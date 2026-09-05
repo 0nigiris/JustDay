@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Remo32</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
+</head>
+<body>
+
+<!-- Экран входа -->
+<div class="login" id="login" hidden>
+  <h1>Remo32</h1>
+  <p>Управление домашними ПК</p>
+
+  <button class="act primary" id="passkey-btn" hidden>🔑 Войти по passkey</button>
+  <div class="divider" id="login-divider" hidden>или</div>
+
+  <form id="password-form">
+    <input type="password" id="password" placeholder="Пароль" autocomplete="current-password" required>
+    <button class="act primary" type="submit">Войти</button>
+  </form>
+
+  <div class="error" id="login-error"></div>
+</div>
+
+<!-- Основной экран -->
+<div id="main" hidden>
+  <header class="top">
+    <div style="flex:1">
+      <h1>Remo32</h1>
+      <div class="sub" id="conn-status">подключение…</div>
+    </div>
+    <button class="icon-btn" id="refresh-btn" title="Обновить">↻</button>
+    <button class="icon-btn" id="menu-btn" title="Ещё">⋯</button>
+  </header>
+
+  <main class="app" id="content">
+    <div class="empty">Загрузка…</div>
+  </main>
+</div>
+
+<div id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

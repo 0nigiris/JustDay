@@ -1,0 +1,24 @@
+/* Разрешение на выключение и перезагрузку без пароля.
+ *
+ * Устанавливается в /etc/polkit-1/rules.d/49-remo32-power.rules
+ * (нужны права root ОДИН РАЗ, при установке).
+ *
+ * Зачем: агент работает от обычного пользователя и не имеет права
+ * выключить машину, если в системе есть другие активные сеансы.
+ * Это правило выдаёт ровно два разрешения и ничего больше — оно НЕ даёт
+ * агенту прав root.
+ *
+ * ЗАМЕНИТЕ "oni" на своё имя пользователя.
+ */
+polkit.addRule(function (action, subject) {
+    var allowed = [
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions"
+    ];
+
+    if (allowed.indexOf(action.id) !== -1 && subject.user === "oni") {
+        return polkit.Result.YES;
+    }
+});

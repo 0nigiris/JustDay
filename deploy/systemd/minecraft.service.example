@@ -1,0 +1,35 @@
+# Пример пользовательской службы Minecraft-сервера.
+#
+# Копировать в ~/.config/systemd/user/minecraft.service и поправить пути.
+# Действия mc-start / mc-stop / mc-restart из конфигурации агента
+# управляют именно этим юнитом — через systemctl --user, без прав root.
+#
+#   systemctl --user daemon-reload
+#   systemctl --user start minecraft
+#
+# Чтобы сервер работал без вошедшего пользователя:
+#   sudo loginctl enable-linger $USER
+
+[Unit]
+Description=Minecraft Server
+After=network-online.target
+
+[Service]
+# oneshot + RemainAfterExit — правильная пара для запуска в tmux:
+# tmux завершается сразу, а служба считается активной, пока её не
+# остановят. Type=simple здесь не подходит: systemd решил бы, что сервер
+# упал в момент старта.
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/minecraft
+
+# Сервер запускается в tmux, чтобы к его консоли можно было подключиться
+# из веб-терминала Remo32 и ввести команду вроде /stop или /say.
+ExecStart=/usr/bin/tmux new-session -d -s minecraft -c %h/minecraft \
+    'java -Xms2G -Xmx4G -jar server.jar nogui'
+# Корректная остановка: сервер получает команду stop и сохраняет мир.
+ExecStop=/usr/bin/tmux send-keys -t minecraft 'stop' Enter
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# Секреты и локальная конфигурация — НИКОГДА не коммитить
+.env
+.env.*
+!.env.example
+# Рабочие конфигурации могут содержать частные адреса — коммитим только примеры
+config/*.toml
+!config/*.example.toml
+config.toml
+config.local.toml
+*.secret
+*.key
+!*.key.example
+secrets/
+data/
+*.db
+*.sqlite3
+
+# ESP-IDF
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+firmware/dependencies.lock
+firmware/main/wifi_secrets.h
+
+# Прочее
+.DS_Store
+*.log
+
+# Рабочая заметка о конкретной машине: публичный IP, модель роутера,
+# имя тайлнета, чужой адрес почты. В репозиторий не идёт.
+docs/SESSION-STATE.md

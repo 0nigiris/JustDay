@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<title>Remo32 — терминал</title>
+<link rel="stylesheet" href="/static/vendor/xterm.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="term-page">
+  <div class="term-head">
+    <button class="icon-btn" onclick="location.href='/'">←</button>
+    <div class="title" id="term-title">терминал</div>
+    <span class="dot unknown" id="term-dot"></span>
+  </div>
+
+  <div class="term-wrap"><div id="term"></div></div>
+
+  <!-- Клавиш, которых нет на экранной клавиатуре телефона, но без которых
+       в терминале жить нельзя. -->
+  <div class="term-keys">
+    <button data-send="\x03">Ctrl-C</button>
+    <button data-send="\x04">Ctrl-D</button>
+    <button data-send="\x1a">Ctrl-Z</button>
+    <button data-send="\x1b">Esc</button>
+    <button data-send="\t">Tab</button>
+    <button data-send="\x1b[A">↑</button>
+    <button data-send="\x1b[B">↓</button>
+    <button data-send="\x1b[D">←</button>
+    <button data-send="\x1b[C">→</button>
+    <button data-send="\x01">Ctrl-A</button>
+    <button data-send="\x05">Ctrl-E</button>
+    <button data-send="|">|</button>
+    <button data-send="~">~</button>
+    <button data-send="/">/</button>
+    <button data-send="-">-</button>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script src="/static/vendor/xterm.js"></script>
+<script src="/static/vendor/xterm-addon-fit.js"></script>
+<script src="/static/terminal.js"></script>
+</body>
+</html>

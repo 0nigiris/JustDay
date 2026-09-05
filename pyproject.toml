@@ -1,0 +1,85 @@
+[project]
+name = "remo32"
+version = "0.1.0"
+description = "Remo32 — личная система удалённого управления ПК и домашним железом"
+requires-python = ">=3.12"
+dependencies = [
+    "remo32-core",
+    "remo32-controller",
+    "remo32-agent",
+    "remo32-espsim",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-psutil",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+remo32-core = { workspace = true }
+remo32-controller = { workspace = true }
+remo32-agent = { workspace = true }
+remo32-espsim = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["firmware"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ASYNC", "S"]
+ignore = [
+    "S104",   # bind 0.0.0.0 — осознанно, адрес всегда из конфига
+    "RUF001", # кириллица в строках — у нас русские сообщения
+    "RUF002",
+    "RUF003",
+    # Параметр timeout у async-функций — осознанный интерфейс клиента:
+    # значение прокидывается в asyncio.wait_for/httpx, а не игнорируется.
+    "ASYNC109",
+    # Запуск systemctl/tmux/nvidia-smi по имени, а не по полному пути —
+    # намеренно: путь различается между дистрибутивами, а PATH службы
+    # задаётся systemd-юнитом.
+    "S607",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["remo32_core", "remo32_controller", "remo32_agent", "remo32_espsim"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108"]
+"**/test_*.py" = ["S101", "S105", "S106"]
+# FastAPI требует вызовы Body()/Query() в значениях по умолчанию.
+"packages/remo32-espsim/src/remo32_espsim/http_server.py" = ["B008"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+exclude = ["firmware/", "build/"]
+
+[[tool.mypy.overrides]]
+module = ["psutil.*", "webauthn.*", "aiomqtt.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning:remo32_.*"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+bypass-selection = true

@@ -1,0 +1,46 @@
+# Центральный контроллер Remo32 — ПОЛЬЗОВАТЕЛЬСКАЯ служба.
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now remo32-controller
+#
+# Контроллер не требует прав root: он никуда не лезет в систему, а лишь
+# ходит по сети к агентам.
+
+[Unit]
+Description=Remo32 Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+EnvironmentFile=%h/.config/remo32/controller.env
+Environment=REMO32_CONTROLLER_CONFIG=%h/.config/remo32/controller.toml
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=%h/.local/bin/uv run --project %h/Remo32 remo32-controller
+WorkingDirectory=%h/Remo32
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Каталог с ключом сессий и passkey должен оставаться доступным на запись.
+ReadWritePaths=%h/.local/share/remo32
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=remo32-controller
+
+[Install]
+WantedBy=default.target
