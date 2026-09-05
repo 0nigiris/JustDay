@@ -30,6 +30,18 @@ prepare_dirs() {
     mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$UNIT_DIR"
     chmod 700 "$CONFIG_DIR" "$DATA_DIR"
     enable_linger
+    sync_venv
+}
+
+# Службы запускаются прямо из .venv, минуя «uv run»: под ProtectHome=read-only
+# uv не может писать в свой кэш и служба падает. Значит окружение должно быть
+# готово заранее.
+sync_venv() {
+    if [ ! -x "$REPO_DIR/.venv/bin/python3" ]; then
+        info "Создаю окружение проекта (uv sync)"
+    fi
+    (cd "$REPO_DIR" && uv sync --quiet) || fail "не удалось выполнить uv sync"
+    ok "окружение проекта готово"
 }
 
 # Без linger пользовательские службы стартуют только после входа в систему.
