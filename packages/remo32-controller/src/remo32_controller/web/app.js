@@ -531,6 +531,228 @@ function renderHelp() {
   </section>`;
 }
 
+/* ------------------------------------------------------------ пульт ------
+
+   Телефон в горизонтальном положении превращается в Stream Deck: страницы
+   крупных кнопок, между которыми листают пальцем, и последняя страница с
+   загрузкой машины.
+
+   Листание сделано нативной прокруткой со scroll-snap, а не обработкой
+   касаний вручную: браузер сам даёт инерцию, отскок у краёв и правильную
+   реакцию на диагональные движения — руками это повторяется плохо.
+
+   Избранное собирает пользователь долгим нажатием, поэтому оно хранится в
+   localStorage: это настройка конкретного телефона, а не системы. */
+
+const FAV_KEY = "remo32.favorites";
+const DECK_PC_KEY = "remo32.deckPc";
+const DECK_HASH = "#/deck";
+
+// Кнопки питания живут не в списке действий, а отдельными ручками API.
+// Чтобы их тоже можно было положить в избранное, даём им такие же
+// идентификаторы, как у обычных действий.
+const POWER_ACTIONS = {
+  "power:shutdown": { name: "Выключить", icon: "⏻", dangerous: true },
+  "power:restart": { name: "Перезагрузка", icon: "🔄", dangerous: true },
+  "power:wake": { name: "Включить", icon: "⏻", dangerous: false },
+};
+
+function favorites() {
+  try {
+    const value = JSON.parse(store.get(FAV_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+const favKey = (pcId, actionId) => `${pcId}::${actionId}`;
+const isFavorite = (pcId, actionId) => favorites().includes(favKey(pcId, actionId));
+
+function toggleFavorite(pcId, actionId) {
+  const key = favKey(pcId, actionId);
+  const list = favorites();
+  const index = list.indexOf(key);
+  if (index >= 0) list.splice(index, 1);
+  else list.push(key);
+  store.set(FAV_KEY, JSON.stringify(list));
+  // Короткая вибрация — единственный отклик, который видно, когда палец
+  // закрывает кнопку целиком.
+  navigator.vibrate?.(index >= 0 ? 15 : [15, 40, 15]);
+  return index < 0;
+}
+
+/* --- какой ПК показывает пульт ------------------------------------------ */
+
+function deckPc() {
+  const saved = store.get(DECK_PC_KEY);
+  return lastPcs.find((p) => p.id === saved) || lastPcs.find((p) => p.state === "online") || lastPcs[0] || null;
+}
+
+/* --- режим ---------------------------------------------------------------
+ *
+ * Включается сам, когда телефон повёрнут: landscape плюс невысокий экран.
+ * Ограничение по высоте нужно, чтобы пульт не срабатывал на мониторе —
+ * тот тоже landscape. Адрес #/deck включает режим принудительно: так его
+ * можно посмотреть и на большом экране. */
+
+const deckMedia = window.matchMedia("(orientation: landscape) and (max-height: 600px)");
+
+function deckActive() {
+  return location.hash === DECK_HASH || deckMedia.matches;
+}
+
+function applyMode() {
+  const on = deckActive();
+  document.body.classList.toggle("deck-mode", on);
+  el("deck").hidden = !on;
+  el("content").hidden = on;
+  el("tabbar").hidden = on;
+  document.querySelector("header.top").hidden = on;
+  return on;
+}
+
+deckMedia.addEventListener("change", async () => {
+  applyMode();
+  await render(true);
+});
+
+/* --- разметка ------------------------------------------------------------ */
+
+function deckButton(pc, action) {
+  const unavailable = action.available === false;
+  const fav = isFavorite(pc.id, action.id);
+  return `<button class="dk ${action.dangerous ? "danger" : ""} ${fav ? "fav" : ""}"
+    data-deck-pc="${esc(pc.id)}" data-deck-action="${esc(action.id)}"
+    ${unavailable ? "disabled" : ""}
+    title="${esc(action.description || action.name)}">
+    <span class="dk-ico">${esc(action.icon || "•")}</span>
+    <span class="dk-cap">${esc(action.name)}</span>
+  </button>`;
+}
+
+function deckPageActions(pc, title, actions, note = "") {
+  const body = actions.length
+    ? `<div class="dk-grid">${actions.map((a) => deckButton(pc, a)).join("")}</div>`
+    : `<div class="empty">${esc(note || "Пусто")}</div>`;
+  return `<section class="dk-page" data-title="${esc(title)}">${body}</section>`;
+}
+
+function deckPageStats(pc) {
+  const body = pc.state === "online"
+    ? renderMetrics(pc.stats) || `<div class="empty">Агент не прислал статистику</div>`
+    : `<div class="empty">${esc(pc.name)} — ${esc(STATE_LABEL[pc.state] || pc.state)}</div>`;
+  return `<section class="dk-page" data-title="Характеристики">${body}</section>`;
+}
+
+function powerActionsFor(pc) {
+  // Для выключенной машины единственное осмысленное действие — разбудить.
+  const ids = pc.state === "online"
+    ? ["power:restart", "power:shutdown"]
+    : pc.wake_supported ? ["power:wake"] : [];
+  return ids.map((id) => ({ id, available: true, ...POWER_ACTIONS[id] }));
+}
+
+function renderDeck() {
+  const pc = deckPc();
+  if (!pc) return `<div class="empty">Ни одного ПК не настроено.</div>`;
+
+  const all = [...(pc.actions || []), ...powerActionsFor(pc)];
+  const byId = new Map(all.map((a) => [a.id, a]));
+
+  // Порядок избранного — тот, в котором его добавляли: пользователь сам
+  // решил, что важнее, и переставлять за него не нужно.
+  const fav = favorites()
+    .filter((key) => key.startsWith(`${pc.id}::`))
+    .map((key) => byId.get(key.slice(pc.id.length + 2)))
+    .filter(Boolean);
+
+  const groups = new Map();
+  for (const action of pc.actions || []) {
+    const key = action.group || "Действия";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(action);
+  }
+  const power = powerActionsFor(pc);
+  if (power.length) groups.set("Питание", power);
+
+  const pages = [
+    deckPageActions(pc, "Избранное", fav,
+      "Долгое нажатие на любой кнопке добавляет её сюда."),
+    ...[...groups].map(([name, actions]) => deckPageActions(pc, name, actions)),
+    deckPageStats(pc),
+  ];
+
+  const dots = pages.map((_, i) => `<i class="${i === 0 ? "on" : ""}"></i>`).join("");
+  const switchable = lastPcs.length > 1;
+
+  return `
+  <div class="dk-top">
+    <div class="dk-title" id="dk-title">Избранное</div>
+    <button class="dk-pc ${switchable ? "" : "static"}" id="dk-pc" ${switchable ? "" : "disabled"}>
+      <span class="dot ${esc(pc.state)}"></span>${esc(pc.name)}
+    </button>
+  </div>
+  <div class="dk-pages" id="dk-pages">${pages.join("")}</div>
+  <div class="dk-dots" id="dk-dots">${dots}</div>`;
+}
+
+/* --- листание ------------------------------------------------------------
+ *
+ * Заголовок и точки ведём по фактической прокрутке, а не по «номеру
+ * страницы»: палец может остановиться между страницами, и тогда врать
+ * не хочется. */
+
+function bindDeckScroll() {
+  const pages = el("dk-pages");
+  if (!pages) return;
+  const update = () => {
+    const index = Math.round(pages.scrollLeft / pages.clientWidth);
+    const page = pages.children[index];
+    if (page) el("dk-title").textContent = page.dataset.title;
+    [...el("dk-dots").children].forEach((dot, i) => dot.classList.toggle("on", i === index));
+  };
+  pages.addEventListener("scroll", update, { passive: true });
+  update();
+}
+
+/* --- долгое нажатие ------------------------------------------------------
+ *
+ * Обычный клик выполняет действие, удержание — кладёт в избранное. Чтобы
+ * после удержания не сработало и действие, помечаем кнопку и гасим
+ * следующий click. */
+
+let pressTimer = null;
+let pressedButton = null;
+
+document.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest("button.dk");
+  if (!button) return;
+  pressedButton = button;
+  // Если после прошлого удержания click почему-то не пришёл (кнопка успела
+  // перерисоваться), метка осталась бы висеть и съела бы следующее нажатие.
+  delete button.dataset.longpress;
+  pressTimer = setTimeout(() => {
+    pressTimer = null;
+    button.dataset.longpress = "1";
+    const added = toggleFavorite(button.dataset.deckPc, button.dataset.deckAction);
+    button.classList.toggle("fav", added);
+    toast(added ? "добавлено в избранное" : "убрано из избранного", "ok");
+  }, 500);
+});
+
+const cancelPress = () => {
+  clearTimeout(pressTimer);
+  pressTimer = null;
+  pressedButton = null;
+};
+document.addEventListener("pointerup", cancelPress);
+document.addEventListener("pointercancel", cancelPress);
+// Прокрутка страницы пальцем не должна считаться удержанием.
+document.addEventListener("pointermove", (event) => {
+  if (pressedButton && Math.abs(event.movementX) + Math.abs(event.movementY) > 6) cancelPress();
+});
+
 /* --------------------------------------------------------------- сценарии */
 
 let refreshing = false;
@@ -691,6 +913,17 @@ async function render(force = false) {
 
     lastPcs = pcs;
     lastSchedules = schedules;
+
+    if (applyMode()) {
+      // Перерисовка не должна сбрасывать лист, на котором стоит палец.
+      const pages = el("dk-pages");
+      const offset = pages ? pages.scrollLeft : 0;
+      el("deck").innerHTML = renderDeck();
+      const fresh = el("dk-pages");
+      if (fresh) fresh.scrollLeft = offset;
+      bindDeckScroll();
+      return;
+    }
 
     let html;
     if (tab === "pcs") {
@@ -866,6 +1099,76 @@ document.addEventListener("click", async (event) => {
 });
 
 
+/* --- нажатия на пульте ---------------------------------------------------
+ *
+ * Отдельный обработчик, потому что у кнопок пульта свои data-атрибуты:
+ * иначе они попали бы в общий обработчик действий и потеряли бы кнопки
+ * питания, которых в списке действий нет. */
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("button.dk, #dk-pc");
+  if (!button) return;
+
+  if (button.id === "dk-pc") {
+    // Перебор машин по кругу: на пульте некуда девать выпадающий список.
+    const index = lastPcs.findIndex((p) => p.id === deckPc()?.id);
+    const next = lastPcs[(index + 1) % lastPcs.length];
+    store.set(DECK_PC_KEY, next.id);
+    await render(true);
+    return;
+  }
+
+  // Удержание уже сделало своё дело — действие выполнять не надо.
+  if (button.dataset.longpress) {
+    delete button.dataset.longpress;
+    return;
+  }
+
+  const pcId = button.dataset.deckPc;
+  const actionId = button.dataset.deckAction;
+
+  if (actionId.startsWith("power:")) {
+    const what = actionId.slice("power:".length);
+    if (what === "wake") {
+      await withBusy(button, async () => {
+        try {
+          const result = await api(`/api/pcs/${encodeURIComponent(pcId)}/wake`, { method: "POST" });
+          const ways = result.attempts.filter((a) => a.ok).map((a) => a.method).join(", ");
+          toast(`Magic packet отправлен (${ways}). Ждём загрузки…`, "ok");
+          setTimeout(() => render(true), 3000);
+        } catch (error) {
+          toast(error.message, "err", error.requestId);
+        }
+      });
+      return;
+    }
+    if (!confirm(what === "shutdown" ? "Выключить компьютер?" : "Перезагрузить компьютер?")) return;
+    await withBusy(button, async () => {
+      try {
+        const result = await api(`/api/pcs/${encodeURIComponent(pcId)}/${what}`, { method: "POST" });
+        toast(result.message || "команда отправлена", result.success ? "ok" : "err");
+        setTimeout(() => render(true), 2000);
+      } catch (error) {
+        toast(error.message, "err", error.requestId);
+      }
+    });
+    return;
+  }
+
+  await withBusy(button, async () => {
+    try {
+      const result = await api(
+        `/api/pcs/${encodeURIComponent(pcId)}/actions/${encodeURIComponent(actionId)}`,
+        { method: "POST" },
+      );
+      toast(result.message || (result.success ? "готово" : "не выполнено"),
+        result.success ? "ok" : "err");
+    } catch (error) {
+      toast(error.message, "err", error.requestId);
+    }
+  });
+});
+
 /* --- сохранение правила ---------------------------------------------------
  *
  * Слушатели повешены на document, а не на саму форму: разметка
@@ -981,5 +1284,6 @@ async function start() {
     location.replace(`#/${TABS[saved] ? saved : DEFAULT_TAB}`);
   }
   syncTabBar();
+  applyMode();
   if (await refreshAuth()) await start();
 })();

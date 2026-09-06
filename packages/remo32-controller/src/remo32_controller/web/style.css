@@ -302,3 +302,169 @@ button.day:active { transform: scale(.94); }
   padding: 1px 5px;
   font-size: 13px;
 }
+
+/* --- пульт (горизонтальный режим) ----------------------------------------
+
+   Телефон, повёрнутый набок, — это Stream Deck: крупные кнопки под палец и
+   листание между страницами. Высота экрана в этом положении маленькая,
+   поэтому всё считается от неё, а не от ширины: сетка обязана поместиться
+   целиком, без вертикальной прокрутки. */
+
+body.deck-mode {
+  padding: 0;
+  overflow: hidden;
+  height: 100dvh;
+}
+
+#deck {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: 6px 10px calc(4px + env(safe-area-inset-bottom));
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+}
+
+.dk-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 6px;
+  flex: 0 0 auto;
+}
+
+.dk-title { font-size: 15px; font-weight: 600; flex: 1; }
+
+.dk-pc {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+}
+.dk-pc.static { opacity: .75; }
+
+/* Страницы: горизонтальная лента с прилипанием. Инерцию и отскок делает
+   браузер — вручную это получается заметно хуже. */
+.dk-pages {
+  flex: 1 1 auto;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.dk-pages::-webkit-scrollbar { display: none; }
+
+.dk-page {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+/* Пять колонок в ряд — столько влезает по ширине повёрнутого телефона,
+   оставаясь нажимаемым. Строки задаются высотой, а не содержимым. */
+.dk-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  width: 100%;
+  align-content: center;
+}
+
+button.dk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  /* Долгое нажатие — наш жест. Системное меню выделения тут только мешает. */
+  -webkit-touch-callout: none;
+  user-select: none;
+  transition: transform .08s ease, background .15s ease;
+}
+
+button.dk:active { transform: scale(.94); background: var(--surface); }
+button.dk[disabled] { opacity: .35; }
+button.dk.danger { border-color: color-mix(in oklab, var(--danger) 55%, var(--border)); }
+button.dk.busy { opacity: .6; }
+
+/* Уголок у избранного: значок поверх кнопки съел бы место под подпись. */
+button.dk.fav { border-color: var(--accent); }
+button.dk.fav::after {
+  content: "";
+  position: absolute;
+  align-self: flex-end;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 0 2px 0 0;
+  transform: translateY(-100%);
+}
+button.dk { position: relative; }
+
+.dk-ico { font-size: clamp(18px, 5.2vh, 30px); line-height: 1; }
+.dk-cap {
+  font-size: clamp(9px, 1.9vh, 12px);
+  line-height: 1.15;
+  text-align: center;
+  color: var(--text-dim);
+  /* Длинные подписи режем, а не переносим на три строки: сетка обязана
+     остаться ровной. */
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.dk-page .metrics {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.dk-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 0 2px;
+  flex: 0 0 auto;
+}
+.dk-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background .2s ease, width .2s ease;
+}
+.dk-dots i.on { background: var(--accent); width: 16px; border-radius: 3px; }
+
+/* Совсем узкие экраны (маленький телефон боком) — четыре колонки. */
+@media (max-width: 700px) {
+  .dk-grid { grid-template-columns: repeat(4, 1fr); }
+}
