@@ -230,3 +230,19 @@ class TestСтатикаИКэш:
             assert версия() != было
         finally:
             os.utime(target, (stat.st_atime, stat.st_mtime))
+
+    def test_манифест_и_значок_отдаются(self, anon: TestClient) -> None:
+        """Без них приложение не ставится на телефон как самостоятельное.
+
+        Файлы легко потерять при переносе: они не упоминаются ни в одном
+        импорте, только в разметке.
+        """
+        assert anon.get("/static/manifest.webmanifest").status_code == 200
+        assert anon.get("/static/icon.svg").status_code == 200
+
+    def test_манифест_ссылается_на_существующий_значок(self, anon: TestClient) -> None:
+        import json
+
+        manifest = json.loads(anon.get("/static/manifest.webmanifest").text)
+        for icon in manifest["icons"]:
+            assert anon.get(icon["src"]).status_code == 200, icon["src"]
