@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0e1116">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Remo32</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=__ASSET_VERSION__">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>">
 </head>
 <body>
@@ -31,19 +31,27 @@
 <div id="main" hidden>
   <header class="top">
     <div style="flex:1">
-      <h1>Remo32</h1>
+      <h1 id="page-title">Remo32</h1>
       <div class="sub" id="conn-status">подключение…</div>
     </div>
     <button class="icon-btn" id="refresh-btn" title="Обновить">↻</button>
-    <button class="icon-btn" id="menu-btn" title="Ещё">⋯</button>
   </header>
 
   <main class="app" id="content">
     <div class="empty">Загрузка…</div>
   </main>
+
+  <!-- Вкладки внизу: до них дотягивается большой палец, в отличие от шапки.
+       Это ссылки, а не кнопки, поэтому работает системная кнопка «назад». -->
+  <nav class="tabbar" id="tabbar">
+    <a class="tab" href="#/pcs" data-tab="pcs"><span class="ico">🖥</span><span>ПК</span></a>
+    <a class="tab" href="#/esp32" data-tab="esp32"><span class="ico">📟</span><span>ESP32</span></a>
+    <a class="tab" href="#/schedule" data-tab="schedule"><span class="ico">⏰</span><span>Расписание</span></a>
+    <a class="tab" href="#/more" data-tab="more"><span class="ico">⋯</span><span>Ещё</span></a>
+  </nav>
 </div>
 
 <div id="toasts"></div>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

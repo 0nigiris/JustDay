@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import Response
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from remo32_controller import __version__
@@ -55,6 +56,46 @@ TAGS = [
     {"name": "терминал", "description": "Удалённый терминал через WebSocket"},
     {"name": "служебные", "description": "Здоровье и поток событий"},
 ]
+
+
+# Без Cache-Control браузер кэширует статику на своё усмотрение и после
+# обновления интерфейса продолжает выполнять старый app.js — вплоть до ошибок
+# вида «элемента больше нет». «no-cache» означает не «не кэшировать», а
+# «каждый раз спрашивать»: при неизменном ETag ответ будет пустой 304.
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+class RevalidatingStaticFiles(StaticFiles):
+    """StaticFiles, заставляющий браузер сверяться с сервером перед показом."""
+
+    def file_response(self, *args: object, **kwargs: object) -> Response:
+        response = super().file_response(*args, **kwargs)  # type: ignore[arg-type]
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+def asset_version() -> str:
+    """Метка версии статики: время правки самого свежего файла интерфейса.
+
+    Одного «Cache-Control: no-cache» мало. Копия, попавшая в кэш браузера
+    раньше, чем появился этот заголовок, остаётся там жить, и телефон
+    продолжает выполнять старый app.js — с ошибками на элементах, которых
+    в разметке уже нет. Меняющийся адрес — единственное, что гарантированно
+    пробивает такой кэш.
+    """
+    newest = 0.0
+    for path in WEB_DIR.rglob("*"):
+        if path.is_file():
+            newest = max(newest, path.stat().st_mtime)
+    return str(int(newest))
+
+
+def _page(name: str) -> HTMLResponse:
+    html = (WEB_DIR / name).read_text(encoding="utf-8")
+    return HTMLResponse(
+        html.replace("__ASSET_VERSION__", asset_version()),
+        headers=NO_CACHE,
+    )
 
 
 def create_app(
@@ -138,14 +179,14 @@ def create_app(
     app.include_router(terminal_api.router)
 
     if WEB_DIR.is_dir():
-        app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+        app.mount("/static", RevalidatingStaticFiles(directory=WEB_DIR), name="static")
 
         @app.get("/", include_in_schema=False)
-        async def index() -> FileResponse:
-            return FileResponse(WEB_DIR / "index.html")
+        async def index() -> HTMLResponse:
+            return _page("index.html")
 
         @app.get("/terminal", include_in_schema=False)
-        async def terminal_page() -> FileResponse:
-            return FileResponse(WEB_DIR / "terminal.html")
+        async def terminal_page() -> HTMLResponse:
+            return _page("terminal.html")
 
     return app

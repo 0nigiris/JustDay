@@ -36,7 +36,8 @@ html, body {
   overscroll-behavior-y: contain;
 }
 
-body { padding: 0 0 env(safe-area-inset-bottom); }
+/* Место под панель вкладок: 56px сама панель плюс вырез снизу у iPhone. */
+body { padding: 0 0 calc(56px + env(safe-area-inset-bottom)); }
 
 .app { max-width: 720px; margin: 0 auto; padding: var(--gap); }
 
@@ -237,3 +238,67 @@ button.day {
 }
 button.day.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.day:active { transform: scale(.94); }
+
+
+/* --- панель вкладок ------------------------------------------------------
+   Прижата к низу: до неё дотягивается большой палец, в отличие от шапки.
+   Ссылки, а не кнопки, — чтобы работала системная кнопка «назад». */
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  background: color-mix(in oklab, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabbar .tab {
+  flex: 1;
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 7px 2px;
+  text-decoration: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: .1px;
+  /* Синяя вспышка выделения при касании тут только мешает. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabbar .tab .ico { font-size: 20px; line-height: 1; }
+.tabbar .tab.on { color: var(--accent); }
+
+/* --- сторож: таблица «ключ — значение» ----------------------------------- */
+
+.kv { display: grid; gap: 1px; background: var(--border); border-radius: 10px; overflow: hidden; }
+.kv > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--surface-2);
+}
+.kv span { color: var(--text-dim); }
+.kv b { font-weight: 600; text-align: right; }
+
+/* --- справка ------------------------------------------------------------- */
+
+.help p { margin: 0 0 10px; color: var(--text-dim); }
+.help p:last-child { margin-bottom: 0; }
+.help b { color: var(--text); font-weight: 600; }
+.help code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 13px;
+}

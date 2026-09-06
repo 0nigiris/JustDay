@@ -184,6 +184,61 @@ async function registerPasskey() {
   }
 }
 
+/* -------------------------------------------------------------- вкладки
+
+   Раньше всё жило на одной длинной странице: ПК, расписание и плата
+   склеивались в один скролл, и на телефоне до нижней карточки приходилось
+   листать. Теперь каждый раздел — отдельный экран, а адрес хранит вкладку,
+   поэтому системная кнопка «назад» ведёт себя предсказуемо. */
+
+const TABS = {
+  pcs: { title: "Компьютеры" },
+  esp32: { title: "ESP32" },
+  schedule: { title: "Расписание" },
+  more: { title: "Ещё" },
+  // Справка открывается из «Ещё» и своей кнопки в панели не имеет.
+  help: { title: "Справка", parent: "more" },
+};
+const DEFAULT_TAB = "pcs";
+const TAB_KEY = "remo32.tab";
+
+const store = {
+  get(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+  },
+  set(key, value) {
+    try { localStorage.setItem(key, value); } catch { /* приватный режим */ }
+  },
+};
+
+function currentTab() {
+  const name = location.hash.replace(/^#\//, "");
+  return TABS[name] ? name : DEFAULT_TAB;
+}
+
+function syncTabBar() {
+  const active = currentTab();
+  el("page-title").textContent = TABS[active].title;
+  const highlight = TABS[active].parent || active;
+  for (const link of document.querySelectorAll("#tabbar .tab")) {
+    link.classList.toggle("on", link.dataset.tab === highlight);
+    link.setAttribute("aria-current", link.dataset.tab === highlight ? "page" : "false");
+  }
+  store.set(TAB_KEY, active);
+}
+
+window.addEventListener("hashchange", async () => {
+  // Уходя с расписания, форму закрываем: вернуться к наполовину заполненному
+  // полю через две вкладки — не то, чего ждёшь.
+  if (currentTab() !== "schedule") {
+    formOpen = false;
+    formEditId = null;
+  }
+  syncTabBar();
+  await render(true);
+  el("content").scrollIntoView({ block: "start" });
+});
+
 /* ------------------------------------------------------------ отрисовка */
 
 const fmtBytes = (bytes) => {
@@ -344,6 +399,19 @@ function renderEsp32(status) {
       metric("Аптайм", fmtUptime(status.uptime_seconds), null),
     ];
     details = `<div class="metrics">${parts.join("")}</div>`;
+    // Сторож — главное, ради чего плата вообще нужна: он замечает, что ПК
+    // погас, и будит его магическим пакетом. Раньше это состояние в
+    // интерфейс не выводилось совсем.
+    if (status.guard) {
+      const g = status.guard;
+      details += `<div class="group-title">Сторож</div>
+        <div class="kv">
+          <div><span>Режим</span><b>${esc(g.state ?? "—")}</b></div>
+          <div><span>ПК на связи</span><b>${g.host_alive ? "да" : "нет"}</b></div>
+          <div><span>Попыток разбудить</span><b>${esc(g.attempts ?? 0)}</b></div>
+          <div><span>Всего пробуждений</span><b>${esc(g.total_wakes ?? 0)}</b></div>
+        </div>`;
+    }
     if (status.gpio?.length) {
       details += `<div class="group-title">GPIO</div><div class="actions">`;
       for (const pin of status.gpio) {
@@ -366,6 +434,100 @@ function renderEsp32(status) {
     </div>
     ${sim}
     ${details}
+  </section>`;
+}
+
+/* ------------------------------------------------------- «Ещё» и справка */
+
+let lastAuthStatus = null;
+
+function renderMore() {
+  const passkeyReady = lastAuthStatus?.passkey_configured && window.PublicKeyCredential;
+  const passkeyNote = passkeyReady
+    ? "Вход по отпечатку или лицу вместо пароля."
+    : "Нужен HTTPS и заданный auth.webauthn_rp_id — см. справку.";
+
+  return `
+  <section class="card">
+    <div class="card-head"><h2>Устройство</h2></div>
+    <div class="group-title">Вход</div>
+    <div class="actions">
+      <button class="act" id="more-passkey" ${passkeyReady ? "" : "disabled"}>🔑 Зарегистрировать passkey</button>
+    </div>
+    <div class="meta">${esc(passkeyNote)}</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Справка и служебное</h2></div>
+    <div class="actions">
+      <button class="act" onclick="location.hash='#/help'">📖 Как этим пользоваться</button>
+      <button class="act" onclick="location.href='/docs'">🛠 Документация API</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Сеанс</h2></div>
+    <div class="actions">
+      <button class="act danger" id="more-logout">🚪 Выйти</button>
+    </div>
+  </section>`;
+}
+
+function renderHelp() {
+  // Короткая справка «что делает эта кнопка». Подробности — в MANUAL.md.
+  return `
+  <section class="card">
+    <div class="card-head"><h2>🖥 Вкладка «ПК»</h2></div>
+    <div class="help">
+      <p>Карточка на каждый компьютер. Пока он <b>онлайн</b>, видны загрузка процессора,
+      памяти, видеокарты и диска, а ниже — действия, которые умеет его агент.</p>
+      <p><b>Выключить</b> и <b>Перезагрузка</b> отмечены красным и всегда переспрашивают.</p>
+      <p>Если компьютер <b>выключен</b>, вместо всего этого будет одна кнопка
+      <b>Включить</b>: она шлёт magic packet (Wake-on-LAN). Компьютер поднимется
+      за минуту-полторы — это нормально.</p>
+      <p>Надпись «данные устарели» значит, что агент отвечает, но статистику давно
+      не присылал: обычно ПК ушёл в сон.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>📟 Вкладка «ESP32»</h2></div>
+    <div class="help">
+      <p>Состояние платы: уровень сигнала Wi-Fi, свободная память, время работы.</p>
+      <p><b>Сторож</b> — то, ради чего плата и нужна. Она сама пингует основной ПК,
+      и если он перестал отвечать дольше отведённого времени, шлёт magic packet.
+      Это страховка на случай, когда тебя нет дома, а компьютер погас.</p>
+      <p>«Режим: наблюдение» — всё спокойно. Плата не выключает компьютер и не может
+      этого сделать: она умеет только будить.</p>
+      <p>GPIO показаны только для чтения. Входы 4 и 5 — датчики питания, выходы
+      18 и 21 — светодиод и резерв под реле.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>⏰ Вкладка «Расписание»</h2></div>
+    <div class="help">
+      <p>Правила вида «в 23:00 по будням погасить подсветку». Кнопка <b>+</b> добавляет
+      правило, нажатие на строку — открывает её для правки.</p>
+      <p>Список действий берётся у выбранного компьютера. Если он сейчас выключен,
+      выбирать будет не из чего — включи его и вернись.</p>
+      <p>Правило срабатывает, даже когда телефон и браузер закрыты: время считает
+      контроллер на домашнем ПК.</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Если что-то не работает</h2></div>
+    <div class="help">
+      <p><b>Страница не открывается с телефона.</b> Проверь, включён ли Tailscale.
+      Адрес — тайлнет-адрес домашнего ПК, а не 127.0.0.1: последнее означает
+      «сам телефон».</p>
+      <p><b>ESP32 «выключена».</b> Скорее всего роутер выдал плате другой адрес.
+      Лечится закреплением адреса за платой в настройках роутера.</p>
+      <p><b>Компьютер не будится.</b> Wake-on-LAN должен быть включён в BIOS и в
+      настройках сетевой карты, а кабель — воткнут: по Wi-Fi это не работает.</p>
+      <p>Подробное руководство лежит в файле <code>MANUAL.md</code> в репозитории.</p>
+    </div>
   </section>`;
 }
 
@@ -516,7 +678,11 @@ async function render(force = false) {
   // перерисовать открытую форму, введённый текст пропадёт прямо под пальцем.
   if (formOpen && !force) return;
   refreshing = true;
+  const tab = currentTab();
   try {
+    // Запрашиваем всё разом, а не только данные активной вкладки: три
+    // локальных запроса дешевле, чем моргающий экран при каждом
+    // переключении, и форма расписания берёт действия из списка ПК.
     const [pcs, esp32, schedules] = await Promise.all([
       api("/api/pcs"),
       api("/api/esp32/status").catch(() => null),
@@ -526,18 +692,29 @@ async function render(force = false) {
     lastPcs = pcs;
     lastSchedules = schedules;
 
-    const html =
-      (pcs.length
+    let html;
+    if (tab === "pcs") {
+      html = pcs.length
         ? pcs.map(renderPc).join("")
         : `<div class="empty">Ни одного ПК не настроено.<br>
-           Добавьте секцию <code>[[pcs]]</code> в конфигурацию контроллера.</div>`) +
-      renderSchedules() +
-      renderEsp32(esp32);
+           Добавьте секцию <code>[[pcs]]</code> в конфигурацию контроллера.</div>`;
+    } else if (tab === "esp32") {
+      html = renderEsp32(esp32) ||
+        `<div class="empty">ESP32 не настроена.<br>
+         Включите секцию <code>[esp32]</code> в конфигурации контроллера.</div>`;
+    } else if (tab === "schedule") {
+      html = renderSchedules();
+    } else if (tab === "more") {
+      lastAuthStatus = await api("/api/auth/status").catch(() => null);
+      html = renderMore();
+    } else {
+      html = renderHelp();
+    }
 
     el("content").innerHTML = html;
     // Список действий заполняется после вставки разметки: он зависит от
     // выбранного в форме ПК, а не от порядка полей в шаблоне.
-    if (formOpen) {
+    if (tab === "schedule" && formOpen) {
       fillActionSelect(lastSchedules.find((s) => s.id === formEditId)?.action_id);
     }
   } catch (error) {
@@ -747,21 +924,22 @@ document.addEventListener("submit", async (event) => {
 
 el("refresh-btn").addEventListener("click", () => render(true));
 
-el("menu-btn").addEventListener("click", async () => {
-  const status = await api("/api/auth/status");
-  const options = ["1 — Зарегистрировать passkey на этом устройстве", "2 — Выйти", "3 — Открыть документацию API"];
-  const choice = prompt(`Remo32 — меню\n\n${options.join("\n")}\n\nВведите номер:`);
-  if (choice === "1") {
-    if (!status.passkey_configured) {
-      toast("Passkey не настроен: задайте auth.webauthn_rp_id и откройте интерфейс по HTTPS", "err");
-      return;
-    }
-    await registerPasskey();
-  } else if (choice === "2") {
+/* Раньше здесь было меню через prompt(): на телефоне оно выглядит как
+   системный запрос пароля и не даёт ни подписей, ни отключённых пунктов.
+   Теперь это обычные кнопки на вкладке «Ещё». */
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+
+  if (button.id === "more-passkey") {
+    await withBusy(button, registerPasskey);
+    return;
+  }
+
+  if (button.id === "more-logout") {
     await api("/api/auth/logout", { method: "POST" });
     location.reload();
-  } else if (choice === "3") {
-    location.href = "/docs";
   }
 });
 
@@ -796,5 +974,12 @@ async function start() {
 }
 
 (async () => {
+  // Без адреса в строке открываем вкладку, на которой ушли в прошлый раз:
+  // возвращаться каждый раз к списку ПК на телефоне утомительно.
+  if (!location.hash) {
+    const saved = store.get(TAB_KEY);
+    location.replace(`#/${TABS[saved] ? saved : DEFAULT_TAB}`);
+  }
+  syncTabBar();
   if (await refreshAuth()) await start();
 })();

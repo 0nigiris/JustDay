@@ -180,3 +180,53 @@ def test_agent_token_mismatch_does_not_log_user_out(
     response = client.get("/api/pcs/testpc/stats")
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "agent_unauthorized"
+
+
+class TestСтатикаИКэш:
+    """Обновление интерфейса должно доезжать до уже открытого браузера.
+
+    Однажды это не сработало: страница отдавалась без Cache-Control, браузер
+    оставил у себя прежний app.js и продолжил выполнять его — со ссылками на
+    элементы, которых в новой разметке уже нет. Экран оставался пустым, а в
+    журнале сервера было чисто.
+    """
+
+    def test_страница_просит_сверяться_с_сервером(self, anon: TestClient) -> None:
+        response = anon.get("/")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-cache"
+
+    def test_статика_просит_сверяться_с_сервером(self, anon: TestClient) -> None:
+        response = anon.get("/static/app.js")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-cache"
+
+    def test_адреса_статики_несут_метку_версии(self, anon: TestClient) -> None:
+        html = anon.get("/").text
+        assert "__ASSET_VERSION__" not in html, "подстановка версии не сработала"
+        assert "/static/app.js?v=" in html
+        assert "/static/style.css?v=" in html
+
+    def test_метка_версии_меняется_вместе_с_файлом(self, anon: TestClient) -> None:
+        import os
+        import re
+
+        from remo32_controller.app import WEB_DIR
+
+        def версия() -> str:
+            html = anon.get("/").text
+            match = re.search(r"/static/app\.js\?v=(\d+)", html)
+            assert match
+            return match.group(1)
+
+        было = версия()
+        # Метка — время правки самого свежего файла интерфейса, а не app.js.
+        # Поэтому сдвигаем время относительно уже полученной метки, иначе
+        # правка более старого файла ничего не изменит и тест соврёт.
+        target = WEB_DIR / "app.js"
+        stat = target.stat()
+        os.utime(target, (stat.st_atime, int(было) + 60))
+        try:
+            assert версия() != было
+        finally:
+            os.utime(target, (stat.st_atime, stat.st_mtime))
