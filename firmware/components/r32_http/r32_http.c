@@ -5,6 +5,9 @@
 
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "r32_proto.h"
 
 static const char *TAG = "r32_http";
@@ -101,9 +104,22 @@ static esp_err_t command_handler(httpd_req_t *req)
     }
     body[received] = '\0';
 
+    /* Признак перезагрузки снимаем до разбора: r32_proto_handle не
+     * перезагружает сам — ответ должен успеть уйти. Раньше это делал
+     * только MQTT, и по HTTP команда «перезагрузить» честно отвечала
+     * «ок», ничего не делая. */
+    const bool is_reboot = strstr(body, "\"reboot\"") != NULL;
+
     char *reply = r32_proto_handle(body, s_cfg);
     free(body);
-    return send_json(req, reply);
+    esp_err_t sent = send_json(req, reply);
+
+    if (is_reboot) {
+        /* Даём ответу уйти в сеть до перезагрузки. */
+        vTaskDelay(pdMS_TO_TICKS(500));
+        esp_restart();
+    }
+    return sent;
 }
 
 static esp_err_t status_handler(httpd_req_t *req)

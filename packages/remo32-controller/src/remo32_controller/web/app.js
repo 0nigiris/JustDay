@@ -635,6 +635,11 @@ function esp32Card(status) {
           <div><span>Всего пробуждений</span><b>${esc(g.total_wakes ?? 0)}</b></div>
         </div>`;
       details += guardConfigBlock(g.config);
+      if (g.config) {
+        const off = g.config.enabled === false;
+        details += `<div class="row"><button class="btn ${off ? "primary" : "danger"}"
+          data-guard="${off ? "on" : "off"}">${off ? "👁 Включить слежку" : "🚫 Выключить слежку"}</button></div>`;
+      }
     }
     if (status.gpio?.length) {
       details += `<div class="group-title">Выводы</div><div class="kv">` +
@@ -1067,6 +1072,27 @@ document.addEventListener("click", async (event) => {
       (result) => {
         toast(result.message || "команда отправлена", result.success ? "ok" : "err");
         setTimeout(() => render(true), 2000);
+      });
+  }
+
+  /* --- сторож --- */
+  if (d.guard) {
+    const on = d.guard === "on";
+    if (!on) {
+      const ok = await confirmSheet({
+        icon: "🚫",
+        title: "Выключить слежку?",
+        text: "Плата перестанет следить за компьютером и не поднимет его, если он погаснет, "
+            + "пока тебя нет дома. Настройка сохраняется в плате и переживёт её перезагрузку.",
+        yes: "Выключить",
+      });
+      if (!ok) return;
+    }
+    return run(button,
+      () => api("/api/esp32/guard", { method: "POST", body: JSON.stringify({ enabled: on }) }),
+      () => {
+        toast(on ? "Сторож снова следит" : "Сторож выключен", on ? "ok" : "err");
+        render(true);
       });
   }
 

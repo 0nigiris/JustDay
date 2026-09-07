@@ -21,6 +21,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+#include "r32_button.h"
 #include "r32_config.h"
 #include "r32_gpio.h"
 #include "r32_guard.h"
@@ -65,6 +66,28 @@ static void start_console(void)
     r32_guard_register_console(&s_config);
 
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
+}
+
+/* --- кнопка на плате ------------------------------------------------------
+ *
+ * Единственный способ управлять платой, когда телефона под рукой нет, а
+ * компьютер выключен — то есть ровно в той ситуации, ради которой плата и
+ * существует. Кнопка одна: вторая на DevKit замкнута на сброс чипа
+ * физически, и прошивка её не видит.
+ */
+
+static void on_button_short(void)
+{
+    esp_err_t err = r32_guard_wake_now();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "кнопка: разбудить не вышло: %s", esp_err_to_name(err));
+    }
+}
+
+static void on_button_long(void)
+{
+    const bool enabled = r32_guard_toggle_enabled();
+    ESP_LOGW(TAG, "кнопка: слежка %s", enabled ? "включена" : "выключена");
 }
 
 static void heartbeat_task(void *arg)
@@ -154,6 +177,13 @@ void app_main(void)
     esp_err_t guard_err = r32_guard_start(&s_config);
     if (guard_err != ESP_OK) {
         ESP_LOGE(TAG, "сторож не запустился: %s", esp_err_to_name(guard_err));
+    }
+
+    /* Кнопку поднимаем после сторожа: её обработчики берут из него и
+     * адрес для побудки, и признак слежки. */
+    esp_err_t button_err = r32_button_start(on_button_short, on_button_long);
+    if (button_err != ESP_OK) {
+        ESP_LOGE(TAG, "кнопка не заработала: %s", esp_err_to_name(button_err));
     }
 
     xTaskCreate(heartbeat_task, "heartbeat", 4096, NULL, 4, NULL);

@@ -167,6 +167,11 @@ static void guard_task(void *arg)
             xSemaphoreTake(s_lock, portMAX_DELAY);
             set_state(R32_GUARD_DISABLED);
             xSemaphoreGive(s_lock);
+            /* Забываем, когда ПК пропал: пока слежка выключена, время
+             * не идёт. Иначе включение обратно сразу после долгой паузы
+             * означало бы мгновенную побудку — а человек ждёт, что отсчёт
+             * начнётся заново. */
+            missing_since_ms = 0;
             vTaskDelay(pdMS_TO_TICKS(CHECK_PERIOD_MS));
             continue;
         }
@@ -251,6 +256,42 @@ static const char *guard_config_problem(const r32_config_t *cfg)
         return "сторож включён, но не задан MAC ПК";
     }
     return NULL;
+}
+
+esp_err_t r32_guard_wake_now(void)
+{
+    if (s_cfg == NULL || s_cfg->guard_mac[0] == '\0') {
+        ESP_LOGE(TAG, "некого будить: MAC не задан");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /* Считаем эту побудку в общий счёт: с телефона должно быть видно, что
+     * кнопку нажимали, иначе непонятно, почему ПК вдруг включился. */
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_status.total_wakes++;
+    if (s_lock) xSemaphoreGive(s_lock);
+
+    ESP_LOGW(TAG, "побудка по кнопке: %s", s_cfg->guard_mac);
+    return r32_wol_send(s_cfg->guard_mac, s_cfg->guard_broadcast, 9, 3);
+}
+
+bool r32_guard_toggle_enabled(void)
+{
+    if (s_cfg == NULL) {
+        return false;
+    }
+
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    const bool enabled = !s_cfg->guard_enabled;
+    s_cfg->guard_enabled = enabled;
+    s_status.attempts = 0;
+    s_status.state = enabled ? R32_GUARD_WATCHING : R32_GUARD_DISABLED;
+    if (s_lock) xSemaphoreGive(s_lock);
+
+    /* В NVS намеренно не пишем: см. комментарий у объявления. */
+    ESP_LOGW(TAG, "сторож %s кнопкой (до перезагрузки платы)",
+             enabled ? "включён" : "выключен");
+    return enabled;
 }
 
 esp_err_t r32_guard_apply(const r32_guard_patch_t *patch, const char **error)
