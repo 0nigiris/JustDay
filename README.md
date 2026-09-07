@@ -174,7 +174,8 @@ REMO32_AGENT_TOKEN_MINEVPSEX=токен-со-второго-ПК
 systemctl --user enable --now remo32-controller
 ```
 
-Открыть с телефона: `http://100.64.0.10:8080`
+Открыть с телефона: `http://100.64.0.10:8080`. С HTTPS (см. «HTTPS и
+passkey» ниже) адрес станет `https://имя-машины.ts.net`, без порта.
 
 ---
 
@@ -310,7 +311,7 @@ Passkey требует защищённого соединения. В Tailscale
 
    ```toml
    [server]
-   public_origin = "https://vasya.tailnet-abc123.ts.net:8080"
+   public_origin = "https://vasya.tailnet-abc123.ts.net"
 
    [auth]
    webauthn_rp_id = "vasya.tailnet-abc123.ts.net"
@@ -320,8 +321,28 @@ Passkey требует защищённого соединения. В Tailscale
    `nginx`), либо использовать `tailscale serve`:
 
    ```bash
-   tailscale serve --bg --https=443 http://127.0.0.1:8080
+   sudo tailscale serve --bg --https=443 http://127.0.0.1:8080
    ```
+
+   `sudo` нужен, пока не задан оператор: `tailscale set --operator=$USER`.
+   Проверить — `tailscale serve status`, должно быть «tailnet only».
+   `funnel` вместо `serve` открыл бы пульт всему интернету; не используйте.
+
+5. Развернуть контроллер за прокси. Это обязательный шаг, без него
+   `serve` отвечает **502**: он стучится строго в `127.0.0.1`, а
+   контроллер по умолчанию слушает адрес Tailscale.
+
+   ```toml
+   [server]
+   host = "127.0.0.1"          # было 100.x.y.z
+   public_origin = "https://vasya.tailnet-abc123.ts.net"
+
+   [auth]
+   cookie_secure = true        # cookie только по HTTPS
+   ```
+
+   После перезапуска прямой `http://100.x.y.z:8080` перестанет
+   отвечать — это и требуется: остаётся один вход, через HTTPS.
 
 ### Проверьте чужие устройства
 
