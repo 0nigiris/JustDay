@@ -64,7 +64,11 @@ class AgentContext:
                 delay_seconds=settings.power.delay_seconds,
             ),
         )
-        self.audit = TerminalAudit(settings.terminal.audit_log)
+        self.audit = TerminalAudit(
+            settings.terminal.audit_log,
+            max_bytes=settings.terminal.audit_max_bytes,
+            keep=settings.terminal.audit_keep,
+        )
 
     @property
     def auth_dependency(self) -> Callable[..., None]:

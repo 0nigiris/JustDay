@@ -105,6 +105,22 @@ static cJSON *build_status_object(const r32_config_t *cfg)
     cJSON_AddBoolToObject(guard_json, "host_alive", guard.host_alive);
     cJSON_AddNumberToObject(guard_json, "attempts", guard.attempts);
     cJSON_AddNumberToObject(guard_json, "total_wakes", guard.total_wakes);
+    cJSON_AddNumberToObject(guard_json, "last_seen_ms", (double) guard.last_seen_ms);
+    cJSON_AddNumberToObject(guard_json, "snooze_until_ms", (double) guard.snooze_until_ms);
+
+    /* Настройки сторожа отдаём вместе с состоянием. Без этого нельзя
+     * проверить по сети, какой MAC записан в плату: консоль доступна
+     * только по USB, а плата живёт от розетки. Разбор неудачной побудки
+     * начинается именно с вопроса «а туда ли шёл пакет». */
+    cJSON *guard_cfg = cJSON_AddObjectToObject(guard_json, "config");
+    cJSON_AddBoolToObject(guard_cfg, "enabled", cfg->guard_enabled);
+    cJSON_AddStringToObject(guard_cfg, "host", cfg->guard_host);
+    cJSON_AddStringToObject(guard_cfg, "mac_address", cfg->guard_mac);
+    cJSON_AddStringToObject(guard_cfg, "broadcast_address",
+                            cfg->guard_broadcast[0] ? cfg->guard_broadcast : "255.255.255.255");
+    cJSON_AddNumberToObject(guard_cfg, "grace_minutes", cfg->guard_grace_minutes);
+    cJSON_AddNumberToObject(guard_cfg, "retry_minutes", cfg->guard_retry_minutes);
+    cJSON_AddNumberToObject(guard_cfg, "max_attempts", cfg->guard_max_attempts);
 
     cJSON *caps = cJSON_AddArrayToObject(status, "capabilities");
     cJSON_AddItemToArray(caps, cJSON_CreateString("wol"));
@@ -113,6 +129,7 @@ static cJSON *build_status_object(const r32_config_t *cfg)
     cJSON_AddItemToArray(caps, cJSON_CreateString("status"));
     cJSON_AddItemToArray(caps, cJSON_CreateString("reboot"));
     cJSON_AddItemToArray(caps, cJSON_CreateString("guard"));
+    cJSON_AddItemToArray(caps, cJSON_CreateString("guard_config"));
     /* "kvm" НЕ объявляем: физического переключателя нет. Контроллер по
      * отсутствию этой возможности честно откажет в переключении. */
 
@@ -233,6 +250,34 @@ char *r32_proto_handle(const char *request_json, const r32_config_t *cfg)
             cJSON *result = cJSON_CreateObject();
             cJSON_AddNumberToObject(result, "minutes", minutes->valuedouble);
             reply = make_reply(command_id, true, NULL, result, NULL);
+        }
+
+    } else if (strcmp(type, "guard_config") == 0) {
+        /* Настройка сторожа по сети. Раньше это умела только консоль по
+         * USB, но плата питается от розетки и провода в ней нет: чтобы
+         * укоротить ожидание на время проверки или исправить MAC, её
+         * пришлось бы нести к компьютеру. Изменения сохраняются в NVS. */
+        cJSON *payload = cJSON_GetObjectItem(request, "payload");
+        if (payload == NULL) {
+            reply = make_reply(command_id, false, "в команде отсутствует payload", NULL, NULL);
+        } else {
+            cJSON *enabled = cJSON_GetObjectItem(payload, "enabled");
+            r32_guard_patch_t patch = {
+                .host = json_str(payload, "host", NULL),
+                .mac = json_str(payload, "mac_address", NULL),
+                .broadcast = json_str(payload, "broadcast_address", NULL),
+                .grace_minutes = json_int(payload, "grace_minutes", -1),
+                .retry_minutes = json_int(payload, "retry_minutes", -1),
+                .max_attempts = json_int(payload, "max_attempts", -1),
+                .enabled = cJSON_IsBool(enabled) ? (cJSON_IsTrue(enabled) ? 1 : 0) : -1,
+            };
+
+            const char *error = "не удалось изменить настройки";
+            if (r32_guard_apply(&patch, &error) == ESP_OK) {
+                reply = make_reply(command_id, true, NULL, NULL, build_status_object(cfg));
+            } else {
+                reply = make_reply(command_id, false, error, NULL, NULL);
+            }
         }
 
     } else if (strcmp(type, "reboot") == 0) {

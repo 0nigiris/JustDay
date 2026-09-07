@@ -21,13 +21,21 @@ from dataclasses import dataclass, field
 
 from remo32_core.errors import DeviceUnreachableError
 from remo32_core.log import get_logger
-from remo32_core.models import DeviceState, Esp32Status, GpioPinState, utcnow
+from remo32_core.models import (
+    DeviceState,
+    Esp32Status,
+    GpioPinState,
+    GuardConfig,
+    GuardStatus,
+    utcnow,
+)
 from remo32_core.protocol import (
     Esp32Command,
     Esp32CommandType,
     Esp32Reply,
     GpioReadPayload,
     GpioWritePayload,
+    GuardConfigPayload,
     GuardSnoozePayload,
     KvmSwitchPayload,
     WakeOnLanPayload,
@@ -82,6 +90,18 @@ class MockEsp32Transport:
         self._wol_sent: list[str] = []
         self._kvm_port: int | None = None
         self._snooze_requests: list[int] = []
+        # Настройки сторожа держим так же, как настоящая плата: в своей
+        # памяти, пережившими перезапуск команды. Значения похожи на
+        # рабочие, чтобы на симуляторе интерфейс выглядел правдиво.
+        self._guard: dict[str, object] = {
+            "enabled": True,
+            "host": "192.168.1.250",
+            "mac_address": "7c:df:a1:00:11:22",
+            "broadcast_address": "255.255.255.255",
+            "grace_minutes": 10,
+            "retry_minutes": 15,
+            "max_attempts": 3,
+        }
         self._reconnects = 0
         self._running = False
 
@@ -187,6 +207,25 @@ class MockEsp32Transport:
                     result={"minutes": command.payload.minutes, "simulated": True},
                 )
 
+            case Esp32CommandType.GUARD_CONFIG:
+                if not isinstance(command.payload, GuardConfigPayload):
+                    return Esp32Reply(
+                        command_id=command.id, ok=False, error="в команде отсутствует payload"
+                    )
+                # Настоящая плата сохраняет только переданные поля и
+                # хранит их в своей памяти. Симулятор обязан вести себя
+                # так же, иначе на нём нельзя проверить интерфейс.
+                changes = command.payload.model_dump(exclude_none=True)
+                self._guard.update(changes)
+                if self._guard.get("enabled") and not self._guard.get("mac_address"):
+                    return Esp32Reply(
+                        command_id=command.id,
+                        ok=False,
+                        error="сторож включён, но не задан MAC ПК",
+                    )
+                log.info("симулятор: настройки сторожа изменены", **changes)
+                return Esp32Reply(command_id=command.id, ok=True, status=self.status())
+
             case Esp32CommandType.GPIO_READ:
                 if not isinstance(command.payload, GpioReadPayload):
                     return Esp32Reply(
@@ -268,5 +307,12 @@ class MockEsp32Transport:
             last_seen=utcnow(),
             reconnect_count=self._reconnects,
             gpio=list(self._gpio.values()),
-            capabilities=["wol", "gpio_in", "gpio_out", "status", "guard"],
+            guard=GuardStatus(
+                state="наблюдение" if self._guard.get("enabled") else "выключен",
+                host_alive=True,
+                attempts=0,
+                total_wakes=0,
+                config=GuardConfig(**self._guard),
+            ),
+            capabilities=["wol", "gpio_in", "gpio_out", "status", "guard", "guard_config"],
         )

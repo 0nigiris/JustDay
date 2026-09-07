@@ -208,3 +208,65 @@ async def test_snooze_sent_even_when_board_is_silent() -> None:
     reply = await controller.guard_snooze(480)
     assert reply is not None and reply.ok
     assert transport.snooze_requests == [480]
+
+
+# --- настройка сторожа по сети -----------------------------------------------
+
+
+async def test_guard_config_changes_only_given_fields(controller: Esp32Controller) -> None:
+    """Передаём одно поле — остальное плата обязана сохранить как было.
+
+    Это главное свойство команды: укоротить ожидание на время проверки,
+    не рискуя случайно стереть записанный MAC.
+    """
+    from remo32_core.protocol import GuardConfigPayload
+
+    before = (await controller.refresh()).guard
+    assert before is not None and before.config is not None
+    mac_before = before.config.mac_address
+    assert before.config.grace_minutes == 10
+
+    await controller.guard_config(GuardConfigPayload(grace_minutes=1))
+
+    after = (await controller.refresh()).guard
+    assert after is not None and after.config is not None
+    assert after.config.grace_minutes == 1
+    assert after.config.mac_address == mac_before
+    assert after.config.retry_minutes == before.config.retry_minutes
+
+
+async def test_guard_config_rejects_enabled_without_mac(controller: Esp32Controller) -> None:
+    """Включённый сторож без MAC — тихо неработающая плата. Отказываем вслух."""
+    from remo32_core.protocol import GuardConfigPayload
+
+    await controller.refresh()
+    controller._transport._guard["mac_address"] = ""  # type: ignore[attr-defined]
+
+    with pytest.raises(DeviceUnreachableError):
+        await controller.guard_config(GuardConfigPayload(enabled=True))
+
+
+async def test_guard_config_needs_firmware_support(controller: Esp32Controller) -> None:
+    """Старая прошивка не умеет — говорим об этом, а не шлём команду в пустоту."""
+    from remo32_core.protocol import GuardConfigPayload
+
+    await controller.refresh()
+    assert controller._status is not None
+    controller._status.capabilities.remove("guard_config")
+
+    with pytest.raises(CapabilityUnavailableError):
+        await controller.guard_config(GuardConfigPayload(grace_minutes=5))
+
+
+async def test_guard_status_survives_unknown_firmware_fields() -> None:
+    """Плата с более новой прошивкой не должна выглядеть сломанной.
+
+    Раньше модель стояла на extra="forbid": стоило прошивке сообщить что-то
+    новое, и разбор статуса падал целиком — вместе с картиной состояния.
+    """
+    from remo32_core.models import GuardStatus
+
+    guard = GuardStatus.model_validate(
+        {"state": "наблюдение", "host_alive": True, "чего_не_было": 1}
+    )
+    assert guard.state == "наблюдение"

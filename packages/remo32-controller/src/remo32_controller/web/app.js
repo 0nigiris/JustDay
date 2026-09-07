@@ -572,6 +572,40 @@ function pcCard(pc) {
   </section>`;
 }
 
+// Настройки сторожа, прочитанные из самой платы.
+//
+// Это не украшение. Консоль у платы только по USB, а стоит она в розетке
+// без провода: единственный способ узнать, какой MAC в неё записан, —
+// спросить по сети. Когда побудка не срабатывает, первый вопрос всегда
+// один: пакет вообще уходил по верному адресу?
+function guardConfigBlock(cfg) {
+  if (!cfg) {
+    return `<div class="meta">Прошивка платы не сообщает настройки сторожа — обновите её,
+      чтобы видеть, какой MAC в неё записан.</div>`;
+  }
+
+  // Сверяем записанный в плату MAC с тем ПК, которого она стережёт.
+  // Расхождение выглядит как полностью исправная система, которая молча
+  // будит несуществующую машину, — поймать это глазами почти невозможно.
+  const norm = (m) => (m || "").toLowerCase().replace(/[^0-9a-f]/g, "");
+  const guarded = state.pcs.find((pc) => norm(pc.mac_address) === norm(cfg.mac_address));
+  const known = state.pcs.some((pc) => norm(pc.mac_address));
+  const warning = !cfg.mac_address
+    ? `<div class="meta err">MAC не записан — будить некого.</div>`
+    : (!guarded && known)
+      ? `<div class="meta err">Этот MAC не совпадает ни с одним известным ПК.
+         Сторож будет будить не ту машину.</div>`
+      : "";
+
+  return `<div class="kv">
+      <div><span>Стережёт</span><b>${esc(cfg.host || "—")}</b></div>
+      <div><span>MAC</span><b>${esc(cfg.mac_address || "не задан")}</b></div>
+      <div><span>Ждёт перед побудкой</span><b>${esc(cfg.grace_minutes ?? "—")} мин</b></div>
+      <div><span>Пауза между попытками</span><b>${esc(cfg.retry_minutes ?? "—")} мин</b></div>
+      <div><span>Попыток</span><b>${cfg.max_attempts ? esc(cfg.max_attempts) : "без предела"}</b></div>
+    </div>${warning}`;
+}
+
 function esp32Card(status) {
   if (!status) return "";
   const online = status.state === "online";
@@ -600,6 +634,7 @@ function esp32Card(status) {
           <div><span>Попыток разбудить</span><b>${esc(g.attempts ?? 0)}</b></div>
           <div><span>Всего пробуждений</span><b>${esc(g.total_wakes ?? 0)}</b></div>
         </div>`;
+      details += guardConfigBlock(g.config);
     }
     if (status.gpio?.length) {
       details += `<div class="group-title">Выводы</div><div class="kv">` +

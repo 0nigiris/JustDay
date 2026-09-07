@@ -136,6 +136,18 @@ class TerminalSettings(BaseSettings):
     )
     scrollback_lines: int = Field(2000, ge=100, le=50_000)
 
+    # Журнал пишется в каждую сессию и сам не заканчивается. На домашней
+    # машине он растёт медленно, но растёт всегда — и однажды заполнит
+    # диск молча, потому что смотреть в него никто не ходит.
+    audit_max_bytes: int = Field(
+        2_000_000,
+        ge=0,
+        description="Размер, после которого журнал откладывается в .1. 0 — не подрезать",
+    )
+    audit_keep: int = Field(
+        3, ge=1, le=20, description="Сколько прошлых журналов хранить (.1, .2, ...)"
+    )
+
 
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(

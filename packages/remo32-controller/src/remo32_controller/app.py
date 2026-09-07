@@ -7,9 +7,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi import Response
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, Response
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from remo32_controller import __version__

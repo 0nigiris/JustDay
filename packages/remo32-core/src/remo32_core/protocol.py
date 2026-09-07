@@ -38,6 +38,7 @@ class Esp32CommandType(StrEnum):
     GPIO_WRITE = "gpio_write"
     KVM_SWITCH = "kvm_switch"
     GUARD_SNOOZE = "guard_snooze"
+    GUARD_CONFIG = "guard_config"
     REBOOT = "reboot"
 
 
@@ -68,6 +69,31 @@ class GuardSnoozePayload(BaseModel):
     )
 
 
+class GuardConfigPayload(BaseModel):
+    """Перенастройка сторожа прямо в плате.
+
+    Все поля необязательные: передаётся только то, что нужно изменить,
+    остальное плата сохраняет как было. Так сделано ради одного случая —
+    укоротить ожидание на время проверки, ничего больше не сломав.
+
+    Существует эта команда потому, что консоль у платы только по USB, а
+    работает она от розетки: без сети настройки было не поправить, не
+    отнеся плату к компьютеру.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    host: str | None = Field(None, min_length=1, max_length=63, description="IP основного ПК")
+    mac_address: MacAddress | None = None
+    broadcast_address: str | None = Field(None, min_length=1, max_length=63)
+    grace_minutes: int | None = Field(
+        None, ge=0, le=1440, description="Ждать перед первой побудкой. 0 — будить сразу."
+    )
+    retry_minutes: int | None = Field(None, ge=1, le=1440)
+    max_attempts: int | None = Field(None, ge=0, le=100, description="0 — без предела")
+
+
 class GpioReadPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -96,6 +122,7 @@ Esp32Payload = Annotated[
     | GpioWritePayload
     | KvmSwitchPayload
     | GuardSnoozePayload
+    | GuardConfigPayload
     | None,
     Field(description="Полезная нагрузка, зависит от типа команды"),
 ]

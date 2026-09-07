@@ -10,6 +10,7 @@ from remo32_controller.esp32.controller import Esp32Controller
 from remo32_core.errors import CapabilityUnavailableError
 from remo32_core.http import RequestId
 from remo32_core.models import ApiResponse, Esp32Status
+from remo32_core.protocol import GuardConfigPayload
 
 router = APIRouter(prefix="/api/esp32", tags=["ESP32"])
 
@@ -53,6 +54,28 @@ async def refresh(
     controller = _esp32(request)
     if controller is None:
         raise CapabilityUnavailableError("ESP32 выключен в конфигурации")
+    return ApiResponse[Esp32Status].success(await controller.refresh(), request_id)
+
+
+@router.post("/guard", response_model=ApiResponse[Esp32Status])
+async def guard_config(
+    body: GuardConfigPayload, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[Esp32Status]:
+    """Изменить настройки сторожа в самой плате.
+
+    Нужно ровно для двух случаев: исправить записанный MAC и укоротить
+    ожидание на время проверки. Консоль у платы только по USB, а стоит
+    она в розетке — иначе за настройками пришлось бы идти с проводом.
+
+    Передаются только изменяемые поля; остальное плата оставляет как есть.
+    Изменения переживают её перезагрузку, поэтому укороченное ожидание
+    нужно возвращать обратно: иначе любой сбой сети станет поводом
+    включить ПК.
+    """
+    controller = _esp32(request)
+    if controller is None:
+        raise CapabilityUnavailableError("ESP32 выключен в конфигурации")
+    await controller.guard_config(body)
     return ApiResponse[Esp32Status].success(await controller.refresh(), request_id)
 
 

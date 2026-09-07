@@ -237,6 +237,77 @@ static void guard_task(void *arg)
     }
 }
 
+/* Общая для консоли и сети проверка: включённый сторож без адреса или
+ * MAC молча ничего не делает, и это худший из возможных исходов. */
+static const char *guard_config_problem(const r32_config_t *cfg)
+{
+    if (!cfg->guard_enabled) {
+        return NULL;
+    }
+    if (cfg->guard_host[0] == '\0') {
+        return "сторож включён, но не задан адрес ПК";
+    }
+    if (cfg->guard_mac[0] == '\0') {
+        return "сторож включён, но не задан MAC ПК";
+    }
+    return NULL;
+}
+
+esp_err_t r32_guard_apply(const r32_guard_patch_t *patch, const char **error)
+{
+    if (s_cfg == NULL || patch == NULL) {
+        if (error) *error = "сторож ещё не запущен";
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    /* Работаем на копии: если настройки окажутся противоречивыми, живая
+     * конфигурация не должна пострадать. */
+    r32_config_t draft = *s_cfg;
+
+    if (patch->host) {
+        strncpy(draft.guard_host, patch->host, sizeof(draft.guard_host) - 1);
+        draft.guard_host[sizeof(draft.guard_host) - 1] = '\0';
+    }
+    if (patch->mac) {
+        strncpy(draft.guard_mac, patch->mac, sizeof(draft.guard_mac) - 1);
+        draft.guard_mac[sizeof(draft.guard_mac) - 1] = '\0';
+    }
+    if (patch->broadcast) {
+        strncpy(draft.guard_broadcast, patch->broadcast, sizeof(draft.guard_broadcast) - 1);
+        draft.guard_broadcast[sizeof(draft.guard_broadcast) - 1] = '\0';
+    }
+    if (patch->grace_minutes >= 0) draft.guard_grace_minutes = patch->grace_minutes;
+    if (patch->retry_minutes >= 0) draft.guard_retry_minutes = patch->retry_minutes;
+    if (patch->max_attempts >= 0) draft.guard_max_attempts = patch->max_attempts;
+    if (patch->enabled >= 0) draft.guard_enabled = patch->enabled != 0;
+
+    const char *problem = guard_config_problem(&draft);
+    if (problem) {
+        if (error) *error = problem;
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = r32_config_save(&draft);
+    if (err != ESP_OK) {
+        if (error) *error = esp_err_to_name(err);
+        return err;
+    }
+
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    *s_cfg = draft;
+    /* Счётчик попыток обнуляем: он относился к прежним настройкам.
+     * Отсчёт молчания ПК живёт внутри задачи и намеренно не трогается —
+     * если ожидание укоротили, новая граница должна сработать сразу. */
+    s_status.attempts = 0;
+    s_status.state = draft.guard_enabled ? R32_GUARD_WATCHING : R32_GUARD_DISABLED;
+    if (s_lock) xSemaphoreGive(s_lock);
+
+    ESP_LOGW(TAG, "настройки сторожа изменены: ПК %s (%s), ожидание %d мин, попыток %d",
+             draft.guard_host, draft.guard_mac, draft.guard_grace_minutes,
+             draft.guard_max_attempts);
+    return ESP_OK;
+}
+
 esp_err_t r32_guard_start(r32_config_t *cfg)
 {
     s_cfg = cfg;

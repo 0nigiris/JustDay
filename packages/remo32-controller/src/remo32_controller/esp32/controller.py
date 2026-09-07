@@ -29,6 +29,7 @@ from remo32_core.protocol import (
     Esp32CommandType,
     Esp32Reply,
     GpioWritePayload,
+    GuardConfigPayload,
     GuardSnoozePayload,
     KvmSwitchPayload,
     WakeOnLanPayload,
@@ -215,6 +216,26 @@ class Esp32Controller:
                 payload=GuardSnoozePayload(minutes=minutes),
             )
         )
+
+    async def guard_config(self, payload: GuardConfigPayload) -> Esp32Reply:
+        """Изменить настройки сторожа в самой плате.
+
+        Плата хранит их в своей памяти и переживает с ними перезагрузку,
+        поэтому команда меняет поведение надолго — это не «на один раз».
+
+        Отдельно про grace: укороченное ожидание удобно на время проверки,
+        но забытое значение в одну минуту означает, что любой чих сети
+        приведёт к попытке включить ПК. Возвращать обратно обязательно.
+        """
+        capabilities = self.status().capabilities
+        if capabilities and "guard_config" not in capabilities:
+            raise CapabilityUnavailableError(
+                "прошивка платы не умеет менять настройки сторожа по сети — обновите её"
+            )
+        reply = await self._send(Esp32Command(type=Esp32CommandType.GUARD_CONFIG, payload=payload))
+        if not reply.ok:
+            raise DeviceUnreachableError(reply.error or "плата отклонила настройки сторожа")
+        return reply
 
     async def reboot_device(self) -> Esp32Reply:
         return await self._send(Esp32Command(type=Esp32CommandType.REBOOT))

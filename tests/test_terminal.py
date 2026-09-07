@@ -77,3 +77,52 @@ def test_audit_survives_unwritable_path(tmp_path: Path) -> None:
 
 def test_terminal_disabled_by_default() -> None:
     assert TerminalSettings().enabled is False
+
+
+# --- ротация журнала аудита --------------------------------------------------
+
+
+def test_журнал_аудита_подрезается_по_размеру(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Разросшийся журнал откладывается в .1, запись продолжается в новый.
+
+    Журнал пишется в каждую сессию и сам не заканчивается: без этого он
+    однажды заполнил бы диск молча.
+    """
+    from remo32_agent.terminal.audit import TerminalAudit
+
+    path = tmp_path / "audit.log"
+    audit = TerminalAudit(path, max_bytes=200, keep=2)
+
+    for i in range(50):
+        audit.record("команда", command=f"строка номер {i}")
+
+    assert path.exists()
+    assert path.stat().st_size < 200 * 2  # текущий файл остался небольшим
+    assert (tmp_path / "audit.log.1").exists()
+    # Имя второго поколения — audit.log.2, а не audit.log.1.2.
+    assert not list(tmp_path.glob("*.1.*"))
+
+
+def test_старые_поколения_журнала_удаляются(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Хранить бесконечно — это просто отложить ту же проблему."""
+    from remo32_agent.terminal.audit import TerminalAudit
+
+    path = tmp_path / "audit.log"
+    audit = TerminalAudit(path, max_bytes=100, keep=2)
+    for i in range(200):
+        audit.record("команда", command=f"довольно длинная строка номер {i}")
+
+    generations = sorted(p.name for p in tmp_path.iterdir())
+    assert generations == ["audit.log", "audit.log.1", "audit.log.2"]
+
+
+def test_ротацию_можно_выключить(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """0 означает «не подрезать»: на чужой машине это может быть нужно."""
+    from remo32_agent.terminal.audit import TerminalAudit
+
+    path = tmp_path / "audit.log"
+    audit = TerminalAudit(path, max_bytes=0, keep=3)
+    for i in range(100):
+        audit.record("команда", command=f"строка номер {i}")
+
+    assert [p.name for p in tmp_path.iterdir()] == ["audit.log"]

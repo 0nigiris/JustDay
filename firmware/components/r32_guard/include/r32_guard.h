@@ -47,6 +47,28 @@ esp_err_t r32_guard_start(r32_config_t *cfg);
  * Так контроллер сообщает о плановом выключении ПК. */
 void r32_guard_snooze(int minutes);
 
+/* Изменение настроек сторожа на ходу.
+ *
+ * Поля-строки: NULL — «не трогать». Числовые: отрицательное значение —
+ * «не трогать». enabled: -1 не трогать, 0 выключить, 1 включить.
+ *
+ * Зачем отдельный тип вместо прямой записи в r32_config_t: протокол
+ * получает конфигурацию по const-указателю и права её менять не имеет,
+ * а владелец изменяемой копии — именно сторож. */
+typedef struct {
+    const char *host;
+    const char *mac;
+    const char *broadcast;
+    int grace_minutes;
+    int retry_minutes;
+    int max_attempts;
+    int enabled;
+} r32_guard_patch_t;
+
+/* Применяет изменения и сохраняет их в NVS. При отказе записывает в
+ * *error короткое объяснение (статическая строка, освобождать не нужно). */
+esp_err_t r32_guard_apply(const r32_guard_patch_t *patch, const char **error);
+
 void r32_guard_get_status(r32_guard_status_t *out);
 
 /* Человекочитаемое имя состояния для отчёта и логов. */

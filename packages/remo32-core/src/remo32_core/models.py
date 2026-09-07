@@ -332,6 +332,26 @@ class GpioPinState(BaseModel):
     label: str | None = None
 
 
+class GuardConfig(BaseModel):
+    """Настройки сторожа, как они записаны в самой плате.
+
+    Плата отдаёт их вместе с состоянием, потому что консоль у неё только
+    по USB, а живёт она от розетки. Без этих полей нельзя проверить по
+    сети, туда ли вообще уходит magic packet: разбор неудачной побудки
+    начинается именно с вопроса «а верный ли MAC записан».
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool | None = None
+    host: str | None = Field(None, description="IP основного ПК в домашней сети")
+    mac_address: str | None = Field(None, description="MAC, на который уходит magic packet")
+    broadcast_address: str | None = None
+    grace_minutes: int | None = Field(None, ge=0, description="Ждать перед первой побудкой")
+    retry_minutes: int | None = Field(None, ge=0)
+    max_attempts: int | None = Field(None, ge=0, description="0 — без предела")
+
+
 class GuardStatus(BaseModel):
     """Состояние сторожа основного ПК на плате.
 
@@ -340,12 +360,23 @@ class GuardStatus(BaseModel):
     и поднять машину сам, без телефона и без контроллера.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    # Здесь намеренно "ignore", а не "forbid": эту структуру заполняет
+    # прошивка, которая живёт своей жизнью и обновляется отдельно от
+    # контроллера. Плата с более новой прошивкой не должна выглядеть
+    # сломанной только потому, что научилась сообщать что-то ещё.
+    model_config = ConfigDict(extra="ignore")
 
     state: str = Field(description="выключен, наблюдение, ПК пропал, побудка, ...")
     host_alive: bool | None = None
     attempts: int | None = Field(None, ge=0, description="Побудок в текущей серии")
     total_wakes: int | None = Field(None, ge=0, description="Побудок с запуска платы")
+    last_seen_ms: float | None = Field(
+        None, description="Время платы, когда ПК отвечал; -1 — не отвечал ни разу"
+    )
+    snooze_until_ms: float | None = Field(None, description="0 — сна нет")
+    config: GuardConfig | None = Field(
+        None, description="Настройки в плате; None — прошивка их ещё не отдаёт"
+    )
 
 
 class Esp32Status(BaseModel):
@@ -355,7 +386,11 @@ class Esp32Status(BaseModel):
     контроллер не знает, с кем разговаривает.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    # Здесь намеренно "ignore", а не "forbid": эту структуру заполняет
+    # прошивка, которая живёт своей жизнью и обновляется отдельно от
+    # контроллера. Плата с более новой прошивкой не должна выглядеть
+    # сломанной только потому, что научилась сообщать что-то ещё.
+    model_config = ConfigDict(extra="ignore")
 
     state: DeviceState = DeviceState.UNKNOWN
     device_id: str | None = None
