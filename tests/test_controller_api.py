@@ -207,6 +207,30 @@ class TestСтатикаИКэш:
         assert "/static/app.js?v=" in html
         assert "/static/style.css?v=" in html
 
+    def test_скрытые_элементы_действительно_скрыты(self, anon: TestClient) -> None:
+        """Атрибут hidden обязан побеждать наши собственные правила display.
+
+        Браузер скрывает hidden правилом с нулевой специфичностью, и любое
+        `#main { display: flex }` его перебивает. Так интерфейс однажды и
+        сломался целиком: экран входа рисовался поверх пульта, а окно
+        подтверждения — поверх всего, и закрыть его было нельзя.
+        """
+        import re
+
+        from remo32_controller.app import WEB_DIR
+
+        css = (WEB_DIR / "style.css").read_text(encoding="utf-8")
+        assert re.search(r"\[hidden\][^{]*\{[^}]*display:\s*none\s*!important", css), (
+            "в style.css нет правила [hidden] { display: none !important }"
+        )
+
+        # Ни один скрываемый элемент не должен полагаться на удачу.
+        html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+        скрываемые = set(re.findall(r'id="([^"]+)"[^>]*\shidden', html))
+        assert {"main", "login", "sheet"} <= скрываемые, (
+            f"разметка изменилась, тест смотрит не туда: {скрываемые}"
+        )
+
     def test_метка_версии_меняется_вместе_с_файлом(self, anon: TestClient) -> None:
         import os
         import re
