@@ -11,7 +11,14 @@ from remo32_controller.auth.dependencies import Session
 from remo32_controller.devices import DeviceRegistry
 from remo32_core.http import RequestId
 from remo32_core.log import get_logger
-from remo32_core.models import ActionDescriptor, ActionResult, ApiResponse, PcSummary, SystemStats
+from remo32_core.models import (
+    ActionDescriptor,
+    ActionEditorState,
+    ActionResult,
+    ApiResponse,
+    PcSummary,
+    SystemStats,
+)
 
 log = get_logger("controller.api.pcs")
 
@@ -89,6 +96,49 @@ async def list_actions(
 ) -> ApiResponse[list[ActionDescriptor]]:
     return ApiResponse[list[ActionDescriptor]].success(
         await _registry(request).actions(pc_id), request_id
+    )
+
+
+@router.get("/{pc_id}/action-editor", response_model=ApiResponse[ActionEditorState])
+async def action_editor(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[ActionEditorState]:
+    """Кнопки, заведённые через интерфейс, вместе с их командами.
+
+    Контроллер здесь посредник: описания проверяет агент — только он знает,
+    какие виды действий понимает его операционная система.
+    """
+    return ApiResponse[ActionEditorState].success(
+        await _registry(request).action_editor(pc_id), request_id
+    )
+
+
+@router.put("/{pc_id}/action-editor/{action_id}", response_model=ApiResponse[ActionDescriptor])
+async def save_action(
+    pc_id: str,
+    action_id: str,
+    payload: dict[str, Any],
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+) -> ApiResponse[ActionDescriptor]:
+    log.info("правка кнопки", pc_id=pc_id, action_id=action_id)
+    return ApiResponse[ActionDescriptor].success(
+        await _registry(request).save_action(pc_id, action_id, payload), request_id
+    )
+
+
+@router.delete("/{pc_id}/action-editor/{action_id}", response_model=ApiResponse[ActionEditorState])
+async def delete_action(
+    pc_id: str,
+    action_id: str,
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+) -> ApiResponse[ActionEditorState]:
+    log.info("удаление кнопки", pc_id=pc_id, action_id=action_id)
+    return ApiResponse[ActionEditorState].success(
+        await _registry(request).delete_action(pc_id, action_id), request_id
     )
 
 

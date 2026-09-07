@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 from remo32_controller.agent_client import AgentClient
 from remo32_controller.config import ControllerSettings, PcConfig, PollerSettings
@@ -27,6 +28,7 @@ from remo32_core.errors import (
 from remo32_core.log import get_logger
 from remo32_core.models import (
     ActionDescriptor,
+    ActionEditorState,
     ActionResult,
     DeviceState,
     PcSummary,
@@ -354,6 +356,25 @@ class DeviceRegistry:
         pc = self.get(pc_id)
         pc.actions = await pc.client.actions()
         return pc.actions
+
+    async def action_editor(self, pc_id: str) -> ActionEditorState:
+        return await self.get(pc_id).client.action_editor()
+
+    async def save_action(
+        self, pc_id: str, action_id: str, payload: dict[str, Any]
+    ) -> ActionDescriptor:
+        pc = self.get(pc_id)
+        descriptor = await pc.client.save_action(action_id, payload)
+        # Кэш действий устарел: следующий запрос списка должен увидеть новую
+        # кнопку, а не то, что лежало здесь до правки.
+        pc.actions = await pc.client.actions()
+        return descriptor
+
+    async def delete_action(self, pc_id: str, action_id: str) -> ActionEditorState:
+        pc = self.get(pc_id)
+        state = await pc.client.delete_action(action_id)
+        pc.actions = await pc.client.actions()
+        return state
 
     def terminal_target(self, pc_id: str, session: str | None, cols: int, rows: int) -> str:
         """Адрес WebSocket терминала агента.

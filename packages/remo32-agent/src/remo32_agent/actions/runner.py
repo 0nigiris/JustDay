@@ -1,9 +1,15 @@
 """Исполнение предопределённых действий.
 
-Реестр действий заполняется из конфигурации. API умеет только одно:
-назвать идентификатор уже описанного действия. Сконструировать новую
-команду через API невозможно — это и есть граница между «безопасными
-предопределёнными действиями» и удалённой оболочкой.
+Реестр действий заполняется из двух файлов: ``agent.toml``, который ведёт
+хозяин машины руками, и ``actions.toml``, за которым стоит кнопка «Добавить»
+в интерфейсе. Разница между ними — в том, кто вправе их переписывать; см.
+:mod:`remo32_agent.actions.store`.
+
+Запуск устроен одинаково для обоих: API умеет только назвать идентификатор
+уже описанного действия. Даже когда описание пришло из интерфейса, оно
+проходит ту же типизированную валидацию и превращается в ``argv``, а не в
+строку для оболочки. Произвольная команда не может появиться ни на одном
+из путей.
 """
 
 from __future__ import annotations
@@ -19,9 +25,14 @@ from remo32_agent.actions.models import (
     SystemdAction,
     TmuxAction,
 )
+from remo32_agent.actions.store import ActionStore
 from remo32_agent.execution import CommandResult, CommandRunner
 from remo32_agent.platforms import PlatformAdapter
-from remo32_core.errors import ActionNotFoundError
+from remo32_core.errors import (
+    ActionNotFoundError,
+    ActionReadOnlyError,
+    ActionsNotEditableError,
+)
 from remo32_core.log import get_logger
 from remo32_core.models import ActionDescriptor, ActionKind, ActionResult, utcnow
 
@@ -29,14 +40,44 @@ log = get_logger("agent.actions")
 
 
 class ActionRegistry:
-    """Реестр действий, доступных на этой машине."""
+    """Реестр действий, доступных на этой машине.
 
-    def __init__(self, actions: Iterable[ActionConfig]) -> None:
-        self._actions: dict[str, ActionConfig] = {}
+    Действия из ``agent.toml`` неизменяемы; действия из хранилища (файл
+    ``actions.toml``) можно править из интерфейса. При совпадении
+    идентификаторов побеждает ``agent.toml``: файл, который человек написал
+    руками, не должен молча подменяться кнопкой с телефона.
+    """
+
+    def __init__(
+        self,
+        actions: Iterable[ActionConfig],
+        store: ActionStore | None = None,
+    ) -> None:
+        self._static: dict[str, ActionConfig] = {}
         for action in actions:
-            if action.id in self._actions:
+            if action.id in self._static:
                 raise ValueError(f"дублирующийся идентификатор действия: {action.id}")
-            self._actions[action.id] = action
+            self._static[action.id] = action
+        self._store = store
+
+    @property
+    def store(self) -> ActionStore | None:
+        return self._store
+
+    def managed(self) -> list[ActionConfig]:
+        """Действия, заведённые через интерфейс. Перечитываются при каждом вызове."""
+        if self._store is None:
+            return []
+        return [a for a in self._store.load() if a.id not in self._static]
+
+    def is_editable(self, action_id: str) -> bool:
+        return any(a.id == action_id for a in self.managed())
+
+    @property
+    def _actions(self) -> dict[str, ActionConfig]:
+        merged: dict[str, ActionConfig] = {a.id: a for a in self.managed()}
+        merged.update(self._static)
+        return merged
 
     def __len__(self) -> int:
         return len(self._actions)
@@ -54,16 +95,53 @@ class ActionRegistry:
 
     def descriptors(self) -> list[ActionDescriptor]:
         """Список действий для интерфейса, отсортированный по группе и имени."""
-        items = [self._describe(a) for a in self._actions.values()]
+        editable = {a.id for a in self.managed()}
+        items = [self._describe(a, a.id in editable) for a in self._actions.values()]
         return sorted(items, key=lambda d: (d.group or "", d.name))
 
     @staticmethod
-    def _describe(action: ActionConfig) -> ActionDescriptor:
+    def _describe(action: ActionConfig, editable: bool = False) -> ActionDescriptor:
         descriptor = action.descriptor()
         descriptor.available = action.is_available()
+        descriptor.editable = editable
         if not descriptor.available:
             descriptor.description = _mark_unavailable(action, descriptor.description)
         return descriptor
+
+    # --- правка из интерфейса -------------------------------------------
+
+    def upsert(self, action: ActionConfig) -> None:
+        """Заводит новую кнопку или заменяет существующую."""
+        store = self._require_store()
+        if action.id in self._static:
+            raise ActionReadOnlyError(
+                f"кнопка «{action.id}» описана в agent.toml и меняется только там",
+                action_id=action.id,
+            )
+        current = [a for a in store.load() if a.id != action.id]
+        current.append(action)
+        store.save(current)
+
+    def delete(self, action_id: str) -> None:
+        store = self._require_store()
+        if action_id in self._static:
+            raise ActionReadOnlyError(
+                f"кнопка «{action_id}» описана в agent.toml и удаляется только там",
+                action_id=action_id,
+            )
+        current = store.load()
+        if not any(a.id == action_id for a in current):
+            raise ActionNotFoundError(f"кнопка не найдена: {action_id}", action_id=action_id)
+        store.save([a for a in current if a.id != action_id])
+
+    def _require_store(self) -> ActionStore:
+        if self._store is None:
+            raise ActionsNotEditableError("правка кнопок через интерфейс выключена")
+        return self._store
+
+    def describe(self, action_id: str) -> ActionDescriptor:
+        """Дескриптор одного действия — то, что интерфейс покажет после сохранения."""
+        return self._describe(self.get(action_id), self.is_editable(action_id))
 
     def availability(self) -> dict[str, bool]:
         return {a.id: a.is_available() for a in self._actions.values()}

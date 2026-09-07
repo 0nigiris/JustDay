@@ -12,17 +12,24 @@ import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from remo32_agent import __version__
+from remo32_agent.actions.models import ActionConfig
 from remo32_agent.context import AgentContext
 from remo32_agent.stats.collector import collect_stats
 from remo32_agent.terminal.session import TerminalConfig, TerminalSession, list_tmux_sessions
-from remo32_core.errors import TerminalDisabledError
+from remo32_core.errors import (
+    ActionInvalidError,
+    ActionsNotEditableError,
+    TerminalDisabledError,
+)
 from remo32_core.http import RequestId
 from remo32_core.log import get_logger
 from remo32_core.models import (
     ActionDescriptor,
+    ActionEditorState,
+    ActionKind,
     ActionResult,
     AgentHealth,
     ApiResponse,
@@ -31,6 +38,23 @@ from remo32_core.models import (
 from remo32_core.protocol import TerminalClientMessage, TerminalServerMessage
 
 log = get_logger("agent.api")
+
+_ACTION_ADAPTER: TypeAdapter[ActionConfig] = TypeAdapter(ActionConfig)
+
+
+def _first_problem(exc: ValidationError) -> str:
+    """Первая ошибка валидации человеческим текстом.
+
+    Полный вывод pydantic на телефоне читать невозможно, а показать нужно
+    именно то поле, которое человек только что заполнил.
+    """
+    errors = exc.errors()
+    if not errors:
+        return "описание кнопки некорректно"
+    first = errors[0]
+    where = ".".join(str(p) for p in first.get("loc", ()) if p != "function-after")
+    message = first.get("msg", "значение недопустимо")
+    return f"{where}: {message}" if where else message
 
 
 class PingResponse(BaseModel):
@@ -104,6 +128,84 @@ def build_router(ctx: AgentContext) -> APIRouter:
         """
         result = await ctx.executor.run(action_id)
         return ApiResponse[ActionResult].success(result, request_id)
+
+    # --- правка кнопок ---------------------------------------------------
+    #
+    # Отдельный префикс, а не /api/actions/...: там уже живёт запуск по
+    # идентификатору, и кнопка с именем «manage» перехватывала бы маршрут.
+
+    @router.get(
+        "/api/action-editor",
+        response_model=ApiResponse[ActionEditorState],
+        tags=["действия"],
+        dependencies=[auth],
+    )
+    async def editor_state(request_id: RequestId) -> ApiResponse[ActionEditorState]:
+        """Кнопки, заведённые через интерфейс, вместе с их командами."""
+        editor = ctx.settings.actions_editor
+        state = ActionEditorState(
+            enabled=editor.enabled,
+            max_actions=editor.max_actions,
+            actions=[
+                a.model_dump(mode="json", exclude_none=True) for a in ctx.registry.managed()
+            ],
+            kinds=list(ActionKind),
+        )
+        return ApiResponse[ActionEditorState].success(state, request_id)
+
+    @router.put(
+        "/api/action-editor/{action_id}",
+        response_model=ApiResponse[ActionDescriptor],
+        tags=["действия"],
+        dependencies=[auth],
+    )
+    async def upsert_action(
+        action_id: str, payload: dict[str, Any], request_id: RequestId
+    ) -> ApiResponse[ActionDescriptor]:
+        """Заводит кнопку или заменяет существующую.
+
+        Тело проверяется теми же моделями, что и конфигурационный файл:
+        произвольная строка для оболочки сюда не пройдёт — вид действия
+        должен быть из списка, а команда приходит списком аргументов.
+        """
+        editor = ctx.settings.actions_editor
+        if not editor.enabled:
+            raise ActionsNotEditableError("правка кнопок через интерфейс выключена")
+
+        body = dict(payload)
+        body["id"] = action_id
+        try:
+            action = _ACTION_ADAPTER.validate_python(body)
+        except ValidationError as exc:
+            raise ActionInvalidError(_first_problem(exc)) from exc
+
+        existing = {a.id for a in ctx.registry.managed()}
+        if action_id not in existing and len(existing) >= editor.max_actions:
+            raise ActionInvalidError(
+                f"уже заведено {len(existing)} кнопок — это предел "
+                f"(actions_editor.max_actions)"
+            )
+
+        ctx.registry.upsert(action)
+        log.info("кнопка сохранена", action_id=action_id, kind=str(action.kind))
+        return ApiResponse[ActionDescriptor].success(
+            ctx.registry.describe(action_id), request_id
+        )
+
+    @router.delete(
+        "/api/action-editor/{action_id}",
+        response_model=ApiResponse[ActionEditorState],
+        tags=["действия"],
+        dependencies=[auth],
+    )
+    async def delete_action(
+        action_id: str, request_id: RequestId
+    ) -> ApiResponse[ActionEditorState]:
+        if not ctx.settings.actions_editor.enabled:
+            raise ActionsNotEditableError("правка кнопок через интерфейс выключена")
+        ctx.registry.delete(action_id)
+        log.info("кнопка удалена", action_id=action_id)
+        return await editor_state(request_id)
 
     @router.post(
         "/api/power/shutdown",

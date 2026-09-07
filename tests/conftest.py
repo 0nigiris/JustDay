@@ -28,6 +28,7 @@ from remo32_agent.actions.models import (
     TmuxAction,
 )
 from remo32_agent.config import (
+    ActionsSettings,
     AgentSettings,
     PowerSettings,
     SecuritySettings,
@@ -99,6 +100,10 @@ def agent_settings(tmp_path: Path, sample_actions: list[object]) -> AgentSetting
         # а безопасность обеспечивает RecordingRunner.
         power=PowerSettings(dry_run=False, delay_seconds=5),
         terminal=TerminalSettings(enabled=False, audit_log=tmp_path / "audit.log"),
+        # Хранилище кнопок обязательно уводим в tmp_path: со значением по
+        # умолчанию тест писал бы в ~/.config/remo32/actions.toml и стирал
+        # настоящие кнопки того, кто запустил pytest.
+        actions_editor=ActionsSettings(store_path=tmp_path / "actions.toml"),
         actions=sample_actions,
     )
 

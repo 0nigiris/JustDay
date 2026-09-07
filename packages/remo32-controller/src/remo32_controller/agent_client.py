@@ -14,14 +14,23 @@ import httpx
 
 from remo32_core.errors import (
     ActionFailedError,
+    ActionInvalidError,
     ActionNotFoundError,
+    ActionReadOnlyError,
+    ActionsNotEditableError,
     AgentAuthError,
     DeviceTimeoutError,
     DeviceUnreachableError,
     Remo32Error,
 )
 from remo32_core.log import current_request_id, get_logger
-from remo32_core.models import ActionDescriptor, ActionResult, AgentHealth, SystemStats
+from remo32_core.models import (
+    ActionDescriptor,
+    ActionEditorState,
+    ActionResult,
+    AgentHealth,
+    SystemStats,
+)
 from remo32_core.protocol import HEADER_AGENT_TOKEN, HEADER_REQUEST_ID
 
 log = get_logger("controller.agent_client")
@@ -70,12 +79,21 @@ class AgentClient:
         return headers
 
     async def _request(
-        self, method: str, path: str, *, timeout: float | None = None
+        self,
+        method: str,
+        path: str,
+        *,
+        timeout: float | None = None,
+        json: Any | None = None,
     ) -> dict[str, Any]:
         url = f"{self._base_url}{path}"
         try:
             response = await self._client.request(
-                method, url, headers=self._headers(), timeout=timeout or self._timeout
+                method,
+                url,
+                headers=self._headers(),
+                timeout=timeout or self._timeout,
+                json=json,
             )
         except httpx.TimeoutException as exc:
             raise DeviceTimeoutError(
@@ -114,6 +132,14 @@ class AgentClient:
         message = str(error.get("message", f"HTTP {response.status_code}"))
         if code == "action_not_found":
             raise ActionNotFoundError(message, **error.get("details", {}))
+        if code == "actions_not_editable":
+            raise ActionsNotEditableError(message)
+        if code == "action_read_only":
+            raise ActionReadOnlyError(message, **error.get("details", {}))
+        if code == "configuration_error":
+            # Кнопка описана неверно. Это ошибка человека в форме, а не сбой
+            # машины: 400, и текст показываем как есть.
+            raise ActionInvalidError(message)
         if code in {"terminal_disabled", "forbidden"}:
             raise Remo32Error(message)
         raise ActionFailedError(message, code=code, url=url)
@@ -137,6 +163,19 @@ class AgentClient:
     async def run_action(self, action_id: str, *, timeout: float = 60.0) -> ActionResult:
         return ActionResult.model_validate(
             await self._request("POST", f"/api/actions/{action_id}", timeout=timeout)
+        )
+
+    async def action_editor(self) -> ActionEditorState:
+        return ActionEditorState.model_validate(await self._request("GET", "/api/action-editor"))
+
+    async def save_action(self, action_id: str, payload: dict[str, Any]) -> ActionDescriptor:
+        return ActionDescriptor.model_validate(
+            await self._request("PUT", f"/api/action-editor/{action_id}", json=payload)
+        )
+
+    async def delete_action(self, action_id: str) -> ActionEditorState:
+        return ActionEditorState.model_validate(
+            await self._request("DELETE", f"/api/action-editor/{action_id}")
         )
 
     async def shutdown(self) -> ActionResult:

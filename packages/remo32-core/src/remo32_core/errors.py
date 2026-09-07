@@ -91,6 +91,40 @@ class TerminalDisabledError(Remo32Error):
     http_status = 403
 
 
+class ActionsNotEditableError(Remo32Error):
+    """Правка кнопок через интерфейс выключена в конфигурации.
+
+    Как и терминал, это возможность, которую владелец машины может закрыть
+    целиком: заводить кнопки — значит задавать команды, которые машина будет
+    исполнять.
+    """
+
+    code = "actions_not_editable"
+    http_status = 403
+
+
+class ActionInvalidError(Remo32Error):
+    """Описание кнопки не прошло проверку.
+
+    Ошибка человека в форме, а не сбой машины, — поэтому 400 и текст,
+    который можно показать прямо под полем.
+    """
+
+    code = "action_invalid"
+    http_status = 400
+
+
+class ActionReadOnlyError(Remo32Error):
+    """Кнопка описана в agent.toml и через интерфейс не меняется.
+
+    Файл ведёт человек: там его комментарии и порядок. Программа не вправе
+    его переписывать, поэтому такие кнопки видны, но доступны только на чтение.
+    """
+
+    code = "action_read_only"
+    http_status = 409
+
+
 class UnauthorizedError(Remo32Error):
     code = "unauthorized"
     http_status = 401

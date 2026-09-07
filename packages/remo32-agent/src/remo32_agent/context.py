@@ -17,6 +17,7 @@ from fastapi import Header
 
 from remo32_agent import __version__
 from remo32_agent.actions.runner import ActionExecutor, ActionRegistry
+from remo32_agent.actions.store import ActionStore
 from remo32_agent.config import AgentSettings
 from remo32_agent.execution import CommandRunner, RecordingRunner, SubprocessRunner
 from remo32_agent.platforms import PlatformAdapter, get_adapter
@@ -52,7 +53,13 @@ class AgentContext:
             settings.security.resolve_token(),
             allow_insecure=settings.security.allow_insecure_no_token,
         )
-        self.executor = ActionExecutor(ActionRegistry(settings.actions), self.runner, self.adapter)
+        store = (
+            ActionStore(settings.actions_editor.store_path)
+            if settings.actions_editor.enabled
+            else None
+        )
+        self.registry = ActionRegistry(settings.actions, store)
+        self.executor = ActionExecutor(self.registry, self.runner, self.adapter)
         self.power = PowerService(
             self.adapter,
             self.runner,

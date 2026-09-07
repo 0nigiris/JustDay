@@ -149,6 +149,30 @@ class TerminalSettings(BaseSettings):
     )
 
 
+class ActionsSettings(BaseSettings):
+    """Правка кнопок прямо из интерфейса.
+
+    Включено по умолчанию: без этого «добавить свою кнопку» означает поход
+    к машине, текстовый редактор и перезапуск службы — то есть возможность,
+    которой не пользуются.
+
+    Понимать, что это даёт, всё же нужно. Кнопка — это команда, которую
+    машина исполнит. Тот, кто вошёл в интерфейс, сможет задать её сам. Это
+    не оболочка (команда разбирается на аргументы и не идёт через ``sh``,
+    вид действия ограничен списком), но и не безобидное действие. Выключите
+    ``enabled``, если интерфейсом пользуется не только владелец машины.
+    """
+
+    enabled: bool = True
+    store_path: Path = Field(
+        Path("~/.config/remo32/actions.toml"),
+        description="Файл, в котором интерфейс хранит заведённые кнопки",
+    )
+    max_actions: int = Field(
+        64, ge=1, le=512, description="Предел на число кнопок — защита от случайного цикла"
+    )
+
+
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="REMO32_AGENT_",
@@ -167,6 +191,7 @@ class AgentSettings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     power: PowerSettings = Field(default_factory=PowerSettings)
     terminal: TerminalSettings = Field(default_factory=TerminalSettings)
+    actions_editor: ActionsSettings = Field(default_factory=ActionsSettings)
     actions: list[ActionConfig] = Field(default_factory=list)
 
     @field_validator("actions")
