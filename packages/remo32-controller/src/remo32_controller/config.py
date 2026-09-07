@@ -277,6 +277,28 @@ class WolSettings(BaseModel):
     )
 
 
+class AndroidAppSettings(BaseSettings):
+    """Раздача APK и обновление приложения на телефоне.
+
+    Магазина у приложения нет, поэтому обновляет его тот же контроллер,
+    которым оно управляет: телефон спрашивает версию, сравнивает со своей и
+    предлагает поставить новую. Иначе каждое обновление — это «скачай по
+    ссылке, найди в загрузках, разреши установку», и его просто не делают.
+
+    Раздача требует входа, как и всё остальное: APK не секрет, но и
+    выкладывать его в открытый доступ ни к чему.
+    """
+
+    enabled: bool = True
+    apk_path: Path = Field(
+        Path("android/dist/remo32.apk"),
+        description=(
+            "Путь к собранному APK. Относительный считается от каталога, "
+            "из которого запущен контроллер"
+        ),
+    )
+
+
 class ControllerSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="REMO32_",
@@ -292,6 +314,7 @@ class ControllerSettings(BaseSettings):
     poller: PollerSettings = Field(default_factory=PollerSettings)
     esp32: Esp32Settings = Field(default_factory=Esp32Settings)
     wol: WolSettings = Field(default_factory=WolSettings)
+    android_app: AndroidAppSettings = Field(default_factory=AndroidAppSettings)
     pcs: list[PcConfig] = Field(default_factory=list)
     data_dir: Path = Field(
         Path("~/.local/share/remo32"),

@@ -263,6 +263,24 @@ class ActionDescriptor(BaseModel):
     )
 
 
+class AppRelease(BaseModel):
+    """Версия приложения для Android, лежащая на контроллере.
+
+    ``version_code`` — то, по чему Android решает, новее ли сборка. Он
+    обязан расти с каждой сборкой, иначе телефон считает новый файл той же
+    самой версией и отказывается ставить его поверх.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version_code: int = Field(description="Целое, растущее с каждой сборкой")
+    version_name: str = Field(description="Человеческое имя версии, например 2026.09.07-a1b2c3d")
+    size_bytes: int
+    sha256: str = Field(description="Контрольная сумма файла: телефон сверяет после загрузки")
+    built_at: str | None = None
+    download_url: str
+
+
 class ActionEditorState(BaseModel):
     """Что интерфейс знает о правке кнопок на конкретной машине.
 

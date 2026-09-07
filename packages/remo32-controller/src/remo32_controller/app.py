@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from remo32_controller import __version__
+from remo32_controller.api import app_update as app_update_api
 from remo32_controller.api import auth as auth_api
 from remo32_controller.api import esp32 as esp32_api
 from remo32_controller.api import pcs as pcs_api
@@ -176,6 +177,7 @@ def create_app(
     app.include_router(esp32_api.router)
     app.include_router(schedules_api.router)
     app.include_router(terminal_api.router)
+    app.include_router(app_update_api.router)
 
     if WEB_DIR.is_dir():
         app.mount("/static", RevalidatingStaticFiles(directory=WEB_DIR), name="static")

@@ -1092,6 +1092,13 @@ function viewMore() {
   </section>
 
   <section class="card">
+    <div class="card-head"><h2>Приложение на телефон</h2></div>
+    <div class="row"><button class="btn" id="more-apk">📲 Скачать APK</button></div>
+    <div class="meta" id="apk-note">Значок на рабочем столе вместо вкладки браузера.
+      Дальше приложение обновляется само: при запуске спрашивает эту же машину.</div>
+  </section>
+
+  <section class="card">
     <div class="card-head"><h2>Свои кнопки</h2></div>
     <div class="row"><button class="btn" data-go="buttons">🎛 Настроить кнопки пульта</button></div>
     <div class="meta">Добавить свою кнопку: запуск приложения, службы или команды в tmux.</div>
@@ -1336,6 +1343,16 @@ document.addEventListener("click", async (event) => {
   }
 
   /* --- свои кнопки --- */
+  if (button.id === "more-apk") {
+    // Ссылку открываем в новой вкладке, а не через fetch: файл должен
+    // уйти в «Загрузки» браузера, а не в память страницы.
+    return run(button, async () => {
+      const release = await api("/api/app/latest");
+      window.location.href = "/api/app/download";
+      return release;
+    }, (release) => toast(`Версия ${release.version_name}`, "ok"));
+  }
+
   if (button.id === "button-add") {
     const pc = editorPc();
     const limit = state.editor?.max_actions ?? 64;

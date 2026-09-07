@@ -18,6 +18,26 @@ KEYSTORE="$HERE/remo32.keystore"
 
 [ -f "$JAR" ] || { echo "нет android.jar: $JAR" >&2; exit 1; }
 
+# Версия сборки.
+#
+# Раньше здесь всегда стояла единица, и Android видел каждую новую сборку
+# как ту же самую версию — отсюда и приходилось удалять приложение перед
+# установкой. versionCode обязан расти, и расти сам: вручную его забывают.
+#
+# Считаем минуты от условного начала отсчёта: значение растёт на единицу в
+# минуту, помещается в int32 (там предел около 2.1 млрд) и не переполнится
+# ещё несколько тысяч лет. Читать его человеку не нужно — для этого есть
+# versionName с датой и хешем коммита.
+VERSION_CODE="${VERSION_CODE:-$(( ($(date -u +%s) - 1700000000) / 60 ))}"
+if [ -z "${VERSION_NAME:-}" ]; then
+    _commit="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo local)"
+    _dirty=""
+    git -C "$HERE" diff --quiet 2>/dev/null || _dirty="+"
+    VERSION_NAME="$(date -u +%Y.%m.%d)-${_commit}${_dirty}"
+fi
+export VERSION_CODE VERSION_NAME
+echo "версия   : $VERSION_NAME (code $VERSION_CODE)"
+
 echo "SDK      : $SDK"
 echo "инструмен: $(basename "$BT")"
 echo "платформа: $(basename "$PLATFORM")"
@@ -90,5 +110,24 @@ fi
     "$OUT/aligned.apk"
 
 "$BT/apksigner" verify --print-certs "$DIST/remo32.apk" >/dev/null
+
+# 6. Метаданные рядом с файлом. По ним контроллер отвечает телефону, какая
+#    версия лежит на сервере: разбирать бинарный манифест внутри APK ради
+#    числа, которое мы только что сами и задали, незачем.
+_sha="$(sha256sum "$DIST/remo32.apk" | cut -d" " -f1)"
+_size="$(stat -c %s "$DIST/remo32.apk")"
+cat > "$DIST/remo32.json" <<META
+{
+  "version_code": $VERSION_CODE,
+  "version_name": "$VERSION_NAME",
+  "size_bytes": $_size,
+  "sha256": "$_sha",
+  "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+META
+
 echo
 echo "готово: $DIST/remo32.apk  ($(du -h "$DIST/remo32.apk" | cut -f1))"
+echo "версия: $VERSION_NAME (code $VERSION_CODE)"
+echo
+echo "Телефон подхватит её сам: приложение спросит контроллер при запуске."

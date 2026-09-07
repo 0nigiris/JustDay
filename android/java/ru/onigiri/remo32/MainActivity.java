@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private FrameLayout root;
     private View errorView;
+    private boolean updateChecked;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -93,6 +94,19 @@ public class MainActivity extends Activity {
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     showError(String.valueOf(error.getDescription()));
+                }
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String loadedUrl) {
+                // Проверяем обновление после загрузки страницы, а не до неё:
+                // к этому моменту в CookieManager уже лежит сессия, а пульт
+                // на экране — то есть проверка ничего не задерживает.
+                // Один раз за запуск: спрашивать при каждом возврате на
+                // вкладку значило бы дёргать сервер без повода.
+                if (!updateChecked) {
+                    updateChecked = true;
+                    new Updater(MainActivity.this, url()).check(false);
                 }
             }
         });
@@ -160,10 +174,15 @@ public class MainActivity extends Activity {
             web.loadUrl(url());
         });
 
+        Button update = new Button(this);
+        update.setText("Проверить обновление");
+        update.setOnClickListener(v -> new Updater(this, field.getText().toString().trim()).check(true));
+
         box.addView(title);
         box.addView(hint);
         box.addView(field);
         box.addView(retry);
+        box.addView(update);
 
         errorView = box;
         root.addView(errorView, new FrameLayout.LayoutParams(
