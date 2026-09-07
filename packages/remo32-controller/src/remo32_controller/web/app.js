@@ -131,6 +131,8 @@ const state = {
   esp32: null,
   auth: null,
   form: { open: false, editId: null },
+  editor: null,          // состояние редактора кнопок текущего ПК
+  buttonForm: null,      // черновик формы: null — форма закрыта
   rendering: false,
 };
 
@@ -325,6 +327,7 @@ const ROUTES = {
   schedule: { title: "Расписание", view: () => viewSchedule() },
   more: { title: "Ещё", view: () => viewMore() },
   help: { title: "Справка", view: () => viewHelp(), parent: "more" },
+  buttons: { title: "Свои кнопки", view: () => viewButtons(), parent: "more" },
 };
 const DEFAULT_ROUTE = "deck";
 
@@ -492,7 +495,7 @@ function metric(label, value, percent = null, note = null) {
   const bar =
     percent == null
       ? ""
-      : `<div class="bar"><i class="${barClass}" style="width:${Math.min(100, percent)}%"></i></div>`;
+      : `<div class="bar"><i class="${barClass}" style="transform:scaleX(${Math.min(100, percent) / 100})"></i></div>`;
   return `<div class="metric ${percent == null ? "na" : ""}">
     <div class="label">${esc(label)}</div>
     <div class="value">${esc(value)}${note ? ` <small>${esc(note)}</small>` : ""}</div>
@@ -790,6 +793,277 @@ function viewSchedule() {
   </section>`;
 }
 
+/* ==================================================== свои кнопки =======
+
+   Своя кнопка — это команда, которую машина выполнит. Поэтому форма
+   намеренно не даёт ввести командную строку: отдельно программа, отдельно
+   аргументы, вид действия — из списка. Так «удобно» не превращается в
+   «через интерфейс можно выполнить что угодно одной строкой».
+
+   Кнопки из agent.toml показаны здесь же, но только на чтение: тот файл
+   ведёт человек, и переписывать его комментарии программа не вправе. */
+
+const KIND_NAMES = {
+  desktop: "Приложение",
+  exec: "Программа",
+  tmux: "Команда в tmux",
+  systemd_user: "Служба (пользователя)",
+  systemd_system: "Служба (системная)",
+  shell_script: "Скрипт с диска",
+};
+
+const KIND_HINTS = {
+  desktop: "Запускает окно на экране компьютера: браузер, игру, редактор.",
+  exec: "Запускает программу без графики. Окна не будет.",
+  tmux: "Запускает команду в фоновой сессии tmux — она переживёт обрыв связи, и к ней можно подключиться из терминала.",
+  systemd_user: "Управляет службой, настроенной у пользователя.",
+  systemd_system: "Управляет системной службой. Обычно требует прав.",
+  shell_script: "Запускает файл, который вы заранее положили на диск.",
+};
+
+/* Идентификатор из названия: латиница как есть, кириллица — транслитом.
+   Правила простые и предсказуемые; при правке идентификатор уже не
+   меняется, иначе кнопка потеряла бы избранное и расписания. */
+const TRANSLIT = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+  и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+  с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch",
+  ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+
+function slugify(name) {
+  const base = [...name.toLowerCase()]
+    .map((ch) => (TRANSLIT[ch] !== undefined ? TRANSLIT[ch] : ch))
+    .join("")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  // Идентификатор обязан начинаться с буквы или цифры.
+  return /^[a-z0-9]/.test(base) ? base : `knopka-${Date.now().toString(36)}`;
+}
+
+const editorPc = () => activePc();
+
+function buttonRow(action) {
+  const kind = KIND_NAMES[action.kind] || action.kind;
+  const tag = action.editable ? "" : `<span class="tag">в файле</span>`;
+  return `<button class="list-row" data-edit-button="${esc(action.id)}" ${action.editable ? "" : "disabled"}>
+    <span class="ico">${esc(action.icon || "•")}</span>
+    <span class="body">
+      <span class="title">${esc(action.name)}</span>
+      <span class="sub">${esc(kind)}${action.group ? ` · ${esc(action.group)}` : ""}</span>
+    </span>
+    ${tag}
+    <span class="chev">${action.editable ? "›" : ""}</span>
+  </button>`;
+}
+
+function viewButtons() {
+  const pc = editorPc();
+  if (!pc) return `<div class="empty">Сначала настройте хотя бы один компьютер.</div>`;
+  if (state.buttonForm) return buttonForm(pc);
+
+  const editor = state.editor;
+  if (!editor) return `<div class="empty">Загрузка…</div>`;
+
+  if (!editor.enabled) {
+    return `<div class="banner warn">Правка кнопок на «${esc(pc.name)}» выключена.
+      Включить: <code>actions_editor.enabled = true</code> в конфигурации агента.</div>
+      <div class="empty">Кнопки этой машины описаны в её <code>agent.toml</code>.</div>`;
+  }
+
+  const all = pc.actions || [];
+  const mine = all.filter((a) => a.editable);
+  const fromFile = all.filter((a) => !a.editable);
+
+  return `
+  <div class="banner">Кнопки появляются на пульте компьютера «${esc(pc.name)}».
+    Сменить компьютер — на вкладке «Ещё».</div>
+
+  ${mine.length ? `<div class="group-title">Мои кнопки</div>
+    <div class="list">${mine.map(buttonRow).join("")}</div>` : ""}
+
+  <div class="row"><button class="btn primary" id="button-add">＋ Добавить кнопку</button></div>
+
+  ${fromFile.length ? `<div class="group-title">Из файла agent.toml</div>
+    <div class="list">${fromFile.map(buttonRow).join("")}</div>
+    <div class="meta" style="padding:8px 4px;color:var(--text-faint);font-size:13px">
+      Эти кнопки меняются только в самом файле: там ваши комментарии и порядок,
+      и программа их не переписывает.</div>` : ""}`;
+}
+
+/* Поля, зависящие от вида действия. Отдельная функция, потому что при
+   смене вида перерисовывается только этот кусок — введённое имя и значок
+   при этом обязаны сохраниться. */
+function kindFields(draft) {
+  const argvText = (draft.argv || []).join("\n");
+  const program = `
+    <div class="field">
+      <label for="f-program">Программа</label>
+      <input id="f-program" value="${esc((draft.argv || [])[0] || "")}" placeholder="obs">
+      <div class="hint">Имя программы или полный путь. Без аргументов.</div>
+    </div>
+    <div class="field">
+      <label for="f-args">Аргументы</label>
+      <textarea id="f-args" placeholder="-c">${esc((draft.argv || []).slice(1).join("\n"))}</textarea>
+      <div class="hint">По одному в строке. Это не командная строка:
+        <code>&amp;&amp;</code>, <code>|</code> и <code>&gt;</code> здесь не работают —
+        для такого положите скрипт на диск и выберите вид «Скрипт с диска».</div>
+    </div>`;
+
+  const workdir = `
+    <div class="field">
+      <label for="f-workdir">Рабочий каталог</label>
+      <input id="f-workdir" value="${esc(draft.workdir || "")}" placeholder="~/проекты">
+      <div class="hint">Необязательно. Отсюда команда начнёт работу.</div>
+    </div>`;
+
+  if (draft.kind === "desktop" || draft.kind === "exec") return program + workdir;
+
+  if (draft.kind === "tmux") {
+    return `
+    <div class="field">
+      <label for="f-session">Имя сессии</label>
+      <input id="f-session" value="${esc(draft.session || "")}" placeholder="main">
+      <div class="hint">Латиница, цифры, дефис. К этой сессии подключается веб-терминал.</div>
+    </div>` + program + workdir;
+  }
+
+  if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
+    const verbs = ["start", "stop", "restart", "reload", "status", "is-active"];
+    return `
+    <div class="field">
+      <label for="f-unit">Юнит</label>
+      <input id="f-unit" value="${esc(draft.unit || "")}" placeholder="minecraft.service">
+    </div>
+    <div class="field">
+      <label for="f-verb">Что сделать</label>
+      <select id="f-verb">${verbs
+        .map((v) => `<option value="${v}" ${draft.verb === v ? "selected" : ""}>${v}</option>`)
+        .join("")}</select>
+    </div>`;
+  }
+
+  return `
+    <div class="field">
+      <label for="f-script">Путь к скрипту</label>
+      <input id="f-script" value="${esc(draft.script || "")}" placeholder="/home/имя/bin/backup.sh">
+      <div class="hint">Абсолютный путь к исполняемому файлу.</div>
+    </div>
+    <div class="field">
+      <label for="f-args">Аргументы</label>
+      <textarea id="f-args" placeholder="">${esc((draft.args || []).join("\n"))}</textarea>
+      <div class="hint">По одному в строке.</div>
+    </div>` + workdir;
+}
+
+function buttonForm(pc) {
+  const draft = state.buttonForm;
+  const isNew = !draft.id;
+
+  return `
+  <section class="card">
+    <div class="card-head"><h2>${isNew ? "Новая кнопка" : "Правка кнопки"}</h2></div>
+
+    ${draft.error ? `<div class="form-error">${esc(draft.error)}</div>` : ""}
+
+    <div class="sheet-form">
+      <div class="field">
+        <label for="f-name">Название</label>
+        <input id="f-name" value="${esc(draft.name || "")}" placeholder="OBS Studio" autofocus>
+      </div>
+
+      <div class="field">
+        <label for="f-icon">Значок</label>
+        <input id="f-icon" value="${esc(draft.icon || "")}" placeholder="🎥" maxlength="8">
+        <div class="hint">Один эмодзи. Он и будет виден на пульте.</div>
+      </div>
+
+      <div class="field">
+        <label for="f-group">Группа</label>
+        <input id="f-group" value="${esc(draft.group || "")}" placeholder="Стрим">
+        <div class="hint">Необязательно. Кнопки одной группы встают на свой лист пульта.</div>
+      </div>
+
+      <div class="field">
+        <label for="f-kind">Вид</label>
+        <select id="f-kind">${Object.entries(KIND_NAMES)
+          .map(([k, label]) => `<option value="${k}" ${draft.kind === k ? "selected" : ""}>${esc(label)}</option>`)
+          .join("")}</select>
+        <div class="hint">${esc(KIND_HINTS[draft.kind] || "")}</div>
+      </div>
+
+      ${kindFields(draft)}
+
+      <div class="kv">
+        <div>
+          <span class="label">Спрашивать перед запуском</span>
+          <button class="switch ${draft.dangerous ? "on" : ""}" id="f-dangerous"
+            aria-pressed="${draft.dangerous ? "true" : "false"}"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="button-cancel">Отмена</button>
+      <button class="btn primary" id="button-save">Сохранить</button>
+    </div>
+    ${isNew ? "" : `<div class="row"><button class="btn danger" id="button-delete">Удалить кнопку</button></div>`}
+  </section>`;
+}
+
+/* Собирает описание из полей формы. Значения читаются из DOM, а не
+   накапливаются на каждое нажатие клавиши: так форму нельзя рассинхронить
+   с тем, что человек видит. */
+function collectForm() {
+  const draft = state.buttonForm;
+  const value = (id) => el(id)?.value.trim() ?? "";
+  const lines = (id) =>
+    (el(id)?.value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+
+  const body = {
+    name: value("f-name"),
+    kind: draft.kind,
+    dangerous: draft.dangerous || false,
+  };
+  const icon = value("f-icon");
+  const group = value("f-group");
+  const workdir = value("f-workdir");
+  if (icon) body.icon = icon;
+  if (group) body.group = group;
+  if (workdir) body.workdir = workdir;
+
+  if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
+    body.unit = value("f-unit");
+    body.verb = value("f-verb");
+  } else if (draft.kind === "shell_script") {
+    body.script = value("f-script");
+    body.args = lines("f-args");
+  } else {
+    const program = value("f-program");
+    body.argv = program ? [program, ...lines("f-args")] : [];
+    if (draft.kind === "tmux") body.session = value("f-session");
+  }
+  return body;
+}
+
+/* То же самое, но чтобы не потерять введённое при смене вида. */
+function stashForm() {
+  const draft = state.buttonForm;
+  if (!draft) return;
+  Object.assign(draft, collectForm());
+}
+
+async function loadEditor(force = false) {
+  const pc = editorPc();
+  if (!pc) return;
+  if (state.editor && !force) return;
+  state.editor = await api(`/api/pcs/${encodeURIComponent(pc.id)}/action-editor`).catch(() => ({
+    enabled: false,
+    actions: [],
+  }));
+}
+
 /* ======================================================== вкладка «Ещё» */
 
 function viewMore() {
@@ -815,6 +1089,12 @@ function viewMore() {
       <button class="btn" id="more-passkey" ${passkeyReady ? "" : "disabled"}>🔑 Зарегистрировать passkey</button>
     </div>
     <div class="meta">${esc(note)}</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Свои кнопки</h2></div>
+    <div class="row"><button class="btn" data-go="buttons">🎛 Настроить кнопки пульта</button></div>
+    <div class="meta">Добавить свою кнопку: запуск приложения, службы или команды в tmux.</div>
   </section>
 
   <section class="card">
@@ -906,6 +1186,7 @@ async function render(force = false) {
     state.esp32 = esp32;
     state.schedules = schedules;
     if (current === "more") state.auth = await api("/api/auth/status").catch(() => state.auth);
+    if (current === "buttons") await loadEditor(force);
 
     // Лист, на котором стоит палец, при обновлении данных сбрасываться
     // не должен.
@@ -996,6 +1277,16 @@ document.addEventListener("pointermove", (event) => {
 
 /* ============================================================ нажатия === */
 
+/* Смена вида действия меняет набор полей. Введённое до этого сохраняем:
+   человек уже написал название и значок, терять их из-за смены вида нельзя. */
+document.addEventListener("change", (event) => {
+  if (event.target.id !== "f-kind" || !state.buttonForm) return;
+  stashForm();
+  state.buttonForm.kind = event.target.value;
+  state.buttonForm.error = null;
+  render(true);
+});
+
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if (!button) return;
@@ -1042,6 +1333,81 @@ document.addEventListener("click", async (event) => {
       () => api(`/api/pcs/${encodeURIComponent(pcId)}/actions/${encodeURIComponent(id)}`, { method: "POST" }),
       (result) => toast(result.message || (result.success ? "готово" : "не выполнено"),
         result.success ? "ok" : "err"));
+  }
+
+  /* --- свои кнопки --- */
+  if (button.id === "button-add") {
+    const pc = editorPc();
+    const limit = state.editor?.max_actions ?? 64;
+    if ((pc?.actions || []).filter((a) => a.editable).length >= limit) {
+      return toast(`Больше ${limit} своих кнопок нельзя`, "err");
+    }
+    state.buttonForm = { kind: "desktop", dangerous: false };
+    state.form.open = true;
+    return render(true);
+  }
+  if (d.editButton) {
+    const found = (state.editor?.actions || []).find((a) => a.id === d.editButton);
+    if (!found) return toast("не нашёл описание этой кнопки", "err");
+    // Копия, а не сама запись: отмена должна оставлять список нетронутым.
+    state.buttonForm = JSON.parse(JSON.stringify(found));
+    state.form.open = true;
+    return render(true);
+  }
+  if (button.id === "f-dangerous") {
+    stashForm();
+    state.buttonForm.dangerous = !state.buttonForm.dangerous;
+    button.classList.toggle("on", state.buttonForm.dangerous);
+    button.setAttribute("aria-pressed", state.buttonForm.dangerous ? "true" : "false");
+    buzz(6);
+    return;
+  }
+  if (button.id === "button-cancel") {
+    state.buttonForm = null;
+    state.form.open = false;
+    return render(true);
+  }
+  if (button.id === "button-save") {
+    const pc = editorPc();
+    const draft = state.buttonForm;
+    const body = collectForm();
+    if (!body.name) {
+      draft.error = "Без названия кнопку не найти на пульте";
+      Object.assign(draft, body);
+      return render(true);
+    }
+    const id = draft.id || slugify(body.name);
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(pc.id)}/action-editor/${encodeURIComponent(id)}`,
+        { method: "PUT", body: JSON.stringify(body) }),
+      async () => {
+        state.buttonForm = null;
+        state.form.open = false;
+        toast(draft.id ? "Кнопка изменена" : "Кнопка добавлена", "ok");
+        await loadEditor(true);
+        render(true);
+      });
+  }
+  if (button.id === "button-delete") {
+    const pc = editorPc();
+    const draft = state.buttonForm;
+    const ok = await confirmSheet({
+      icon: "🗑",
+      title: `Удалить «${draft.name}»?`,
+      text: "Кнопка исчезнет с пульта. Сама программа на компьютере останется.",
+      yes: "Удалить",
+    });
+    if (!ok) return;
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(pc.id)}/action-editor/${encodeURIComponent(draft.id)}`,
+        { method: "DELETE" }),
+      async () => {
+        state.buttonForm = null;
+        state.form.open = false;
+        toast("Кнопка удалена", "ok");
+        await loadEditor(true);
+        render(true);
+      });
   }
 
   /* --- карточка ПК --- */
