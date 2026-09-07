@@ -1,0 +1,76 @@
+name: Проверки
+
+# Прогоняется на каждый push и pull request. Здесь ровно то же, что
+# запускается локально перед коммитом, — иначе «у меня работает» и
+# «в репозитории работает» разъезжаются, и никто этого не замечает,
+# пока не придёт первый чужой человек.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  # Новый push отменяет прошлый прогон той же ветки: ждать результата
+  # по устаревшему коду незачем.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 — заявленный минимум, 3.13 — то, на чём разрабатывается.
+        python: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Поставить uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Поставить Python и зависимости
+        run: uv sync --frozen --all-packages
+
+      - name: Стиль (ruff)
+        run: uv run ruff check .
+
+      - name: Типы (mypy)
+        run: uv run mypy packages
+
+      - name: Тесты
+        run: uv run pytest -q
+
+  javascript:
+    name: Синтаксис интерфейса
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Сборщика у интерфейса нет намеренно, поэтому и проверка простая:
+      # синтаксическая ошибка в app.js ломает пульт целиком и молча.
+      - name: Проверить app.js и terminal.js
+        run: |
+          node --check packages/remo32-controller/src/remo32_controller/web/app.js
+          node --check packages/remo32-controller/src/remo32_controller/web/terminal.js
+
+  shell:
+    name: Скрипты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Не блокирует сборку: замечания shellcheck полезны, но ломать из-за
+      # них проверку всего проекта — значит приучить всех её игнорировать.
+      - name: shellcheck
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck deploy/install.sh tools/*.sh android/build.sh

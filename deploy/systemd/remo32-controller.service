@@ -22,8 +22,8 @@ Environment=PYTHONUNBUFFERED=1
 # старте пишет в ~/.cache/uv, а ProtectHome=read-only это запрещает —
 # служба падала с «Read-only file system». Зависимости обновляются
 # командой «uv sync» вручную, службе для работы uv не нужен.
-ExecStart=%h/Remo32/.venv/bin/remo32-controller
-WorkingDirectory=%h/Remo32
+ExecStart=%REPO%/.venv/bin/remo32-controller
+WorkingDirectory=%REPO%
 
 Restart=always
 RestartSec=5

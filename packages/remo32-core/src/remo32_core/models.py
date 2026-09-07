@@ -65,7 +65,7 @@ DeviceId = Annotated[
         description=(
             "Идентификатор устройства: строчные латинские буквы, цифры, дефис, подчёркивание."
         ),
-        examples=["vasya", "minevpsex"],
+        examples=["desktop", "server"],
     ),
 ]
 

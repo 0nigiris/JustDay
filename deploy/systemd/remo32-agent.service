@@ -27,13 +27,14 @@ EnvironmentFile=%h/.config/remo32/agent.env
 Environment=REMO32_AGENT_CONFIG=%h/.config/remo32/agent.toml
 Environment=PYTHONUNBUFFERED=1
 
-# %h — домашний каталог. Путь до uv поправьте, если он у вас другой.
+# %REPO% подставляет install.sh — это каталог, куда вы склонировали
+# репозиторий. Если ставите юнит руками, впишите путь сами.
 # Запуск напрямую из окружения проекта, а не через «uv run»: uv при каждом
 # старте пишет в ~/.cache/uv, а ProtectHome=read-only это запрещает —
 # служба падала с «Read-only file system». Зависимости обновляются
 # командой «uv sync» вручную, службе для работы uv не нужен.
-ExecStart=%h/Remo32/.venv/bin/remo32-agent
-WorkingDirectory=%h/Remo32
+ExecStart=%REPO%/.venv/bin/remo32-agent
+WorkingDirectory=%REPO%
 
 Restart=always
 RestartSec=5

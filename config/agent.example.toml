@@ -10,7 +10,7 @@
 # Токен агента задаётся переменной окружения REMO32_AGENT_TOKEN
 # либо файлом, указанным в security.token_file (права 0600).
 
-agent_id = "vasya"
+agent_id = "desktop"
 display_name = "Основной ПК"
 
 [server]

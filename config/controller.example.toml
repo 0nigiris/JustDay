@@ -27,7 +27,7 @@ port = 8080
 log_level = "INFO"
 log_format = "console"
 # Адрес, по которому вы открываете интерфейс. Нужен для passkey.
-# public_origin = "https://vasya.tailnet-abc123.ts.net:8080"
+# public_origin = "https://desktop.tailnet-abc123.ts.net:8080"
 
 [auth]
 session_ttl_hours = 720          # 30 дней: не логиниться заново каждый день
@@ -43,7 +43,7 @@ password_enabled = true
 # В Tailscale: включите HTTPS Certificates в админке и получите сертификат
 # командой `tailscale cert <имя>.<tailnet>.ts.net`.
 webauthn_enabled = true
-# webauthn_rp_id = "vasya.tailnet-abc123.ts.net"
+# webauthn_rp_id = "desktop.tailnet-abc123.ts.net"
 webauthn_rp_name = "Remo32"
 
 max_failed_attempts = 10
@@ -98,13 +98,13 @@ offline_after_seconds = 45.0
 # ---------------------------------------------------------------------------
 
 [[pcs]]
-id = "vasya"
+id = "desktop"
 name = "Основной ПК"
 description = "Рабочая машина"
 # Адрес агента. Внутри Tailscale используйте адрес 100.x.y.z — тогда
 # соединение шифруется и не зависит от домашней сети.
 agent_url = "http://127.0.0.1:8765"
-agent_token_env = "REMO32_AGENT_TOKEN_VASYA"
+agent_token_env = "REMO32_AGENT_TOKEN_DESKTOP"
 mac_address = "5c:f9:dd:11:22:33"
 # Точнее, чем 255.255.255.255: пакет уходит в нужную подсеть.
 broadcast_address = "192.168.1.255"
@@ -118,11 +118,11 @@ guarded_by_esp32 = true
 guard_snooze_minutes = 480       # 8 часов тишины: хватает на ночь
 
 [[pcs]]
-id = "minevpsex"
+id = "server"
 name = "Серверный ПК"
 description = "Minecraft и прочее"
-agent_url = "http://100.124.137.12:8765"
-agent_token_env = "REMO32_AGENT_TOKEN_MINEVPSEX"
+agent_url = "http://100.x.y.z:8765"
+agent_token_env = "REMO32_AGENT_TOKEN_SERVER"
 # mac_address = "??:??:??:??:??:??"   # посмотреть на самом ПК: cat /sys/class/net/<iface>/address
 broadcast_address = "192.168.1.255"
 terminal_enabled = false

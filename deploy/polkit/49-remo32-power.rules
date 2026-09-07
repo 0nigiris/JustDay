@@ -8,7 +8,8 @@
  * Это правило выдаёт ровно два разрешения и ничего больше — оно НЕ даёт
  * агенту прав root.
  *
- * ЗАМЕНИТЕ "oni" на своё имя пользователя.
+ * %USER% подставляет install.sh. Если ставите файл руками —
+ * впишите вместо него своё имя пользователя.
  */
 polkit.addRule(function (action, subject) {
     var allowed = [
@@ -18,7 +19,7 @@ polkit.addRule(function (action, subject) {
         "org.freedesktop.login1.reboot-multiple-sessions"
     ];
 
-    if (allowed.indexOf(action.id) !== -1 && subject.user === "oni") {
+    if (allowed.indexOf(action.id) !== -1 && subject.user === "%USER%") {
         return polkit.Result.YES;
     }
 });

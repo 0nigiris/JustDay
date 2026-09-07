@@ -9,6 +9,7 @@
 #   ./deploy/install.sh controller      — поставить контроллер
 #   ./deploy/install.sh both            — и то, и другое
 #   ./deploy/install.sh polkit          — разрешить выключение без пароля (sudo)
+#   ./deploy/install.sh check           — проверить, что всё работает
 
 set -euo pipefail
 
@@ -60,6 +61,42 @@ enable_linger() {
     fi
 }
 
+# Юнит должен указывать на тот каталог, куда репозиторий действительно
+# склонирован. Раньше в нём было зашито ~/Remo32, и у любого, кто положил
+# проект в другое место, служба не стартовала с невнятным «no such file».
+install_unit() {
+    local name="$1"
+    sed -e "s|%REPO%|$REPO_DIR|g" -e "s|%h|$HOME|g" \
+        "$REPO_DIR/deploy/systemd/$name.service" > "$UNIT_DIR/$name.service"
+    systemctl --user daemon-reload
+
+    if systemctl --user is-enabled --quiet "$name" 2>/dev/null; then
+        systemctl --user restart "$name"
+        ok "$name перезапущен"
+        return
+    fi
+
+    # Спрашиваем, а не включаем молча: служба, поднятая без ведома человека,
+    # — плохое начало знакомства с программой.
+    if ask "Запустить $name сейчас и добавить в автозапуск?"; then
+        systemctl --user enable --now "$name"
+        ok "$name запущен"
+    else
+        info "Позже: systemctl --user enable --now $name"
+    fi
+}
+
+# Вопрос «да/нет». Если ввода нет (скрипт запустили из другого скрипта),
+# отвечаем «нет»: молчание не должно означать согласие.
+ask() {
+    local answer
+    if [ ! -t 0 ]; then
+        return 1
+    fi
+    read -r -p "$(printf '\033[1;36m?\033[0m %s [y/N] ' "$1")" answer
+    [[ "$answer" =~ ^[YyДд]$ ]]
+}
+
 install_agent() {
     info "Установка агента"
     prepare_dirs
@@ -92,10 +129,8 @@ EOF
     cp "$REPO_DIR/deploy/scripts/screenshot.sh" "$DATA_DIR/scripts/"
     chmod +x "$DATA_DIR/scripts/screenshot.sh"
 
-    sed "s|%h|$HOME|g" "$REPO_DIR/deploy/systemd/remo32-agent.service" \
-        > "$UNIT_DIR/remo32-agent.service"
-    systemctl --user daemon-reload
-    ok "служба установлена: systemctl --user enable --now remo32-agent"
+    install_unit remo32-agent
+    ok "служба установлена"
 }
 
 install_controller() {
@@ -121,9 +156,10 @@ REMO32_PASSWORD_HASH=$hash
 REMO32_SESSION_SECRET=$secret
 # Токен(ы) агентов — впишите значения с машин, где стоит агент:
 # REMO32_AGENT_TOKEN=...
-# либо по одному на ПК:
-# REMO32_AGENT_TOKEN_VASYA=...
-# REMO32_AGENT_TOKEN_MINEVPSEX=...
+# либо по одному на ПК (суффикс — идентификатор ПК из controller.toml
+# заглавными буквами):
+# REMO32_AGENT_TOKEN_DESKTOP=...
+# REMO32_AGENT_TOKEN_SERVER=...
 EOF
         chmod 600 "$CONFIG_DIR/controller.env"
         ok "создан $CONFIG_DIR/controller.env"
@@ -131,20 +167,79 @@ EOF
         warn "$CONFIG_DIR/controller.env уже есть, пароль не меняю"
     fi
 
-    sed "s|%h|$HOME|g" "$REPO_DIR/deploy/systemd/remo32-controller.service" \
-        > "$UNIT_DIR/remo32-controller.service"
-    systemctl --user daemon-reload
-    ok "служба установлена: systemctl --user enable --now remo32-controller"
+    install_unit remo32-controller
+    ok "служба установлена"
 
     echo
     warn "Проверьте адрес прослушивания в $CONFIG_DIR/controller.toml"
     warn "Для доступа с телефона укажите адрес Tailscale: $(command -v tailscale >/dev/null && tailscale ip -4 2>/dev/null | head -1 || echo '<tailscale ip -4>')"
 }
 
+# Проверка после установки. Отвечает на вопрос «почему не работает?»
+# раньше, чем он будет задан: что установлено, что запущено, что отвечает.
+# printf с %-28s выравнивает по БАЙТАМ, а кириллица в UTF-8 занимает по два
+# на букву — колонка разъезжается. Добиваем пробелами по числу символов.
+field() {
+    local label="$1" width=26 pad=""
+    local n=$(( width - ${#label} ))
+    while [ "$n" -gt 0 ]; do pad+=" "; n=$(( n - 1 )); done
+    printf '  %s%s' "$label" "$pad"
+}
+
+run_check() {
+    info "Проверка установки"
+    echo
+
+    field "окружение проекта"
+    if [ -x "$REPO_DIR/.venv/bin/python3" ]; then ok "есть"; else fail "нет — запустите: uv sync"; fi
+
+    field "linger"
+    if [ "$(loginctl show-user "$USER" --property=Linger --value 2>/dev/null)" = "yes" ]; then
+        ok "включён"
+    else
+        warn "выключен — после перезагрузки службы не поднимутся до входа в систему"
+    fi
+
+    local any=0
+    for name in remo32-agent remo32-controller; do
+        [ -f "$UNIT_DIR/$name.service" ] || continue
+        any=1
+        field "$name"
+        if systemctl --user is-active --quiet "$name"; then
+            ok "работает"
+        else
+            warn "не работает — journalctl --user -u $name -n 30"
+        fi
+    done
+    [ "$any" = 1 ] || warn "  ни одна служба не установлена"
+
+    for pair in "агент:8765:/ping" "контроллер:8080:/api/health"; do
+        local label=${pair%%:*}
+        local rest=${pair#*:}
+        local port=${rest%%:*}
+        local path=${rest#*:}
+        [ -f "$UNIT_DIR/remo32-agent.service" ] || [ "$label" = "контроллер" ] || continue
+        field "$label отвечает"
+        if curl -fsS -m 3 "http://127.0.0.1:$port$path" >/dev/null 2>&1; then
+            ok "да (порт $port)"
+        else
+            warn "нет ответа на 127.0.0.1:$port"
+        fi
+    done
+
+    echo
+    field "конфигурация"
+    if [ -f "$CONFIG_DIR/controller.toml" ] || [ -f "$CONFIG_DIR/agent.toml" ]; then
+        ok "$CONFIG_DIR"
+    else
+        warn "не найдена в $CONFIG_DIR"
+    fi
+}
+
 install_polkit() {
     info "Установка правила polkit (нужен sudo)"
     tmp="$(mktemp)"
-    sed "s/\"oni\"/\"$USER\"/" "$REPO_DIR/deploy/polkit/49-remo32-power.rules" > "$tmp"
+    sed "s|%USER%|$USER|g" "$REPO_DIR/deploy/polkit/49-remo32-power.rules" > "$tmp"
     sudo install -m 0644 "$tmp" /etc/polkit-1/rules.d/49-remo32-power.rules
     rm -f "$tmp"
     ok "выключение и перезагрузка разрешены пользователю $USER без пароля"
@@ -154,10 +249,11 @@ need python3
 need systemctl
 
 case "${1:-}" in
-    agent)      need uv; install_agent ;;
-    controller) need uv; install_controller ;;
-    both)       need uv; install_agent; install_controller ;;
+    agent)      need uv; install_agent; echo; run_check ;;
+    controller) need uv; install_controller; echo; run_check ;;
+    both)       need uv; install_agent; install_controller; echo; run_check ;;
     polkit)     install_polkit ;;
+    check)      run_check ;;
     *)
         cat <<EOF
 Использование: $0 {agent|controller|both|polkit}
@@ -166,6 +262,7 @@ case "${1:-}" in
   controller  установить центральный контроллер
   both        установить оба (типично для основного ПК)
   polkit      разрешить выключение/перезагрузку без пароля (запросит sudo)
+  check       проверить, что установлено и работает
 
 Ничего не делает без явной команды.
 EOF

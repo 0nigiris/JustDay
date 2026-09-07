@@ -84,7 +84,7 @@ class ServerSettings(BaseModel):
         None,
         description=(
             "Полный адрес, по которому вы открываете интерфейс, например "
-            "https://vasya.tailnet-abc123.ts.net:8080. Нужен для passkey."
+            "https://desktop.tailnet-abc123.ts.net:8080. Нужен для passkey."
         ),
     )
 
@@ -115,7 +115,7 @@ class AuthSettings(BaseModel):
     webauthn_rp_id: str | None = Field(
         None,
         description=(
-            "Домен для passkey, например vasya.tailnet-abc123.ts.net. "
+            "Домен для passkey, например desktop.tailnet-abc123.ts.net. "
             "Passkey привязан к домену: при смене адреса ключи перестанут работать."
         ),
     )
