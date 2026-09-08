@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "nvs.h"
 #include "ping/ping_sock.h"
 
 #include "r32_wifi.h"
@@ -26,6 +27,12 @@ static r32_guard_status_t s_status = {
     .last_seen_ms = -1,
 };
 static SemaphoreHandle_t s_lock = NULL;
+
+/* Счётчик побудок хранится в NVS; сами функции — ниже, рядом с остальной
+ * работой с памятью платы. Здесь только объявления: задача сторожа стоит
+ * выше по файлу и вызывает их. */
+static void stats_load(void);
+static void stats_save(void);
 
 /* --------------------------------------------------------------- пинг */
 
@@ -220,6 +227,7 @@ static void guard_task(void *arg)
             } else {
                 s_status.attempts++;
                 s_status.total_wakes++;
+                stats_save();
                 last_wake_ms = now_ms;
                 set_state(R32_GUARD_WAKING);
                 xSemaphoreGive(s_lock);
@@ -240,6 +248,49 @@ static void guard_task(void *arg)
 
         vTaskDelay(pdMS_TO_TICKS(CHECK_PERIOD_MS));
     }
+}
+
+/* --- счётчик побудок --------------------------------------------------
+ *
+ * Живёт в NVS, а не только в памяти. Причина простая: побудка — событие
+ * редкое и происходит ровно тогда, когда рядом никого нет. Счётчик,
+ * обнуляемый перезагрузкой платы, отвечает на вопрос «сработал ли сторож
+ * этой ночью» бесполезным нулём — ровно так и случилось при первой
+ * успешной побудке 2026-09-08: ПК проснулся сам, а плата к вечеру
+ * перезапустилась, и доказательства не осталось.
+ *
+ * Износ флеша здесь не проблема: запись происходит раз в побудку, то есть
+ * единицы раз в сутки в худшем случае, а NVS переживает десятки тысяч
+ * циклов.
+ */
+
+#define STATS_NAMESPACE "r32_stats"
+#define STATS_KEY_WAKES "wakes"
+
+static void stats_load(void)
+{
+    nvs_handle_t handle;
+    if (nvs_open(STATS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
+        return; /* раздела ещё нет — значит побудок не было */
+    }
+    uint32_t saved = 0;
+    if (nvs_get_u32(handle, STATS_KEY_WAKES, &saved) == ESP_OK) {
+        s_status.total_wakes = (int) saved;
+    }
+    nvs_close(handle);
+}
+
+static void stats_save(void)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(STATS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "счётчик побудок не сохранён: %s", esp_err_to_name(err));
+        return;
+    }
+    nvs_set_u32(handle, STATS_KEY_WAKES, (uint32_t) s_status.total_wakes);
+    nvs_commit(handle);
+    nvs_close(handle);
 }
 
 /* Общая для консоли и сети проверка: включённый сторож без адреса или
@@ -269,6 +320,7 @@ esp_err_t r32_guard_wake_now(void)
      * кнопку нажимали, иначе непонятно, почему ПК вдруг включился. */
     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
     s_status.total_wakes++;
+    stats_save();
     if (s_lock) xSemaphoreGive(s_lock);
 
     ESP_LOGW(TAG, "побудка по кнопке: %s", s_cfg->guard_mac);
@@ -358,6 +410,9 @@ esp_err_t r32_guard_start(r32_config_t *cfg)
     }
 
     s_status.state = cfg->guard_enabled ? R32_GUARD_WATCHING : R32_GUARD_DISABLED;
+
+    /* Счётчик побудок переживает перезагрузку платы: см. stats_load. */
+    stats_load();
 
     if (cfg->guard_enabled && (cfg->guard_host[0] == '\0' || cfg->guard_mac[0] == '\0')) {
         ESP_LOGE(TAG, "сторож включён, но не задан адрес или MAC — команда: guard --help");

@@ -6,6 +6,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
@@ -90,6 +91,55 @@ def asset_version() -> str:
     return str(int(newest))
 
 
+def install_security_headers(app: FastAPI, settings: ControllerSettings) -> None:
+    """Заголовки, ограничивающие браузер.
+
+    Пульт живёт в тайлнете и требует входа, но это не повод отдавать
+    страницу без ограничений: единственная найденная XSS в чужом
+    расширении или подменённый ответ по пути — и сессия уходит.
+
+    Политика намеренно строгая и без лазеек вроде ``unsafe-eval``:
+    интерфейс — один файл разметки, один стиля и один скрипта, никаких
+    внешних источников. Единственное послабление — ``unsafe-inline`` для
+    стилей: разметка расставляет ширину полос прямо в атрибуте ``style``.
+
+    HSTS выдаётся только когда контроллер и правда за HTTPS. Прислать его
+    по обычному http значит запретить браузеру открывать этот адрес до
+    истечения срока — и запереть владельца снаружи, если сертификат
+    отвалится.
+    """
+
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'none'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    https = settings.auth.cookie_secure
+
+    @app.middleware("http")
+    async def security_headers(request: Any, call_next: Any) -> Response:
+        response: Response = await call_next(request)
+        response.headers.setdefault("Content-Security-Policy", csp)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Пульт не спрашивает ни камеру, ни микрофон, ни местоположение.
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+        )
+        if https:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+
 def _page(name: str) -> HTMLResponse:
     html = (WEB_DIR / name).read_text(encoding="utf-8")
     return HTMLResponse(
@@ -169,6 +219,7 @@ def create_app(
     app.state.schedules = schedules
 
     install_request_id_middleware(app, component="controller")
+    install_security_headers(app, settings)
     install_exception_handlers(app)
 
     app.include_router(system_api.router)
