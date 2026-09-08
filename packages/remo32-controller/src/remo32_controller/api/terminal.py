@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from typing import Annotated
 
 import websockets
@@ -39,10 +40,24 @@ async def terminal_proxy(
         await websocket.close(code=4401, reason="требуется вход")
         return
     try:
-        auth.sessions.verify(token)
+        payload = auth.sessions.verify(token)
     except Remo32Error:
         await websocket.close(code=4401, reason="сессия недействительна")
         return
+
+    # Терминал — самая мощная дверь в системе, а cookie живёт неделями.
+    # Поэтому здесь спрашивается не «вошёл ли ты когда-то», а «вошёл ли
+    # недавно»: украденная сессия даёт пульт, но не оболочку.
+    max_age = auth.terminal_max_session_age_seconds
+    if max_age > 0:
+        age = time.time() - float(payload.get("iat", 0))
+        if age > max_age:
+            log.warning("терминал отклонён: несвежая сессия", pc=pc_id, age_seconds=int(age))
+            await websocket.close(
+                code=4403,
+                reason="войдите заново — терминал требует свежего входа",
+            )
+            return
 
     try:
         target = registry.terminal_target(pc_id, session, cols, rows)

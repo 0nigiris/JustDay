@@ -18,6 +18,7 @@ from typing import Any
 
 import jwt
 
+from remo32_controller.auth.revocations import RevocationStore
 from remo32_core.errors import UnauthorizedError
 from remo32_core.log import get_logger
 
@@ -28,15 +29,23 @@ ISSUER = "remo32-controller"
 
 
 class SessionManager:
-    def __init__(self, secret: str, *, ttl_hours: int = 720) -> None:
+    def __init__(
+        self,
+        secret: str,
+        *,
+        ttl_hours: int = 720,
+        revocations: RevocationStore | None = None,
+    ) -> None:
         if len(secret) < 32:
             raise ValueError("ключ подписи сессий должен быть не короче 32 символов")
         self._secret = secret
         self._ttl = timedelta(hours=ttl_hours)
-        # Отозванные идентификаторы сессий. Хранятся в памяти: перезапуск
-        # контроллера и так делает все прежние сессии бесполезными не сразу,
-        # но выход из системы обязан действовать немедленно.
-        self._revoked: set[str] = set()
+        # Отзывы обязаны переживать перезапуск. Пока они жили в памяти,
+        # «Выйти» переставало действовать после первого же обновления
+        # службы, и украденная сессия воскресала на оставшийся месяц.
+        # По умолчанию — в памяти: так менеджер, созданный без хранилища,
+        # хотя бы отзывает сессии в пределах своей жизни, а не делает вид.
+        self._revocations = revocations or RevocationStore(None)
 
     def issue(self, subject: str = "owner", **claims: Any) -> tuple[str, datetime]:
         now = datetime.now(UTC)
@@ -44,7 +53,11 @@ class SessionManager:
         payload = {
             "iss": ISSUER,
             "sub": subject,
-            "iat": int(now.timestamp()),
+            # Время выдачи — с долями секунды. С округлением до целой
+            # секунды сессия, выданная сразу после «выйти на всех
+            # устройствах», попадала под собственную отсечку: человек
+            # нажимал кнопку, входил заново и тут же вылетал обратно.
+            "iat": now.timestamp(),
             "exp": int(expires.timestamp()),
             "jti": secrets.token_urlsafe(12),
             **claims,
@@ -61,7 +74,7 @@ class SessionManager:
         except jwt.InvalidTokenError as exc:
             raise UnauthorizedError("недействительная сессия") from exc
 
-        if payload.get("jti") in self._revoked:
+        if self._revocations.is_revoked(payload.get("jti"), payload.get("iat")):
             raise UnauthorizedError("сессия завершена")
         return payload
 
@@ -73,7 +86,15 @@ class SessionManager:
         except jwt.InvalidTokenError:
             return
         if (jti := payload.get("jti")) is not None:
-            self._revoked.add(str(jti))
+            self._revocations.revoke(str(jti))
+
+    def revoke_all(self) -> None:
+        """Завершает все сессии на всех устройствах.
+
+        Единственный ответ на «кажется, у меня увели телефон»: самих
+        токенов сервер не хранит и отозвать их поимённо не может.
+        """
+        self._revocations.revoke_all()
 
     @property
     def ttl_seconds(self) -> int:

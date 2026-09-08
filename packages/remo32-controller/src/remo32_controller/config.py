@@ -121,6 +121,17 @@ class AuthSettings(BaseModel):
     )
     webauthn_rp_name: str = "Remo32"
 
+    terminal_max_session_age_minutes: int = Field(
+        240,
+        ge=0,
+        le=43200,
+        description=(
+            "Насколько свежим должен быть вход, чтобы открыть терминал. "
+            "Сессия живёт неделями, а терминал — это оболочка на машине: "
+            "украденная cookie должна давать пульт, но не shell. "
+            "0 — не требовать свежести"
+        ),
+    )
     max_failed_attempts: int = Field(10, ge=1, le=100)
     lockout_seconds: int = Field(300, ge=10, le=86400)
 

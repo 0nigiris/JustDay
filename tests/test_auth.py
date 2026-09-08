@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from conftest import TEST_PASSWORD
 
@@ -164,3 +166,72 @@ def test_passkey_disabled_without_rp_id(controller_settings: ControllerSettings)
     service = AuthService(controller_settings)
     assert service.webauthn is None
     assert service.passkey_configured is False
+
+
+class TestОтзывСессий:
+    """Выход обязан переживать перезапуск службы.
+
+    Пока отзывы жили в памяти процесса, «Выйти» действовало только до
+    следующего обновления контроллера: украденная сессия воскресала и
+    работала оставшиеся тридцать дней.
+    """
+
+    def test_отзыв_переживает_перезапуск(self, tmp_path: Path) -> None:
+        from remo32_controller.auth.revocations import RevocationStore
+
+        path = tmp_path / "sessions.json"
+        secret = "k" * 48
+
+        manager = SessionManager(secret, revocations=RevocationStore(path))
+        token, _ = manager.issue()
+        manager.revoke(token)
+
+        # Новый процесс: тот же ключ, то же хранилище на диске.
+        restarted = SessionManager(secret, revocations=RevocationStore(path))
+        with pytest.raises(UnauthorizedError, match="завершена"):
+            restarted.verify(token)
+
+    def test_выход_везде_рубит_все_сессии(self, tmp_path: Path) -> None:
+        from remo32_controller.auth.revocations import RevocationStore
+
+        path = tmp_path / "sessions.json"
+        secret = "k" * 48
+        manager = SessionManager(secret, revocations=RevocationStore(path))
+
+        phone, _ = manager.issue()
+        laptop, _ = manager.issue()
+        manager.verify(phone)
+
+        manager.revoke_all()
+
+        for token in (phone, laptop):
+            with pytest.raises(UnauthorizedError, match="завершена"):
+                manager.verify(token)
+
+    def test_после_выхода_везде_новый_вход_работает(self, tmp_path: Path) -> None:
+        """Иначе «выйти везде» означало бы «сломать себе вход навсегда»."""
+        from remo32_controller.auth.revocations import RevocationStore
+
+        path = tmp_path / "sessions.json"
+        manager = SessionManager("k" * 48, revocations=RevocationStore(path))
+        manager.revoke_all()
+
+        fresh, _ = manager.issue()
+        assert manager.verify(fresh)["sub"] == "owner"
+
+    def test_файл_отзывов_закрыт_от_чужих(self, tmp_path: Path) -> None:
+        from remo32_controller.auth.revocations import RevocationStore
+
+        path = tmp_path / "sessions.json"
+        store = RevocationStore(path)
+        store.revoke("какой-то-jti")
+        assert path.stat().st_mode & 0o077 == 0
+
+    def test_испорченный_файл_не_ломает_вход(self, tmp_path: Path) -> None:
+        from remo32_controller.auth.revocations import RevocationStore
+
+        path = tmp_path / "sessions.json"
+        path.write_text("не json", encoding="utf-8")
+        manager = SessionManager("k" * 48, revocations=RevocationStore(path))
+        token, _ = manager.issue()
+        assert manager.verify(token)["sub"] == "owner"

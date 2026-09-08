@@ -1192,7 +1192,12 @@ function viewMore() {
 
   <section class="card">
     <div class="card-head"><h2>Сеанс</h2></div>
-    <div class="row"><button class="btn danger" id="more-logout">🚪 Выйти</button></div>
+    <div class="row">
+      <button class="btn" id="more-logout">🚪 Выйти</button>
+      <button class="btn danger" id="more-logout-all">🧹 Выйти на всех устройствах</button>
+    </div>
+    <div class="meta">Второе — если телефон потерялся: завершит сессии везде,
+      включая это устройство. Войти заново придётся всюду.</div>
   </section>`;
 }
 
@@ -1449,6 +1454,18 @@ document.addEventListener("click", async (event) => {
     return run(button,
       () => api(`/api/pcs/${encodeURIComponent(activePc().id)}/approvals/session`, { method: "POST" }),
       (approval) => toast(`Следующий вход без пароля — ${approval.seconds_left} с`, "ok"));
+  }
+
+  if (button.id === "more-logout-all") {
+    const ok = await confirmSheet({
+      icon: "🧹",
+      title: "Выйти на всех устройствах?",
+      text: "Все сессии будут завершены, включая эту. Придётся войти заново везде.",
+      yes: "Выйти везде",
+    });
+    if (!ok) return;
+    return run(button, () => api("/api/auth/logout-everywhere", { method: "POST" }),
+      () => { toast("Все сессии завершены", "ok"); showLogin(); });
   }
 
   if (button.id === "more-apk") {

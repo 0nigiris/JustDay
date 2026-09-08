@@ -115,6 +115,31 @@ async def logout(
     )
 
 
+@router.post("/logout-everywhere", response_model=ApiResponse[AuthStatus])
+async def logout_everywhere(
+    response: Response, auth: Auth, _session: Session, request_id: RequestId
+) -> ApiResponse[AuthStatus]:
+    """Завершает сессии на всех устройствах разом.
+
+    Единственный ответ на «кажется, у меня увели телефон»: сами токены
+    сервер не хранит и отозвать их поимённо не может, поэтому отсекается
+    всё, что выдано раньше этой секунды. Придётся войти заново везде,
+    включая это устройство, — это и есть смысл действия.
+    """
+    auth.sessions.revoke_all()
+    response.delete_cookie(str(auth.cookie_settings()["key"]), path="/")
+    log.warning("завершены все сессии по запросу владельца")
+    return ApiResponse[AuthStatus].success(
+        AuthStatus(
+            authenticated=False,
+            password_enabled=auth.password_enabled,
+            passkey_available=auth.passkey_available,
+            passkey_configured=auth.passkey_configured,
+        ),
+        request_id,
+    )
+
+
 @router.post("/passkey/register/options", response_model=ApiResponse[dict[str, Any]])
 async def passkey_register_options(
     auth: Auth, _session: Session, request_id: RequestId

@@ -46,6 +46,11 @@ webauthn_enabled = true
 # webauthn_rp_id = "desktop.tailnet-abc123.ts.net"
 webauthn_rp_name = "Remo32"
 
+# Терминал — самая мощная дверь: это оболочка на машине. Сессия живёт
+# неделями, поэтому здесь спрашивается не «вошёл ли когда-то», а «вошёл ли
+# недавно»: украденная cookie даёт пульт, но не shell. 0 — не требовать.
+terminal_max_session_age_minutes = 240
+
 max_failed_attempts = 10
 lockout_seconds = 300
 

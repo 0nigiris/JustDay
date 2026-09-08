@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from remo32_controller.auth.passwords import verify_password
+from remo32_controller.auth.revocations import RevocationStore
 from remo32_controller.auth.sessions import SessionManager, load_or_create_secret
 from remo32_controller.auth.store import CredentialStore
 from remo32_controller.auth.webauthn_flow import WebAuthnService
@@ -68,7 +69,11 @@ class AuthService:
         secret = settings.auth.resolve_session_secret() or load_or_create_secret(
             data_dir / "session.key"
         )
-        self.sessions = SessionManager(secret, ttl_hours=settings.auth.session_ttl_hours)
+        self.sessions = SessionManager(
+            secret,
+            ttl_hours=settings.auth.session_ttl_hours,
+            revocations=RevocationStore(data_dir / "sessions.json"),
+        )
         self.store = CredentialStore(data_dir / "passkeys.json")
         self._password_hash = settings.auth.resolve_password_hash()
         self._limiter = RateLimiter(
@@ -132,6 +137,10 @@ class AuthService:
         token, _ = self.sessions.issue(method="passkey", credential=stored.label)
         log.info("успешный вход по passkey", source=source, label=stored.label)
         return token, self.sessions.ttl_seconds
+
+    @property
+    def terminal_max_session_age_seconds(self) -> int:
+        return self._settings.auth.terminal_max_session_age_minutes * 60
 
     def cookie_settings(self) -> dict[str, object]:
         return {
