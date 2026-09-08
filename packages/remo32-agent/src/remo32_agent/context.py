@@ -18,6 +18,7 @@ from fastapi import Header
 from remo32_agent import __version__
 from remo32_agent.actions.runner import ActionExecutor, ActionRegistry
 from remo32_agent.actions.store import ActionStore
+from remo32_agent.approvals import ApprovalStore
 from remo32_agent.config import AgentSettings
 from remo32_agent.execution import CommandRunner, RecordingRunner, SubprocessRunner
 from remo32_agent.platforms import PlatformAdapter, get_adapter
@@ -57,6 +58,9 @@ class AgentContext:
             ActionStore(settings.actions_editor.store_path)
             if settings.actions_editor.enabled
             else None
+        )
+        self.approvals = ApprovalStore(
+            settings.approvals.directory, enabled=settings.approvals.enabled
         )
         self.registry = ActionRegistry(settings.actions, store)
         self.executor = ActionExecutor(self.registry, self.runner, self.adapter)

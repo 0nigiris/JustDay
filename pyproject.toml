@@ -54,7 +54,9 @@ ignore = [
 known-first-party = ["remo32_core", "remo32_controller", "remo32_agent", "remo32_espsim"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "S108"]
+# S603 — тесты запускают скрипт PAM подпроцессом, чтобы проверять его так
+# же, как это делает сам PAM. Аргументы здесь литеральные.
+"tests/**" = ["S101", "S105", "S106", "S108", "S603"]
 "**/test_*.py" = ["S101", "S105", "S106"]
 # FastAPI требует вызовы Body()/Query() в значениях по умолчанию.
 "packages/remo32-espsim/src/remo32_espsim/http_server.py" = ["B008"]

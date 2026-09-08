@@ -16,6 +16,8 @@ from remo32_core.models import (
     ActionEditorState,
     ActionResult,
     ApiResponse,
+    ApprovalInfo,
+    ApprovalList,
     PcSummary,
     SystemStats,
 )
@@ -96,6 +98,44 @@ async def list_actions(
 ) -> ApiResponse[list[ActionDescriptor]]:
     return ApiResponse[list[ActionDescriptor]].success(
         await _registry(request).actions(pc_id), request_id
+    )
+
+
+@router.get("/{pc_id}/approvals", response_model=ApiResponse[ApprovalList])
+async def approvals(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[ApprovalList]:
+    """Чего компьютер ждёт от вас прямо сейчас: подтверждения входа или sudo."""
+    return ApiResponse[ApprovalList].success(
+        await _registry(request).get(pc_id).client.approvals(), request_id
+    )
+
+
+@router.post("/{pc_id}/approvals/session", response_model=ApiResponse[ApprovalInfo])
+async def allow_session(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[ApprovalInfo]:
+    """Заранее разрешить следующий вход в систему на этом ПК."""
+    log.info("разрешён следующий вход", pc_id=pc_id)
+    return ApiResponse[ApprovalInfo].success(
+        await _registry(request).get(pc_id).client.allow_session(), request_id
+    )
+
+
+@router.post("/{pc_id}/approvals/{approval_id}", response_model=ApiResponse[ApprovalInfo])
+async def decide_approval(
+    pc_id: str,
+    approval_id: str,
+    payload: dict[str, Any],
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+) -> ApiResponse[ApprovalInfo]:
+    approved = bool(payload.get("approved", False))
+    log.info("решение по подтверждению", pc_id=pc_id, id=approval_id, approved=approved)
+    return ApiResponse[ApprovalInfo].success(
+        await _registry(request).get(pc_id).client.decide_approval(approval_id, approved),
+        request_id,
     )
 
 

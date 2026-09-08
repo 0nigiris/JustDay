@@ -10,6 +10,7 @@
 #   ./deploy/install.sh both            — и то, и другое
 #   ./deploy/install.sh polkit          — разрешить выключение без пароля (sudo)
 #   ./deploy/install.sh check           — проверить, что всё работает
+#   ./deploy/install.sh approvals       — подтверждение входа и sudo с телефона
 
 set -euo pipefail
 
@@ -236,6 +237,39 @@ run_check() {
     fi
 }
 
+# Ставит скрипт подтверждения и печатает строки для PAM — но сам PAM не
+# трогает. Ошибка в этих файлах лишает человека и root, и входа в систему;
+# такую правку он должен сделать своими руками, глядя на экран, с открытым
+# запасным root-терминалом.
+install_approvals() {
+    info "Подтверждение входа и sudo с телефона"
+    sudo install -m 0755 "$REPO_DIR/deploy/scripts/remo32-pam.py" /usr/local/bin/remo32-pam
+    ok "скрипт установлен: /usr/local/bin/remo32-pam"
+
+    echo
+    warn "ОСТАВШЕЕСЯ СДЕЛАЙТЕ САМИ. Сначала откройте ВТОРОЙ терминал и"
+    warn "выполните в нём: sudo -i — пусть остаётся открытым."
+    warn "Ошибка в PAM лишает и root, и входа в систему; этот терминал —"
+    warn "единственный способ откатить правку, не загружаясь с флешки."
+    echo
+    echo "  1. В ~/.config/remo32/agent.toml:"
+    echo
+    echo "       [approvals]"
+    echo "       enabled = true"
+    echo
+    echo "  2. Первой строкой в /etc/pam.d/sudo:"
+    echo
+    echo "       auth       sufficient   pam_exec.so quiet /usr/local/bin/remo32-pam request --kind sudo"
+    echo
+    echo "  3. Первой строкой в /etc/pam.d/kde (вход в Plasma):"
+    echo
+    echo "       auth        sufficient    pam_exec.so quiet /usr/local/bin/remo32-pam check --kind login"
+    echo
+    echo "  4. Проверка, не выходя из запасного терминала:  sudo -k && sudo true"
+    echo
+    echo "  Подробности и разбор неполадок — в MANUAL.md."
+}
+
 install_polkit() {
     info "Установка правила polkit (нужен sudo)"
     tmp="$(mktemp)"
@@ -253,16 +287,18 @@ case "${1:-}" in
     controller) need uv; install_controller; echo; run_check ;;
     both)       need uv; install_agent; install_controller; echo; run_check ;;
     polkit)     install_polkit ;;
+    approvals)  install_approvals ;;
     check)      run_check ;;
     *)
         cat <<EOF
-Использование: $0 {agent|controller|both|polkit}
+Использование: $0 {agent|controller|both|polkit|check|approvals}
 
   agent       установить агент на этот ПК
   controller  установить центральный контроллер
   both        установить оба (типично для основного ПК)
   polkit      разрешить выключение/перезагрузку без пароля (запросит sudo)
   check       проверить, что установлено и работает
+  approvals   поставить скрипт подтверждения входа и sudo с телефона (sudo)
 
 Ничего не делает без явной команды.
 EOF

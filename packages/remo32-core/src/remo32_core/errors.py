@@ -103,6 +103,17 @@ class ActionsNotEditableError(Remo32Error):
     http_status = 403
 
 
+class ApprovalsDisabledError(Remo32Error):
+    """Подтверждение входа и sudo с телефона выключено в конфигурации.
+
+    Как терминал и правка кнопок, это возможность, которую владелец машины
+    включает осознанно: она меняет то, как компьютер пускает к себе.
+    """
+
+    code = "approvals_disabled"
+    http_status = 403
+
+
 class ActionInvalidError(Remo32Error):
     """Описание кнопки не прошло проверку.
 

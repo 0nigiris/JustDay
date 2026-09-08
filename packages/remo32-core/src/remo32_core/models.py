@@ -263,6 +263,34 @@ class ActionDescriptor(BaseModel):
     )
 
 
+class ApprovalInfo(BaseModel):
+    """Запрос компьютера на подтверждение с телефона.
+
+    Показывается человеку целиком: он должен видеть, что именно
+    подтверждает — вход в систему или команду от имени root, — и откуда
+    запрос пришёл. Подтверждение вслепую ничем не лучше пустого пароля.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    kind: str = Field(description="login — вход в систему, sudo — команда от root")
+    state: str = Field(description="pending, approved или denied")
+    user: str = ""
+    source: str = Field("", description="Терминал или устройство, откуда пришёл запрос")
+    command: str = ""
+    created_at: float = 0.0
+    expires_at: float = 0.0
+    seconds_left: int = 0
+
+
+class ApprovalList(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = False
+    items: list[ApprovalInfo] = Field(default_factory=list)
+
+
 class AppRelease(BaseModel):
     """Версия приложения для Android, лежащая на контроллере.
 

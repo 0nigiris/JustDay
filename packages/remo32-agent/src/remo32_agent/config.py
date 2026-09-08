@@ -149,6 +149,36 @@ class TerminalSettings(BaseSettings):
     )
 
 
+class ApprovalSettings(BaseSettings):
+    """Подтверждение входа и sudo с телефона.
+
+    Выключено по умолчанию, и это не перестраховка: включение меняет то,
+    как компьютер пускает к себе. Кто держит разблокированный телефон,
+    войдёт в систему и получит root.
+
+    Учтите ещё одно: одобрения лежат в каталоге пользователя, поэтому
+    любая программа, запущенная от вашего имени, может подделать их и
+    получить sudo без пароля. Закрыть это можно было бы только службой от
+    root, а её здесь нет намеренно.
+    """
+
+    enabled: bool = False
+    directory: Path = Field(
+        Path("~/.local/share/remo32/approvals"),
+        description="Каталог обмена с PAM-скриптом",
+    )
+    login_ttl_seconds: int = Field(
+        120,
+        ge=10,
+        le=600,
+        description=(
+            "Сколько живёт предварительное одобрение входа. Человек нажимает "
+            "на телефоне и идёт к компьютеру — этого времени должно хватить "
+            "ровно на дорогу, не больше"
+        ),
+    )
+
+
 class ActionsSettings(BaseSettings):
     """Правка кнопок прямо из интерфейса.
 
@@ -192,6 +222,7 @@ class AgentSettings(BaseSettings):
     power: PowerSettings = Field(default_factory=PowerSettings)
     terminal: TerminalSettings = Field(default_factory=TerminalSettings)
     actions_editor: ActionsSettings = Field(default_factory=ActionsSettings)
+    approvals: ApprovalSettings = Field(default_factory=ApprovalSettings)
     actions: list[ActionConfig] = Field(default_factory=list)
 
     @field_validator("actions")

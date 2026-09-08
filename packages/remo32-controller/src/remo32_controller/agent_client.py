@@ -29,6 +29,8 @@ from remo32_core.models import (
     ActionEditorState,
     ActionResult,
     AgentHealth,
+    ApprovalInfo,
+    ApprovalList,
     SystemStats,
 )
 from remo32_core.protocol import HEADER_AGENT_TOKEN, HEADER_REQUEST_ID
@@ -176,6 +178,21 @@ class AgentClient:
     async def delete_action(self, action_id: str) -> ActionEditorState:
         return ActionEditorState.model_validate(
             await self._request("DELETE", f"/api/action-editor/{action_id}")
+        )
+
+    async def approvals(self) -> ApprovalList:
+        return ApprovalList.model_validate(await self._request("GET", "/api/approvals"))
+
+    async def allow_session(self) -> ApprovalInfo:
+        return ApprovalInfo.model_validate(
+            await self._request("POST", "/api/approvals/session")
+        )
+
+    async def decide_approval(self, approval_id: str, approved: bool) -> ApprovalInfo:
+        return ApprovalInfo.model_validate(
+            await self._request(
+                "POST", f"/api/approvals/{approval_id}", json={"approved": approved}
+            )
         )
 
     async def shutdown(self) -> ActionResult:

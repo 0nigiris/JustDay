@@ -22,6 +22,8 @@ from remo32_agent.terminal.session import TerminalConfig, TerminalSession, list_
 from remo32_core.errors import (
     ActionInvalidError,
     ActionsNotEditableError,
+    ApprovalsDisabledError,
+    NotFoundError,
     TerminalDisabledError,
 )
 from remo32_core.http import RequestId
@@ -33,6 +35,8 @@ from remo32_core.models import (
     ActionResult,
     AgentHealth,
     ApiResponse,
+    ApprovalInfo,
+    ApprovalList,
     SystemStats,
 )
 from remo32_core.protocol import TerminalClientMessage, TerminalServerMessage
@@ -206,6 +210,68 @@ def build_router(ctx: AgentContext) -> APIRouter:
         ctx.registry.delete(action_id)
         log.info("кнопка удалена", action_id=action_id)
         return await editor_state(request_id)
+
+    # --- подтверждение входа и sudo с телефона ----------------------------
+
+    @router.get(
+        "/api/approvals",
+        response_model=ApiResponse[ApprovalList],
+        tags=["подтверждения"],
+        dependencies=[auth],
+    )
+    async def list_approvals(request_id: RequestId) -> ApiResponse[ApprovalList]:
+        """Чего компьютер ждёт прямо сейчас.
+
+        Опрашивается вместе с остальным состоянием: человек набирает sudo и
+        видит запрос на телефоне через секунду, не открывая ничего особо.
+        """
+        store = ctx.approvals
+        items = [ApprovalInfo(**a.to_json()) for a in store.list()] if store.enabled else []
+        return ApiResponse[ApprovalList].success(
+            ApprovalList(enabled=store.enabled, items=items), request_id
+        )
+
+    @router.post(
+        "/api/approvals/session",
+        response_model=ApiResponse[ApprovalInfo],
+        tags=["подтверждения"],
+        dependencies=[auth],
+    )
+    async def allow_session(request_id: RequestId) -> ApiResponse[ApprovalInfo]:
+        """Заранее разрешить следующий вход в систему.
+
+        На экране входа ждать нечего: человек уже стоит перед формой. Поэтому
+        одобрение выдаётся заранее, живёт пару минут и сгорает при первом же
+        использовании.
+        """
+        if not ctx.approvals.enabled:
+            raise ApprovalsDisabledError("подтверждение с телефона выключено")
+        approval = ctx.approvals.create(
+            "login",
+            state="approved",
+            user=ctx.settings.agent_id,
+            source="телефон",
+            ttl_seconds=ctx.settings.approvals.login_ttl_seconds,
+        )
+        return ApiResponse[ApprovalInfo].success(ApprovalInfo(**approval.to_json()), request_id)
+
+    @router.post(
+        "/api/approvals/{approval_id}",
+        response_model=ApiResponse[ApprovalInfo],
+        tags=["подтверждения"],
+        dependencies=[auth],
+    )
+    async def decide(
+        approval_id: str, payload: dict[str, Any], request_id: RequestId
+    ) -> ApiResponse[ApprovalInfo]:
+        """Ответить на ожидающий запрос: подтвердить или отклонить."""
+        if not ctx.approvals.enabled:
+            raise ApprovalsDisabledError("подтверждение с телефона выключено")
+        try:
+            approval = ctx.approvals.decide(approval_id, bool(payload.get("approved", False)))
+        except KeyError:
+            raise NotFoundError("запрос не найден или истёк") from None
+        return ApiResponse[ApprovalInfo].success(ApprovalInfo(**approval.to_json()), request_id)
 
     @router.post(
         "/api/power/shutdown",

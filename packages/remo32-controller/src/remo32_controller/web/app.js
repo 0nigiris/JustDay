@@ -131,6 +131,8 @@ const state = {
   esp32: null,
   auth: null,
   form: { open: false, editId: null },
+  approvals: [],         // чего компьютер ждёт от нас прямо сейчас
+  approvalsEnabled: false,
   editor: null,          // состояние редактора кнопок текущего ПК
   buttonForm: null,      // черновик формы: null — форма закрыта
   rendering: false,
@@ -821,6 +823,45 @@ function viewSchedule() {
   </section>`;
 }
 
+/* ============================================ подтверждение входа ======
+
+   Компьютер спрашивает — телефон отвечает. Так работают часы с Mac, и
+   ровно это здесь: пароль не хранится и не передаётся, подтверждается
+   факт «это я».
+
+   Запросы показываются на любой вкладке и первыми: человек уже стоит у
+   компьютера и ждёт, искать их по меню он не станет. */
+
+const APPROVAL_TITLES = {
+  login: "Вход в систему",
+  sudo: "Команда от имени root",
+  other: "Подтверждение",
+};
+
+function approvalBlock() {
+  if (!state.approvals.length) return "";
+
+  return state.approvals
+    .filter((a) => a.state === "pending")
+    .map((a) => `
+      <section class="card approval">
+        <div class="card-head">
+          <span class="dot connecting"></span>
+          <h2>${esc(APPROVAL_TITLES[a.kind] || a.kind)}</h2>
+          <span class="state-label">${esc(a.seconds_left)} с</span>
+        </div>
+        <div class="kv">
+          <div><span class="label">Откуда</span><span class="value">${esc(a.source || "—")}</span></div>
+          ${a.command ? `<div><span class="label">Команда</span><span class="value">${esc(a.command)}</span></div>` : ""}
+        </div>
+        <div class="row">
+          <button class="btn" data-approve="${esc(a.id)}" data-ok="0">Отклонить</button>
+          <button class="btn primary" data-approve="${esc(a.id)}" data-ok="1">Подтвердить</button>
+        </div>
+      </section>`)
+    .join("");
+}
+
 /* ==================================================== свои кнопки =======
 
    Своя кнопка — это команда, которую машина выполнит. Поэтому форма
@@ -1120,6 +1161,15 @@ function viewMore() {
   </section>
 
   <section class="card">
+    <div class="card-head"><h2>Вход в компьютер</h2></div>
+    <div class="row"><button class="btn" id="more-session"
+      ${state.approvalsEnabled ? "" : "disabled"}>🔓 Разрешить следующий вход</button></div>
+    <div class="meta">${state.approvalsEnabled
+      ? "Нажмите перед тем, как идти к компьютеру: следующий вход пройдёт без пароля. Разрешение сгорает через пару минут и после первого использования."
+      : "Выключено. Включается в конфигурации агента: approvals.enabled — и настройкой PAM, см. справку."}</div>
+  </section>
+
+  <section class="card">
     <div class="card-head"><h2>Приложение на телефон</h2></div>
     <div class="row"><button class="btn" id="more-apk">📲 Скачать APK</button></div>
     <div class="meta" id="apk-note">Значок на рабочем столе вместо вкладки браузера.
@@ -1221,6 +1271,18 @@ async function render(force = false) {
     state.esp32 = esp32;
     state.schedules = schedules;
     if (current === "more") state.auth = await api("/api/auth/status").catch(() => state.auth);
+
+    // Запросы на подтверждение спрашиваем у активного ПК на каждой
+    // перерисовке: человек уже стоит у компьютера и ждёт ответа, задержка
+    // здесь заметнее, чем лишний запрос по локальной сети.
+    const pc = activePc();
+    if (pc && pc.state === "online") {
+      const list = await api(`/api/pcs/${encodeURIComponent(pc.id)}/approvals`).catch(() => null);
+      state.approvals = list?.items || [];
+      state.approvalsEnabled = list?.enabled ?? false;
+    } else {
+      state.approvals = [];
+    }
     if (current === "buttons") await loadEditor(force);
 
     // Лист, на котором стоит палец, при обновлении данных сбрасываться
@@ -1229,7 +1291,7 @@ async function render(force = false) {
     const offset = pager ? pager.scrollLeft : 0;
 
     syncChrome();
-    el("view").innerHTML = ROUTES[current].view();
+    el("view").innerHTML = approvalBlock() + ROUTES[current].view();
 
     if (current === "deck") {
       const fresh = el("pager");
@@ -1371,6 +1433,24 @@ document.addEventListener("click", async (event) => {
   }
 
   /* --- свои кнопки --- */
+  if (d.approve) {
+    const ok = d.ok === "1";
+    buzz(ok ? 12 : 6);
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(activePc().id)}/approvals/${encodeURIComponent(d.approve)}`,
+        { method: "POST", body: JSON.stringify({ approved: ok }) }),
+      () => {
+        toast(ok ? "Подтверждено" : "Отклонено", ok ? "ok" : "err");
+        render(true);
+      });
+  }
+
+  if (button.id === "more-session") {
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(activePc().id)}/approvals/session`, { method: "POST" }),
+      (approval) => toast(`Следующий вход без пароля — ${approval.seconds_left} с`, "ok"));
+  }
+
   if (button.id === "more-apk") {
     // Ссылку открываем в новой вкладке, а не через fetch: файл должен
     // уйти в «Загрузки» браузера, а не в память страницы.
