@@ -22,11 +22,13 @@ from dataclasses import dataclass, field
 from remo32_core.errors import DeviceUnreachableError
 from remo32_core.log import get_logger
 from remo32_core.models import (
+    ButtonStatus,
     DeviceState,
     Esp32Status,
     GpioPinState,
     GuardConfig,
     GuardStatus,
+    LedStatus,
     utcnow,
 )
 from remo32_core.protocol import (
@@ -314,5 +316,17 @@ class MockEsp32Transport:
                 total_wakes=0,
                 config=GuardConfig(**self._guard),
             ),
+            button=ButtonStatus(
+                configured=True,
+                pin=0,
+                pressed_now=False,
+                # Ненулевое: симулятор изображает исправную плату, и
+                # предупреждение «нажатия не доходят» на нём появляться
+                # не должно.
+                level_changes=4,
+                short_presses=2,
+                long_presses=0,
+            ),
+            led=LedStatus(pin=48, type=2),
             capabilities=["wol", "gpio_in", "gpio_out", "status", "guard", "guard_config"],
         )

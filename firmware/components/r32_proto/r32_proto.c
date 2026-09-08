@@ -10,6 +10,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "r32_gpio.h"
+#include "r32_button.h"
 #include "r32_guard.h"
 #include "r32_wifi.h"
 #include "r32_wol.h"
@@ -121,6 +122,28 @@ static cJSON *build_status_object(const r32_config_t *cfg)
     cJSON_AddNumberToObject(guard_cfg, "grace_minutes", cfg->guard_grace_minutes);
     cJSON_AddNumberToObject(guard_cfg, "retry_minutes", cfg->guard_retry_minutes);
     cJSON_AddNumberToObject(guard_cfg, "max_attempts", cfg->guard_max_attempts);
+
+    /* Кнопка — отдельным блоком, и главное здесь level_changes.
+     *
+     * «Кнопка не работает» — жалоба, которую без этих чисел невозможно
+     * разобрать: консоль платы доступна только по USB, а плата висит на
+     * стене. Если счётчик изменений уровня стоит на месте после нажатия,
+     * значит сигнал не доходит до вывода — виноват не разбор нажатий, а
+     * номер вывода или сама кнопка. */
+    r32_button_status_t button;
+    r32_button_get_status(&button);
+    cJSON *button_json = cJSON_AddObjectToObject(status, "button");
+    cJSON_AddBoolToObject(button_json, "configured", button.configured);
+    cJSON_AddNumberToObject(button_json, "pin", button.pin);
+    cJSON_AddBoolToObject(button_json, "pressed_now", button.pressed_now);
+    cJSON_AddNumberToObject(button_json, "level_changes", button.level_changes);
+    cJSON_AddNumberToObject(button_json, "short_presses", button.short_presses);
+    cJSON_AddNumberToObject(button_json, "long_presses", button.long_presses);
+    cJSON_AddNumberToObject(button_json, "last_change_ms", (double) button.last_change_ms);
+
+    cJSON *led_json = cJSON_AddObjectToObject(status, "led");
+    cJSON_AddNumberToObject(led_json, "pin", cfg->led_pin);
+    cJSON_AddNumberToObject(led_json, "type", cfg->led_type);
 
     cJSON *caps = cJSON_AddArrayToObject(status, "capabilities");
     cJSON_AddItemToArray(caps, cJSON_CreateString("wol"));

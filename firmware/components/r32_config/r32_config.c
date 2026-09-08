@@ -43,6 +43,13 @@ esp_err_t r32_config_load(r32_config_t *out)
     out->guard_retry_minutes = 15;
     out->guard_max_attempts = 3;
 
+    /* Значения по умолчанию — для «официальной» ESP32-S3 DevKitC-1:
+     * кнопка BOOT на GPIO0, адресный светодиод на GPIO48. На другой плате
+     * поправьте командой «pins» или по сети. */
+    out->button_pin = 0;
+    out->led_pin = 48;
+    out->led_type = R32_LED_ADDRESSABLE;
+
     nvs_handle_t handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
@@ -78,6 +85,9 @@ esp_err_t r32_config_load(r32_config_t *out)
     if (nvs_get_i32(handle, "g_grace", &value) == ESP_OK) out->guard_grace_minutes = (int) value;
     if (nvs_get_i32(handle, "g_retry", &value) == ESP_OK) out->guard_retry_minutes = (int) value;
     if (nvs_get_i32(handle, "g_tries", &value) == ESP_OK) out->guard_max_attempts = (int) value;
+    if (nvs_get_i32(handle, "btn_pin", &value) == ESP_OK) out->button_pin = (int) value;
+    if (nvs_get_i32(handle, "led_pin", &value) == ESP_OK) out->led_pin = (int) value;
+    if (nvs_get_i32(handle, "led_type", &value) == ESP_OK) out->led_type = (int) value;
 
     nvs_close(handle);
     return ESP_OK;
@@ -108,6 +118,9 @@ esp_err_t r32_config_save(const r32_config_t *cfg)
     nvs_set_i32(handle, "g_grace", cfg->guard_grace_minutes);
     nvs_set_i32(handle, "g_retry", cfg->guard_retry_minutes);
     nvs_set_i32(handle, "g_tries", cfg->guard_max_attempts);
+    nvs_set_i32(handle, "btn_pin", cfg->button_pin);
+    nvs_set_i32(handle, "led_pin", cfg->led_pin);
+    nvs_set_i32(handle, "led_type", cfg->led_type);
 
     err = nvs_commit(handle);
     nvs_close(handle);
@@ -232,6 +245,55 @@ static int cmd_show(int argc, char **argv)
                s_cfg->guard_grace_minutes, s_cfg->guard_retry_minutes,
                s_cfg->guard_max_attempts);
     }
+    printf("  кнопка    : GPIO%d\n", s_cfg->button_pin);
+    printf("  светодиод : GPIO%d (%s)\n", s_cfg->led_pin,
+           s_cfg->led_type == 2 ? "адресный" : s_cfg->led_type == 1 ? "обычный" : "нет");
+    return 0;
+}
+
+/* Выводы кнопки и светодиода.
+ *
+ * Плат ESP32-S3 много, и расходятся они именно здесь: у одних адресный
+ * светодиод на GPIO48, у других на 38, у третьих его нет вовсе. Подобрать
+ * вывод перепрошивкой — полчаса на попытку; командой — секунды.
+ */
+static struct {
+    struct arg_str *what;
+    struct arg_int *pin;
+    struct arg_end *end;
+} pins_args;
+
+static int cmd_pins(int argc, char **argv)
+{
+    int errors = arg_parse(argc, argv, (void **) &pins_args);
+    if (errors != 0) {
+        arg_print_errors(stderr, pins_args.end, argv[0]);
+        return 1;
+    }
+
+    const char *what = pins_args.what->sval[0];
+    const int pin = pins_args.pin->count > 0 ? pins_args.pin->ival[0] : -1;
+
+    if (strcmp(what, "button") == 0) {
+        s_cfg->button_pin = pin;
+        printf("кнопка: GPIO%d%s\n", pin, pin < 0 ? " (выключена)" : "");
+    } else if (strcmp(what, "led") == 0) {
+        s_cfg->led_pin = pin;
+        printf("светодиод: GPIO%d%s\n", pin, pin < 0 ? " (выключен)" : "");
+    } else if (strcmp(what, "led-type") == 0) {
+        if (pin < 0 || pin > 2) {
+            printf("тип: 0 — нет, 1 — обычный, 2 — адресный WS2812\n");
+            return 1;
+        }
+        s_cfg->led_type = pin;
+        printf("тип светодиода: %s\n",
+               pin == 2 ? "адресный WS2812" : pin == 1 ? "обычный" : "нет");
+    } else {
+        printf("что именно: button, led или led-type\n");
+        return 1;
+    }
+
+    printf("не забудьте save и restart\n");
     return 0;
 }
 
@@ -315,6 +377,18 @@ void r32_config_register_console(r32_config_t *cfg)
         .command = "show", .help = "Показать конфигурацию", .hint = NULL, .func = &cmd_show,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&show_cmd));
+
+    pins_args.what = arg_str1(NULL, NULL, "<что>", "button | led | led-type");
+    pins_args.pin = arg_int1(NULL, NULL, "<номер>", "номер GPIO, -1 — выключить");
+    pins_args.end = arg_end(2);
+    const esp_console_cmd_t pins_cmd = {
+        .command = "pins",
+        .help = "Выводы кнопки и светодиода: pins button 0 | pins led 48 | pins led-type 2",
+        .hint = NULL,
+        .func = &cmd_pins,
+        .argtable = &pins_args,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&pins_cmd));
 
     const esp_console_cmd_t save_cmd = {
         .command = "save", .help = "Сохранить конфигурацию в NVS", .hint = NULL, .func = &cmd_save,

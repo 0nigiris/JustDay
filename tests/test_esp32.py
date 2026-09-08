@@ -270,3 +270,44 @@ async def test_guard_status_survives_unknown_firmware_fields() -> None:
         {"state": "наблюдение", "host_alive": True, "чего_не_было": 1}
     )
     assert guard.state == "наблюдение"
+
+
+class TestДиагностикаКнопки:
+    """Кнопка на плате: почему её состояние вообще отдаётся по сети.
+
+    Плата висит на стене, консоль у неё только по USB. Жалоба «кнопка не
+    работает» без чисел неразрешима: не отличить «не тот вывод» от «сигнал
+    есть, а обработчик молчит».
+    """
+
+    def test_статус_кнопки_разбирается(self) -> None:
+        from remo32_core.models import Esp32Status
+
+        status = Esp32Status.model_validate(
+            {
+                "state": "online",
+                "device_id": "esp32-main",
+                "button": {
+                    "configured": True,
+                    "pin": 0,
+                    "pressed_now": False,
+                    "level_changes": 6,
+                    "short_presses": 3,
+                    "long_presses": 1,
+                    "last_change_ms": 123456,
+                },
+                "led": {"pin": 48, "type": 2},
+            }
+        )
+        assert status.button is not None
+        assert status.button.level_changes == 6
+        assert status.led is not None and status.led.type == 2
+
+    def test_старая_прошивка_не_ломает_разбор(self) -> None:
+        """Плата с прошивкой без кнопки должна оставаться исправной, а не
+        выглядеть сломанной из-за отсутствующего поля."""
+        from remo32_core.models import Esp32Status
+
+        status = Esp32Status.model_validate({"state": "online", "device_id": "esp32-main"})
+        assert status.button is None
+        assert status.led is None

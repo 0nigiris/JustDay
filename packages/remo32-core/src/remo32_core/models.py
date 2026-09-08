@@ -427,6 +427,34 @@ class GuardStatus(BaseModel):
     )
 
 
+class ButtonStatus(BaseModel):
+    """Что кнопка на плате видела с момента включения.
+
+    Существует ради одного вопроса: «нажатие вообще доходит до платы?».
+    Консоль платы доступна только по USB, а плата висит на стене — без
+    этих чисел жалобу «кнопка не работает» разобрать нечем.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    configured: bool = False
+    pin: int = -1
+    pressed_now: bool = False
+    level_changes: int = Field(
+        0, description="Сколько раз менялся уровень. Ноль после нажатия — сигнал не доходит"
+    )
+    short_presses: int = 0
+    long_presses: int = 0
+    last_change_ms: int = 0
+
+
+class LedStatus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    pin: int = -1
+    type: int = Field(0, description="0 — нет, 1 — обычный, 2 — адресный WS2812")
+
+
 class Esp32Status(BaseModel):
     """Состояние аппаратного контроллера.
 
@@ -462,6 +490,10 @@ class Esp32Status(BaseModel):
     guard: GuardStatus | None = Field(
         None, description="Сторож основного ПК; None — прошивка его не поддерживает"
     )
+    button: ButtonStatus | None = Field(
+        None, description="Кнопка на плате; None — прошивка старее этой возможности"
+    )
+    led: LedStatus | None = None
     capabilities: list[str] = Field(
         default_factory=list,
         description="Что умеет прошивка: wol, gpio_in, gpio_out, guard, kvm, oled, sensors",

@@ -26,6 +26,7 @@
 #include "r32_gpio.h"
 #include "r32_guard.h"
 #include "r32_http.h"
+#include "r32_led.h"
 #include "r32_mqtt.h"
 #include "r32_proto.h"
 #include "r32_wifi.h"
@@ -79,6 +80,10 @@ static void start_console(void)
 static void on_button_short(void)
 {
     esp_err_t err = r32_guard_wake_now();
+    /* Отклик светом обязателен: сама побудка — это пакет в сеть, и без
+     * него нажатие вообще ничем не проявляется. Человек жмёт второй раз,
+     * третий, и решает, что кнопка не работает. */
+    r32_led_blip(err == ESP_OK);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "кнопка: разбудить не вышло: %s", esp_err_to_name(err));
     }
@@ -87,6 +92,7 @@ static void on_button_short(void)
 static void on_button_long(void)
 {
     const bool enabled = r32_guard_toggle_enabled();
+    r32_led_blip(true);
     ESP_LOGW(TAG, "кнопка: слежка %s", enabled ? "включена" : "выключена");
 }
 
@@ -115,6 +121,21 @@ static void heartbeat_task(void *arg)
                      r32_guard_state_name(guard.state), guard.total_wakes);
         }
 
+        /* Свет обновляем здесь же, а не в самом стороже: состояние платы
+         * складывается из нескольких вещей, и первой идёт сеть. Плата без
+         * Wi-Fi не разбудит ПК, что бы ни думал сторож. */
+        if (!wifi.connected) {
+            r32_led_set(R32_LED_NO_NETWORK);
+        } else {
+            switch (guard.state) {
+            case R32_GUARD_DISABLED: r32_led_set(R32_LED_OFF); break;
+            case R32_GUARD_MISSING:  r32_led_set(R32_LED_MISSING); break;
+            case R32_GUARD_WAKING:
+            case R32_GUARD_GAVE_UP:  r32_led_set(R32_LED_WAKING); break;
+            default:                 r32_led_set(R32_LED_WATCHING); break;
+            }
+        }
+
         r32_mqtt_publish_status();
         vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_PERIOD_MS));
     }
@@ -132,6 +153,12 @@ void app_main(void)
     init_nvs();
     ESP_ERROR_CHECK(r32_config_load(&s_config));
     ESP_ERROR_CHECK(r32_gpio_init());
+
+    /* Индикацию поднимаем раньше всего остального: на ненастроенной плате
+     * это единственный признак жизни — консоль требует провода, сети ещё
+     * нет, а понять «включилась ли она вообще» надо сразу. */
+    r32_led_start(s_config.led_pin, s_config.led_type);
+    r32_led_set(R32_LED_NOT_CONFIGURED);
 
     /* Консоль поднимаем всегда и до сети: если Wi-Fi не настроен или
      * настроен неверно, единственный способ это исправить — провод. */
@@ -181,7 +208,8 @@ void app_main(void)
 
     /* Кнопку поднимаем после сторожа: её обработчики берут из него и
      * адрес для побудки, и признак слежки. */
-    esp_err_t button_err = r32_button_start(on_button_short, on_button_long);
+    esp_err_t button_err = r32_button_start(s_config.button_pin,
+                                            on_button_short, on_button_long);
     if (button_err != ESP_OK) {
         ESP_LOGE(TAG, "кнопка не заработала: %s", esp_err_to_name(button_err));
     }

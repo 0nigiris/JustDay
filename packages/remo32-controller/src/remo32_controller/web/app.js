@@ -644,6 +644,34 @@ function esp32Card(status) {
           data-guard="${off ? "on" : "off"}">${off ? "👁 Включить слежку" : "🚫 Выключить слежку"}</button></div>`;
       }
     }
+    // Кнопка. Главное здесь — «изменений уровня»: если после нажатия оно
+    // стоит на месте, сигнал не доходит до вывода, и искать ошибку в
+    // разборе нажатий бесполезно. Плата висит на стене, консоль только по
+    // USB — без этих чисел жалобу «кнопка не работает» разобрать нечем.
+    if (status.button) {
+      const b = status.button;
+      const mute = "color:var(--text-dim)";
+      details += `<div class="group-title">Кнопка</div>
+        <div class="kv">
+          <div><span>Вывод</span><b>${b.configured ? `GPIO${esc(b.pin)}` : "выключена"}</b></div>
+          <div><span>Сейчас</span><b>${b.pressed_now ? "нажата" : "отпущена"}</b></div>
+          <div><span>Изменений уровня</span><b>${esc(b.level_changes ?? 0)}</b></div>
+          <div><span>Коротких нажатий</span><b>${esc(b.short_presses ?? 0)}</b></div>
+          <div><span>Долгих нажатий</span><b>${esc(b.long_presses ?? 0)}</b></div>
+        </div>`;
+      if (b.configured && (b.level_changes ?? 0) === 0) {
+        details += `<div class="banner warn">Плата ни разу не заметила нажатия.
+          Нажмите кнопку и обновите экран: если «изменений уровня» осталось нулём,
+          вывод GPIO${esc(b.pin)} не тот. Сменить: команда <code>pins button &lt;номер&gt;</code>
+          в консоли платы по USB.</div>`;
+      }
+      if (status.led) {
+        details += `<div class="meta" style="${mute}">Светодиод: ${
+          status.led.type ? `GPIO${esc(status.led.pin)}, ${
+            status.led.type === 2 ? "адресный" : "обычный"}` : "не настроен"}</div>`;
+      }
+    }
+
     if (status.gpio?.length) {
       details += `<div class="group-title">Выводы</div><div class="kv">` +
         status.gpio.map((pin) =>
