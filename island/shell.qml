@@ -96,7 +96,7 @@ ShellRoot {
             readonly property string mode: JD.mode
             readonly property Item content: ({
                 expanded: expandedView, settings: settingsHolder, approval: approvalView, card: cardView, listening: listeningView,
-                flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
+                notification: notificationView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
                 peek: peekView, hidden: peekView })[mode]
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden"].includes(mode) && !JD.detailOpen
 
@@ -128,6 +128,7 @@ ShellRoot {
                 enabled: !["expanded", "settings", "approval", "card"].includes(island.mode)
                 onTapped: {
                     if (island.mode === "answer") { JD.answerOpen = false; return }
+                    if (island.mode === "notification") { JD.notification = null; return }
                     JD.expanded = true
                 }
             }
@@ -137,6 +138,7 @@ ShellRoot {
             ListeningView { id: listeningView; shown: island.mode === "listening" }
             ThinkingView { id: thinkingView; shown: island.mode === "thinking" || island.mode === "transcribing" }
             FlashView { id: flashView; shown: island.mode === "flash" }
+            NotificationView { id: notificationView; shown: island.mode === "notification" }
             AnswerView { id: answerView; shown: island.mode === "answer" }
             ApprovalView { id: approvalView; shown: island.mode === "approval" }
             CardView { id: cardView; shown: island.mode === "card" }
@@ -288,6 +290,7 @@ ShellRoot {
         id: pv
         readonly property string event: JD.workers > 0 ? "Клод работает" + (JD.workers > 1 ? " ×" + JD.workers : "")
                                         : JD.dstate === "offline" ? JD.assistantName + " не запущен"
+                                        : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title
                                         : JD.update ? "Доступно обновление"
                                         : (JD.island.show_events !== false && JD.history.length && JD.history[0].a) ? JD.history[0].a : ""
         implicitWidth: peekRow.implicitWidth + 32
@@ -418,6 +421,29 @@ ShellRoot {
         }
     }
 
+    component NotificationView: View {
+        readonly property var n: JD.notification || ({})
+        implicitWidth: Math.min(560, Math.max(320, nRow.implicitWidth + 36))
+        implicitHeight: nRow.implicitHeight + 26
+        RowLayout {
+            id: nRow
+            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 18 }
+            spacing: 12
+            Rectangle {
+                implicitWidth: 36; implicitHeight: 36; radius: 10
+                color: JD.fill1
+                Icon { anchors.centerIn: parent; name: n.icon || (n.app || "").toLowerCase(); fallback: "preferences-desktop-notification-bell"; implicitSize: 24 }
+            }
+            ColumnLayout {
+                spacing: 1
+                Layout.fillWidth: true
+                Label2 { text: n.app || ""; color: JD.text3; font.pixelSize: 11; Layout.fillWidth: true }
+                Label1 { text: n.summary || ""; Layout.fillWidth: true; Layout.maximumWidth: 460 }
+                Label2 { visible: !!n.body; text: (n.body || "").replace(/\s+/g, " "); wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true; Layout.maximumWidth: 460 }
+            }
+        }
+    }
+
     // ───────────── cards ─────────────
     component CardHeader: RowLayout {
         property string icon: ""
@@ -518,12 +544,13 @@ ShellRoot {
 
             CardHeader {
                 Layout.fillWidth: true
-                icon: "mail-message"
-                tint: cv.c.type === "mail_sent" ? JD.accentGreen : JD.accentRed
+                icon: cv.c.type === "calendar" ? "view-calendar" : "mail-message"
+                tint: cv.c.type === "mail_sent" ? JD.accentGreen : cv.c.type === "calendar" ? JD.accentOrange : JD.accentRed
                 title: ({ mail_draft: "Новое письмо", mail_sent: "Письмо отправлено", mail_read: cv.c.subject || "Письмо",
-                          mail_list: "Почта" })[cv.c.type] || "Почта"
+                          mail_list: "Почта", calendar: "Календарь · " + (cv.c.when || "") })[cv.c.type] || "Почта"
                 subtitle: ({ mail_draft: "черновик · проверьте перед отправкой", mail_sent: "Кому: " + (cv.c.to || ""),
-                             mail_read: "от " + (cv.c.from || ""), mail_list: "важные непрочитанные · обработано локально" })[cv.c.type] || ""
+                             mail_read: "от " + (cv.c.from || ""), mail_list: "важные непрочитанные · обработано локально",
+                             calendar: (cv.c.items || []).length ? (cv.c.items || []).length + " · обработано локально" : "свободно" })[cv.c.type] || ""
                 IconButton { icon: "window-close"; size: 26; onClicked: JD.card = null }
             }
 
@@ -570,6 +597,35 @@ ShellRoot {
                 PillButton { label: "Не отправлять"; onClicked: JD.send({ cmd: "type", text: "не отправляй" }) }
                 PillButton { label: "Изменить голосом"; onClicked: JD.send({ cmd: "toggle" }) }
                 PillButton { label: "Отправить"; tint: JD.accentBlue; onClicked: JD.send({ cmd: "type", text: "да, отправляй" }) }
+            }
+
+            // calendar events
+            Repeater {
+                model: cv.c.type === "calendar" ? (cv.c.items || []) : []
+                Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: 44
+                    radius: 12
+                    color: JD.fill1
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 12
+                        Text {
+                            text: modelData.all_day ? "весь день" : Qt.formatTime(new Date(modelData.start), "HH:mm")
+                            color: JD.accentOrange; font.family: JD.fontFamily; font.pixelSize: 13; font.weight: Font.DemiBold
+                            Layout.preferredWidth: 70
+                        }
+                        ColumnLayout {
+                            spacing: 0
+                            Layout.fillWidth: true
+                            Label1 { text: modelData.title; Layout.fillWidth: true }
+                            Label2 { visible: !!modelData.location; text: modelData.location; Layout.fillWidth: true }
+                        }
+                    }
+                }
             }
 
             // list of letters
@@ -804,6 +860,28 @@ ShellRoot {
                     IconButton { icon: "media-skip-backward"; onClicked: ev.player.previous() }
                     IconButton { icon: ev.player && ev.player.isPlaying ? "media-playback-pause" : "media-playback-start"; size: 36; onClicked: ev.player.togglePlaying() }
                     IconButton { icon: "media-skip-forward"; onClicked: ev.player.next() }
+                }
+            }
+
+            // recent notifications
+            ColumnLayout {
+                visible: JD.notifications.length > 0 && JD.island.show_notifications !== false
+                spacing: 6
+                RowLayout {
+                    Label2 { text: "Уведомления"; Layout.fillWidth: true }
+                    Label2 { text: "очистить"; color: JD.accentBlue; TapHandler { onTapped: JD.notifications = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+                }
+                Repeater {
+                    model: JD.notifications.slice(0, 3)
+                    RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Label2 { text: modelData.ts; color: JD.text3; font.features: { "tnum": 1 } }
+                        Icon { name: modelData.icon || (modelData.app || "").toLowerCase(); fallback: "preferences-desktop-notification-bell"; implicitSize: 16 }
+                        Label1 { text: modelData.summary; font.weight: Font.Normal; Layout.preferredWidth: 220 }
+                        Label2 { text: (modelData.body || "").replace(/\s+/g, " "); Layout.fillWidth: true }
+                    }
                 }
             }
 

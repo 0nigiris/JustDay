@@ -17,7 +17,7 @@ import time
 
 import numpy as np
 
-from . import audio, config, events, fastpath, mail, workers
+from . import audio, calendar_lane, config, events, fastpath, mail, workers
 from .brain import Brain
 from .stt import STT
 from .tts import TTS, normalize, split_sentences
@@ -465,6 +465,18 @@ class Daemon:
             self.state = "thinking" if self.brain.busy else "idle"
             await self.earcon("done")
             return
+        if calendar_lane.CAL_WORDS.search(text):
+            try:
+                cal = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.handle, text)
+            except Exception as e:  # noqa: BLE001
+                log.warning("calendar failed: %s", e)
+                cal = ("Не получилось открыть календарь.", None)
+            if cal and gen == self._cancel_gen:
+                reply, card = cal
+                if card:
+                    self.publish(kind="card", card=card)
+                await self.say(reply)
+                return
         if self.cfg["mail"]["address"] and self.mail.wants(text):
             if await self.handle_mail(text) or gen != self._cancel_gen:
                 return
@@ -710,6 +722,13 @@ class Daemon:
                     self.publish(update=self.update_info)
                 except Exception as e:  # noqa: BLE001 — offline is fine
                     log.info("update check failed: %s", type(e).__name__)
+            if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
+                self._last_cal = time.monotonic()
+                try:
+                    nxt = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.upcoming, 2)
+                except Exception:  # noqa: BLE001 — offline
+                    nxt = None
+                self.publish(next_event=nxt)
             isl = self.cfg["island"]
             if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
                 last_weather, self._weather_city = time.monotonic(), isl["city"]

@@ -14,6 +14,9 @@ Singleton {
     property var settings: ({})
     property var history: []
     property var weather: null
+    property var notification: null   // desktop notification being shown
+    property var notifications: []    // recent ones for the menu
+    property var nextEvent: null      // calendar event starting within 2 hours
     property var update: null      // {behind, changes} when GitHub has a newer version
     function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
 
@@ -54,6 +57,7 @@ Singleton {
         if (settingsOpen) return "settings"
         if (card) return "card"
         if (dstate === "listening") return "listening"
+        if (notification) return "notification"
         if (flashText) return "flash"
         if (answerOpen) return "answer"
         if (dstate === "transcribing") return "transcribing"
@@ -147,6 +151,7 @@ Singleton {
         if (m.workers !== undefined) workers = m.workers
         if (m.weather !== undefined) weather = m.weather
         if (m.update !== undefined) update = m.update
+        if (m.next_event !== undefined) nextEvent = m.next_event
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
@@ -169,6 +174,12 @@ Singleton {
             flash("Отменено", "dialog-cancel", accentRed)
             break
         case "error": flash(m.detail, "dialog-error", accentRed); break
+        case "notification":
+            if (island.show_notifications === false) break
+            notification = m.notification
+            notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
+            notifTimer.restart()
+            break
         case "card":
             card = m.card
             cardTimer.interval = m.card.type === "mail_draft" ? 90000 : (m.card.type === "mail_sent" ? 3500 : 25000)
@@ -184,6 +195,7 @@ Singleton {
         flashTimer.restart()
     }
     Timer { id: flashTimer; interval: 2200; onTriggered: jd.flashText = "" }
+    Timer { id: notifTimer; interval: 5000; onTriggered: if (jd.islandHovered) restart(); else jd.notification = null }
     Timer {
         id: answerTimer
         interval: Math.min(15000, 4000 + jd.answer.length * 45)

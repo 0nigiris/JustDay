@@ -114,7 +114,7 @@ Item {
                         { id: "voice", title: "Голос и звук", icon: "audio-lines", tint: "#ff375f" },
                         { id: "buttons", title: "Кнопки", icon: "keyboard", tint: "#0a84ff" },
                         { id: "model", title: "Модель", icon: "cpu", tint: "#bf5af2" },
-                        { id: "mail", title: "Почта", icon: "mail", tint: "#ff453a" },
+                        { id: "mail", title: "Почта и календарь", icon: "mail", tint: "#ff453a" },
                         { id: "people", title: "Люди", icon: "users", tint: "#30d158" },
                         { id: "memory", title: "Память", icon: "brain", tint: "#64d2ff" },
                         { id: "privacy", title: "Приватность", icon: "shield", tint: "#ff9f0a" },
@@ -576,6 +576,7 @@ Item {
                 Row { title: "Погода"; subtitle: "Open-Meteo, без ключей; в сеть уходит только название города"; Toggle { checked: win.get("island.show_weather") !== false; onToggled: v => win.set("island.show_weather", v) } }
                 Row { title: "Город"; subtitle: "Пусто — погода не запрашивается"; Field { key: "island.city"; placeholderText: "Москва" } }
                 Row { title: "Последние события"; subtitle: "Последний ответ ассистента, работа Клода"; Toggle { checked: win.get("island.show_events") !== false; onToggled: v => win.set("island.show_events", v) } }
+                Row { title: "Уведомления на острове"; subtitle: "Копия системных уведомлений (Plasma показывает их как обычно). Никуда не отправляются"; Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
             }
             Note { text: "В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет." }
         }
@@ -881,7 +882,7 @@ Item {
             spacing: 6
             property bool connecting: false
             property string status: win.get("mail.address") ? (win.d.mail_password ? "Подключена: " + win.get("mail.address") : "Нет пароля приложения") : "Не подключена"
-            PageTitle { title: "Почта"; subtitle: "Письма читает и пишет локальная модель — в облако ничего не уходит" }
+            PageTitle { title: "Почта и календарь"; subtitle: "Письма и события обрабатываются на этом компьютере — в облако ничего не уходит" }
             Note {
                 Layout.bottomMargin: 6
                 text: "<b>Почему «пароль приложения», а не вход через Google?</b> Это не пароль от аккаунта, а отдельный ключ только для почты (IMAP/SMTP), как у Thunderbird. " +
@@ -912,6 +913,30 @@ Item {
                 }
             }
             Note { text: "Нужна двухэтапная аутентификация Google. Создать пароль приложения: <a href='https://myaccount.google.com/apppasswords'>myaccount.google.com/apppasswords</a>" }
+            GroupTitle { text: "КАЛЕНДАРЬ" }
+            Group {
+                id: calGroup
+                property bool busy: false
+                Row { title: "Состояние"; subtitle: win.d.calendar ? "Подключено календарей: " + win.d.calendar : "Не подключён"; Glyph { name: win.d.calendar ? "check" : "circle-alert"; size: 18 } }
+                Row {
+                    title: "Ссылка iCal"
+                    subtitle: "Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Только чтение, без пароля"
+                    Field { id: calUrl; echoMode: TextInput.Password; placeholderText: win.d.calendar ? "••••••••" : "https://calendar.google.com/…/basic.ics"; implicitWidth: 260 }
+                }
+                Row {
+                    title: ""
+                    Btn {
+                        text: calGroup.busy ? "Проверяю…" : "Подключить"; primary: true; busy: calGroup.busy; enabled: !!calUrl.text.trim()
+                        onClicked: {
+                            calGroup.busy = true
+                            win.run(["calendar", "setup"], r => { calGroup.busy = false; win.notify(r.ok ? "Календарь подключён: сегодня событий " + r.today : "Не получилось: " + (r.error || "")); calUrl.text = ""; win.reload() },
+                                    { JUSTDAY_SECRET: calUrl.text.trim() })
+                        }
+                    }
+                }
+            }
+            Note { text: "Спросите: «что у меня сегодня?», «какие встречи завтра?». За 2 часа до события оно появится на острове при наведении." }
+
             GroupTitle { text: "ПОВЕДЕНИЕ" }
             Group {
                 Row { title: "Сообщать о новых письмах"; subtitle: "«Новое письмо от …» голосом и на острове"; Toggle { checked: !!win.get("mail.announce"); onToggled: v => win.set("mail.announce", v) } }

@@ -323,6 +323,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("autostart", help="start JustDay with the session: on | off | status")
     sp.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
+    sp = sub.add_parser("calendar", help="private calendar from iCal links: setup | today | tomorrow | week")
+    sp.add_argument("action", choices=["setup", "today", "tomorrow", "week", "test"])
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -477,6 +479,27 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit("git pull не удался")
         env = {**os.environ, "JUSTDAY_SETUP": "0"}
         sys.exit(subprocess.run([str(config.REPO_DIR / "install.sh")], env=env).returncode)
+    elif a.cmd == "calendar":
+        from . import calendar_lane, providers
+
+        if a.action == "setup":
+            print("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Несколько ссылок — через пробел.")
+            value = (os.environ.get("JUSTDAY_SECRET") or input("ссылка(и): ")).strip()
+            providers.secret_set("calendar", value)
+            try:
+                _print({"ok": True, "today": len(calendar_lane.day(0)), "calendars": len(calendar_lane.urls())})
+            except Exception as e:  # noqa: BLE001
+                _print({"ok": False, "error": str(e)})
+        elif a.action == "test":
+            _print({"configured": bool(calendar_lane.urls()), "calendars": len(calendar_lane.urls())})
+        else:
+            import datetime as dt
+
+            if a.action == "week":
+                now = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+                _print(calendar_lane.between(now, now + dt.timedelta(days=7)))
+            else:
+                _print(calendar_lane.day(1 if a.action == "tomorrow" else 0))
     elif a.cmd == "version":
         from . import manage
 

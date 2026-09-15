@@ -68,6 +68,7 @@
     ],
     "deny": [
       "Bash(justday mail:*)",
+      "Bash(justday calendar:*)",
       "Bash(justday secret:*)",
       "Bash(jarvis mail:*)",
       "Bash(jarvis secret:*)",
