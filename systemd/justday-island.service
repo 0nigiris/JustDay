@@ -1,0 +1,13 @@
+[Unit]
+Description=JustDay Dynamic Island (Quickshell)
+PartOf=graphical-session.target
+After=graphical-session.target justday.service
+
+[Service]
+Type=simple
+ExecStart=@QS@ -p @REPO@/island
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pt
+*.onnx
+
+# local test artifacts
+*.wav
+!voice/voices/*/ref.wav

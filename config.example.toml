@@ -1,0 +1,64 @@
+# JustDay configuration — ~/.config/justday/config.toml
+# Only override what you need; defaults live in src/justday/config.py.
+# Apply changes: systemctl --user restart justday
+
+[user]
+name = ""                   # your name (signature in letters)
+address_as = "сэр"          # how the assistant addresses you
+assistant_name = "Джарвис"  # main name (shown in the island)
+assistant_aliases = ["JustDay"]  # other names it answers to
+
+[audio]
+input = ""                  # substring of a PipeWire source name (pactl list short sources), "" = default
+output = ""                 # substring of a sink name, "" = default
+earcons = true              # short beeps when listening starts
+silence_seconds = 1.0       # pause length that ends an utterance
+followup_seconds = 6        # after the assistant asks a question, listen again without the hotkey (0 = off)
+double_tap_seconds = 0.35   # double press of the talk key (G6) = cancel everything (0 = off)
+
+[stt]
+model = "large-v3-turbo"    # faster-whisper model; "small" for CPU-only machines
+device = "cuda"             # cuda | cpu
+language = "ru"             # "" = auto-detect
+
+[tts]
+engine = "silero"           # silero | espeak | none
+speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
+
+[wakeword]
+enabled = false             # "Hey Jarvis" (English openWakeWord model) — keeps the mic open, audio stays local
+threshold = 0.5
+
+[brain]
+# Easier: `justday model list` / `justday model use <provider> <model>`
+provider = "claude"         # claude | ollama | openrouter | deepseek | custom
+model = "sonnet"            # claude: sonnet, opus…; ollama: qwen3.5:9b; openrouter: vendor/model[:free]
+# base_url = ""             # provider = "custom": any Anthropic-compatible endpoint (LiteLLM, vLLM…)
+# context_tokens = 0        # context window of a non-Claude model (0 = provider default)
+effort = "low"              # low = fast replies; heavy thinking is delegated to Opus subagents/workers
+permission_mode = "auto"    # auto = classifier-reviewed autonomy; risky actions ask you
+chrome = true               # Claude in Chrome browser control (needs claude.ai login)
+resume_within_hours = 12    # keep the conversation across restarts
+
+[workers]
+model = ""                  # model for Claude Code worker sessions, "" = your Claude Code default
+auto_review = true          # when a worker finishes, JustDay checks its work and reports
+
+[ui]
+notifications = true
+
+[desktop]
+accessibility = true        # AT-SPI on: Qt/GTK buttons get numbered marks on screenshots → exact clicks
+
+[local_llm]                 # private tasks (mail). Ollama on 127.0.0.1 — scripts/setup-local-llm.sh
+model = "qwen3.5:9b"
+keep_alive = "10m"          # unload after 10 min idle to free VRAM for games
+
+[mail]                      # `justday mail setup` fills address + app password (keyring)
+address = ""
+query = "category:primary is:unread newer_than:7d"   # what counts as important (Gmail search)
+announce = true             # say "новое письмо от …" when important mail arrives
+poll_seconds = 180
+
+[apps.aliases]              # spoken name → desktop id for instant launches (justday apps find <name> shows ids)
+# "дискорд" = "org.equicord.equibop"

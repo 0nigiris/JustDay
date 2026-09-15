@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kwin": {
+      "command": "sh",
+      "args": ["-c", "exec \"$(uv tool dir)/kwin-mcp/bin/python\" \"${CLAUDE_PLUGIN_ROOT}/bin/kwin_live.py\""]
+    }
+  }
+}

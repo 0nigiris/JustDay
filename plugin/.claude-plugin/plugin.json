@@ -1,0 +1,6 @@
+{
+  "name": "justday",
+  "version": "0.1.0",
+  "description": "JustDay desktop-agent skills (KDE Plasma/Wayland desktop, browser, Claude Code workers, files, games, email) and the kwin MCP server",
+  "license": "GPL-3.0-or-later"
+}

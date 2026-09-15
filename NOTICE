@@ -1,0 +1,12 @@
+JustDay — voice AI assistant for Linux
+Copyright (C) 2026 0nigiris <https://github.com/0nigiris>
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. See LICENSE.
+
+Modified versions must keep this notice, credit the original author and be released under the GPL.
+
+Third-party parts:
+  island/icons/*.svg  — Lucide icons, ISC License (island/icons/LICENSE-lucide.txt)
+  voice/voices/*      — reference voices generated with Qwen3-TTS (Apache License 2.0)

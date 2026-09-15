@@ -1,0 +1,16 @@
+[Unit]
+Description=JustDay voice desktop agent
+PartOf=graphical-session.target
+After=graphical-session.target pipewire.service
+
+[Service]
+Type=simple
+ExecStart=@JUSTDAY@ daemon
+Environment=PATH=@PATH@
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+# The daemon only listens on a user-only Unix socket; no network ports.
+
+[Install]
+WantedBy=graphical-session.target

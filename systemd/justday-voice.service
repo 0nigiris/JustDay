@@ -1,0 +1,14 @@
+[Unit]
+Description=JustDay neural voice (Qwen3-TTS)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/justday/voice/.venv/bin/python @REPO@/voice/server.py
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
