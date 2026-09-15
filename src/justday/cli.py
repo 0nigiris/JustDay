@@ -488,7 +488,9 @@ def main(argv: list[str] | None = None) -> None:
 
         if a.action == "setup":
             print("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Несколько ссылок — через пробел.")
-            value = (os.environ.get("JUSTDAY_SECRET") or input("ссылка(и): ")).strip()
+            import getpass
+
+            value = (os.environ.get("JUSTDAY_SECRET") or getpass.getpass("ссылка(и) (ввод скрыт): ")).strip()
             providers.secret_set("calendar", value)
             try:
                 _print({"ok": True, "today": len(calendar_lane.day(0)), "calendars": len(calendar_lane.urls())})

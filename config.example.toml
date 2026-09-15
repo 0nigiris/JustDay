@@ -7,6 +7,7 @@ name = ""                   # your name (signature in letters)
 address_as = "сэр"          # how the assistant addresses you
 assistant_name = "Джарвис"  # main name (shown in the island)
 assistant_aliases = ["JustDay"]  # other names it answers to
+language = "ru"             # ru | en — island, settings, spoken replies (set [stt] language too)
 
 [audio]
 input = ""                  # substring of a PipeWire source name (pactl list short sources), "" = default
@@ -22,12 +23,17 @@ device = "cuda"             # cuda | cpu
 language = "ru"             # "" = auto-detect
 
 [tts]
-engine = "silero"           # silero | espeak | none
+engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | silero | espeak | none
+voice = "jarvis"            # neural voice: jarvis, friday or one you designed/cloned (justday voice list)
+neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
 
 [wakeword]
 enabled = false             # "Hey Jarvis" (English openWakeWord model) — keeps the mic open, audio stays local
 threshold = 0.5
+
+[voiceprint]                # Settings → Voice → "Tune to my voice" (justday voiceprint enroll)
+mode = "off"                # off | wake (wake word and follow-ups must be you) | always
 
 [brain]
 # Easier: `justday model list` / `justday model use <provider> <model>`
@@ -46,6 +52,19 @@ auto_review = true          # when a worker finishes, JustDay checks its work an
 
 [ui]
 notifications = true
+
+[island]                    # Dynamic Island, applied live
+animations = "spring"       # spring | smooth | off
+hover_reveal = true         # hover the top edge to show widgets
+show_weather = true
+show_events = true
+show_notifications = true   # mirror desktop notifications (they never leave the computer)
+city = ""                   # weather location; empty = no weather requests
+screen = ""                 # monitor name, e.g. DP-2; empty = top-left one
+
+[updates]
+check = true                # look for a new version on GitHub (git fetch)
+interval_hours = 6
 
 [desktop]
 accessibility = true        # AT-SPI on: Qt/GTK buttons get numbered marks on screenshots → exact clicks
