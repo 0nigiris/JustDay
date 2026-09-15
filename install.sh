@@ -38,7 +38,7 @@ done
 # kwin-mcp builds dbus-python, pygobject and pycairo from source: compiler + headers + AT-SPI typelib
 command -v gcc >/dev/null || need+=(gcc)
 command -v pkg-config >/dev/null || need+=(pkgconf-pkg-config)
-for pc in dbus-1:dbus-devel glib-2.0:glib2-devel cairo:cairo-devel gobject-introspection-1.0:gobject-introspection-devel \
+for pc in dbus-1:dbus-devel glib-2.0:glib2-devel cairo:cairo-devel cairo-gobject:cairo-gobject-devel gobject-introspection-1.0:gobject-introspection-devel \
           atspi-2:at-spi2-core-devel; do
   pkg-config --exists "${pc%%:*}" 2>/dev/null || need+=("${pc#*:}")
 done
@@ -47,7 +47,7 @@ if ((${#need[@]})); then
   if command -v dnf >/dev/null; then PM=(sudo dnf install -y)
   elif command -v apt-get >/dev/null; then PM=(sudo apt-get install -y)
     need=("${need[@]/pkgconf-pkg-config/pkg-config}"); need=("${need[@]/gcc/build-essential}"); need=("${need[@]/dbus-devel/libdbus-1-dev}")
-    need=("${need[@]/glib2-devel/libglib2.0-dev}"); need=("${need[@]/cairo-devel/libcairo2-dev}"); need=("${need[@]/dbus-tools/dbus-bin}")
+    need=("${need[@]/glib2-devel/libglib2.0-dev}"); need=("${need[@]/cairo-gobject-devel/libcairo2-dev}"); need=("${need[@]/cairo-devel/libcairo2-dev}"); need=("${need[@]/dbus-tools/dbus-bin}")
     need=("${need[@]/gobject-introspection-devel/libgirepository-2.0-dev}"); need=("${need[@]/at-spi2-core-devel/libatspi2.0-dev}")
     need=("${need[@]/pipewire-utils/pipewire-bin}"); need=("${need[@]/gtk3/libgtk-3-bin}"); need=("${need[@]/libnotify/libnotify-bin}"); need=("${need[@]/ImageMagick/imagemagick}")
     need=("${need[@]/libsecret/libsecret-tools}"); need=("${need[@]/gtk4-layer-shell/gir1.2-gtk4layershell-1.0}"); need=("${need[@]/python3-gobject/python3-gi}")
@@ -55,7 +55,7 @@ if ((${#need[@]})); then
     need=("${need[@]/pipewire-utils/pipewire}"); need=("${need[@]/fd-find/fd}"); need=("${need[@]/ImageMagick/imagemagick}"); need=("${need[@]/libnotify/libnotify}")
     need=("${need[@]/python3-gobject/python-gobject}"); need=("${need[@]/python3-cairo/python-cairo}")
     need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
-    need=("${need[@]/glib2-devel/glib2}"); need=("${need[@]/cairo-devel/cairo}"); need=("${need[@]/gobject-introspection-devel/gobject-introspection}")
+    need=("${need[@]/glib2-devel/glib2}"); need=("${need[@]/cairo-gobject-devel/cairo}"); need=("${need[@]/cairo-devel/cairo}"); need=("${need[@]/gobject-introspection-devel/gobject-introspection}")
     need=("${need[@]/at-spi2-core-devel/at-spi2-core}"); need=("${need[@]/dbus-tools/dbus}")
   else die "Unknown package manager. Install manually: ${need[*]}"; fi
   say "Installing system packages (sudo): ${need[*]}"

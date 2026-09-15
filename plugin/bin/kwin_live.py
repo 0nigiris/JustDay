@@ -6,12 +6,14 @@ coordinates of the last look and returns a fresh look — so the model never doe
 a GUI step costs one turn instead of three or four.
 """
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Annotated
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # relmouse.py next to this file
 from kwin_mcp import server
 from mcp.server.mcpserver.utilities.types import Image
 from pydantic import Field
@@ -147,7 +149,8 @@ async def act(
         "Actions, executed in order. Coordinates are pixels of the last `look` image, or #N for a marked element. "
         "click X Y | click #N | double X Y | right X Y | move X Y | scroll X Y N (N<0 = up) | "
         "drag X1 Y1 X2 Y2 [X3 Y3 ...] (path, e.g. drawing) | type TEXT (any language) | "
-        "key COMBO (Return, ctrl+k, alt+Tab…) | hold KEY | release KEY | wait MS"))],
+        "key COMBO (Return, ctrl+k, alt+Tab…) | hold KEY | release KEY | wait MS | "
+        "games: turn DX DY [MS] (relative mouse = camera) | press KEY MS (hold a key for MS) | mouse down|up [left|right]"))],
     look_after: Annotated[bool, Field(description="Return a fresh look after the steps (default true).")] = True,
     settle_ms: Annotated[int, Field(description="Pause before the final look.")] = 450,
     screen_coords: Annotated[bool, Field(description="Coordinates are absolute screen pixels, not image pixels.")] = False,
@@ -179,6 +182,18 @@ async def act(
                 eng.keyboard_key_down(rest.strip())
             elif op == "release":
                 eng.keyboard_key_up(rest.strip())
+            elif op == "turn":  # games: relative mouse (camera). turn DX DY [MS]
+                import relmouse
+
+                relmouse.move(float(a[0]), float(a[1]), duration=(int(a[2]) / 1000) if len(a) > 2 else 0.0)
+            elif op == "press":  # press KEY MS — hold a key for a while (walk, charge a jump)
+                eng.keyboard_key_down(a[0])
+                time.sleep(min(10.0, int(a[1]) / 1000) if len(a) > 1 else 0.1)
+                eng.keyboard_key_up(a[0])
+            elif op == "mouse":  # mouse down|up [left|right] — hold a button (aim, drag in games)
+                import relmouse
+
+                relmouse.button(a[1] if len(a) > 1 else "left", a[0] == "down")
             elif op == "wait":
                 time.sleep(min(10.0, int(a[0]) / 1000))
             else:
