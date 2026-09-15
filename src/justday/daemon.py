@@ -17,7 +17,7 @@ import time
 
 import numpy as np
 
-from . import audio, calendar_lane, config, events, fastpath, mail, workers
+from . import audio, calendar_lane, config, events, fastpath, mail, voiceprint, workers
 from .brain import Brain
 from .stt import STT
 from .tts import TTS, normalize, split_sentences
@@ -193,6 +193,7 @@ class Daemon:
         self._last_toggle = 0.0
         self._holding = False
         self._voice_warned = False
+        self._activation = "button"
         self._cancel_gen = 0  # bumped by cancel_all: anything started before it is dropped
         self.weather: dict | None = None
         self.update_info: dict | None = None
@@ -357,7 +358,7 @@ class Daemon:
             await self.player.play(audio.earcon(kind), 48000)
 
     # ---------------- listening ----------------
-    async def toggle(self) -> str:
+    async def toggle(self, source: str = "button") -> str:
         """Hotkey handler. Tap (auto-stop on silence, tap again to finish), double tap (cancel all) and hold:
         a held key auto-repeats, so toggles arriving <1 s apart mean "still held"; when they stop,
         the key was released and the utterance ends."""
@@ -379,6 +380,7 @@ class Daemon:
             self._listen_cancel.set()  # second tap: finish the utterance now
             return "stop-listening"
         self._holding = False
+        self._activation = source
         self.stop_speaking()
         self.listen()
         return "listening"
@@ -430,6 +432,16 @@ class Daemon:
             events.emit("listen_empty")
             self.state = after
             return
+        mode = self.cfg["voiceprint"]["mode"]
+        if mode == "always" or (mode == "wake" and (followup or self._activation == "wake")):
+            prof = voiceprint.profile()
+            if prof:
+                sc = await asyncio.get_running_loop().run_in_executor(None, voiceprint.score, pcm)
+                if sc is not None and sc < prof["threshold"]:
+                    events.emit("listen_rejected", score=round(sc, 2))
+                    self.publish(kind="error", detail="Голос не узнан")
+                    self.state = after
+                    return
         self.state = "transcribing"
         gen = self._cancel_gen
         text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
@@ -484,6 +496,32 @@ class Daemon:
             await self.brain.inject(text, source)  # keep the running task; Claude handles both
             return
         asyncio.create_task(self.run_turn(text, source))
+
+    async def _record_fixed(self, seconds: float) -> np.ndarray:
+        self.stop_speaking()
+        self.mic.start()
+        frames: list[np.ndarray] = []
+        self.mic.subscribe(frames.append)
+        self.state = "listening"
+        await self.earcon("listen")
+        await asyncio.sleep(max(1.5, min(30.0, seconds)))
+        self.mic.unsubscribe(frames.append)
+        self.state = "idle"
+        return np.concatenate(frames) if frames else np.zeros(0, dtype=np.int16)
+
+    async def enroll_record(self, kind: str, index: int, seconds: float) -> dict:
+        """One enrollment clip: "Hey Jarvis" (kind=wake) or a command phrase (kind=phrase)."""
+        pcm = await self._record_fixed(seconds)
+        await self.earcon("done")
+        level = float(voiceprint.rms_frames(pcm).max()) if len(pcm) else 0.0
+        if level < 0.02:
+            return {"ok": False, "error": "Слишком тихо — говорите ближе к микрофону", "level": round(level, 3)}
+        clip = voiceprint.trim_silence(pcm)
+        voiceprint.save_wav(voiceprint.DIR / f"{kind}_{index}.wav", pcm)
+        text = ""
+        if kind == "phrase":
+            text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
+        return {"ok": True, "text": text, "level": round(level, 3), "seconds": round(len(clip) / audio.RATE, 1)}
 
     async def record_sample(self, seconds: float) -> dict:
         import wave
@@ -656,7 +694,14 @@ class Daemon:
 
         download_models(model_names=[w["model"]])
         path = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models", f"{w['model']}_v0.1.onnx")
-        self._wake = Model(wakeword_models=[path], inference_framework="onnx")
+        prof = voiceprint.profile() or {}
+        verifier = prof.get("wake_verifier") or ""
+        if verifier and os.path.exists(verifier):  # trained on the user's own "Hey Jarvis"
+            self._wake = Model(wakeword_models=[path], inference_framework="onnx",
+                               custom_verifier_models={os.path.basename(path).rsplit(".onnx", 1)[0]: verifier},
+                               custom_verifier_threshold=0.3)
+        else:
+            self._wake = Model(wakeword_models=[path], inference_framework="onnx")
         loop = asyncio.get_running_loop()
 
         def on_frame(frame: np.ndarray) -> None:
@@ -667,7 +712,7 @@ class Daemon:
                 self._wake_cooldown = time.monotonic() + 2.5
                 self._wake.reset()
                 events.emit("wakeword", score=round(float(score), 2))
-                loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self.toggle()))
+                loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self.toggle(source="wake")))
 
         self.mic.subscribe(on_frame)
         self.mic.start()
@@ -849,6 +894,25 @@ class Daemon:
                         self.publish(kind="card", card=card)
                     asyncio.create_task(self._speak_and_listen(reply, expects))
                     resp = {"ok": True, "result": "черновик показан пользователю и ждёт его подтверждения голосом или кнопкой"}
+            elif cmd == "enroll_record":
+                resp = await self.enroll_record(req.get("kind", "phrase"), int(req.get("index", 0)), float(req.get("seconds", 4)))
+            elif cmd == "enroll_finish":
+                resp = await asyncio.get_running_loop().run_in_executor(None, voiceprint.enroll_finish)
+                if resp.get("ok"):
+                    config.set_value("audio", "silence_seconds", resp["silence_seconds"])
+                    if self.cfg["voiceprint"]["mode"] == "off":
+                        config.set_value("voiceprint", "mode", "wake")
+                    self.reload_settings()
+            elif cmd == "voiceprint_status":
+                p = voiceprint.profile()
+                resp = {"ok": True, "enrolled": bool(p), "created": (p or {}).get("created", ""), "threshold": (p or {}).get("threshold"),
+                        "wake_verifier": bool((p or {}).get("wake_verifier")), "mode": self.cfg["voiceprint"]["mode"],
+                        "phrases": voiceprint.PHRASES, "wake_phrases": voiceprint.WAKE_PHRASES}
+            elif cmd == "voiceprint_reset":
+                voiceprint.reset()
+                config.set_value("voiceprint", "mode", "off")
+                self.reload_settings()
+                resp = {"ok": True}
             elif cmd == "record_sample":  # voice cloning sample: record N seconds, transcribe locally
                 resp = await self.record_sample(float(req.get("seconds", 12)))
             elif cmd == "reload_settings":  # after `justday config set`: hot-apply what can be

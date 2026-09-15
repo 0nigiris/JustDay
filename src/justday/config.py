@@ -73,6 +73,8 @@ DEFAULTS: dict = {
     },
     "ui": {"notifications": True},
     "updates": {"check": True, "interval_hours": 6},
+    # personal voice profile (Settings → Голос и звук → «Настроить под мой голос»)
+    "voiceprint": {"mode": "off"},  # off | wake (only wake word / follow-ups must be you) | always
     # Dynamic Island look & feel (applied live)
     "island": {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off

@@ -167,6 +167,17 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
+            Rectangle {  // content scrolls under the corner buttons: fade it out at the top
+                z: 9
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 64
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: JD.ink }
+                    GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.85) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+                visible: scroller.contentY > 4
+            }
             RowLayout {
                 z: 10
                 anchors { top: parent.top; right: parent.right; topMargin: 16; rightMargin: 18 }
@@ -733,6 +744,107 @@ Item {
                 }
             }
             property string samplePath: ""
+
+            // ───── personal voice profile ─────
+            GroupTitle { text: "ПОД МОЙ ГОЛОС" }
+            Group {
+                id: vpGroup
+                property var st: null
+                property int step: -1          // -1 = not enrolling
+                property var steps: []
+                property bool recording: false
+                property string heard: ""
+                property string result: ""
+                function refresh() { win.run(["voiceprint", "status"], v => vpGroup.st = v) }
+                function start() {
+                    steps = st.wake_phrases.map((p, i) => ({ kind: "wake", index: i, secs: 2.5, text: p }))
+                              .concat(st.phrases.map((p, i) => ({ kind: "phrase", index: i, secs: 5, text: p })))
+                    step = 0; heard = ""; result = ""
+                }
+                function record() {
+                    const s = steps[step]
+                    recording = true; heard = ""
+                    win.run(["voiceprint", "record", s.kind, String(s.index), String(s.secs)], r => {
+                        recording = false
+                        if (!r.ok) { heard = "✗ " + (r.error || "не получилось"); return }
+                        heard = r.text ? "✓ «" + r.text + "»" : "✓ записано"
+                        if (step < steps.length - 1) advance.restart()
+                        else finish()
+                    })
+                }
+                function finish() {
+                    result = "Обучаю…"
+                    win.run(["voiceprint", "finish"], r => {
+                        step = -1
+                        result = r.ok ? "Готово: пауза конца фразы " + r.silence_seconds + " с" + (r.wake_verifier ? ", «Hey Jarvis» дообучено" : "") : "Не получилось: " + (r.error || "")
+                        refresh(); win.reload()
+                    })
+                }
+                Timer { id: advance; interval: 900; onTriggered: { vpGroup.step += 1; vpGroup.heard = "" } }
+                Component.onCompleted: refresh()
+
+                Row {
+                    visible: vpGroup.step < 0
+                    title: vpGroup.st && vpGroup.st.enrolled ? "Голос настроен · " + vpGroup.st.created : "Настроить под мой голос"
+                    subtitle: vpGroup.result || "Прочитайте 11 коротких фраз (~1 минута). Ассистент запомнит тембр и темп вашей речи; «Hey Jarvis» начнёт лучше узнавать именно вас. Всё хранится только на компьютере"
+                    RowLayout {
+                        spacing: 8
+                        Btn { text: vpGroup.st && vpGroup.st.enrolled ? "Заново" : "Начать"; primary: !(vpGroup.st && vpGroup.st.enrolled); enabled: !!vpGroup.st; onClicked: vpGroup.start() }
+                        Btn { visible: !!(vpGroup.st && vpGroup.st.enrolled); glyph: "trash"; text: ""; implicitWidth: 34; danger: true
+                              onClicked: win.run(["voiceprint", "reset"], () => { vpGroup.result = "Профиль голоса удалён"; vpGroup.refresh() }) }
+                    }
+                }
+                // enrollment step
+                Item {
+                    visible: vpGroup.step >= 0
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: vp.width
+                    implicitHeight: 170
+                    ColumnLayout {
+                        anchors { fill: parent; margins: 16 }
+                        spacing: 10
+                        RowLayout {
+                            Text { text: vpGroup.step >= 0 ? "Шаг " + (vpGroup.step + 1) + " из " + vpGroup.steps.length : ""; color: win.t2; font.family: win.font; font.pixelSize: 12; Layout.fillWidth: true }
+                            Btn { text: "Отмена"; onClicked: { vpGroup.step = -1; vpGroup.result = "" } }
+                        }
+                        Rectangle {  // progress
+                            Layout.fillWidth: true
+                            implicitHeight: 4
+                            radius: 2
+                            color: "#3a3a3c"
+                            Rectangle {
+                                width: parent.width * (vpGroup.step + (vpGroup.heard.startsWith("✓") ? 1 : 0)) / Math.max(1, vpGroup.steps.length)
+                                height: 4; radius: 2; color: win.blue
+                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                            }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: vpGroup.step >= 0 ? "«" + vpGroup.steps[vpGroup.step].text + "»" : ""
+                            color: win.t1; font.family: win.font; font.pixelSize: 22; font.weight: Font.DemiBold
+                            wrapMode: Text.Wrap
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 12
+                            Text { text: vpGroup.heard; color: vpGroup.heard.startsWith("✗") ? "#ff6961" : "#30d158"; font.family: win.font; font.pixelSize: 13 }
+                            Btn { text: vpGroup.recording ? "Говорите…" : "Записать"; glyph: "mic"; primary: true; busy: vpGroup.recording; onClicked: vpGroup.record() }
+                        }
+                    }
+                }
+                Row {
+                    title: "Откликаться только на мой голос"
+                    subtitle: "Чужие голоса (видео, гости) игнорируются. «Слово и ответы» — только при «Hey Jarvis» и ответах без кнопки; кнопка всегда слушает любого"
+                    Segmented {
+                        enabled: !!(vpGroup.st && vpGroup.st.enrolled)
+                        opacity: enabled ? 1 : 0.4
+                        options: [{ value: "off", label: "Нет" }, { value: "wake", label: "Слово и ответы" }, { value: "always", label: "Всегда" }]
+                        current: win.get("voiceprint.mode") || "off"
+                        onPicked: v => { win.set("voiceprint.mode", v); win.notify("Сохранено") }
+                    }
+                }
+            }
 
             GroupTitle { text: "УСТРОЙСТВА" }
             Group {

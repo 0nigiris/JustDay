@@ -325,6 +325,9 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
     sp = sub.add_parser("calendar", help="private calendar from iCal links: setup | today | tomorrow | week")
     sp.add_argument("action", choices=["setup", "today", "tomorrow", "week", "test"])
+    sp = sub.add_parser("voiceprint", help="personal voice profile: status | enroll | record KIND INDEX SECONDS | finish | reset | mode off|wake|always")
+    sp.add_argument("action", choices=["status", "enroll", "record", "finish", "reset", "mode"])
+    sp.add_argument("args", nargs="*")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -500,6 +503,8 @@ def main(argv: list[str] | None = None) -> None:
                 _print(calendar_lane.between(now, now + dt.timedelta(days=7)))
             else:
                 _print(calendar_lane.day(1 if a.action == "tomorrow" else 0))
+    elif a.cmd == "voiceprint":
+        _voiceprint_cmd(a)
     elif a.cmd == "version":
         from . import manage
 
@@ -548,6 +553,38 @@ def _contacts_cmd(a) -> None:
         if unknown:
             sys.exit(f"unknown fields {sorted(unknown)}; allowed: {', '.join(contacts.FIELDS)}")
         _print(contacts.upsert(" ".join(name_parts), **fields))
+
+
+def _voiceprint_cmd(a) -> None:
+    args = a.args
+    if a.action == "status":
+        _print(control("voiceprint_status", timeout=10))
+    elif a.action == "record":
+        _print(control("enroll_record", timeout=60, kind=args[0], index=int(args[1]), seconds=float(args[2])))
+    elif a.action == "finish":
+        _print(control("enroll_finish", timeout=300))
+    elif a.action == "reset":
+        _print(control("voiceprint_reset", timeout=20))
+    elif a.action == "mode":
+        config.set_value("voiceprint", "mode", args[0])
+        _print(control("reload_settings", timeout=5))
+    else:  # interactive enrollment in the terminal
+        st = control("voiceprint_status", timeout=10)
+        steps = [("wake", i, 2.5, p) for i, p in enumerate(st["wake_phrases"])] + [("phrase", i, 5.0, p) for i, p in enumerate(st["phrases"])]
+        print("Настройка под ваш голос: после сигнала произнесите фразу обычным голосом. Enter — записать, s — пропустить.")
+        for n, (kind, idx, secs, phrase) in enumerate(steps, 1):
+            while True:
+                if input(f"\n[{n}/{len(steps)}] Скажите: «{phrase}»  (Enter) ").strip().lower() == "s":
+                    break
+                r = control("enroll_record", timeout=60, kind=kind, index=idx, seconds=secs)
+                if r.get("ok"):
+                    print("  ✓" + (f" услышал: «{r['text']}»" if r.get("text") else ""))
+                    break
+                print(f"  ✗ {r.get('error')} — ещё раз")
+        r = control("enroll_finish", timeout=300)
+        print("\nГотово: порог узнавания {threshold}, пауза конца фразы {silence_seconds} с, слово пробуждения дообучено: {wake}".format(
+            threshold=r.get("threshold"), silence_seconds=r.get("silence_seconds"), wake="да" if r.get("wake_verifier") else "нет")
+            if r.get("ok") else f"\nНе получилось: {r.get('error')}")
 
 
 def _config_cmd(a) -> None:
