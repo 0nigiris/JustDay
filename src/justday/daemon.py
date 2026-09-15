@@ -18,7 +18,7 @@ import time
 import numpy as np
 
 from . import audio, calendar_lane, config, events, fastpath, mail, voiceprint, workers
-from .i18n import t
+from .i18n import lang, t
 from .brain import Brain
 from .stt import STT
 from .tts import TTS, normalize, split_sentences
@@ -120,7 +120,7 @@ def fetch_weather(city: str) -> dict | None:
     state = events.load_state()
     geo = state.get("weather_geo") or {}
     if geo.get("query") != city:
-        url = "https://geocoding-api.open-meteo.com/v1/search?" + urllib.parse.urlencode({"name": city, "count": 1, "language": "ru"})
+        url = "https://geocoding-api.open-meteo.com/v1/search?" + urllib.parse.urlencode({"name": city, "count": 1, "language": lang()})
         with urllib.request.urlopen(url, timeout=10) as r:
             found = (json.load(r).get("results") or [None])[0]
         if not found:
@@ -300,7 +300,7 @@ class Daemon:
                 pcm = await loop.run_in_executor(None, self.tts.synth, sentence)
                 if gen != self._speech_gen or not len(pcm):
                     continue
-                prev, self.state = self.state, "speaking"
+                self.state = "speaking"
                 await self.player.play(pcm, self.tts.rate)
                 if self.state == "speaking":
                     self.state = "thinking" if self.brain.busy else "idle"
@@ -406,7 +406,6 @@ class Daemon:
     async def _listen_once(self, followup: bool) -> None:
         self.mic.start()
         self._last_mic_use = time.monotonic()
-        prev_state = self.state
         self.state = "listening"
         self._listen_cancel = asyncio.Event()
         self._discard_recording = False
@@ -914,7 +913,7 @@ class Daemon:
                 p = voiceprint.profile()
                 resp = {"ok": True, "enrolled": bool(p), "created": (p or {}).get("created", ""), "threshold": (p or {}).get("threshold"),
                         "wake_verifier": bool((p or {}).get("wake_verifier")), "mode": self.cfg["voiceprint"]["mode"],
-                        "phrases": voiceprint.PHRASES, "wake_phrases": voiceprint.WAKE_PHRASES}
+                        "phrases": voiceprint.phrases(), "wake_phrases": voiceprint.WAKE_PHRASES}
             elif cmd == "voiceprint_reset":
                 voiceprint.reset()
                 config.set_value("voiceprint", "mode", "off")

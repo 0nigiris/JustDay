@@ -12,7 +12,7 @@ import re
 import time
 import urllib.request
 
-from . import config, events, providers
+from . import events, providers
 from .i18n import lang, t
 
 CAL_WORDS = re.compile(r"\b(календар\w*|расписани\w*|встреч\w*|созвон\w*|планы? на|что у меня (сегодня|завтра|на неделе|на завтра)|"
@@ -20,9 +20,28 @@ CAL_WORDS = re.compile(r"\b(календар\w*|расписани\w*|встре
 _cache: dict[str, tuple[float, bytes]] = {}
 
 
-def urls() -> list[str]:
-    raw = providers.secret_get("calendar")
+def parse_urls(raw: str) -> list[str]:
     return [u for u in re.split(r"\s+", raw) if u.startswith(("http://", "https://", "webcal://"))]
+
+
+def urls() -> list[str]:
+    return parse_urls(providers.secret_get("calendar"))
+
+
+def setup(raw: str) -> dict:
+    """Check every link before it goes to the keyring, so a typo is never saved as a "connected" calendar."""
+    import icalendar
+
+    links = parse_urls(raw)
+    if not links:
+        return {"ok": False, "error": "нужна ссылка http(s):// или webcal://"}
+    for u in links:
+        try:
+            icalendar.Calendar.from_ical(_fetch(u))
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"[:200]}
+    providers.secret_set("calendar", " ".join(links))
+    return {"ok": True, "today": len(day(0)), "calendars": len(links)}
 
 
 def _fetch(url: str) -> bytes:

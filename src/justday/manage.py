@@ -187,6 +187,18 @@ def trash(path: str) -> dict:
     return {"ok": r.returncode == 0, "error": r.stderr.strip()}
 
 
+def forget_memory(path: Path) -> dict:
+    """Trash a memory note and drop its line from the MEMORY.md index, so the model is not pointed at a missing file."""
+    r = trash(str(path))
+    index = path.parent / "MEMORY.md"
+    if r["ok"] and index.exists():
+        lines = index.read_text(encoding="utf-8").splitlines(keepends=True)
+        kept = [line for line in lines if f"]({path.name})" not in line]
+        if len(kept) != len(lines):
+            index.write_text("".join(kept), encoding="utf-8")
+    return r
+
+
 def autostart(state: str | None = None) -> dict:
     units = [u for u in SERVICES if (Path.home() / ".config/systemd/user" / u).exists()]
     if state in ("on", "off"):

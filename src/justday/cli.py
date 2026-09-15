@@ -397,7 +397,7 @@ def main(argv: list[str] | None = None) -> None:
                 target = Path(a.target or "").resolve()
                 if target.parent != mem.resolve():  # only memory notes, nothing else on disk
                     sys.exit("not a memory file")
-                _print(manage.trash(str(target)))
+                _print(manage.forget_memory(target))
             else:
                 _print(manage.trash(str(config.EVENTS_FILE)))
             return
@@ -484,18 +484,14 @@ def main(argv: list[str] | None = None) -> None:
         env = {**os.environ, "JUSTDAY_SETUP": "0"}
         sys.exit(subprocess.run([str(config.REPO_DIR / "install.sh")], env=env).returncode)
     elif a.cmd == "calendar":
-        from . import calendar_lane, providers
+        from . import calendar_lane
 
         if a.action == "setup":
             print("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Несколько ссылок — через пробел.")
             import getpass
 
             value = (os.environ.get("JUSTDAY_SECRET") or getpass.getpass("ссылка(и) (ввод скрыт): ")).strip()
-            providers.secret_set("calendar", value)
-            try:
-                _print({"ok": True, "today": len(calendar_lane.day(0)), "calendars": len(calendar_lane.urls())})
-            except Exception as e:  # noqa: BLE001
-                _print({"ok": False, "error": str(e)})
+            _print(calendar_lane.setup(value))
         elif a.action == "test":
             _print({"configured": bool(calendar_lane.urls()), "calendars": len(calendar_lane.urls())})
         else:

@@ -33,6 +33,19 @@ PHRASES = [
     "Включи на Ютубе что-нибудь спокойное",
     "Запомни, что мой любимый браузер — Хелиум",
 ]
+PHRASES_EN = [
+    "Jarvis, open the calculator",
+    "Work out what twenty five times four is",
+    "What will the weather be like tomorrow morning?",
+    "Text mom that I'll be home tonight",
+    "Play something calm on YouTube",
+    "Remember that my favourite browser is Helium",
+]
+
+
+def phrases() -> list[str]:
+    """Enrollment phrases in the user's language: the pace and pauses should match how they really talk."""
+    return PHRASES_EN if config.load()["user"].get("language", "ru") == "en" else PHRASES
 
 _session = None
 
