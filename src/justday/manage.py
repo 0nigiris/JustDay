@@ -59,6 +59,24 @@ def voices() -> dict:
             "neural": items, "silero": VOICES}
 
 
+def update_status(fetch: bool = True) -> dict:
+    """Is the GitHub copy newer than this install? (git fetch + compare; works for shallow clones too)"""
+    repo = str(config.REPO_DIR)
+    git = lambda *a: subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True, timeout=60)  # noqa: E731
+    if not (config.REPO_DIR / ".git").exists():
+        return {"ok": False, "error": "не git-копия"}
+    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() or "main"
+    if fetch:
+        f = git("fetch", "--quiet", "origin", branch)
+        if f.returncode != 0:
+            return {"ok": False, "error": (f.stderr.strip() or "нет сети")[:200]}
+    behind = git("rev-list", "--count", f"HEAD..origin/{branch}").stdout.strip()
+    log = git("log", "--format=%s", f"HEAD..origin/{branch}").stdout.strip().splitlines()
+    dirty = bool(git("status", "--porcelain", "--untracked-files=no").stdout.strip())
+    return {"ok": True, "branch": branch, "behind": int(behind or 0), "changes": log[:10], "local_changes": dirty,
+            "current": git("rev-parse", "--short", "HEAD").stdout.strip()}
+
+
 def app_version() -> str:
     try:
         return pkg_version("justday")

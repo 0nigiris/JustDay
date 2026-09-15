@@ -72,12 +72,14 @@ DEFAULTS: dict = {
         "auto_review": True,
     },
     "ui": {"notifications": True},
+    "updates": {"check": True, "interval_hours": 6},
     # Dynamic Island look & feel (applied live)
     "island": {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off
         "hover_reveal": True,  # hover the top edge to show the island
         "show_weather": True,
         "show_events": True,  # last answer / new mail / Claude status in the hover view
+        "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         "city": "",  # weather location; empty = no weather requests at all
         "screen": "",  # monitor name (e.g. DP-2); empty = the one at the top-left
     },

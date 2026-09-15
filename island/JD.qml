@@ -14,6 +14,8 @@ Singleton {
     property var settings: ({})
     property var history: []
     property var weather: null
+    property var update: null      // {behind, changes} when GitHub has a newer version
+    function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
 
     property string activity: ""           // one line of what is happening (heard text, tool, draft)
     property string activityIcon: ""
@@ -144,6 +146,7 @@ Singleton {
         if (m.history !== undefined) history = m.history
         if (m.workers !== undefined) workers = m.workers
         if (m.weather !== undefined) weather = m.weather
+        if (m.update !== undefined) update = m.update
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate

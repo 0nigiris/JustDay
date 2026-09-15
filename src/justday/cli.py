@@ -324,6 +324,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
     sp = sub.add_parser("version")
+    sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
+    sp.add_argument("--check", action="store_true")
 
     a = p.parse_args(argv)
 
@@ -458,6 +460,23 @@ def main(argv: list[str] | None = None) -> None:
         from . import manage
 
         _print(manage.autostart(None if a.state == "status" else a.state))
+    elif a.cmd == "update":
+        from . import manage
+
+        st = manage.update_status()
+        if a.check or not st.get("ok"):
+            _print(st)
+            sys.exit(0 if st.get("ok") else 1)
+        if st["behind"] == 0:
+            print("JustDay уже последней версии")
+            return
+        if st["local_changes"]:
+            sys.exit("в папке JustDay есть ваши изменения — обновление остановлено, чтобы их не потерять (git stash)")
+        print(f"Обновляю: {st['behind']} изменений\n  " + "\n  ".join(st["changes"]))
+        if subprocess.run(["git", "-C", str(config.REPO_DIR), "pull", "--ff-only", "--quiet"]).returncode != 0:
+            sys.exit("git pull не удался")
+        env = {**os.environ, "JUSTDAY_SETUP": "0"}
+        sys.exit(subprocess.run([str(config.REPO_DIR / "install.sh")], env=env).returncode)
     elif a.cmd == "version":
         from . import manage
 

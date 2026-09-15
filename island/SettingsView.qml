@@ -1236,6 +1236,24 @@ Item {
                 Row { title: "Файл настроек"; subtitle: win.d.about ? win.d.about.config : ""; Btn { text: "Открыть"; onClicked: Quickshell.execDetached(["xdg-open", win.d.about.config]) } }
                 Row { title: "Руководство"; subtitle: "Как всё устроено, модели, приватность, решение проблем"; Btn { glyph: "file-text"; text: "Открыть"; onClicked: JD.openManual() } }
                 Row { title: "Лицензия"; subtitle: "GNU GPL v3 · © 2026 0nigiris · иконки Lucide (ISC)" }
+                Row { title: "Исходный код"; subtitle: "github.com/0nigiris/JustDay"; Btn { glyph: "external-link"; text: "GitHub"; onClicked: Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay"]) } }
+            }
+            GroupTitle { text: "ОБНОВЛЕНИЯ" }
+            Group {
+                id: updGroup
+                property var st: null
+                property bool checking: false
+                Row {
+                    title: updGroup.checking ? "Проверяю…" : !updGroup.st ? "Проверить обновления" : !updGroup.st.ok ? "Не удалось проверить" : updGroup.st.behind ? "Доступно обновление" : "Установлена последняя версия"
+                    subtitle: updGroup.st && updGroup.st.ok && updGroup.st.behind ? updGroup.st.changes.slice(0, 3).join(" · ") : updGroup.st && !updGroup.st.ok ? updGroup.st.error : "Обновления берутся из GitHub"
+                    RowLayout {
+                        spacing: 8
+                        Btn { glyph: "refresh-cw"; text: "Проверить"; busy: updGroup.checking
+                              onClicked: { updGroup.checking = true; win.run(["update", "--check"], v => { updGroup.checking = false; updGroup.st = v }) } }
+                        Btn { visible: !!(updGroup.st && updGroup.st.behind); text: "Обновить"; primary: true; onClicked: JD.runUpdate() }
+                    }
+                }
+                Row { title: "Проверять автоматически"; subtitle: "Раз в 6 часов; на острове появится кнопка"; Toggle { checked: win.get("updates.check") !== false; onToggled: v => win.set("updates.check", v) } }
             }
         }
     }

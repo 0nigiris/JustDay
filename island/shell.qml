@@ -288,6 +288,7 @@ ShellRoot {
         id: pv
         readonly property string event: JD.workers > 0 ? "Клод работает" + (JD.workers > 1 ? " ×" + JD.workers : "")
                                         : JD.dstate === "offline" ? JD.assistantName + " не запущен"
+                                        : JD.update ? "Доступно обновление"
                                         : (JD.island.show_events !== false && JD.history.length && JD.history[0].a) ? JD.history[0].a : ""
         implicitWidth: peekRow.implicitWidth + 32
         implicitHeight: 44
@@ -674,6 +675,24 @@ ShellRoot {
                 }
                 IconButton { icon: "configure"; size: 28; onClicked: JD.openSettings("general") }
                 IconButton { icon: "window-close"; size: 28; onClicked: JD.expanded = false }
+            }
+
+            // update available
+            Rectangle {
+                visible: !!JD.update
+                Layout.fillWidth: true
+                implicitHeight: 48
+                radius: 16
+                color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.16)
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 8
+                    spacing: 10
+                    Label1 { text: "Доступно обновление JustDay"; Layout.fillWidth: false }
+                    Label2 { text: JD.update ? (JD.update.changes || [])[0] || "" : ""; Layout.fillWidth: true }
+                    PillButton { label: "Обновить"; tint: JD.accentBlue; onClicked: JD.runUpdate() }
+                }
             }
 
             // ask by text

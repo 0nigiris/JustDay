@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import subprocess
 import time
@@ -75,6 +76,22 @@ def vocabulary(cfg: dict) -> str:
             seen.add(w.lower())
             extra.append(w)
     return (base.rstrip(". ") + ", " + ", ".join(extra[:40]) + ".") if extra else base
+
+
+NOTIFY_RX = re.compile(r'string "(?P<app>.*?)"\n\s*uint32 \d+\n\s*string "(?P<icon>.*?)"\n\s*string "(?P<summary>.*?)"\n'
+                       r'\s*string "(?P<body>.*?)"\n\s*array \[', re.S)
+DESKTOP_RX = re.compile(r'string "desktop-entry"\n\s*variant\s+string "(.*?)"')
+
+
+def parse_notification(raw: str) -> dict | None:
+    """One `dbus-monitor` Notify call → {app, icon, summary, body}."""
+    m = NOTIFY_RX.search(raw)
+    if not m:
+        return None
+    d = DESKTOP_RX.search(raw)
+    unq = lambda s: s.replace('\\"', '"')  # noqa: E731
+    return {"app": unq(m["app"]), "icon": (d.group(1) if d else "") or m["icon"], "summary": unq(m["summary"]),
+            "body": re.sub(r"<[^>]+>", "", unq(m["body"]))[:300]}
 
 
 def settings_snapshot(cfg: dict) -> dict:
@@ -178,6 +195,7 @@ class Daemon:
         self._voice_warned = False
         self._cancel_gen = 0  # bumped by cancel_all: anything started before it is dropped
         self.weather: dict | None = None
+        self.update_info: dict | None = None
         self._weather_city = ""
         self.mail = mail.MailAssistant()
         self.stt.vocabulary = vocabulary(self.cfg)
@@ -642,12 +660,56 @@ class Daemon:
         self.mic.subscribe(on_frame)
         self.mic.start()
 
+    async def _watch_notifications(self) -> None:
+        """Mirror desktop notifications onto the island (read-only eavesdrop; Plasma still shows and owns them).
+        They stay on this computer: nothing is passed to the brain."""
+        rule = "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
+        while True:
+            try:
+                proc = await asyncio.create_subprocess_exec("dbus-monitor", "--session", rule,
+                                                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                buf: list[str] = []
+                async for raw in proc.stdout:
+                    line = raw.decode("utf-8", "replace")
+                    if line.startswith(("method call", "signal")):
+                        self._emit_notification("".join(buf))
+                        buf = [] if line.startswith("signal") else [line]
+                    elif buf:
+                        buf.append(line)
+                        if line.strip().startswith("int32"):  # expire timeout = last argument
+                            self._emit_notification("".join(buf))
+                            buf = []
+                await proc.wait()
+            except (OSError, asyncio.CancelledError):
+                return
+            await asyncio.sleep(5)
+
+    def _emit_notification(self, raw: str) -> None:
+        if "member=Notify" not in raw or not self.cfg["island"].get("show_notifications", True):
+            return
+        n = parse_notification(raw)
+        if not n or n["app"] == "JustDay":  # our own approval / status notifications
+            return
+        self.publish(kind="notification", notification=n)
+
     async def _housekeeping(self) -> None:
         poll = self.cfg["workers"]["poll_seconds"]
         last_poll = last_mail = last_ping = last_weather = 0.0
+        last_update_check = time.monotonic() - self.cfg["updates"]["interval_hours"] * 3600 + 120  # first check 2 min after start
         m = self.cfg["mail"]
         while True:
             await asyncio.sleep(2)
+            upd = self.cfg["updates"]
+            if upd["check"] and time.monotonic() - last_update_check > upd["interval_hours"] * 3600:
+                last_update_check = time.monotonic()
+                from . import manage
+
+                try:
+                    st = await asyncio.get_running_loop().run_in_executor(None, manage.update_status)
+                    self.update_info = st if st.get("ok") and st.get("behind") else None
+                    self.publish(update=self.update_info)
+                except Exception as e:  # noqa: BLE001 — offline is fine
+                    log.info("update check failed: %s", type(e).__name__)
             isl = self.cfg["island"]
             if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
                 last_weather, self._weather_city = time.monotonic(), isl["city"]
@@ -703,7 +765,7 @@ class Daemon:
             if cmd == "subscribe":
                 self._subs.add(writer)
                 hello = {"state": self.state, "workers": self._workers_active, "settings": settings_snapshot(self.cfg),
-                         "history": recent_history(), "weather": self.weather}
+                         "history": recent_history(), "weather": self.weather, "update": self.update_info}
                 writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
                 await writer.drain()
                 await reader.read()  # hold the connection until the client goes away
@@ -801,6 +863,8 @@ class Daemon:
         await self.brain.start()
         self._setup_wakeword()
         asyncio.create_task(self._housekeeping())
+        if shutil.which("dbus-monitor"):
+            asyncio.create_task(self._watch_notifications())
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         stop = asyncio.Event()
         for sig in (signal.SIGTERM, signal.SIGINT):
