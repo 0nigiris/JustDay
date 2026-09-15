@@ -29,7 +29,7 @@ say "JustDay code: $APP_DIR"
 need=()
 for pair in pw-record:pipewire-utils wl-copy:wl-clipboard playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
             fd:fd-find rg:ripgrep jq:jq spectacle:spectacle gtk-launch:gtk3 notify-send:libnotify \
-            espeak-ng:espeak-ng git:git kitty:kitty magick:ImageMagick zstd:zstd secret-tool:libsecret; do
+            espeak-ng:espeak-ng git:git kitty:kitty magick:ImageMagick zstd:zstd secret-tool:libsecret qdbus-qt6:qt6-qttools; do
   command -v "${pair%%:*}" >/dev/null || need+=("${pair#*:}")
 done
 # on-screen indicator: GTK4 + gtk4-layer-shell through the system Python
@@ -46,7 +46,7 @@ command -v dbus-monitor >/dev/null || need+=(dbus-tools)
 if ((${#need[@]})); then
   if command -v dnf >/dev/null; then PM=(sudo dnf install -y)
   elif command -v apt-get >/dev/null; then PM=(sudo apt-get install -y)
-    need=("${need[@]/pkgconf-pkg-config/pkg-config}"); need=("${need[@]/gcc/build-essential}"); need=("${need[@]/dbus-devel/libdbus-1-dev}")
+    need=("${need[@]/spectacle/kde-spectacle}"); need=("${need[@]/qt6-qttools/qdbus-qt6}"); need=("${need[@]/pkgconf-pkg-config/pkg-config}"); need=("${need[@]/gcc/build-essential}"); need=("${need[@]/dbus-devel/libdbus-1-dev}")
     need=("${need[@]/glib2-devel/libglib2.0-dev}"); need=("${need[@]/cairo-gobject-devel/libcairo2-dev}"); need=("${need[@]/cairo-devel/libcairo2-dev}"); need=("${need[@]/dbus-tools/dbus-bin}")
     need=("${need[@]/gobject-introspection-devel/libgirepository-2.0-dev}"); need=("${need[@]/at-spi2-core-devel/libatspi2.0-dev}")
     need=("${need[@]/pipewire-utils/pipewire-bin}"); need=("${need[@]/gtk3/libgtk-3-bin}"); need=("${need[@]/libnotify/libnotify-bin}"); need=("${need[@]/ImageMagick/imagemagick}")
@@ -54,7 +54,7 @@ if ((${#need[@]})); then
   elif command -v pacman >/dev/null; then PM=(sudo pacman -S --needed --noconfirm)
     need=("${need[@]/pipewire-utils/pipewire}"); need=("${need[@]/fd-find/fd}"); need=("${need[@]/ImageMagick/imagemagick}"); need=("${need[@]/libnotify/libnotify}")
     need=("${need[@]/python3-gobject/python-gobject}"); need=("${need[@]/python3-cairo/python-cairo}")
-    need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
+    need=("${need[@]/qt6-qttools/qt6-tools}"); need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
     need=("${need[@]/glib2-devel/glib2}"); need=("${need[@]/cairo-gobject-devel/cairo}"); need=("${need[@]/cairo-devel/cairo}"); need=("${need[@]/gobject-introspection-devel/gobject-introspection}")
     need=("${need[@]/at-spi2-core-devel/at-spi2-core}"); need=("${need[@]/dbus-tools/dbus}")
   else die "Unknown package manager. Install manually: ${need[*]}"; fi
