@@ -288,10 +288,10 @@ ShellRoot {
     // ───────────── compact views ─────────────
     component PeekView: View {
         id: pv
-        readonly property string event: JD.workers > 0 ? "Клод работает" + (JD.workers > 1 ? " ×" + JD.workers : "")
-                                        : JD.dstate === "offline" ? JD.assistantName + " не запущен"
+        readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
+                                        : JD.dstate === "offline" ? JD.assistantName + JD.tr(" не запущен")
                                         : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title
-                                        : JD.update ? "Доступно обновление"
+                                        : JD.update ? JD.tr("Доступно обновление")
                                         : (JD.island.show_events !== false && JD.history.length && JD.history[0].a) ? JD.history[0].a : ""
         implicitWidth: peekRow.implicitWidth + 32
         implicitHeight: 44
@@ -302,7 +302,7 @@ ShellRoot {
             spacing: 12
             Ring { size: 18; tint: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.accentCyan; spinning: JD.workers > 0 }
             Text { text: Qt.formatTime(clock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 16; font.weight: Font.Bold; font.features: { "tnum": 1 } }
-            Label2 { text: clock.date.toLocaleDateString(Qt.locale("ru_RU"), "ddd, d MMM") }
+            Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM") }
             Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
             Label2 { visible: !!pv.event; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : JD.text2 }
             Rectangle { visible: !!JD.weather && JD.island.show_weather !== false; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
@@ -324,7 +324,7 @@ ShellRoot {
             anchors.rightMargin: 16
             spacing: 10
             Ring { size: 20 }
-            Label1 { text: "Слушаю"; Layout.fillWidth: true }
+            Label1 { text: JD.tr("Слушаю"); Layout.fillWidth: true }
             Waveform { Layout.preferredWidth: 46; Layout.preferredHeight: 22 }
         }
     }
@@ -353,7 +353,7 @@ ShellRoot {
 
     component ThinkingView: View {
         id: tv
-        readonly property string line: JD.dstate === "transcribing" ? "Распознаю…" : (JD.activity || "Думаю…")
+        readonly property string line: JD.dstate === "transcribing" ? JD.tr("Распознаю…") : (JD.activity || JD.tr("Думаю…"))
         property int elapsed: 0
         Timer { interval: 1000; repeat: true; running: tv.shown; onTriggered: tv.elapsed = Math.round((Date.now() - JD.busySince) / 1000) }
         TextMetrics { font.family: JD.fontFamily; id: tm; text: tv.line; font.pixelSize: 13; font.weight: Font.DemiBold }
@@ -378,7 +378,7 @@ ShellRoot {
                 opacity: JD.detailOpen ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 150 } }
             }
-            Label2 { text: tv.elapsed >= 3 ? tv.elapsed + " с" : ""; font.features: { "tnum": 1 } }
+            Label2 { text: tv.elapsed >= 3 ? tv.elapsed + JD.tr(" с") : ""; font.features: { "tnum": 1 } }
             IconButton {
                 visible: oneLine.truncated || JD.detailOpen
                 size: 24
@@ -475,7 +475,7 @@ ShellRoot {
                 spacing: 10
                 Ring { size: 18 }
                 Label1 { text: JD.assistantName; Layout.fillWidth: true }
-                Label2 { text: JD.dstate === "speaking" ? "говорит" : "" }
+                Label2 { text: JD.dstate === "speaking" ? JD.tr("говорит") : "" }
             }
             Flickable {
                 Layout.fillWidth: true
@@ -504,7 +504,7 @@ ShellRoot {
             id: approvalCol
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
             spacing: 14
-            CardHeader { icon: "dialog-warning"; title: "Нужно подтверждение"; subtitle: JD.approvalReason; tint: JD.accentOrange; Layout.fillWidth: true }
+            CardHeader { icon: "dialog-warning"; title: JD.tr("Нужно подтверждение"); subtitle: JD.approvalReason; tint: JD.accentOrange; Layout.fillWidth: true }
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: cmd.implicitHeight + 20
@@ -526,8 +526,8 @@ ShellRoot {
             RowLayout {
                 Layout.alignment: Qt.AlignRight
                 spacing: 10
-                PillButton { label: "Отклонить"; onClicked: JD.send({ cmd: "deny" }) }
-                PillButton { label: "Разрешить"; tint: JD.accentOrange; labelColor: "black"; onClicked: JD.send({ cmd: "approve" }) }
+                PillButton { label: JD.tr("Отклонить"); onClicked: JD.send({ cmd: "deny" }) }
+                PillButton { label: JD.tr("Разрешить"); tint: JD.accentOrange; labelColor: "black"; onClicked: JD.send({ cmd: "approve" }) }
             }
         }
     }
@@ -546,11 +546,11 @@ ShellRoot {
                 Layout.fillWidth: true
                 icon: cv.c.type === "calendar" ? "view-calendar" : "mail-message"
                 tint: cv.c.type === "mail_sent" ? JD.accentGreen : cv.c.type === "calendar" ? JD.accentOrange : JD.accentRed
-                title: ({ mail_draft: "Новое письмо", mail_sent: "Письмо отправлено", mail_read: cv.c.subject || "Письмо",
-                          mail_list: "Почта", calendar: "Календарь · " + (cv.c.when || "") })[cv.c.type] || "Почта"
-                subtitle: ({ mail_draft: "черновик · проверьте перед отправкой", mail_sent: "Кому: " + (cv.c.to || ""),
-                             mail_read: "от " + (cv.c.from || ""), mail_list: "важные непрочитанные · обработано локально",
-                             calendar: (cv.c.items || []).length ? (cv.c.items || []).length + " · обработано локально" : "свободно" })[cv.c.type] || ""
+                title: ({ mail_draft: JD.tr("Новое письмо"), mail_sent: JD.tr("Письмо отправлено"), mail_read: cv.c.subject || JD.tr("Письмо"),
+                          mail_list: JD.tr("Почта"), calendar: JD.tr("Календарь · ") + (cv.c.when || "") })[cv.c.type] || JD.tr("Почта")
+                subtitle: ({ mail_draft: JD.tr("черновик · проверьте перед отправкой"), mail_sent: JD.tr("Кому: ") + (cv.c.to || ""),
+                             mail_read: JD.tr("от ") + (cv.c.from || ""), mail_list: JD.tr("важные непрочитанные · обработано локально"),
+                             calendar: (cv.c.items || []).length ? (cv.c.items || []).length + JD.tr(" · обработано локально") : JD.tr("свободно") })[cv.c.type] || ""
                 IconButton { icon: "window-close"; size: 26; onClicked: JD.card = null }
             }
 
@@ -561,10 +561,10 @@ ShellRoot {
                 columns: 2
                 columnSpacing: 12
                 rowSpacing: 6
-                Label2 { text: "Кому" }
+                Label2 { text: JD.tr("Кому") }
                 Label1 { text: (cv.c.to || "") + (cv.c.address && cv.c.address !== cv.c.to ? "  <" + cv.c.address + ">" : ""); Layout.fillWidth: true }
-                Label2 { text: "Тема" }
-                Label1 { text: cv.c.subject || "без темы"; Layout.fillWidth: true }
+                Label2 { text: JD.tr("Тема") }
+                Label1 { text: cv.c.subject || JD.tr("без темы"); Layout.fillWidth: true }
             }
             Rectangle {
                 visible: cv.c.type === "mail_draft" || cv.c.type === "mail_read"
@@ -594,9 +594,9 @@ ShellRoot {
                 visible: cv.c.type === "mail_draft"
                 Layout.alignment: Qt.AlignRight
                 spacing: 10
-                PillButton { label: "Не отправлять"; onClicked: JD.send({ cmd: "type", text: "не отправляй" }) }
-                PillButton { label: "Изменить голосом"; onClicked: JD.send({ cmd: "toggle" }) }
-                PillButton { label: "Отправить"; tint: JD.accentBlue; onClicked: JD.send({ cmd: "type", text: "да, отправляй" }) }
+                PillButton { label: JD.tr("Не отправлять"); onClicked: JD.send({ cmd: "type", text: JD.tr("не отправляй") }) }
+                PillButton { label: JD.tr("Изменить голосом"); onClicked: JD.send({ cmd: "toggle" }) }
+                PillButton { label: JD.tr("Отправить"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "type", text: JD.tr("да, отправляй") }) }
             }
 
             // calendar events
@@ -614,7 +614,7 @@ ShellRoot {
                         anchors.rightMargin: 12
                         spacing: 12
                         Text {
-                            text: modelData.all_day ? "весь день" : Qt.formatTime(new Date(modelData.start), "HH:mm")
+                            text: modelData.all_day ? JD.tr("весь день") : Qt.formatTime(new Date(modelData.start), "HH:mm")
                             color: JD.accentOrange; font.family: JD.fontFamily; font.pixelSize: 13; font.weight: Font.DemiBold
                             Layout.preferredWidth: 70
                         }
@@ -664,7 +664,7 @@ ShellRoot {
                         }
                     }
                     HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: JD.send({ cmd: "type", text: "прочитай письмо номер " + modelData.n }) }
+                    TapHandler { onTapped: JD.send({ cmd: "type", text: JD.tr("прочитай письмо номер ") + modelData.n }) }
                 }
             }
         }
@@ -718,8 +718,8 @@ ShellRoot {
                     spacing: 1
                     Label1 { text: JD.assistantName; font.pixelSize: 17 }
                     Label2 {
-                        text: ({ idle: "Готов", listening: "Слушаю", transcribing: "Распознаю", thinking: JD.activity || "Работаю",
-                                 speaking: "Говорит", approval: "Ждёт подтверждения", offline: "Демон не запущен" })[JD.dstate] || JD.dstate
+                        text: ({ idle: JD.tr("Готов"), listening: JD.tr("Слушаю"), transcribing: JD.tr("Распознаю"), thinking: JD.activity || JD.tr("Работаю"),
+                                 speaking: JD.tr("Говорит"), approval: JD.tr("Ждёт подтверждения"), offline: JD.tr("Демон не запущен") })[JD.dstate] || JD.dstate
                         Layout.maximumWidth: 380
                     }
                 }
@@ -745,9 +745,9 @@ ShellRoot {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 8
                     spacing: 10
-                    Label1 { text: "Доступно обновление JustDay"; Layout.fillWidth: false }
+                    Label1 { text: JD.tr("Доступно обновление JustDay"); Layout.fillWidth: false }
                     Label2 { text: JD.update ? (JD.update.changes || [])[0] || "" : ""; Layout.fillWidth: true }
-                    PillButton { label: "Обновить"; tint: JD.accentBlue; onClicked: JD.runUpdate() }
+                    PillButton { label: JD.tr("Обновить"); tint: JD.accentBlue; onClicked: JD.runUpdate() }
                 }
             }
 
@@ -773,7 +773,7 @@ ShellRoot {
                         clip: true
                         selectByMouse: true
                         onAccepted: if (text.trim()) { JD.send({ cmd: "type", text: text }); text = ""; JD.expanded = false }
-                        Text { font.family: JD.fontFamily; text: "Спросите или попросите что-нибудь…"; color: JD.text3; font.pixelSize: 14; visible: !input.text && !input.preeditText }
+                        Text { font.family: JD.fontFamily; text: JD.tr("Спросите или попросите что-нибудь…"); color: JD.text3; font.pixelSize: 14; visible: !input.text && !input.preeditText }
                     }
                     IconButton { icon: "audio-input-microphone"; size: 32; onClicked: { JD.expanded = false; JD.send({ cmd: "toggle" }) } }
                 }
@@ -782,24 +782,24 @@ ShellRoot {
             // quick toggles
             RowLayout {
                 spacing: 10
-                Tile { icon: "audio-volume-high"; title: "Звуки"; on: !!JD.settings.earcons; onToggled: ev.setting("audio.earcons", !on) }
-                Tile { icon: "preferences-desktop-notification-bell"; title: "Уведомления"; on: !!JD.settings.notifications; onToggled: ev.setting("ui.notifications", !on) }
-                Tile { icon: "mail-message"; title: JD.settings.mail ? "Объявлять письма" : "Почта не настроена"; on: !!JD.settings.mail && !!JD.settings.mail_announce; onToggled: if (JD.settings.mail) ev.setting("mail.announce", !on); else JD.openSettings("mail") }
-                Tile { icon: "input-mouse"; title: "Метки кнопок"; on: !!JD.settings.accessibility; onToggled: ev.setting("desktop.accessibility", !on) }
+                Tile { icon: "audio-volume-high"; title: JD.tr("Звуки"); on: !!JD.settings.earcons; onToggled: ev.setting("audio.earcons", !on) }
+                Tile { icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); on: !!JD.settings.notifications; onToggled: ev.setting("ui.notifications", !on) }
+                Tile { icon: "mail-message"; title: JD.settings.mail ? JD.tr("Объявлять письма") : JD.tr("Почта не настроена"); on: !!JD.settings.mail && !!JD.settings.mail_announce; onToggled: if (JD.settings.mail) ev.setting("mail.announce", !on); else JD.openSettings("mail") }
+                Tile { icon: "input-mouse"; title: JD.tr("Метки кнопок"); on: !!JD.settings.accessibility; onToggled: ev.setting("desktop.accessibility", !on) }
             }
 
             // model
             ColumnLayout {
                 spacing: 8
-                Label2 { text: "Модель" }
+                Label2 { text: JD.tr("Модель") }
                 RowLayout {
                     spacing: 6
                     Repeater {
                         model: [
-                            { id: "claude", label: "Claude", model: "sonnet", hint: "подписка" },
-                            { id: "ollama", label: "Локальная", model: "qwen3.5:9b", hint: "приватно" },
-                            { id: "openrouter", label: "OpenRouter", model: "nvidia/nemotron-3-super-120b-a12b:free", hint: "бесплатно" },
-                            { id: "deepseek", label: "DeepSeek", model: "deepseek-v4-pro", hint: "ключ" }
+                            { id: "claude", label: "Claude", model: "sonnet", hint: JD.tr("подписка") },
+                            { id: "ollama", label: JD.tr("Локальная"), model: "qwen3.5:9b", hint: JD.tr("приватно") },
+                            { id: "openrouter", label: "OpenRouter", model: "nvidia/nemotron-3-super-120b-a12b:free", hint: JD.tr("бесплатно") },
+                            { id: "deepseek", label: "DeepSeek", model: "deepseek-v4-pro", hint: JD.tr("ключ") }
                         ]
                         Rectangle {
                             required property var modelData
@@ -829,8 +829,8 @@ ShellRoot {
                 RowLayout {
                     visible: !!ev.pendingProvider && ev.pendingProvider !== JD.settings.provider
                     spacing: 10
-                    Label2 { text: "Модель сменится после перезапуска (текущий разговор начнётся заново)"; Layout.fillWidth: true }
-                    PillButton { label: "Перезапустить"; tint: JD.accentBlue; onClicked: { JD.run(["restart"]); ev.pendingProvider = "" } }
+                    Label2 { text: JD.tr("Модель сменится после перезапуска (текущий разговор начнётся заново)"); Layout.fillWidth: true }
+                    PillButton { label: JD.tr("Перезапустить"); tint: JD.accentBlue; onClicked: { JD.run(["restart"]); ev.pendingProvider = "" } }
                 }
             }
 
@@ -868,8 +868,8 @@ ShellRoot {
                 visible: JD.notifications.length > 0 && JD.island.show_notifications !== false
                 spacing: 6
                 RowLayout {
-                    Label2 { text: "Уведомления"; Layout.fillWidth: true }
-                    Label2 { text: "очистить"; color: JD.accentBlue; TapHandler { onTapped: JD.notifications = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+                    Label2 { text: JD.tr("Уведомления"); Layout.fillWidth: true }
+                    Label2 { text: JD.tr("очистить"); color: JD.accentBlue; TapHandler { onTapped: JD.notifications = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
                 }
                 Repeater {
                     model: JD.notifications.slice(0, 3)
@@ -889,7 +889,7 @@ ShellRoot {
             ColumnLayout {
                 visible: JD.history.length > 0
                 spacing: 6
-                Label2 { text: "Недавнее" }
+                Label2 { text: JD.tr("Недавнее") }
                 Repeater {
                     model: JD.history.slice(0, 4)
                     RowLayout {
@@ -906,11 +906,11 @@ ShellRoot {
             // footer
             RowLayout {
                 spacing: 8
-                PillButton { label: "Новый разговор"; onClicked: JD.send({ cmd: "new_session" }) }
-                PillButton { label: "Остановить"; onClicked: JD.send({ cmd: "stop" }) }
+                PillButton { label: JD.tr("Новый разговор"); onClicked: JD.send({ cmd: "new_session" }) }
+                PillButton { label: JD.tr("Остановить"); onClicked: JD.send({ cmd: "stop" }) }
                 Item { Layout.fillWidth: true }
-                PillButton { label: "Журнал"; onClicked: Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) }
-                PillButton { label: "Руководство"; onClicked: JD.openManual() }
+                PillButton { label: JD.tr("Журнал"); onClicked: Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) }
+                PillButton { label: JD.tr("Руководство"); onClicked: JD.openManual() }
             }
         }
     }

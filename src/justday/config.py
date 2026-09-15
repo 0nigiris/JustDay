@@ -22,7 +22,8 @@ REPO_DIR = Path(__file__).resolve().parents[2]
 
 DEFAULTS: dict = {
     # assistant_name: how the assistant calls itself and what you call it (also a hint for speech recognition)
-    "user": {"name": "", "address_as": "сэр", "assistant_name": "Джарвис", "assistant_aliases": ["JustDay"]},
+    "user": {"name": "", "address_as": "сэр", "assistant_name": "Джарвис", "assistant_aliases": ["JustDay"],
+             "language": "ru"},  # ru | en — assistant replies, voice lines and the island
     "audio": {
         # Substring of a PipeWire source node name; empty = system default source.
         "input": "",

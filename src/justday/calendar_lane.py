@@ -13,8 +13,10 @@ import time
 import urllib.request
 
 from . import config, events, providers
+from .i18n import lang, t
 
-CAL_WORDS = re.compile(r"\b(календар\w*|расписани\w*|встреч\w*|созвон\w*|планы? на|что у меня (сегодня|завтра|на неделе|на завтра))", re.I)
+CAL_WORDS = re.compile(r"\b(календар\w*|расписани\w*|встреч\w*|созвон\w*|планы? на|что у меня (сегодня|завтра|на неделе|на завтра)|"
+                       r"calendar|schedule|meetings?|appointments?|what do i have (today|tomorrow|this week))", re.I)
 _cache: dict[str, tuple[float, bytes]] = {}
 
 
@@ -49,7 +51,7 @@ def between(start: dt.datetime, end: dt.datetime) -> list[dict]:
             if not all_day:
                 s = (s if s.tzinfo else s.replace(tzinfo=local)).astimezone(local)
                 e = (e if e.tzinfo else e.replace(tzinfo=local)).astimezone(local)
-            out.append({"title": str(ev.get("SUMMARY", "Без названия")), "all_day": all_day,
+            out.append({"title": str(ev.get("SUMMARY", t("Без названия"))), "all_day": all_day,
                         "start": s.isoformat(), "end": e.isoformat(), "location": str(ev.get("LOCATION", "") or ""),
                         "calendar": name})
     out.sort(key=lambda x: (not x["all_day"], x["start"]))
@@ -71,34 +73,39 @@ def upcoming(hours: float = 2) -> dict | None:
 
 
 def spoken(items: list[dict], when: str) -> str:
+    when_t = t(when)
     if not items:
-        return f"{when.capitalize()} в календаре ничего нет."
+        line = t("{when} в календаре ничего нет.", when=when_t)
+        return line[0].upper() + line[1:]
     parts = []
     for e in items[:6]:
         if e["all_day"]:
-            parts.append(f"весь день — {e['title']}")
+            parts.append(t("весь день — {title}", title=e["title"]))
         else:
-            parts.append(f"в {dt.datetime.fromisoformat(e['start']).strftime('%H:%M')} — {e['title']}")
-    more = f" И ещё {len(items) - 6}." if len(items) > 6 else ""
+            parts.append(t("в {time} — {title}", time=dt.datetime.fromisoformat(e["start"]).strftime("%H:%M"), title=e["title"]))
+    more = t(" И ещё {n}.", n=len(items) - 6) if len(items) > 6 else ""
     n = len(items)
     word = "событие" if n % 10 == 1 and n % 100 != 11 else "события" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "событий"
-    return f"{when.capitalize()} {n} {word}: " + "; ".join(parts) + "." + more
+    if lang() == "en":
+        word = "event" if n == 1 else "events"
+    head = t("{when} {n} {word}: ", when=when_t, n=n, word=word)
+    return head[0].upper() + head[1:] + "; ".join(parts) + "." + more
 
 
 def handle(text: str) -> tuple[str, dict] | None:
     """Voice request → (spoken reply, island card) or None if it is not about the calendar / no calendar set up."""
     if not CAL_WORDS.search(text) or not urls():
         return None
-    t = text.lower()
-    offset, when = (1, "завтра") if "завтра" in t else (0, "сегодня")
-    if "недел" in t:
+    low = text.lower()
+    offset, when = (1, "завтра") if ("завтра" in low or "tomorrow" in low) else (0, "сегодня")
+    if "недел" in low or "week" in low:
         local = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
         items = between(local, local + dt.timedelta(days=7))
         when = "на этой неделе"
     else:
         items = day(offset)
     events.emit("calendar", count=len(items))  # no titles in the journal
-    return spoken(items, when), {"type": "calendar", "when": when, "items": items[:8]}
+    return spoken(items, when), {"type": "calendar", "when": t(when), "items": items[:8]}
 
 
 if __name__ == "__main__":

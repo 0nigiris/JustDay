@@ -21,8 +21,9 @@ from email.message import EmailMessage
 from html.parser import HTMLParser
 
 from . import config, contacts, events, localllm, providers
+from .i18n import reply_language_hint, t
 
-MAIL_WORDS = re.compile(r"\b(почт\w*|письм\w*|писем|имейл\w*|емейл\w*|e-?mail\w*|мейл\w*|gmail|джимейл\w*|inbox|входящ\w*)\b", re.I)
+MAIL_WORDS = re.compile(r"\b(почт\w*|письм\w*|писем|имейл\w*|емейл\w*|e-?mail\w*|мейл\w*|gmail|джимейл\w*|inbox|входящ\w*|mail|letters?)\b", re.I)
 
 
 # ---------------- IMAP / SMTP ----------------
@@ -230,12 +231,12 @@ class MailAssistant:
                 d, self.draft = self.draft, None
                 send(d["to"], d["subject"], d["body"], d.get("in_reply_to", ""), d.get("attachments"))
                 self.last_sent = d
-                return "Отправил.", False
+                return t("Отправил."), False
             if action == "send" and self.letters:  # "да" after "новое письмо от … Сказать, о чём?"
                 return self._summary(cached=True)
             if action == "cancel":
                 self.draft = None
-                return "Хорошо, не отправляю.", False
+                return t("Хорошо, не отправляю."), False
             if action == "edit" and self.draft:
                 return self._draft(self.draft["to"], self.draft["name"],
                                    f"{self.draft['body']}\n\nПравка: {intent.get('what', text)}",
@@ -243,13 +244,13 @@ class MailAssistant:
             if action == "read":
                 letter = letter or (self.letters[0] if self.letters else None)
                 if not letter:
-                    return "Сначала скажите «проверь почту».", False
+                    return t("Сначала скажите «проверь почту»."), False
                 self.last_letter = letter
-                return localllm.chat(READ_PROMPT, f"От: {letter.sender}\nТема: {letter.subject}\n\n{letter.body}"), False
+                return localllm.chat(READ_PROMPT + reply_language_hint(), f"От: {letter.sender}\nТема: {letter.subject}\n\n{letter.body}"), False
             if action == "reply":
                 letter = letter or (self.letters[0] if len(self.letters) == 1 else None)
                 if not letter:
-                    return "На какое письмо ответить?", True
+                    return t("На какое письмо ответить?"), True
                 context = f"Отвечаем на письмо от {letter.sender}, тема «{letter.subject}»:\n{letter.body[:1500]}\n\n"
                 subject = letter.subject if letter.subject.lower().startswith("re:") else f"Re: {letter.subject}"
                 return self._draft(letter.address, letter.sender, context + f"Что ответить: {intent.get('what', text)}",
@@ -258,14 +259,14 @@ class MailAssistant:
                 who = (intent.get("to") or "").strip()
                 addr = find_address(who) if who else ""
                 if not addr:
-                    return f"Не нашёл адрес для «{who or 'получателя'}». Скажите адрес или имя, как в переписке.", True
+                    return t("Не нашёл адрес для «{who}». Скажите адрес или имя, как в переписке.", who=who or t("получателя")), True
                 return self._draft(addr, who, f"Что написать: {intent.get('what', text)}")
             return self._summary()
         except RuntimeError as e:
-            return f"Почта не настроена: {e}.", False
+            return t("Почта не настроена: {e}.", e=e), False
         except (imaplib.IMAP4.error, smtplib.SMTPException, OSError) as e:
             events.emit("mail_error", error=type(e).__name__)
-            return "Не получилось связаться с почтой.", False
+            return t("Не получилось связаться с почтой."), False
 
     def card(self, reply: str) -> dict | None:
         """What the Dynamic Island shows for the last mail action (rendered locally, never sent anywhere)."""
@@ -291,12 +292,12 @@ class MailAssistant:
         if not cached:
             self.letters = fetch(m["query"], limit=m["max_letters"])
             other = count(m["other_query"])
-            tail = f" Ещё {other} в рекламе и соцсетях, их не читал." if other else ""
+            tail = t(" Ещё {n} в рекламе и соцсетях, их не читал.", n=other) if other else ""
         if not self.letters:
-            return "Новых важных писем нет." + tail, False
+            return t("Новых важных писем нет.") + tail, False
         listing = "\n\n".join(f"Письмо {i}. От: {l.sender}\nТема: {l.subject}\n{l.body[:600]}"
                               for i, l in enumerate(self.letters, 1))
-        return localllm.chat(SUMMARY_PROMPT, listing, max_tokens=350) + tail, False
+        return localllm.chat(SUMMARY_PROMPT + reply_language_hint(), listing, max_tokens=350) + tail, False
 
     def compose(self, who: str, about: str, attachments: list[str]) -> tuple[str, bool] | None:
         """Draft requested by the brain ("send this file to mom"). None = address unknown (the brain should ask)."""
@@ -317,11 +318,11 @@ class MailAssistant:
 
     def _draft(self, to: str, name: str, instruction: str, in_reply_to: str = "", subject: str = "") -> tuple[str, bool]:
         user = config.load()["user"].get("name") or ""
-        raw = localllm.chat(DRAFT_PROMPT.format(name=user or "без подписи"), instruction, json_mode=True, max_tokens=500)
+        raw = localllm.chat(DRAFT_PROMPT.format(name=user or "без подписи") + reply_language_hint(), instruction, json_mode=True, max_tokens=500)
         d = json.loads(raw)
         self.draft = {"to": to, "name": name, "subject": subject or d.get("subject", ""), "body": d.get("body", ""),
                       "in_reply_to": in_reply_to}
-        return f"Кому: {name or to}. Текст: «{self.draft['body']}». Отправить?", True
+        return t("Кому: {to}. Текст: «{body}». Отправить?", to=name or to, body=self.draft["body"]), True
 
     # ---- new-mail announcements (daemon housekeeping) ----
     def check_new(self) -> str:
@@ -337,4 +338,4 @@ class MailAssistant:
         self.letters = fresh
         self.active_until = time.monotonic() + 120
         senders = ", ".join(dict.fromkeys(l.sender for l in fresh))
-        return f"Новое письмо от {senders}." if len(fresh) == 1 else f"{len(fresh)} новых письма: {senders}."
+        return t("Новое письмо от {who}.", who=senders) if len(fresh) == 1 else t("{n} новых письма: {who}.", n=len(fresh), who=senders)

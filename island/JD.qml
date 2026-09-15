@@ -81,6 +81,13 @@ Singleton {
     readonly property color accentRed: "#ff453a"
     readonly property color accentPurple: "#bf5af2"
     readonly property string fontFamily: "Inter"
+
+    // ───────────── language ─────────────
+    // UI strings are written in Russian; tr() swaps them for island/i18n/<lang>.json when another language is chosen
+    readonly property string lang: settings.language || "ru"
+    FileView { id: dictFile; path: jd.lang === "ru" ? "" : Quickshell.shellDir + "/i18n/" + jd.lang + ".json"; blockLoading: true }
+    readonly property var dict: { try { return lang === "ru" ? ({}) : JSON.parse(dictFile.text()) } catch (e) { return ({}) } }
+    function tr(s) { return dict[s] || s }
     readonly property string assistantName: settings.assistant_name || "JustDay"
 
     function accentFor(s) {
@@ -171,7 +178,7 @@ Singleton {
         case "approval_result": approvalText = ""; break
         case "cancel":
             approvalText = ""; answerOpen = false; card = null
-            flash("Отменено", "dialog-cancel", accentRed)
+            flash(tr("Отменено"), "dialog-cancel", accentRed)
             break
         case "error": flash(m.detail, "dialog-error", accentRed); break
         case "notification":

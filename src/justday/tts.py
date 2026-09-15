@@ -52,16 +52,17 @@ def _latin_word(m: re.Match) -> str:
     return "".join(_LETTERS.get(c, c) for c in w)
 
 
-def normalize(text: str) -> str:
+def normalize(text: str, lang: str = "ru") -> str:
     text = re.sub(r"```.*?```", " ", text, flags=re.S)           # code blocks are not for ears
     text = re.sub(r"`([^`]*)`", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)          # markdown links
-    text = re.sub(r"https?://\S+", " ссылка ", text)
+    text = re.sub(r"https?://\S+", " ссылка " if lang == "ru" else " link ", text)
     text = re.sub(r"(?<!\w)[~/][\w./-]+", " ", text)              # file paths
     text = re.sub(r"[*_#>|]+", " ", text)
     text = re.sub(r"[\U0001F000-\U0001FFFF☀-➿]", " ", text)  # emoji
-    text = _LEX_RE.sub(lambda m: LEXICON[m.group(0).lower()], text)
-    text = re.sub(r"[A-Za-z]+", _latin_word, text)
+    if lang == "ru":  # Russian voices swallow Latin letters: spell brand names the Russian way
+        text = _LEX_RE.sub(lambda m: LEXICON[m.group(0).lower()], text)
+        text = re.sub(r"[A-Za-z]+", _latin_word, text)
     text = text.replace("—", ",").replace("–", ",")
     return re.sub(r"\s+", " ", text).strip()
 
@@ -134,7 +135,8 @@ class TTS:
     def synth(self, sentence: str) -> np.ndarray:
         """Return int16 PCM at self.rate for one already-normalized sentence."""
         engine = self.cfg["engine"]
-        if engine == "silero":
+        lang = self.cfg.get("lang", "ru")
+        if engine == "silero" and lang == "ru":  # Silero voices here are Russian-only
             try:
                 with self._lock:
                     audio = self._silero().apply_tts(
@@ -145,7 +147,7 @@ class TTS:
                 log.exception("silero failed on %r, using espeak", sentence)
         if engine == "none":
             return np.zeros(0, dtype=np.int16)
-        wav = subprocess.run(["espeak-ng", "-v", "ru", "--stdout", sentence], capture_output=True).stdout
+        wav = subprocess.run(["espeak-ng", "-v", lang if lang in ("ru", "en") else "ru", "--stdout", sentence], capture_output=True).stdout
         pcm = np.frombuffer(wav[44:], dtype=np.int16)  # espeak: 22050 Hz mono WAV
         idx = np.linspace(0, len(pcm) - 1, int(len(pcm) * self.rate / 22050)).astype(int)
         return pcm[idx] if len(pcm) else pcm

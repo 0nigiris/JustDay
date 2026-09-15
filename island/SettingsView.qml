@@ -108,18 +108,18 @@ Item {
                 }
                 Repeater {
                     model: [
-                        { id: "general", title: "Общие", icon: "settings", tint: "#8e8e93" },
-                        { id: "appearance", title: "Остров и анимации", icon: "wand-sparkles", tint: "#ff2d55" },
-                        { id: "widgets", title: "Виджеты", icon: "cloud-sun", tint: "#32ade6" },
-                        { id: "voice", title: "Голос и звук", icon: "audio-lines", tint: "#ff375f" },
-                        { id: "buttons", title: "Кнопки", icon: "keyboard", tint: "#0a84ff" },
-                        { id: "model", title: "Модель", icon: "cpu", tint: "#bf5af2" },
-                        { id: "mail", title: "Почта и календарь", icon: "mail", tint: "#ff453a" },
-                        { id: "people", title: "Люди", icon: "users", tint: "#30d158" },
-                        { id: "memory", title: "Память", icon: "brain", tint: "#64d2ff" },
-                        { id: "privacy", title: "Приватность", icon: "shield", tint: "#ff9f0a" },
-                        { id: "diagnostics", title: "Диагностика", icon: "activity", tint: "#636366" },
-                        { id: "about", title: "О программе", icon: "info", tint: "#5e5ce6" }
+                        { id: "general", title: JD.tr("Общие"), icon: "settings", tint: "#8e8e93" },
+                        { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
+                        { id: "widgets", title: JD.tr("Виджеты"), icon: "cloud-sun", tint: "#32ade6" },
+                        { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
+                        { id: "buttons", title: JD.tr("Кнопки"), icon: "keyboard", tint: "#0a84ff" },
+                        { id: "model", title: JD.tr("Модель"), icon: "cpu", tint: "#bf5af2" },
+                        { id: "mail", title: JD.tr("Почта и календарь"), icon: "mail", tint: "#ff453a" },
+                        { id: "people", title: JD.tr("Люди"), icon: "users", tint: "#30d158" },
+                        { id: "memory", title: JD.tr("Память"), icon: "brain", tint: "#64d2ff" },
+                        { id: "privacy", title: JD.tr("Приватность"), icon: "shield", tint: "#ff9f0a" },
+                        { id: "diagnostics", title: JD.tr("Диагностика"), icon: "activity", tint: "#636366" },
+                        { id: "about", title: JD.tr("О программе"), icon: "info", tint: "#5e5ce6" }
                     ]
                     Rectangle {
                         required property var modelData
@@ -147,14 +147,14 @@ Item {
                 Btn {
                     visible: win.restartNeeded
                     Layout.fillWidth: true
-                    text: "Перезапустить JustDay"
+                    text: JD.tr("Перезапустить JustDay")
                     primary: true
-                    onClicked: { win.run(["restart"]); win.restartNeeded = false; win.notify("Перезапускаю… новый разговор начнётся с нуля") }
+                    onClicked: { win.run(["restart"]); win.restartNeeded = false; win.notify(JD.tr("Перезапускаю… новый разговор начнётся с нуля")) }
                 }
                 Text {
                     visible: win.restartNeeded
                     Layout.fillWidth: true
-                    text: "Часть изменений применится после перезапуска"
+                    text: JD.tr("Часть изменений применится после перезапуска")
                     wrapMode: Text.Wrap
                     color: win.t2; font.family: win.font; font.pixelSize: 11
                     horizontalAlignment: Text.AlignHCenter
@@ -189,7 +189,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 visible: win.loading
-                text: "Загружаю настройки…"
+                text: JD.tr("Загружаю настройки…")
                 color: win.t2; font.family: win.font; font.pixelSize: 14
             }
 
@@ -395,7 +395,7 @@ Item {
             if (!key) return
             const old = win.get(key)
             const value = Array.isArray(old) ? text.split(",").map(s => s.trim()).filter(s => s) : text
-            if (JSON.stringify(value) !== JSON.stringify(old)) { win.set(key, value); win.notify("Сохранено") }
+            if (JSON.stringify(value) !== JSON.stringify(old)) { win.set(key, value); win.notify(JD.tr("Сохранено")) }
         }
         onAccepted: commit()
         onActiveFocusChanged: if (!activeFocus) commit()
@@ -411,7 +411,7 @@ Item {
         textRole: "label"
         valueRole: "value"
         currentIndex: Math.max(0, options.findIndex(o => o.value === win.get(key)))
-        onActivated: i => { if (key) { win.set(key, options[i].value); win.notify("Сохранено") } }
+        onActivated: i => { if (key) { win.set(key, options[i].value); win.notify(JD.tr("Сохранено")) } }
         font.family: win.font
         font.pixelSize: 13
         contentItem: Text {
@@ -462,7 +462,7 @@ Item {
             implicitWidth: 200
             from: ss.from; to: ss.to; stepSize: ss.step
             value: Number(win.get(ss.key)) || 0
-            onPressedChanged: if (!pressed) { win.set(ss.key, Number(value.toFixed(ss.decimals))); win.notify("Сохранено") }
+            onPressedChanged: if (!pressed) { win.set(ss.key, Number(value.toFixed(ss.decimals))); win.notify(JD.tr("Сохранено")) }
             background: Rectangle {
                 x: sl.leftPadding; y: sl.topPadding + sl.availableHeight / 2 - height / 2
                 width: sl.availableWidth; height: 4; radius: 2; color: "#48484a"
@@ -527,24 +527,42 @@ Item {
         id: generalPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: "Общие"; subtitle: "Как зовут ассистента и как он обращается к вам" }
+            PageTitle { title: JD.tr("Общие"); subtitle: JD.tr("Как зовут ассистента и как он обращается к вам") }
             Group {
-                Row { title: "Имя ассистента"; subtitle: "Показывается на острове"; Field { key: "user.assistant_name" } }
-                Row { title: "Другие имена"; subtitle: "Через запятую, на все он откликается"; Field { key: "user.assistant_aliases" } }
-                Row { title: "Как обращаться к вам"; Field { key: "user.address_as"; placeholderText: "сэр" } }
-                Row { title: "Ваше имя"; subtitle: "Для подписи в письмах"; Field { key: "user.name"; placeholderText: "Имя" } }
+                Row { title: JD.tr("Имя ассистента"); subtitle: JD.tr("Показывается на острове"); Field { key: "user.assistant_name" } }
+                Row { title: JD.tr("Другие имена"); subtitle: JD.tr("Через запятую, на все он откликается"); Field { key: "user.assistant_aliases" } }
+                Row { title: JD.tr("Как обращаться к вам"); Field { key: "user.address_as"; placeholderText: JD.tr("сэр") } }
+                Row { title: JD.tr("Ваше имя"); subtitle: JD.tr("Для подписи в письмах"); Field { key: "user.name"; placeholderText: JD.tr("Имя") } }
             }
-            GroupTitle { text: "СИСТЕМА" }
+            GroupTitle { text: "LANGUAGE · ЯЗЫК" }
             Group {
                 Row {
-                    title: "Запускать вместе с системой"
-                    Toggle { checked: win.d.autostart ? win.d.autostart.enabled : false
-                             onToggled: v => { win.run(["autostart", v ? "on" : "off"], r => { win.d.autostart = r; win.d = Object.assign({}, win.d) }); win.notify(v ? "Автозапуск включён" : "Автозапуск выключен") } }
+                    title: "Язык / Language"
+                    subtitle: JD.tr("Ассистент, голос, остров и распознавание речи. Нужен перезапуск ассистента")
+                    Segmented {
+                        options: [{ value: "ru", label: "Русский" }, { value: "en", label: "English" }]
+                        current: win.get("user.language") || "ru"
+                        onPicked: v => {
+                            win.set("user.language", v)
+                            win.set("stt.language", v)
+                            if (v === "en" && win.get("user.address_as") === "сэр") win.set("user.address_as", "sir")
+                            if (v === "ru" && win.get("user.address_as") === "sir") win.set("user.address_as", "сэр")
+                            win.restartNeeded = true
+                        }
+                    }
                 }
-                Row { title: "Уведомления"; subtitle: "Системные уведомления о подтверждениях и ошибках"; Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
+            }
+            GroupTitle { text: JD.tr("СИСТЕМА") }
+            Group {
                 Row {
-                    title: "Язык распознавания"
-                    Choice { key: "stt.language"; options: [{ value: "ru", label: "Русский" }, { value: "en", label: "English" }, { value: "", label: "Автоопределение" }] }
+                    title: JD.tr("Запускать вместе с системой")
+                    Toggle { checked: win.d.autostart ? win.d.autostart.enabled : false
+                             onToggled: v => { win.run(["autostart", v ? "on" : "off"], r => { win.d.autostart = r; win.d = Object.assign({}, win.d) }); win.notify(v ? JD.tr("Автозапуск включён") : JD.tr("Автозапуск выключен")) } }
+                }
+                Row { title: JD.tr("Уведомления"); subtitle: JD.tr("Системные уведомления о подтверждениях и ошибках"); Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
+                Row {
+                    title: JD.tr("Язык распознавания")
+                    Choice { key: "stt.language"; options: [{ value: "ru", label: JD.tr("Русский") }, { value: "en", label: "English" }, { value: "", label: JD.tr("Автоопределение") }] }
                 }
             }
         }
@@ -554,27 +572,27 @@ Item {
         id: appearancePage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: "Остров и анимации"; subtitle: "Как выглядит и двигается Dynamic Island" }
+            PageTitle { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается Dynamic Island") }
             Group {
                 Row {
-                    title: "Анимации"
-                    subtitle: win.get("island.animations") === "off" ? "Мгновенные переходы" : win.get("island.animations") === "smooth" ? "Плавно, без отскока" : "Пружинные, как у Apple"
+                    title: JD.tr("Анимации")
+                    subtitle: win.get("island.animations") === "off" ? JD.tr("Мгновенные переходы") : win.get("island.animations") === "smooth" ? JD.tr("Плавно, без отскока") : JD.tr("Пружинные, как у Apple")
                     Segmented {
-                        options: [{ value: "spring", label: "Пружинные" }, { value: "smooth", label: "Плавные" }, { value: "off", label: "Выкл" }]
+                        options: [{ value: "spring", label: JD.tr("Пружинные") }, { value: "smooth", label: JD.tr("Плавные") }, { value: "off", label: JD.tr("Выкл") }]
                         current: win.get("island.animations")
                         onPicked: v => win.set("island.animations", v)
                     }
                 }
-                Row { title: "Появляться при наведении"; subtitle: "Подведите курсор к верхнему краю экрана по центру"; Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
+                Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
-                    title: "Монитор"
+                    title: JD.tr("Монитор")
                     Choice {
                         key: "island.screen"
-                        options: [{ value: "", label: "Основной (слева сверху)" }].concat(Quickshell.screens.map(s => ({ value: s.name, label: s.name + " · " + s.width + "×" + s.height })))
+                        options: [{ value: "", label: JD.tr("Основной (слева сверху)") }].concat(Quickshell.screens.map(s => ({ value: s.name, label: s.name + " · " + s.width + "×" + s.height })))
                     }
                 }
             }
-            Note { text: "Все изменения применяются сразу. Погода и события — в разделе «Виджеты». Открыть меню клавишей: команда <tt>qs -p ~/JustDay/island ipc call island toggle</tt> в Системных настройках → Комбинации клавиш." }
+            Note { text: JD.tr("Все изменения применяются сразу. Погода и события — в разделе «Виджеты». Открыть меню клавишей: команда <tt>qs -p ~/JustDay/island ipc call island toggle</tt> в Системных настройках → Комбинации клавиш.") }
         }
     }
 
@@ -582,14 +600,14 @@ Item {
         id: widgetsPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: "Виджеты"; subtitle: "Что показывать, когда вы наводите курсор на верхний край экрана" }
+            PageTitle { title: JD.tr("Виджеты"); subtitle: JD.tr("Что показывать, когда вы наводите курсор на верхний край экрана") }
             Group {
-                Row { title: "Погода"; subtitle: "Open-Meteo, без ключей; в сеть уходит только название города"; Toggle { checked: win.get("island.show_weather") !== false; onToggled: v => win.set("island.show_weather", v) } }
-                Row { title: "Город"; subtitle: "Пусто — погода не запрашивается"; Field { key: "island.city"; placeholderText: "Москва" } }
-                Row { title: "Последние события"; subtitle: "Последний ответ ассистента, работа Клода"; Toggle { checked: win.get("island.show_events") !== false; onToggled: v => win.set("island.show_events", v) } }
-                Row { title: "Уведомления на острове"; subtitle: "Копия системных уведомлений (Plasma показывает их как обычно). Никуда не отправляются"; Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
+                Row { title: JD.tr("Погода"); subtitle: JD.tr("Open-Meteo, без ключей; в сеть уходит только название города"); Toggle { checked: win.get("island.show_weather") !== false; onToggled: v => win.set("island.show_weather", v) } }
+                Row { title: JD.tr("Город"); subtitle: JD.tr("Пусто — погода не запрашивается"); Field { key: "island.city"; placeholderText: JD.tr("Москва") } }
+                Row { title: JD.tr("Последние события"); subtitle: JD.tr("Последний ответ ассистента, работа Клода"); Toggle { checked: win.get("island.show_events") !== false; onToggled: v => win.set("island.show_events", v) } }
+                Row { title: JD.tr("Уведомления на острове"); subtitle: JD.tr("Копия системных уведомлений (Plasma показывает их как обычно). Никуда не отправляются"); Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
             }
-            Note { text: "В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет." }
+            Note { text: JD.tr("В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет.") }
         }
     }
 
@@ -607,51 +625,51 @@ Item {
             property bool recording: false
             property bool designing: false
 
-            PageTitle { title: "Голос и звук"; subtitle: "Каким голосом говорит ассистент и как он вас слушает" }
+            PageTitle { title: JD.tr("Голос и звук"); subtitle: JD.tr("Каким голосом говорит ассистент и как он вас слушает") }
             Group {
                 Row {
-                    title: "Движок голоса"
-                    subtitle: vp.engine === "qwen" ? "Нейросетевой: Qwen3-TTS на вашей видеокарте" : vp.engine === "silero" ? "Silero: быстрый, звучит роботизированно" : "Без голоса, только остров"
+                    title: JD.tr("Движок голоса")
+                    subtitle: vp.engine === "qwen" ? JD.tr("Нейросетевой: Qwen3-TTS на вашей видеокарте") : vp.engine === "silero" ? JD.tr("Silero: быстрый, звучит роботизированно") : JD.tr("Без голоса, только остров")
                     Segmented {
-                        options: [{ value: "qwen", label: "Нейросетевой" }, { value: "silero", label: "Silero" }, { value: "none", label: "Выкл" }]
+                        options: [{ value: "qwen", label: JD.tr("Нейросетевой") }, { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
                         current: vp.engine
                         onPicked: v => { win.set("tts.engine", v); vp.engine = v }
                     }
                 }
                 Row {
                     visible: vp.engine === "qwen" && !vp.neuralInstalled
-                    title: "Нейроголос не установлен"
-                    subtitle: "Загрузка ~4 ГБ, нужна видеокарта NVIDIA"
-                    Btn { text: "Установить"; primary: true; onClicked: Quickshell.execDetached(["kitty", "--hold", Quickshell.shellDir + "/../scripts/setup-voice.sh"]) }
+                    title: JD.tr("Нейроголос не установлен")
+                    subtitle: JD.tr("Загрузка ~4 ГБ, нужна видеокарта NVIDIA")
+                    Btn { text: JD.tr("Установить"); primary: true; onClicked: Quickshell.execDetached(["kitty", "--hold", Quickshell.shellDir + "/../scripts/setup-voice.sh"]) }
                 }
                 Row {
                     visible: vp.engine === "qwen" && vp.neuralInstalled && !vp.neuralOk
-                    title: "Служба голоса остановлена"
-                    subtitle: "Пока она не запущена, ассистент говорит голосом Silero"
-                    Btn { text: "Запустить"; primary: true; onClicked: { Quickshell.execDetached(["systemctl", "--user", "start", "justday-voice.service"]); win.notify("Запускаю голос…"); reloadLater.restart() } }
+                    title: JD.tr("Служба голоса остановлена")
+                    subtitle: JD.tr("Пока она не запущена, ассистент говорит голосом Silero")
+                    Btn { text: JD.tr("Запустить"); primary: true; onClicked: { Quickshell.execDetached(["systemctl", "--user", "start", "justday-voice.service"]); win.notify(JD.tr("Запускаю голос…")); reloadLater.restart() } }
                 }
                 Row {
                     visible: vp.engine === "qwen" && vp.neuralInstalled
-                    title: "Качество голоса"
-                    subtitle: win.get("tts.neural_quality") === "best" ? "Модель 1.7B: чище тембр, ~4,5 ГБ видеопамяти" : "Модель 0.6B: быстрее, ~2,5 ГБ видеопамяти"
+                    title: JD.tr("Качество голоса")
+                    subtitle: win.get("tts.neural_quality") === "best" ? JD.tr("Модель 1.7B: чище тембр, ~4,5 ГБ видеопамяти") : JD.tr("Модель 0.6B: быстрее, ~2,5 ГБ видеопамяти")
                     Segmented {
-                        options: [{ value: "fast", label: "Быстрее" }, { value: "best", label: "Качественнее" }]
+                        options: [{ value: "fast", label: JD.tr("Быстрее") }, { value: "best", label: JD.tr("Качественнее") }]
                         current: win.get("tts.neural_quality") || "fast"
                         onPicked: v => {
                             win.set("tts.neural_quality", v)
                             Quickshell.execDetached(["systemctl", "--user", "restart", "justday-voice.service"])
-                            win.notify(v === "best" ? "Загружаю большую модель голоса (до минуты)…" : "Переключаю на быструю модель…")
+                            win.notify(v === "best" ? JD.tr("Загружаю большую модель голоса (до минуты)…") : JD.tr("Переключаю на быструю модель…"))
                         }
                     }
                 }
                 Row {
                     visible: vp.engine === "silero"
-                    title: "Голос Silero"
+                    title: JD.tr("Голос Silero")
                     Choice { key: "tts.speaker"; options: (win.d.voices ? win.d.voices.silero : []).map(v => ({ value: v.id, label: v.name + " · " + v.kind })) }
                 }
             }
 
-            GroupTitle { visible: vp.engine === "qwen" && vp.neuralInstalled; text: "ГОЛОСА" }
+            GroupTitle { visible: vp.engine === "qwen" && vp.neuralInstalled; text: JD.tr("ГОЛОСА") }
             Group {
                 visible: vp.engine === "qwen" && vp.neuralInstalled
                 Repeater {
@@ -662,8 +680,8 @@ Item {
                         subtitle: modelData.description
                         RowLayout {
                             spacing: 8
-                            Btn { glyph: "play"; text: "Прослушать"; onClicked: { win.set("tts.voice", modelData.id); win.run(["voice", "preview", "Здравствуйте, сэр. Так звучит мой голос."]) } }
-                            Btn { text: "Выбрать"; primary: win.get("tts.voice") !== modelData.id; enabled: win.get("tts.voice") !== modelData.id; onClicked: { win.set("tts.voice", modelData.id); win.notify("Голос: " + modelData.name) } }
+                            Btn { glyph: "play"; text: JD.tr("Прослушать"); onClicked: { win.set("tts.voice", modelData.id); win.run(["voice", "preview", JD.tr("Здравствуйте, сэр. Так звучит мой голос.")]) } }
+                            Btn { text: JD.tr("Выбрать"); primary: win.get("tts.voice") !== modelData.id; enabled: win.get("tts.voice") !== modelData.id; onClicked: { win.set("tts.voice", modelData.id); win.notify(JD.tr("Голос: ") + modelData.name) } }
                             Btn { visible: !modelData.builtin; glyph: "trash"; text: ""; implicitWidth: 34; danger: true
                                   onClicked: win.run(["voice", "delete", modelData.id], () => win.reload()) }
                         }
@@ -671,13 +689,13 @@ Item {
                 }
             }
 
-            GroupTitle { visible: vp.engine === "qwen" && vp.neuralOk; text: "НОВЫЙ ГОЛОС" }
+            GroupTitle { visible: vp.engine === "qwen" && vp.neuralOk; text: JD.tr("НОВЫЙ ГОЛОС") }
             Group {
                 visible: vp.engine === "qwen" && vp.neuralOk
                 Row {
-                    title: "Создать по описанию"
-                    subtitle: "Опишите тембр, возраст, манеру. Первый раз загрузится модель 1.7B (~3,5 ГБ)"
-                    Field { id: designName; key: ""; placeholderText: "Название голоса"; implicitWidth: 200 }
+                    title: JD.tr("Создать по описанию")
+                    subtitle: JD.tr("Опишите тембр, возраст, манеру. Первый раз загрузится модель 1.7B (~3,5 ГБ)")
+                    Field { id: designName; key: ""; placeholderText: JD.tr("Название голоса"); implicitWidth: 200 }
                 }
                 Item {
                     Layout.fillWidth: true
@@ -691,7 +709,7 @@ Item {
                             anchors.fill: parent
                             wrapMode: TextArea.Wrap
                             color: win.t1
-                            placeholderText: "Например: спокойный низкий мужской голос, чёткая дикция, манера сдержанного британского дворецкого"
+                            placeholderText: JD.tr("Например: спокойный низкий мужской голос, чёткая дикция, манера сдержанного британского дворецкого")
                             placeholderTextColor: win.t3
                             font.family: win.font
                             font.pixelSize: 13
@@ -702,7 +720,7 @@ Item {
                 Row {
                     title: ""
                     Btn {
-                        text: vp.designing ? "Создаю…" : "Создать голос"
+                        text: vp.designing ? JD.tr("Создаю…") : JD.tr("Создать голос")
                         primary: true
                         busy: vp.designing
                         enabled: designName.text.trim() && designText.text.trim()
@@ -710,34 +728,34 @@ Item {
                             vp.designing = true
                             win.run(["voice", "design", designName.text.trim(), designText.text.trim()], r => {
                                 vp.designing = false
-                                if (r.ok) { win.notify("Голос создан"); win.set("tts.voice", r.id); win.reload() }
-                                else win.notify("Не получилось: " + (r.error || ""))
+                                if (r.ok) { win.notify(JD.tr("Голос создан")); win.set("tts.voice", r.id); win.reload() }
+                                else win.notify(JD.tr("Не получилось: ") + (r.error || ""))
                             })
                         }
                     }
                 }
                 Row {
-                    title: "Клонировать из записи"
-                    subtitle: vp.sampleText ? "Распознано: «" + vp.sampleText + "»" : "Прочитайте вслух любой текст 12 секунд. Только свой голос или голос, на который есть разрешение"
+                    title: JD.tr("Клонировать из записи")
+                    subtitle: vp.sampleText ? JD.tr("Распознано: «") + vp.sampleText + "»" : JD.tr("Прочитайте вслух любой текст 12 секунд. Только свой голос или голос, на который есть разрешение")
                     RowLayout {
                         spacing: 8
-                        Field { id: cloneName; placeholderText: "Название"; implicitWidth: 140 }
+                        Field { id: cloneName; placeholderText: JD.tr("Название"); implicitWidth: 140 }
                         Btn {
-                            text: vp.recording ? "Говорите…" : "Записать"
+                            text: vp.recording ? JD.tr("Говорите…") : JD.tr("Записать")
                             glyph: "mic"
                             busy: vp.recording
                             onClicked: {
                                 vp.recording = true
-                                win.run(["voice", "record", "12"], r => { vp.recording = false; if (r.ok) { vp.sampleText = r.text; vp.samplePath = r.path } else win.notify("Не расслышал, попробуйте ещё раз") })
+                                win.run(["voice", "record", "12"], r => { vp.recording = false; if (r.ok) { vp.sampleText = r.text; vp.samplePath = r.path } else win.notify(JD.tr("Не расслышал, попробуйте ещё раз")) })
                             }
                         }
                         Btn {
-                            text: "Сохранить"
+                            text: JD.tr("Сохранить")
                             primary: true
                             enabled: !!vp.sampleText && !!cloneName.text.trim()
                             onClicked: win.run(["voice", "clone", cloneName.text.trim(), vp.samplePath, vp.sampleText], r => {
-                                if (r.ok) { win.notify("Голос сохранён"); win.set("tts.voice", r.id); vp.sampleText = ""; win.reload() }
-                                else win.notify("Не получилось: " + (r.error || ""))
+                                if (r.ok) { win.notify(JD.tr("Голос сохранён")); win.set("tts.voice", r.id); vp.sampleText = ""; win.reload() }
+                                else win.notify(JD.tr("Не получилось: ") + (r.error || ""))
                             })
                         }
                     }
@@ -746,7 +764,7 @@ Item {
             property string samplePath: ""
 
             // ───── personal voice profile ─────
-            GroupTitle { text: "ПОД МОЙ ГОЛОС" }
+            GroupTitle { text: JD.tr("ПОД МОЙ ГОЛОС") }
             Group {
                 id: vpGroup
                 property var st: null
@@ -766,17 +784,17 @@ Item {
                     recording = true; heard = ""
                     win.run(["voiceprint", "record", s.kind, String(s.index), String(s.secs)], r => {
                         recording = false
-                        if (!r.ok) { heard = "✗ " + (r.error || "не получилось"); return }
-                        heard = r.text ? "✓ «" + r.text + "»" : "✓ записано"
+                        if (!r.ok) { heard = "✗ " + (r.error || JD.tr("не получилось")); return }
+                        heard = r.text ? "✓ «" + r.text + "»" : JD.tr("✓ записано")
                         if (step < steps.length - 1) advance.restart()
                         else finish()
                     })
                 }
                 function finish() {
-                    result = "Обучаю…"
+                    result = JD.tr("Обучаю…")
                     win.run(["voiceprint", "finish"], r => {
                         step = -1
-                        result = r.ok ? "Готово: пауза конца фразы " + r.silence_seconds + " с" + (r.wake_verifier ? ", «Hey Jarvis» дообучено" : "") : "Не получилось: " + (r.error || "")
+                        result = r.ok ? JD.tr("Готово: пауза конца фразы ") + r.silence_seconds + JD.tr(" с") + (r.wake_verifier ? JD.tr(", «Hey Jarvis» дообучено") : "") : JD.tr("Не получилось: ") + (r.error || "")
                         refresh(); win.reload()
                     })
                 }
@@ -785,13 +803,13 @@ Item {
 
                 Row {
                     visible: vpGroup.step < 0
-                    title: vpGroup.st && vpGroup.st.enrolled ? "Голос настроен · " + vpGroup.st.created : "Настроить под мой голос"
-                    subtitle: vpGroup.result || "Прочитайте 11 коротких фраз (~1 минута). Ассистент запомнит тембр и темп вашей речи; «Hey Jarvis» начнёт лучше узнавать именно вас. Всё хранится только на компьютере"
+                    title: vpGroup.st && vpGroup.st.enrolled ? JD.tr("Голос настроен · ") + vpGroup.st.created : JD.tr("Настроить под мой голос")
+                    subtitle: vpGroup.result || JD.tr("Прочитайте 11 коротких фраз (~1 минута). Ассистент запомнит тембр и темп вашей речи; «Hey Jarvis» начнёт лучше узнавать именно вас. Всё хранится только на компьютере")
                     RowLayout {
                         spacing: 8
-                        Btn { text: vpGroup.st && vpGroup.st.enrolled ? "Заново" : "Начать"; primary: !(vpGroup.st && vpGroup.st.enrolled); enabled: !!vpGroup.st; onClicked: vpGroup.start() }
+                        Btn { text: vpGroup.st && vpGroup.st.enrolled ? JD.tr("Заново") : JD.tr("Начать"); primary: !(vpGroup.st && vpGroup.st.enrolled); enabled: !!vpGroup.st; onClicked: vpGroup.start() }
                         Btn { visible: !!(vpGroup.st && vpGroup.st.enrolled); glyph: "trash"; text: ""; implicitWidth: 34; danger: true
-                              onClicked: win.run(["voiceprint", "reset"], () => { vpGroup.result = "Профиль голоса удалён"; vpGroup.refresh() }) }
+                              onClicked: win.run(["voiceprint", "reset"], () => { vpGroup.result = JD.tr("Профиль голоса удалён"); vpGroup.refresh() }) }
                     }
                 }
                 // enrollment step
@@ -804,8 +822,8 @@ Item {
                         anchors { fill: parent; margins: 16 }
                         spacing: 10
                         RowLayout {
-                            Text { text: vpGroup.step >= 0 ? "Шаг " + (vpGroup.step + 1) + " из " + vpGroup.steps.length : ""; color: win.t2; font.family: win.font; font.pixelSize: 12; Layout.fillWidth: true }
-                            Btn { text: "Отмена"; onClicked: { vpGroup.step = -1; vpGroup.result = "" } }
+                            Text { text: vpGroup.step >= 0 ? JD.tr("Шаг ") + (vpGroup.step + 1) + JD.tr(" из ") + vpGroup.steps.length : ""; color: win.t2; font.family: win.font; font.pixelSize: 12; Layout.fillWidth: true }
+                            Btn { text: JD.tr("Отмена"); onClicked: { vpGroup.step = -1; vpGroup.result = "" } }
                         }
                         Rectangle {  // progress
                             Layout.fillWidth: true
@@ -829,52 +847,52 @@ Item {
                             Layout.alignment: Qt.AlignHCenter
                             spacing: 12
                             Text { text: vpGroup.heard; color: vpGroup.heard.startsWith("✗") ? "#ff6961" : "#30d158"; font.family: win.font; font.pixelSize: 13 }
-                            Btn { text: vpGroup.recording ? "Говорите…" : "Записать"; glyph: "mic"; primary: true; busy: vpGroup.recording; onClicked: vpGroup.record() }
+                            Btn { text: vpGroup.recording ? JD.tr("Говорите…") : JD.tr("Записать"); glyph: "mic"; primary: true; busy: vpGroup.recording; onClicked: vpGroup.record() }
                         }
                     }
                 }
                 Row {
-                    title: "Откликаться только на мой голос"
-                    subtitle: "Чужие голоса (видео, гости) игнорируются. «Слово и ответы» — только при «Hey Jarvis» и ответах без кнопки; кнопка всегда слушает любого"
+                    title: JD.tr("Откликаться только на мой голос")
+                    subtitle: JD.tr("Чужие голоса (видео, гости) игнорируются. «Слово и ответы» — только при «Hey Jarvis» и ответах без кнопки; кнопка всегда слушает любого")
                     Segmented {
                         enabled: !!(vpGroup.st && vpGroup.st.enrolled)
                         opacity: enabled ? 1 : 0.4
-                        options: [{ value: "off", label: "Нет" }, { value: "wake", label: "Слово и ответы" }, { value: "always", label: "Всегда" }]
+                        options: [{ value: "off", label: JD.tr("Нет") }, { value: "wake", label: JD.tr("Слово и ответы") }, { value: "always", label: JD.tr("Всегда") }]
                         current: win.get("voiceprint.mode") || "off"
-                        onPicked: v => { win.set("voiceprint.mode", v); win.notify("Сохранено") }
+                        onPicked: v => { win.set("voiceprint.mode", v); win.notify(JD.tr("Сохранено")) }
                     }
                 }
             }
 
-            GroupTitle { text: "УСТРОЙСТВА" }
+            GroupTitle { text: JD.tr("УСТРОЙСТВА") }
             Group {
                 Row {
-                    title: "Микрофон"
+                    title: JD.tr("Микрофон")
                     Choice {
                         key: "audio.input"
                         implicitWidth: 320
-                        options: [{ value: "", label: "Системный по умолчанию" }].concat((win.d.devices ? win.d.devices.sources : []).map(s => ({ value: s.name, label: s.description })))
+                        options: [{ value: "", label: JD.tr("Системный по умолчанию") }].concat((win.d.devices ? win.d.devices.sources : []).map(s => ({ value: s.name, label: s.description })))
                         currentIndex: Math.max(0, options.findIndex(o => o.value && win.get("audio.input") && o.value.indexOf(win.get("audio.input")) >= 0))
                     }
                 }
                 Row {
-                    title: "Вывод звука"
+                    title: JD.tr("Вывод звука")
                     Choice {
                         key: "audio.output"
                         implicitWidth: 320
-                        options: [{ value: "", label: "Системный по умолчанию" }].concat((win.d.devices ? win.d.devices.sinks : []).map(s => ({ value: s.name, label: s.description })))
+                        options: [{ value: "", label: JD.tr("Системный по умолчанию") }].concat((win.d.devices ? win.d.devices.sinks : []).map(s => ({ value: s.name, label: s.description })))
                         currentIndex: Math.max(0, options.findIndex(o => o.value && win.get("audio.output") && o.value.indexOf(win.get("audio.output")) >= 0))
                     }
                 }
-                Row { title: "Звуковые сигналы"; subtitle: "Короткий звук в начале прослушивания и после действия"; Toggle { checked: !!win.get("audio.earcons"); onToggled: v => win.set("audio.earcons", v) } }
+                Row { title: JD.tr("Звуковые сигналы"); subtitle: JD.tr("Короткий звук в начале прослушивания и после действия"); Toggle { checked: !!win.get("audio.earcons"); onToggled: v => win.set("audio.earcons", v) } }
             }
 
-            GroupTitle { text: "КАК СЛУШАЕТ" }
+            GroupTitle { text: JD.tr("КАК СЛУШАЕТ") }
             Group {
-                Row { title: "Пауза в конце фразы"; subtitle: "Сколько тишины считать концом просьбы"; SSlider { key: "audio.silence_seconds"; from: 0.5; to: 2.0; step: 0.1; unit: " с" } }
-                Row { title: "Ждать ответа на вопрос"; subtitle: "Слушать без кнопки после вопроса ассистента (0 — выкл)"; SSlider { key: "audio.followup_seconds"; from: 0; to: 15; step: 1; decimals: 0; unit: " с" } }
-                Row { title: "Двойное нажатие = отмена"; subtitle: "Максимальный промежуток между нажатиями (0 — выкл)"; SSlider { key: "audio.double_tap_seconds"; from: 0; to: 0.6; step: 0.05; decimals: 2; unit: " с" } }
-                Row { title: "Слово «Hey Jarvis»"; subtitle: "Микрофон слушает постоянно, звук не покидает компьютер"; Toggle { checked: !!win.get("wakeword.enabled"); onToggled: v => win.set("wakeword.enabled", v) } }
+                Row { title: JD.tr("Пауза в конце фразы"); subtitle: JD.tr("Сколько тишины считать концом просьбы"); SSlider { key: "audio.silence_seconds"; from: 0.5; to: 2.0; step: 0.1; unit: JD.tr(" с") } }
+                Row { title: JD.tr("Ждать ответа на вопрос"); subtitle: JD.tr("Слушать без кнопки после вопроса ассистента (0 — выкл)"); SSlider { key: "audio.followup_seconds"; from: 0; to: 15; step: 1; decimals: 0; unit: JD.tr(" с") } }
+                Row { title: JD.tr("Двойное нажатие = отмена"); subtitle: JD.tr("Максимальный промежуток между нажатиями (0 — выкл)"); SSlider { key: "audio.double_tap_seconds"; from: 0; to: 0.6; step: 0.05; decimals: 2; unit: JD.tr(" с") } }
+                Row { title: JD.tr("Слово «Hey Jarvis»"); subtitle: JD.tr("Микрофон слушает постоянно, звук не покидает компьютер"); Toggle { checked: !!win.get("wakeword.enabled"); onToggled: v => win.set("wakeword.enabled", v) } }
             }
         }
     }
@@ -883,25 +901,25 @@ Item {
         id: buttonsPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: "Кнопки"; subtitle: "Глобальные сочетания KDE. Формат: Meta+J, Ctrl+Alt+Space, F19" }
+            PageTitle { title: JD.tr("Кнопки"); subtitle: JD.tr("Глобальные сочетания KDE. Формат: Meta+J, Ctrl+Alt+Space, F19") }
             Group {
-                Row { title: "Говорить"; subtitle: "Нажать — слушает до паузы, зажать — пока держите"; Field { id: talkKey; text: win.d.hotkeys ? win.d.hotkeys.talk : ""; implicitWidth: 180 } }
-                Row { title: "Кнопка мыши"; subtitle: "Вторая клавиша «говорить», например F19 с G502"; Field { id: extraKey; text: win.d.hotkeys ? win.d.hotkeys.extra : ""; implicitWidth: 180 } }
-                Row { title: "Отменить всё"; Field { id: cancelKey; text: win.d.hotkeys ? win.d.hotkeys.cancel : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Говорить"); subtitle: JD.tr("Нажать — слушает до паузы, зажать — пока держите"); Field { id: talkKey; text: win.d.hotkeys ? win.d.hotkeys.talk : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Кнопка мыши"); subtitle: JD.tr("Вторая клавиша «говорить», например F19 с G502"); Field { id: extraKey; text: win.d.hotkeys ? win.d.hotkeys.extra : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Отменить всё"); Field { id: cancelKey; text: win.d.hotkeys ? win.d.hotkeys.cancel : ""; implicitWidth: 180 } }
                 Row {
                     title: ""
                     Btn {
-                        text: "Применить"
+                        text: JD.tr("Применить")
                         primary: true
                         onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text],
-                                           r => win.notify(r.ok ? "Сочетания обновлены" : "Не получилось"))
+                                           r => win.notify(r.ok ? JD.tr("Сочетания обновлены") : JD.tr("Не получилось")))
                     }
                 }
             }
             Note {
-                text: "<b>Кнопка на мыши Logitech (G502 и др.)</b>: назначьте ей клавишу F19 через libratbag, например<br>" +
-                      "<tt>ratbagctl &lt;мышь&gt; profile 0 button 5 action set key KEY_F19</tt>. F13 не подходит: в KDE она открывает Системные настройки.<br><br>" +
-                      "<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук»."
+                text: JD.tr("<b>Кнопка на мыши Logitech (G502 и др.)</b>: назначьте ей клавишу F19 через libratbag, например<br>") +
+                      JD.tr("<tt>ratbagctl &lt;мышь&gt; profile 0 button 5 action set key KEY_F19</tt>. F13 не подходит: в KDE она открывает Системные настройки.<br><br>") +
+                      JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».")
             }
         }
     }
@@ -914,14 +932,14 @@ Item {
             property var models: win.d.models || ({ current: {}, providers: [] })
             property string provider: models.current.provider || "claude"
             property var info: (models.providers || []).find(p => p.id === mp.provider) || ({})
-            PageTitle { title: "Модель"; subtitle: "Какая нейросеть думает. Память, навыки и инструменты общие для всех" }
+            PageTitle { title: JD.tr("Модель"); subtitle: JD.tr("Какая нейросеть думает. Память, навыки и инструменты общие для всех") }
             Group {
                 Row {
-                    title: "Провайдер"
+                    title: JD.tr("Провайдер")
                     subtitle: mp.info.desc || ""
                     Segmented {
-                        options: [{ value: "claude", label: "Claude" }, { value: "ollama", label: "Локальная" }, { value: "openrouter", label: "OpenRouter" },
-                                  { value: "deepseek", label: "DeepSeek" }, { value: "custom", label: "Свой адрес" }]
+                        options: [{ value: "claude", label: "Claude" }, { value: "ollama", label: JD.tr("Локальная") }, { value: "openrouter", label: "OpenRouter" },
+                                  { value: "deepseek", label: "DeepSeek" }, { value: "custom", label: JD.tr("Свой адрес") }]
                         current: mp.provider
                         onPicked: v => {
                             mp.provider = v
@@ -933,8 +951,8 @@ Item {
                     }
                 }
                 Row {
-                    title: "Модель"
-                    subtitle: "Можно ввести любое название модели провайдера"
+                    title: JD.tr("Модель")
+                    subtitle: JD.tr("Можно ввести любое название модели провайдера")
                     RowLayout {
                         spacing: 8
                         Choice {
@@ -948,41 +966,41 @@ Item {
                 }
                 Row {
                     visible: !!mp.info.needs_key
-                    title: "API-ключ"
-                    subtitle: mp.info.has_key ? "Ключ сохранён в связке ключей" : "Хранится в KWallet / GNOME Keyring, не в файлах"
+                    title: JD.tr("API-ключ")
+                    subtitle: mp.info.has_key ? JD.tr("Ключ сохранён в связке ключей") : JD.tr("Хранится в KWallet / GNOME Keyring, не в файлах")
                     RowLayout {
                         spacing: 8
-                        Field { id: keyField; echoMode: TextInput.Password; placeholderText: mp.info.has_key ? "••••••••" : "вставьте ключ"; implicitWidth: 220 }
+                        Field { id: keyField; echoMode: TextInput.Password; placeholderText: mp.info.has_key ? "••••••••" : JD.tr("вставьте ключ"); implicitWidth: 220 }
                         Btn {
-                            text: "Сохранить"
+                            text: JD.tr("Сохранить")
                             primary: true
                             enabled: !!keyField.text
                             onClicked: {
                                 const secretName = mp.provider
-                                win.run(["secret", "set", secretName, "--stdin"], () => { keyField.text = ""; win.notify("Ключ сохранён"); win.restartNeeded = true; win.reload() },
+                                win.run(["secret", "set", secretName, "--stdin"], () => { keyField.text = ""; win.notify(JD.tr("Ключ сохранён")); win.restartNeeded = true; win.reload() },
                                         { JUSTDAY_SECRET: keyField.text })
                             }
                         }
                     }
                 }
-                Row { visible: mp.provider === "custom"; title: "Адрес API"; subtitle: "Anthropic-совместимый, например LiteLLM"; Field { key: "brain.base_url"; placeholderText: "http://127.0.0.1:4000" } }
+                Row { visible: mp.provider === "custom"; title: JD.tr("Адрес API"); subtitle: JD.tr("Anthropic-совместимый, например LiteLLM"); Field { key: "brain.base_url"; placeholderText: "http://127.0.0.1:4000" } }
                 Row {
                     visible: mp.provider === "claude"
-                    title: "Сколько думать"
-                    subtitle: "Больше — умнее, но медленнее"
+                    title: JD.tr("Сколько думать")
+                    subtitle: JD.tr("Больше — умнее, но медленнее")
                     Segmented {
-                        options: [{ value: "low", label: "Быстро" }, { value: "medium", label: "Средне" }, { value: "high", label: "Глубоко" }]
+                        options: [{ value: "low", label: JD.tr("Быстро") }, { value: "medium", label: JD.tr("Средне") }, { value: "high", label: JD.tr("Глубоко") }]
                         current: win.get("brain.effort")
                         onPicked: v => win.set("brain.effort", v)
                     }
                 }
             }
             Note {
-                text: mp.provider === "claude" ? "Используются лимиты вашей подписки Claude. Вход: команда <tt>claude</tt>, затем /login."
-                    : mp.provider === "ollama" ? "Всё на вашей видеокарте, ничего не уходит в интернет. Модель слабее Claude в сложных действиях с окнами."
-                    : mp.provider === "openrouter" ? "Модели с суффиксом :free бесплатны с лимитами. Ключ: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>"
-                    : mp.provider === "deepseek" ? "Ключ: <a href='https://platform.deepseek.com/api_keys'>platform.deepseek.com</a>"
-                    : "Любой сервер с Anthropic Messages API. Для провайдеров только с OpenAI API поставьте LiteLLM."
+                text: mp.provider === "claude" ? JD.tr("Используются лимиты вашей подписки Claude. Вход: команда <tt>claude</tt>, затем /login.")
+                    : mp.provider === "ollama" ? JD.tr("Всё на вашей видеокарте, ничего не уходит в интернет. Модель слабее Claude в сложных действиях с окнами.")
+                    : mp.provider === "openrouter" ? JD.tr("Модели с суффиксом :free бесплатны с лимитами. Ключ: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>")
+                    : mp.provider === "deepseek" ? JD.tr("Ключ: <a href='https://platform.deepseek.com/api_keys'>platform.deepseek.com</a>")
+                    : JD.tr("Любой сервер с Anthropic Messages API. Для провайдеров только с OpenAI API поставьте LiteLLM.")
             }
         }
     }
@@ -993,22 +1011,22 @@ Item {
             id: mlp
             spacing: 6
             property bool connecting: false
-            property string status: win.get("mail.address") ? (win.d.mail_password ? "Подключена: " + win.get("mail.address") : "Нет пароля приложения") : "Не подключена"
-            PageTitle { title: "Почта и календарь"; subtitle: "Письма и события обрабатываются на этом компьютере — в облако ничего не уходит" }
+            property string status: win.get("mail.address") ? (win.d.mail_password ? JD.tr("Подключена: ") + win.get("mail.address") : JD.tr("Нет пароля приложения")) : JD.tr("Не подключена")
+            PageTitle { title: JD.tr("Почта и календарь"); subtitle: JD.tr("Письма и события обрабатываются на этом компьютере — в облако ничего не уходит") }
             Note {
                 Layout.bottomMargin: 6
-                text: "<b>Почему «пароль приложения», а не вход через Google?</b> Это не пароль от аккаунта, а отдельный ключ только для почты (IMAP/SMTP), как у Thunderbird. " +
-                      "Он хранится в связке ключей KDE на этом компьютере и передаётся только серверу Google. Отозвать можно в любой момент на странице паролей приложений — остальной аккаунт он не открывает. " +
-                      "Кнопка «Войти через Google» требует, чтобы у приложения была проверенная Google регистрация — у открытого проекта её пока нет."
+                text: JD.tr("<b>Почему «пароль приложения», а не вход через Google?</b> Это не пароль от аккаунта, а отдельный ключ только для почты (IMAP/SMTP), как у Thunderbird. ") +
+                      JD.tr("Он хранится в связке ключей KDE на этом компьютере и передаётся только серверу Google. Отозвать можно в любой момент на странице паролей приложений — остальной аккаунт он не открывает. ") +
+                      JD.tr("Кнопка «Войти через Google» требует, чтобы у приложения была проверенная Google регистрация — у открытого проекта её пока нет.")
             }
             Group {
-                Row { title: "Состояние"; subtitle: mlp.status; Glyph { name: win.get("mail.address") && win.d.mail_password ? "check" : "circle-alert"; size: 18 } }
-                Row { title: "Адрес Gmail"; Field { id: mailAddr; text: win.get("mail.address") || ""; placeholderText: "you@gmail.com" } }
-                Row { title: "Пароль приложения"; subtitle: "16 символов, не основной пароль"; Field { id: mailPw; echoMode: TextInput.Password; placeholderText: win.d.mail_password ? "••••••••" : "xxxx xxxx xxxx xxxx" } }
+                Row { title: JD.tr("Состояние"); subtitle: mlp.status; Glyph { name: win.get("mail.address") && win.d.mail_password ? "check" : "circle-alert"; size: 18 } }
+                Row { title: JD.tr("Адрес Gmail"); Field { id: mailAddr; text: win.get("mail.address") || ""; placeholderText: "you@gmail.com" } }
+                Row { title: JD.tr("Пароль приложения"); subtitle: JD.tr("16 символов, не основной пароль"); Field { id: mailPw; echoMode: TextInput.Password; placeholderText: win.d.mail_password ? "••••••••" : "xxxx xxxx xxxx xxxx" } }
                 Row {
                     title: ""
                     Btn {
-                        text: mlp.connecting ? "Проверяю…" : "Подключить"
+                        text: mlp.connecting ? JD.tr("Проверяю…") : JD.tr("Подключить")
                         primary: true
                         busy: mlp.connecting
                         enabled: !!mailAddr.text.trim() && (!!mailPw.text || win.d.mail_password)
@@ -1016,7 +1034,7 @@ Item {
                             mlp.connecting = true
                             win.run(["mail", "setup", "--address", mailAddr.text.trim()], r => {
                                 mlp.connecting = false
-                                win.notify(r.ok ? "Почта подключена: во входящих " + r.inbox : "Не удалось войти: " + (r.error || ""))
+                                win.notify(r.ok ? JD.tr("Почта подключена: во входящих ") + r.inbox : JD.tr("Не удалось войти: ") + (r.error || ""))
                                 mailPw.text = ""
                                 win.reload()
                             }, { JUSTDAY_SECRET: mailPw.text })
@@ -1024,36 +1042,36 @@ Item {
                     }
                 }
             }
-            Note { text: "Нужна двухэтапная аутентификация Google. Создать пароль приложения: <a href='https://myaccount.google.com/apppasswords'>myaccount.google.com/apppasswords</a>" }
-            GroupTitle { text: "КАЛЕНДАРЬ" }
+            Note { text: JD.tr("Нужна двухэтапная аутентификация Google. Создать пароль приложения: <a href='https://myaccount.google.com/apppasswords'>myaccount.google.com/apppasswords</a>") }
+            GroupTitle { text: JD.tr("КАЛЕНДАРЬ") }
             Group {
                 id: calGroup
                 property bool busy: false
-                Row { title: "Состояние"; subtitle: win.d.calendar ? "Подключено календарей: " + win.d.calendar : "Не подключён"; Glyph { name: win.d.calendar ? "check" : "circle-alert"; size: 18 } }
+                Row { title: JD.tr("Состояние"); subtitle: win.d.calendar ? JD.tr("Подключено календарей: ") + win.d.calendar : JD.tr("Не подключён"); Glyph { name: win.d.calendar ? "check" : "circle-alert"; size: 18 } }
                 Row {
-                    title: "Ссылка iCal"
-                    subtitle: "Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Только чтение, без пароля"
+                    title: JD.tr("Ссылка iCal")
+                    subtitle: JD.tr("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Только чтение, без пароля")
                     Field { id: calUrl; echoMode: TextInput.Password; placeholderText: win.d.calendar ? "••••••••" : "https://calendar.google.com/…/basic.ics"; implicitWidth: 260 }
                 }
                 Row {
                     title: ""
                     Btn {
-                        text: calGroup.busy ? "Проверяю…" : "Подключить"; primary: true; busy: calGroup.busy; enabled: !!calUrl.text.trim()
+                        text: calGroup.busy ? JD.tr("Проверяю…") : JD.tr("Подключить"); primary: true; busy: calGroup.busy; enabled: !!calUrl.text.trim()
                         onClicked: {
                             calGroup.busy = true
-                            win.run(["calendar", "setup"], r => { calGroup.busy = false; win.notify(r.ok ? "Календарь подключён: сегодня событий " + r.today : "Не получилось: " + (r.error || "")); calUrl.text = ""; win.reload() },
+                            win.run(["calendar", "setup"], r => { calGroup.busy = false; win.notify(r.ok ? JD.tr("Календарь подключён: сегодня событий ") + r.today : JD.tr("Не получилось: ") + (r.error || "")); calUrl.text = ""; win.reload() },
                                     { JUSTDAY_SECRET: calUrl.text.trim() })
                         }
                     }
                 }
             }
-            Note { text: "Спросите: «что у меня сегодня?», «какие встречи завтра?». За 2 часа до события оно появится на острове при наведении." }
+            Note { text: JD.tr("Спросите: «что у меня сегодня?», «какие встречи завтра?». За 2 часа до события оно появится на острове при наведении.") }
 
-            GroupTitle { text: "ПОВЕДЕНИЕ" }
+            GroupTitle { text: JD.tr("ПОВЕДЕНИЕ") }
             Group {
-                Row { title: "Сообщать о новых письмах"; subtitle: "«Новое письмо от …» голосом и на острове"; Toggle { checked: !!win.get("mail.announce"); onToggled: v => win.set("mail.announce", v) } }
-                Row { title: "Проверять каждые"; SSlider { key: "mail.poll_seconds"; from: 60; to: 900; step: 60; decimals: 0; unit: " с" } }
-                Row { title: "Что считать важным"; subtitle: "Поисковый запрос Gmail"; Field { key: "mail.query"; implicitWidth: 300 } }
+                Row { title: JD.tr("Сообщать о новых письмах"); subtitle: JD.tr("«Новое письмо от …» голосом и на острове"); Toggle { checked: !!win.get("mail.announce"); onToggled: v => win.set("mail.announce", v) } }
+                Row { title: JD.tr("Проверять каждые"); SSlider { key: "mail.poll_seconds"; from: 60; to: 900; step: 60; decimals: 0; unit: JD.tr(" с") } }
+                Row { title: JD.tr("Что считать важным"); subtitle: JD.tr("Поисковый запрос Gmail"); Field { key: "mail.query"; implicitWidth: 300 } }
             }
         }
     }
@@ -1066,36 +1084,36 @@ Item {
             property var people: []
             function refresh() { win.run(["contacts", "list"], v => pp.people = Array.isArray(v) ? v : []) }
             Component.onCompleted: refresh()
-            PageTitle { title: "Люди"; subtitle: "Записная книжка, которую ассистент пополняет сам: кто есть кто и как с кем связываться" }
+            PageTitle { title: JD.tr("Люди"); subtitle: JD.tr("Записная книжка, которую ассистент пополняет сам: кто есть кто и как с кем связываться") }
             Group {
-                Row { visible: pp.people.length === 0; title: "Пока пусто"; subtitle: "Скажите, например: «напиши маме» — он спросит, как с ней связаться, и запомнит" }
+                Row { visible: pp.people.length === 0; title: JD.tr("Пока пусто"); subtitle: JD.tr("Скажите, например: «напиши маме» — он спросит, как с ней связаться, и запомнит") }
                 Repeater {
                     model: pp.people
                     Row {
                         required property var modelData
                         title: modelData.name + (modelData.aliases && modelData.aliases.length ? "  ·  " + modelData.aliases.join(", ") : "")
-                        subtitle: [modelData.email ? "почта " + modelData.email : "", modelData.discord ? "Discord " + modelData.discord : "",
+                        subtitle: [modelData.email ? JD.tr("почта ") + modelData.email : "", modelData.discord ? "Discord " + modelData.discord : "",
                                    modelData.telegram ? "Telegram " + modelData.telegram : "", modelData.whatsapp ? "WhatsApp " + modelData.whatsapp : "",
-                                   modelData.preferred ? "обычно через " + modelData.preferred : "", modelData.note || ""].filter(x => x).join("  ·  ")
+                                   modelData.preferred ? JD.tr("обычно через ") + modelData.preferred : "", modelData.note || ""].filter(x => x).join("  ·  ")
                         Btn { glyph: "trash"; text: ""; implicitWidth: 34; danger: true; onClicked: win.run(["contacts", "forget", modelData.name], () => pp.refresh()) }
                     }
                 }
             }
-            GroupTitle { text: "ДОБАВИТЬ ИЛИ ИЗМЕНИТЬ" }
+            GroupTitle { text: JD.tr("ДОБАВИТЬ ИЛИ ИЗМЕНИТЬ") }
             Group {
-                Row { title: "Имя"; Field { id: cName; placeholderText: "Мама" } }
-                Row { title: "Как вы его называете"; subtitle: "Через запятую"; Field { id: cAliases; placeholderText: "мама, мамуля" } }
-                Row { title: "Почта"; Field { id: cEmail; placeholderText: "name@example.com" } }
+                Row { title: JD.tr("Имя"); Field { id: cName; placeholderText: JD.tr("Мама") } }
+                Row { title: JD.tr("Как вы его называете"); subtitle: JD.tr("Через запятую"); Field { id: cAliases; placeholderText: JD.tr("мама, мамуля") } }
+                Row { title: JD.tr("Почта"); Field { id: cEmail; placeholderText: "name@example.com" } }
                 Row { title: "Discord / Telegram / WhatsApp"; RowLayout { spacing: 6; Field { id: cDiscord; placeholderText: "Discord"; implicitWidth: 110 } Field { id: cTelegram; placeholderText: "Telegram"; implicitWidth: 110 } Field { id: cWhatsapp; placeholderText: "WhatsApp"; implicitWidth: 110 } } }
                 Row {
-                    title: "Обычно связываться через"
-                    Choice { id: cPreferred; options: [{ value: "", label: "—" }, { value: "discord", label: "Discord" }, { value: "telegram", label: "Telegram" }, { value: "whatsapp", label: "WhatsApp" }, { value: "email", label: "Почта" }, { value: "phone", label: "Телефон" }] }
+                    title: JD.tr("Обычно связываться через")
+                    Choice { id: cPreferred; options: [{ value: "", label: "—" }, { value: "discord", label: "Discord" }, { value: "telegram", label: "Telegram" }, { value: "whatsapp", label: "WhatsApp" }, { value: "email", label: JD.tr("Почта") }, { value: "phone", label: JD.tr("Телефон") }] }
                 }
-                Row { title: "Заметка"; subtitle: "Например: «живёт в Польше»"; Field { id: cNote; implicitWidth: 300 } }
+                Row { title: JD.tr("Заметка"); subtitle: JD.tr("Например: «живёт в Польше»"); Field { id: cNote; implicitWidth: 300 } }
                 Row {
                     title: ""
                     Btn {
-                        text: "Сохранить"
+                        text: JD.tr("Сохранить")
                         primary: true
                         enabled: !!cName.text.trim()
                         onClicked: {
@@ -1104,7 +1122,7 @@ Item {
                             add("aliases", cAliases.text.trim()); add("email", cEmail.text.trim()); add("discord", cDiscord.text.trim())
                             add("telegram", cTelegram.text.trim()); add("whatsapp", cWhatsapp.text.trim())
                             add("preferred", cPreferred.options[cPreferred.currentIndex].value); add("note", cNote.text.trim())
-                            win.run(args, () => { pp.refresh(); win.notify("Сохранено"); [cName, cAliases, cEmail, cDiscord, cTelegram, cWhatsapp, cNote].forEach(f => f.text = "") })
+                            win.run(args, () => { pp.refresh(); win.notify(JD.tr("Сохранено")); [cName, cAliases, cEmail, cDiscord, cTelegram, cWhatsapp, cNote].forEach(f => f.text = "") })
                         }
                     }
                 }
@@ -1135,9 +1153,9 @@ Item {
                 })
             }
 
-            PageTitle { title: "Память"; subtitle: "Что ассистент запомнил о вас. Хранится в файлах и одинакова для любой модели. Нажмите на заметку, чтобы изменить" }
+            PageTitle { title: JD.tr("Память"); subtitle: JD.tr("Что ассистент запомнил о вас. Хранится в файлах и одинакова для любой модели. Нажмите на заметку, чтобы изменить") }
             Group {
-                Row { visible: memp.mem.files.length === 0; title: "Пока пусто"; subtitle: "Скажите «запомни, что…» или добавьте заметку ниже" }
+                Row { visible: memp.mem.files.length === 0; title: JD.tr("Пока пусто"); subtitle: JD.tr("Скажите «запомни, что…» или добавьте заметку ниже") }
                 Repeater {
                     model: memp.mem.files
                     ColumnLayout {
@@ -1147,11 +1165,11 @@ Item {
                         spacing: 0
                         Row {
                             title: modelData.description || modelData.name
-                            subtitle: memp.editing === modelData.file ? "Редактирование" : modelData.body.replace(/\*\*/g, "").split("\n").filter(l => l.trim()).slice(0, 2).join(" ").slice(0, 220)
+                            subtitle: memp.editing === modelData.file ? JD.tr("Редактирование") : modelData.body.replace(/\*\*/g, "").split("\n").filter(l => l.trim()).slice(0, 2).join(" ").slice(0, 220)
                             RowLayout {
                                 spacing: 6
-                                Btn { glyph: memp.editing === modelData.file ? "chevron-up" : "file-text"; text: memp.editing === modelData.file ? "Свернуть" : "Изменить"; onClicked: memp.open(modelData.file) }
-                                Btn { glyph: "trash"; text: ""; implicitWidth: 34; danger: true; onClicked: win.run(["memory", "forget", modelData.file], () => { win.notify("Забыто (в корзине)"); memp.editing = ""; win.reload() }) }
+                                Btn { glyph: memp.editing === modelData.file ? "chevron-up" : "file-text"; text: memp.editing === modelData.file ? JD.tr("Свернуть") : JD.tr("Изменить"); onClicked: memp.open(modelData.file) }
+                                Btn { glyph: "trash"; text: ""; implicitWidth: 34; danger: true; onClicked: win.run(["memory", "forget", modelData.file], () => { win.notify(JD.tr("Забыто (в корзине)")); memp.editing = ""; win.reload() }) }
                             }
                         }
                         Item {
@@ -1185,9 +1203,9 @@ Item {
                             }
                             Btn {
                                 anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 10 }
-                                text: "Сохранить"
+                                text: JD.tr("Сохранить")
                                 primary: true
-                                onClicked: win.run(["memory", "write", modelData.file], () => { win.notify("Память обновлена"); memp.editing = ""; win.reload() },
+                                onClicked: win.run(["memory", "write", modelData.file], () => { win.notify(JD.tr("Память обновлена")); memp.editing = ""; win.reload() },
                                                    { JUSTDAY_TEXT: memp.header + "\n" + editText.text.trim() + "\n" })
                             }
                         }
@@ -1195,9 +1213,9 @@ Item {
                 }
             }
 
-            GroupTitle { text: "НОВАЯ ЗАМЕТКА" }
+            GroupTitle { text: JD.tr("НОВАЯ ЗАМЕТКА") }
             Group {
-                Row { title: "О чём"; Field { id: noteTitle; placeholderText: "Мой основной браузер"; implicitWidth: 300 } }
+                Row { title: JD.tr("О чём"); Field { id: noteTitle; placeholderText: JD.tr("Мой основной браузер"); implicitWidth: 300 } }
                 Item {
                     Layout.fillWidth: true
                     implicitHeight: 90
@@ -1210,7 +1228,7 @@ Item {
                             anchors.fill: parent
                             wrapMode: TextArea.Wrap
                             color: win.t1
-                            placeholderText: "Что запомнить, например: пользуюсь Helium, закладки в нём"
+                            placeholderText: JD.tr("Что запомнить, например: пользуюсь Helium, закладки в нём")
                             placeholderTextColor: win.t3
                             font.family: win.font
                             font.pixelSize: 13
@@ -1221,22 +1239,22 @@ Item {
                 Row {
                     title: ""
                     Btn {
-                        text: "Запомнить"
+                        text: JD.tr("Запомнить")
                         primary: true
                         enabled: !!noteTitle.text.trim() && !!noteText.text.trim()
-                        onClicked: win.run(["memory", "new", noteTitle.text.trim()], () => { win.notify("Запомнил"); noteTitle.text = ""; noteText.text = ""; win.reload() },
+                        onClicked: win.run(["memory", "new", noteTitle.text.trim()], () => { win.notify(JD.tr("Запомнил")); noteTitle.text = ""; noteText.text = ""; win.reload() },
                                            { JUSTDAY_TEXT: noteText.text })
                     }
                 }
             }
 
-            GroupTitle { text: "ПРОФИЛЬ" }
+            GroupTitle { text: JD.tr("ПРОФИЛЬ") }
             Group {
                 Row {
-                    title: "Профиль пользователя и компьютера"
-                    subtitle: "CLAUDE.md: кто вы, какое у вас железо и программы. Ассистент читает его в начале каждого разговора"
+                    title: JD.tr("Профиль пользователя и компьютера")
+                    subtitle: JD.tr("CLAUDE.md: кто вы, какое у вас железо и программы. Ассистент читает его в начале каждого разговора")
                     Btn {
-                        text: memp.profileOpen ? "Свернуть" : "Изменить"
+                        text: memp.profileOpen ? JD.tr("Свернуть") : JD.tr("Изменить")
                         glyph: memp.profileOpen ? "chevron-up" : "file-text"
                         onClicked: {
                             if (memp.profileOpen) { memp.profileOpen = false; return }
@@ -1264,9 +1282,9 @@ Item {
                     }
                     Btn {
                         anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 10 }
-                        text: "Сохранить профиль"
+                        text: JD.tr("Сохранить профиль")
                         primary: true
-                        onClicked: win.run(["memory", "write", memp.mem.profile], () => { win.notify("Профиль сохранён · применится в новом разговоре"); memp.profileOpen = false },
+                        onClicked: win.run(["memory", "write", memp.mem.profile], () => { win.notify(JD.tr("Профиль сохранён · применится в новом разговоре")); memp.profileOpen = false },
                                            { JUSTDAY_TEXT: profileText.text })
                     }
                 }
@@ -1274,8 +1292,8 @@ Item {
             RowLayout {
                 Layout.topMargin: 10
                 spacing: 8
-                Btn { glyph: "folder-open"; text: "Открыть папку памяти"; onClicked: Quickshell.execDetached(["xdg-open", memp.mem.dir]) }
-                Btn { glyph: "rotate-ccw"; text: "Новый разговор"; onClicked: { JD.send({ cmd: "new_session" }); win.notify("Разговор начат заново, память сохранена") } }
+                Btn { glyph: "folder-open"; text: JD.tr("Открыть папку памяти"); onClicked: Quickshell.execDetached(["xdg-open", memp.mem.dir]) }
+                Btn { glyph: "rotate-ccw"; text: JD.tr("Новый разговор"); onClicked: { JD.send({ cmd: "new_session" }); win.notify(JD.tr("Разговор начат заново, память сохранена")) } }
             }
         }
     }
@@ -1284,25 +1302,25 @@ Item {
         id: privacyPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: "Приватность"; subtitle: "Что остаётся на компьютере, а что уходит в облако" }
+            PageTitle { title: JD.tr("Приватность"); subtitle: JD.tr("Что остаётся на компьютере, а что уходит в облако") }
             Group {
-                Row { title: "Только на компьютере"; subtitle: "Звук и распознавание речи, голос, мгновенные команды, почта, ключи и пароли, журнал" ; Glyph { name: "house"; size: 18 } }
-                Row { title: "Уходит модели"; subtitle: (win.get("brain.provider") === "ollama" ? "Ничего: модель локальная. " : "Текст просьб, профиль и память, то, что ассистент прочитал инструментами (команды, файлы, скриншоты). ") + "Телеметрия Claude Code выключена"; Glyph { name: "cloud"; size: 18 } }
+                Row { title: JD.tr("Только на компьютере"); subtitle: JD.tr("Звук и распознавание речи, голос, мгновенные команды, почта, ключи и пароли, журнал") ; Glyph { name: "house"; size: 18 } }
+                Row { title: JD.tr("Уходит модели"); subtitle: (win.get("brain.provider") === "ollama" ? JD.tr("Ничего: модель локальная. ") : JD.tr("Текст просьб, профиль и память, то, что ассистент прочитал инструментами (команды, файлы, скриншоты). ")) + JD.tr("Телеметрия Claude Code выключена"); Glyph { name: "cloud"; size: 18 } }
             }
-            GroupTitle { text: "НАСТРОЙКИ" }
+            GroupTitle { text: JD.tr("НАСТРОЙКИ") }
             Group {
-                Row { title: "Метки кнопок на скриншотах"; subtitle: "Шина доступности: точные клики в KDE/Qt-приложениях"; Toggle { checked: !!win.get("desktop.accessibility"); onToggled: v => win.set("desktop.accessibility", v) } }
-                Row { title: "Управление браузером (Claude in Chrome)"; subtitle: "Работает только с моделью Claude"; Toggle { checked: !!win.get("brain.chrome"); onToggled: v => win.set("brain.chrome", v) } }
-                Row { title: "Хранение данных у Anthropic"; subtitle: "30 дней, если обучение на ваших данных выключено"; Btn { glyph: "external-link"; text: "Открыть"; onClicked: Quickshell.execDetached(["xdg-open", "https://claude.ai/settings/data-privacy-controls"]) } }
+                Row { title: JD.tr("Метки кнопок на скриншотах"); subtitle: JD.tr("Шина доступности: точные клики в KDE/Qt-приложениях"); Toggle { checked: !!win.get("desktop.accessibility"); onToggled: v => win.set("desktop.accessibility", v) } }
+                Row { title: JD.tr("Управление браузером (Claude in Chrome)"); subtitle: JD.tr("Работает только с моделью Claude"); Toggle { checked: !!win.get("brain.chrome"); onToggled: v => win.set("brain.chrome", v) } }
+                Row { title: JD.tr("Хранение данных у Anthropic"); subtitle: JD.tr("30 дней, если обучение на ваших данных выключено"); Btn { glyph: "external-link"; text: JD.tr("Открыть"); onClicked: Quickshell.execDetached(["xdg-open", "https://claude.ai/settings/data-privacy-controls"]) } }
             }
-            GroupTitle { text: "ОЧИСТКА" }
+            GroupTitle { text: JD.tr("ОЧИСТКА") }
             Group {
                 Row {
-                    title: "Журнал событий"
-                    subtitle: "Что вы просили и что он делал" + (win.d.memory ? " · " + win.d.memory.journal_kb + " КБ" : "")
-                    Btn { text: confirmJ.armed ? "Точно очистить?" : "Очистить"; danger: true
+                    title: JD.tr("Журнал событий")
+                    subtitle: JD.tr("Что вы просили и что он делал") + (win.d.memory ? " · " + win.d.memory.journal_kb + JD.tr(" КБ") : "")
+                    Btn { text: confirmJ.armed ? JD.tr("Точно очистить?") : JD.tr("Очистить"); danger: true
                           property bool armed: false; id: confirmJ
-                          onClicked: { if (!armed) { armed = true; return } win.run(["memory", "clear-journal"], () => { win.notify("Журнал в корзине"); win.reload() }); armed = false } }
+                          onClicked: { if (!armed) { armed = true; return } win.run(["memory", "clear-journal"], () => { win.notify(JD.tr("Журнал в корзине")); win.reload() }); armed = false } }
                 }
             }
         }
@@ -1315,13 +1333,13 @@ Item {
             spacing: 6
             property var results: []
             property bool checking: false
-            PageTitle { title: "Диагностика"; subtitle: "Работают ли части JustDay" }
+            PageTitle { title: JD.tr("Диагностика"); subtitle: JD.tr("Работают ли части JustDay") }
             Group {
                 Repeater {
                     model: win.d.services || []
                     Row {
                         required property var modelData
-                        title: ({ "justday.service": "Ассистент", "justday-island.service": "Dynamic Island", "justday-ollama.service": "Локальная модель", "justday-voice.service": "Нейроголос" })[modelData.unit] || modelData.unit
+                        title: ({ "justday.service": JD.tr("Ассистент"), "justday-island.service": "Dynamic Island", "justday-ollama.service": JD.tr("Локальная модель"), "justday-voice.service": JD.tr("Нейроголос") })[modelData.unit] || modelData.unit
                         subtitle: modelData.unit + " · " + modelData.state
                         Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: modelData.active ? "#30d158" : "#ff453a" }
                     }
@@ -1330,10 +1348,10 @@ Item {
             RowLayout {
                 Layout.topMargin: 10
                 spacing: 8
-                Btn { text: dp.checking ? "Проверяю…" : "Проверить всё"; glyph: "activity"; busy: dp.checking; primary: true
+                Btn { text: dp.checking ? JD.tr("Проверяю…") : JD.tr("Проверить всё"); glyph: "activity"; busy: dp.checking; primary: true
                       onClicked: { dp.checking = true; win.run(["doctor", "--json"], v => { dp.checking = false; dp.results = Array.isArray(v) ? v : [] }) } }
-                Btn { glyph: "refresh-cw"; text: "Перезапустить ассистента"; onClicked: { win.run(["restart"], () => win.reload()); win.notify("Перезапускаю…") } }
-                Btn { glyph: "file-text"; text: "Журнал"; onClicked: Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) }
+                Btn { glyph: "refresh-cw"; text: JD.tr("Перезапустить ассистента"); onClicked: { win.run(["restart"], () => win.reload()); win.notify(JD.tr("Перезапускаю…")) } }
+                Btn { glyph: "file-text"; text: JD.tr("Журнал"); onClicked: Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) }
             }
             Group {
                 visible: dp.results.length > 0
@@ -1366,31 +1384,31 @@ Item {
                 Glyph { anchors.centerIn: parent; name: "sparkles"; size: 44 }
             }
             Text { Layout.alignment: Qt.AlignHCenter; text: "JustDay"; color: win.t1; font.family: win.font; font.pixelSize: 30; font.weight: Font.Bold }
-            Text { Layout.alignment: Qt.AlignHCenter; text: "Голосовой ИИ-ассистент для Linux · версия " + (win.d.about ? win.d.about.version : ""); color: win.t2; font.family: win.font; font.pixelSize: 13 }
+            Text { Layout.alignment: Qt.AlignHCenter; text: JD.tr("Голосовой ИИ-ассистент для Linux · версия ") + (win.d.about ? win.d.about.version : ""); color: win.t2; font.family: win.font; font.pixelSize: 13 }
             Group {
                 Layout.topMargin: 10
                 Row { title: "Claude Code"; subtitle: win.d.about ? win.d.about.claude : "" }
-                Row { title: "Файл настроек"; subtitle: win.d.about ? win.d.about.config : ""; Btn { text: "Открыть"; onClicked: Quickshell.execDetached(["xdg-open", win.d.about.config]) } }
-                Row { title: "Руководство"; subtitle: "Как всё устроено, модели, приватность, решение проблем"; Btn { glyph: "file-text"; text: "Открыть"; onClicked: JD.openManual() } }
-                Row { title: "Лицензия"; subtitle: "GNU GPL v3 · © 2026 0nigiris · иконки Lucide (ISC)" }
-                Row { title: "Исходный код"; subtitle: "github.com/0nigiris/JustDay"; Btn { glyph: "external-link"; text: "GitHub"; onClicked: Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay"]) } }
+                Row { title: JD.tr("Файл настроек"); subtitle: win.d.about ? win.d.about.config : ""; Btn { text: JD.tr("Открыть"); onClicked: Quickshell.execDetached(["xdg-open", win.d.about.config]) } }
+                Row { title: JD.tr("Руководство"); subtitle: JD.tr("Как всё устроено, модели, приватность, решение проблем"); Btn { glyph: "file-text"; text: JD.tr("Открыть"); onClicked: JD.openManual() } }
+                Row { title: JD.tr("Лицензия"); subtitle: JD.tr("GNU GPL v3 · © 2026 0nigiris · иконки Lucide (ISC)") }
+                Row { title: JD.tr("Исходный код"); subtitle: "github.com/0nigiris/JustDay"; Btn { glyph: "external-link"; text: "GitHub"; onClicked: Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay"]) } }
             }
-            GroupTitle { text: "ОБНОВЛЕНИЯ" }
+            GroupTitle { text: JD.tr("ОБНОВЛЕНИЯ") }
             Group {
                 id: updGroup
                 property var st: null
                 property bool checking: false
                 Row {
-                    title: updGroup.checking ? "Проверяю…" : !updGroup.st ? "Проверить обновления" : !updGroup.st.ok ? "Не удалось проверить" : updGroup.st.behind ? "Доступно обновление" : "Установлена последняя версия"
-                    subtitle: updGroup.st && updGroup.st.ok && updGroup.st.behind ? updGroup.st.changes.slice(0, 3).join(" · ") : updGroup.st && !updGroup.st.ok ? updGroup.st.error : "Обновления берутся из GitHub"
+                    title: updGroup.checking ? JD.tr("Проверяю…") : !updGroup.st ? JD.tr("Проверить обновления") : !updGroup.st.ok ? JD.tr("Не удалось проверить") : updGroup.st.behind ? JD.tr("Доступно обновление") : JD.tr("Установлена последняя версия")
+                    subtitle: updGroup.st && updGroup.st.ok && updGroup.st.behind ? updGroup.st.changes.slice(0, 3).join(" · ") : updGroup.st && !updGroup.st.ok ? updGroup.st.error : JD.tr("Обновления берутся из GitHub")
                     RowLayout {
                         spacing: 8
-                        Btn { glyph: "refresh-cw"; text: "Проверить"; busy: updGroup.checking
+                        Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); busy: updGroup.checking
                               onClicked: { updGroup.checking = true; win.run(["update", "--check"], v => { updGroup.checking = false; updGroup.st = v }) } }
-                        Btn { visible: !!(updGroup.st && updGroup.st.behind); text: "Обновить"; primary: true; onClicked: JD.runUpdate() }
+                        Btn { visible: !!(updGroup.st && updGroup.st.behind); text: JD.tr("Обновить"); primary: true; onClicked: JD.runUpdate() }
                     }
                 }
-                Row { title: "Проверять автоматически"; subtitle: "Раз в 6 часов; на острове появится кнопка"; Toggle { checked: win.get("updates.check") !== false; onToggled: v => win.set("updates.check", v) } }
+                Row { title: JD.tr("Проверять автоматически"); subtitle: JD.tr("Раз в 6 часов; на острове появится кнопка"); Toggle { checked: win.get("updates.check") !== false; onToggled: v => win.set("updates.check", v) } }
             }
         }
     }

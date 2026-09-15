@@ -18,6 +18,7 @@ import time
 import numpy as np
 
 from . import audio, calendar_lane, config, events, fastpath, mail, voiceprint, workers
+from .i18n import t
 from .brain import Brain
 from .stt import STT
 from .tts import TTS, normalize, split_sentences
@@ -27,9 +28,9 @@ log = logging.getLogger("justday.daemon")
 # Bare acknowledgements ("Готово.", "Открыл терминал.") are replaced by the "done" earcon.
 ACK = re.compile(r"^\W*(готово|сделано|сделал|есть|окей|ок|хорошо|выполнено|принято|done|"
                  r"(открыл|запустил|включил|закрыл|свернул|переключил|поставил|выключил)[\w\s«»\"'.-]{0,40})\W*$", re.I)
-STOP_WORDS = re.compile(r"\b(стоп|хватит|отмена|отмени|отменяй|замолчи|заткнись|stop|cancel)\b", re.I)
-YES = re.compile(r"\b(да|давай|разрешаю|разреши|подтверждаю|конечно|ок|окей|можно|делай|yes)\b", re.I)
-NO = re.compile(r"\b(нет|не надо|отмена|отклон\w*|запрещаю|стоп|no)\b", re.I)
+STOP_WORDS = re.compile(r"\b(стоп|хватит|отмена|отмени|отменяй|замолчи|заткнись|stop|cancel|never ?mind|shut up|be quiet)\b", re.I)
+YES = re.compile(r"\b(да|давай|разрешаю|разреши|подтверждаю|конечно|ок|окей|можно|делай|yes|yeah|sure|ok|okay|allow|go ahead|do it)\b", re.I)
+NO = re.compile(r"\b(нет|не надо|отмена|отклон\w*|запрещаю|стоп|no|nope|don'?t|deny|cancel)\b", re.I)
 
 
 def tool_icon(name: str, inp: str) -> str:
@@ -97,6 +98,7 @@ def parse_notification(raw: str) -> dict | None:
 def settings_snapshot(cfg: dict) -> dict:
     b, m = cfg["brain"], cfg["mail"]
     return {"provider": b.get("provider", "claude"), "model": b["model"], "assistant_name": cfg["user"]["assistant_name"],
+            "language": cfg["user"].get("language", "ru"),
             "earcons": cfg["audio"]["earcons"], "notifications": cfg["ui"]["notifications"],
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"]}
@@ -132,6 +134,7 @@ def fetch_weather(city: str) -> dict | None:
         data = json.load(r)
     cur, daily = data["current"], data.get("daily", {})
     text, icon = WMO.get(int(cur["weather_code"]), ("", "cloud"))
+    text = t(text)
     if icon == "sun" and not cur.get("is_day", 1):
         icon = "moon"
     return {"city": geo["name"], "temp": round(cur["temperature_2m"]), "text": text, "icon": icon,
@@ -237,9 +240,9 @@ class Daemon:
         elif kind in ("approval_result", "cancel", "turn_done", "listen_empty", "listen_cancelled"):
             msg = {"kind": kind}
         elif kind == "worker_start":
-            msg = {"kind": "tool", "detail": "Клод взялся за задачу", "icon": "applications-development"}
+            msg = {"kind": "tool", "detail": t("Клод взялся за задачу"), "icon": "applications-development"}
         elif kind in ("brain_error", "turn_failed", "mail_error"):
-            msg = {"kind": "error", "detail": {"mail_error": "Почта недоступна"}.get(kind, "Ошибка мозга")}
+            msg = {"kind": "error", "detail": t("Почта недоступна") if kind == "mail_error" else t("Ошибка мозга")}
         else:
             return
         try:
@@ -272,7 +275,9 @@ class Daemon:
             events.emit("ack_suppressed", text=text)
             return
         self._spoken += 1
-        for s in split_sentences(normalize(text)):
+        lang = self.cfg["user"].get("language", "ru")
+        self.tts.cfg["lang"] = lang
+        for s in split_sentences(normalize(text, lang)):
             self._speech_q.put_nowait(s)
 
     async def say(self, text: str) -> None:
@@ -439,7 +444,7 @@ class Daemon:
                 sc = await asyncio.get_running_loop().run_in_executor(None, voiceprint.score, pcm)
                 if sc is not None and sc < prof["threshold"]:
                     events.emit("listen_rejected", score=round(sc, 2))
-                    self.publish(kind="error", detail="Голос не узнан")
+                    self.publish(kind="error", detail=t("Голос не узнан"))
                     self.state = after
                     return
         self.state = "transcribing"
@@ -482,7 +487,7 @@ class Daemon:
                 cal = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.handle, text)
             except Exception as e:  # noqa: BLE001
                 log.warning("calendar failed: %s", e)
-                cal = ("Не получилось открыть календарь.", None)
+                cal = (t("Не получилось открыть календарь."), None)
             if cal and gen == self._cancel_gen:
                 reply, card = cal
                 if card:
@@ -515,7 +520,7 @@ class Daemon:
         await self.earcon("done")
         level = float(voiceprint.rms_frames(pcm).max()) if len(pcm) else 0.0
         if level < 0.02:
-            return {"ok": False, "error": "Слишком тихо — говорите ближе к микрофону", "level": round(level, 3)}
+            return {"ok": False, "error": t("Слишком тихо — говорите ближе к микрофону"), "level": round(level, 3)}
         clip = voiceprint.trim_silence(pcm)
         voiceprint.save_wav(voiceprint.DIR / f"{kind}_{index}.wav", pcm)
         text = ""
@@ -572,6 +577,8 @@ class Daemon:
         self.brain.cfg["user"] = new["user"]
         self.stt.vocabulary = vocabulary(new)
         restart = [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
+        if new["user"].get("language") != old["user"].get("language"):
+            restart.append("language")
         if new["tts"]["engine"] != old["tts"]["engine"]:
             restart.append("tts")
         self.publish(settings=settings_snapshot(new))
@@ -586,13 +593,13 @@ class Daemon:
         prev = self.state
         prev_gen = self._cancel_gen
         self.state = "thinking"
-        self.publish(detail="Почта · локально", kind="tool")
+        self.publish(detail=t("Почта · локально"), kind="tool")
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, self.mail.handle, text)
         except Exception as e:
             log.exception("mail lane failed")
             events.emit("mail_error", error=type(e).__name__)
-            result = ("Локальная модель для почты не отвечает.", False)
+            result = (t("Локальная модель для почты не отвечает."), False)
         if result is None:
             self.state = prev
             return False
@@ -624,7 +631,7 @@ class Daemon:
             self._event_queue.get_nowait()
         await self.brain.interrupt()
         self.state = "idle"
-        self.publish(detail="Отменено", kind="tool")
+        self.publish(detail=t("Отменено"), kind="tool")
         await self.earcon("error")
 
     async def run_turn(self, text: str, source: str = "voice") -> str:
@@ -637,7 +644,7 @@ class Daemon:
             if gen != self._cancel_gen:
                 return ""
             events.emit("turn_failed", error=repr(e))
-            await self.say("Не получилось связаться с мозгом. Подробности в логе.")
+            await self.say(t("Не получилось связаться с мозгом. Подробности в логе."))
             reply = ""
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
             return ""
@@ -656,11 +663,11 @@ class Daemon:
         events.emit("approval_wait", desc=desc)
         self.state = "approval"
         # the command itself is shown on the island / in the notification; reading "rm минус rf…" aloud helps nobody
-        await self.say("Нужно подтверждение. Разрешить?")
+        await self.say(t("Нужно подтверждение. Разрешить?"))
         proc = await asyncio.create_subprocess_exec(
             "notify-send", "-a", "JustDay", "-u", "critical", "-i", "dialog-warning", "--wait",
-            "--action=allow=Разрешить", "--action=deny=Отклонить",
-            "JustDay просит подтверждение", f"{desc[:400]}\n{reason[:200]}",
+            f"--action=allow={t('Разрешить')}", f"--action=deny={t('Отклонить')}",
+            t("JustDay просит подтверждение"), f"{desc[:400]}\n{reason[:200]}",
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
 
         async def from_notification():
@@ -798,7 +805,7 @@ class Daemon:
                     card = self.mail.card(news)
                     if card:
                         self.publish(kind="card", card=card)
-                    await self.say(news + " Сказать, о чём?")
+                    await self.say(news + " " + t("Сказать, о чём?"))
             if not self._wake and self.state != "listening" and time.monotonic() - self._last_mic_use > 20:
                 self.mic.stop()
             if self.cfg["workers"]["auto_review"] and time.monotonic() - last_poll > poll:

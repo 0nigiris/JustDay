@@ -32,6 +32,7 @@ from claude_agent_sdk import (
 )
 
 from . import config, events, providers
+from .i18n import t
 
 log = logging.getLogger("justday.brain")
 
@@ -61,34 +62,34 @@ def humanize_tool(name: str, inp: dict) -> str:
     if name == "Bash":
         return inp.get("description") or inp.get("command", "")[:160]
     if tool == "look":
-        return "Смотрю на экран" + (f": {inp['window']}" if inp.get("window") else "")
+        return t("Смотрю на экран") + (f": {inp['window']}" if inp.get("window") else "")
     if tool == "act":
         steps = inp.get("steps") or []
         typed = next((s[5:] for s in steps if s.startswith("type ")), "")
         if typed:
-            return f"Печатаю «{typed[:60]}»"
+            return t("Печатаю «{text}»", text=typed[:60])
         ops = {s.split(" ", 1)[0] for s in steps}
-        return ("Перетаскиваю" if "drag" in ops else "Нажимаю в окне" if ops & {"click", "double", "right"}
-                else "Нажимаю клавиши" if "key" in ops else "Действую в окне")
+        return t("Перетаскиваю" if "drag" in ops else "Нажимаю в окне" if ops & {"click", "double", "right"}
+                 else "Нажимаю клавиши" if "key" in ops else "Действую в окне")
     if name.startswith("mcp__claude-in-chrome"):
         url = inp.get("url") or ""
-        return f"Браузер: {urlparse(url).netloc or url}" if url else f"Браузер: {tool.replace('_', ' ')}"
+        return t("Браузер: {what}", what=(urlparse(url).netloc or url) if url else tool.replace("_", " "))
     if name.startswith("mcp__plugin_justday_kwin"):
-        return {"list_windows": "Смотрю, какие окна открыты", "focus_window": "Переключаю окно",
-                "find_ui_elements": "Ищу кнопку", "accessibility_tree": "Изучаю окно"}.get(tool, "Управляю рабочим столом")
+        return t({"list_windows": "Смотрю, какие окна открыты", "focus_window": "Переключаю окно",
+                  "find_ui_elements": "Ищу кнопку", "accessibility_tree": "Изучаю окно"}.get(tool, "Управляю рабочим столом"))
     if name == "WebSearch":
-        return f"Ищу в интернете: {inp.get('query', '')}"
+        return t("Ищу в интернете: {q}", q=inp.get("query", ""))
     if name == "WebFetch":
-        return f"Читаю {urlparse(inp.get('url', '')).netloc}"
+        return t("Читаю {what}", what=urlparse(inp.get("url", "")).netloc)
     if name in ("Read", "Edit", "Write"):
-        verb = {"Read": "Читаю", "Edit": "Правлю", "Write": "Пишу"}[name]
-        return f"{verb} {Path(inp.get('file_path', '')).name}"
+        verb = {"Read": "Читаю {what}", "Edit": "Правлю {what}", "Write": "Пишу {what}"}[name]
+        return t(verb, what=Path(inp.get("file_path", "")).name)
     if name in ("Grep", "Glob"):
-        return "Ищу в файлах"
+        return t("Ищу в файлах")
     if name == "Skill":
-        return f"Навык: {inp.get('skill') or inp.get('name', '')}"
+        return t("Навык: {name}", name=inp.get("skill") or inp.get("name", ""))
     if name in ("Agent", "Task"):
-        return "Думаю глубже: " + (inp.get("description") or "субагент")
+        return t("Думаю глубже: {what}", what=inp.get("description") or t("субагент"))
     return describe_tool(name, inp)
 
 
@@ -118,11 +119,15 @@ class Brain:
     # ---------- lifecycle ----------
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
         b = self.cfg["brain"]
-        persona = (config.REPO_DIR / "brain" / "PERSONA.md").read_text(encoding="utf-8")
         u = self.cfg["user"]
+        lang = u.get("language", "ru")
+        persona_file = config.REPO_DIR / "brain" / ("PERSONA.md" if lang == "ru" else f"PERSONA.{lang}.md")
+        if not persona_file.exists():
+            persona_file = config.REPO_DIR / "brain" / "PERSONA.md"
+        persona = persona_file.read_text(encoding="utf-8")
         names = [u["assistant_name"], *u.get("assistant_aliases", [])]
         persona = (persona.replace("{address_as}", u["address_as"] or "").replace("{assistant_name}", names[0])
-                   .replace("{assistant_names}", " и ".join(f"«{n}»" for n in names)))
+                   .replace("{assistant_names}", (" и " if lang == "ru" else " and ").join(f"«{n}»" for n in names)))
         claude = providers.is_claude(self.cfg)
         # Claude in Chrome and the auto-mode classifier need an Anthropic account; other models use the local policy
         extra = {"chrome": None} if b.get("chrome") and claude else {}

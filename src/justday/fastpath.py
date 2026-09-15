@@ -10,6 +10,7 @@ import re
 import subprocess
 
 from . import config, desktop
+from .i18n import t as _t
 from .tts import LEXICON
 
 RU_NAMES = {ru: en for en, ru in LEXICON.items()}
@@ -19,10 +20,12 @@ RU_NAMES.update({"телега": "telegram", "вскод": "code", "вс код"
 
 FILLER = re.compile(
     r"\b(джарвис|justday|пожалуйста|плиз|please|быстро|быстренько|давай|ка|ну|мне|теперь|а|приложение|программу|"
-    r"сейчас|срочно|сэр)\b", re.I)
+    r"сейчас|срочно|сэр|hey|jarvis|could you|can you|would you|sir|the|app|now|quickly)\b", re.I)
 REJECT = re.compile(
     r"\b(проект\w*|файл\w*|папк\w*|видео\w*|музык\w*|песн\w*|трек\w*|фильм\w*|вкладк\w*|терминал\w*|в|во|на|про|из|с|"
-    r"и|где|что|как|все|всё|последн\w*|вчерашн\w*|там|его|её|ее|их|это|этот|эту)\b", re.I)
+    r"и|где|что|как|все|всё|последн\w*|вчерашн\w*|там|его|её|ее|их|это|этот|эту|"
+    r"projects?|files?|folders?|videos?|music|songs?|tracks?|movies?|tabs?|terminal|in|on|about|from|with|and|where|what|how|"
+    r"last|yesterday|there|it|this|that)\b", re.I)
 
 SITES = {
     "ютуб": "https://www.youtube.com", "youtube": "https://www.youtube.com",
@@ -32,6 +35,7 @@ SITES = {
     "твич": "https://www.twitch.tv", "twitch": "https://www.twitch.tv",
     "реддит": "https://www.reddit.com", "reddit": "https://www.reddit.com",
     "чатгпт": "https://chatgpt.com", "claude ai": "https://claude.ai", "клод ai": "https://claude.ai",
+    "mail": "https://mail.google.com", "my mail": "https://mail.google.com", "chatgpt": "https://chatgpt.com",
 }
 
 _TR = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
@@ -89,6 +93,16 @@ MEDIA = [
      ("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"), "звук выключен"),
     (re.compile(r"^(включи|верни) звук$"), ("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"), "звук включён"),
     (re.compile(r"^заблокируй (экран|компьютер|комп|пк)$"), ("loginctl", "lock-session"), "экран заблокирован"),
+    # English
+    (re.compile(r"^(pause|pause (the )?(music|video)|stop (the )?(music|video))$"), ("playerctl", "pause"), "paused"),
+    (re.compile(r"^(play|resume|unpause|continue)( (the )?(music|video))?$"), ("playerctl", "play"), "playing"),
+    (re.compile(r"^(next|skip)( (track|song|video))?$"), ("playerctl", "next"), "next track"),
+    (re.compile(r"^previous( (track|song|video))?$"), ("playerctl", "previous"), "previous track"),
+    (re.compile(r"^(louder|volume up|turn (it )?up)$"), ("wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "10%+"), "volume +10%"),
+    (re.compile(r"^(quieter|volume down|turn (it )?down)$"), ("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "10%-"), "volume −10%"),
+    (re.compile(r"^(mute|mute (the )?sound)$"), ("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"), "muted"),
+    (re.compile(r"^unmute$"), ("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"), "unmuted"),
+    (re.compile(r"^lock (the )?(screen|computer|pc)$"), ("loginctl", "lock-session"), "screen locked"),
 ]
 
 
@@ -104,25 +118,26 @@ def try_handle(text: str) -> str | None:
         return None
     for rx, cmd, desc in MEDIA:
         if rx.match(t):
-            return desc if _run(*cmd) else None
-    m = re.match(r"^(громкость|звук) (на )?(\d{1,3})( процент\w*)?$", t)
+            return _t(desc) if _run(*cmd) else None
+    m = re.match(r"^(громкость|звук|volume|set volume to|volume to) (на )?(\d{1,3})( процент\w*| percent)?$", t)
     if m:
-        return f"громкость {m.group(3)}%" if _run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{min(100, int(m.group(3)))}%") else None
+        return _t("громкость {n}%", n=m.group(3)) if _run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{min(100, int(m.group(3)))}%") else None
 
-    m = re.match(r"^(открой|открыть|запусти|запустить|включи|вруби) (.+)$", t)
+    m = re.match(r"^(открой|открыть|запусти|запустить|включи|вруби|open|launch|start|run) (.+)$", t)
     if m:
         target = m.group(2).strip()
         if target in SITES:
             last_icon = "internet-web-browser"
-            return f"открыл {SITES[target]}" if _run("xdg-open", SITES[target]) else None
+            return _t("открыл {what}", what=SITES[target]) if _run("xdg-open", SITES[target]) else None
         app = _app(target)
         if app:
             last_icon = app.get("icon") or app["id"]
             desktop.launch_app_id(app["id"])
-            return f"запустил {app['name']}"
+            return _t("запустил {what}", what=app["name"])
         return None
 
-    m = re.match(r"^(закрой|закрыть|выключи|выруби|сверни|свернуть|разверни|переключись на|покажи) (.+)$", t)
+    m = re.match(r"^(закрой|закрыть|выключи|выруби|сверни|свернуть|разверни|переключись на|покажи|close|quit|exit|minimize|"
+                 r"switch to|show|focus) (.+)$", t)
     if m:
         verb, target = m.group(1), m.group(2).strip()
         app = _app(target)
@@ -130,9 +145,9 @@ def try_handle(text: str) -> str | None:
             return None
         last_icon = app.get("icon") or app["id"]
         action = {"сверни": "minimize", "свернуть": "minimize", "разверни": "focus", "переключись на": "focus",
-                  "покажи": "focus"}.get(verb, "close")
+                  "покажи": "focus", "minimize": "minimize", "switch to": "focus", "show": "focus", "focus": "focus"}.get(verb, "close")
         for term in (app["name"], app["id"].rsplit(".", 1)[-1], target):
             if desktop.windows(action, term):
-                return {"close": "закрыл", "minimize": "свернул", "focus": "переключил на"}[action] + f" {app['name']}"
+                return _t({"close": "закрыл {what}", "minimize": "свернул {what}", "focus": "переключил на {what}"}[action], what=app["name"])
         return None
     return None
