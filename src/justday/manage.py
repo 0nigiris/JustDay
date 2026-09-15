@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from importlib.metadata import PackageNotFoundError, version as pkg_version
@@ -96,13 +97,21 @@ def audio_devices() -> dict:
     return {"sources": listing("sources"), "sinks": listing("sinks")}
 
 
-def hotkeys() -> dict:
+def _shortcut(desktop_id: str) -> list[str]:
+    """Active keys of a desktop-file shortcut. kglobalshortcutsrc holds only keys changed in System Settings;
+    keys equal to the desktop file's X-KDE-Shortcuts defaults are not written there, so fall back to the file."""
     raw = subprocess.run(["kreadconfig6", "--file", "kglobalshortcutsrc", "--group", "services", "--group",
-                          "net.local.justday.desktop", "--key", "_launch"], capture_output=True, text=True).stdout.strip()
-    cancel = subprocess.run(["kreadconfig6", "--file", "kglobalshortcutsrc", "--group", "services", "--group",
-                             "net.local.justday-stop.desktop", "--key", "_launch"], capture_output=True, text=True).stdout.strip()
-    talk = raw.split("\t") if raw else []
-    return {"talk": talk[0] if talk else "", "extra": talk[1] if len(talk) > 1 else "", "cancel": cancel}
+                          desktop_id, "--key", "_launch"], capture_output=True, text=True).stdout.strip()
+    if raw and raw != "none":
+        return [k for k in raw.split("\t") if k and k != "none"]
+    f = Path.home() / ".local/share/applications" / desktop_id
+    m = re.search(r"^X-KDE-Shortcuts=(.*)$", f.read_text(), re.M) if f.exists() else None
+    return [k.strip() for k in m.group(1).split(",") if k.strip()] if m else []
+
+
+def hotkeys() -> dict:
+    talk, cancel = _shortcut("net.local.justday.desktop"), _shortcut("net.local.justday-stop.desktop")
+    return {"talk": talk[0] if talk else "", "extra": talk[1] if len(talk) > 1 else "", "cancel": cancel[0] if cancel else ""}
 
 
 def set_hotkeys(talk: str, extra: str, cancel: str) -> dict:

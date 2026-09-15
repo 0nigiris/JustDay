@@ -190,13 +190,14 @@ def t_daemon():
 
 
 def t_hotkey():
-    out = subprocess.run(["kreadconfig6", "--file", "kglobalshortcutsrc", "--group", "services", "--group",
-                          "net.local.justday.desktop", "--key", "_launch"], capture_output=True, text=True).stdout.strip()
+    from .manage import hotkeys
+    keys = hotkeys()
     mouse = subprocess.run(["kreadconfig6", "--file", "kcminputrc", "--group", "ButtonRebinds", "--group", "Mouse",
                             "--key", "ExtraButton1"], capture_output=True, text=True).stdout.strip()
-    if not out:
+    if not keys["talk"]:
         raise RuntimeError("global shortcut not registered (run install.sh)")
-    return f"shortcut={out}" + (f", mouse ExtraButton1→{mouse}" if mouse else "")
+    return f"talk={keys['talk']}" + (f"+{keys['extra']}" if keys["extra"] else "") + f", cancel={keys['cancel'] or '—'}" + \
+        (f", mouse ExtraButton1→{mouse}" if mouse else "")
 
 
 def screenshot(all_screens: bool = False, full: bool = False) -> dict:
