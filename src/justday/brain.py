@@ -98,16 +98,19 @@ class Brain:
         self,
         cfg: dict,
         on_text: Callable[[str], Awaitable[None]],
-        approver: Callable[[str, str], Awaitable[bool]],
+        approver: Callable[[str, str, bool], Awaitable[bool]],
+        asker: Callable[[list[dict]], Awaitable[dict | None]],
     ):
         self.cfg = cfg
         self.on_text = on_text
         self.approver = approver
+        self.asker = asker
         self.client: ClaudeSDKClient | None = None
         self.session_id: str | None = None
         self._turn_done = asyncio.Event()
         self._turn_done.set()
         self._turn_lock = asyncio.Lock()
+        self._conn_lock = asyncio.Lock()  # start / new_session / stop must not overlap (a second client orphans the first)
         self._reader: asyncio.Task | None = None
         self._last_text = ""
         self._notes: list[str] = []
@@ -157,6 +160,10 @@ class Brain:
         )
 
     async def start(self) -> None:
+        async with self._conn_lock:
+            await self._start()
+
+    async def _start(self) -> None:
         BRAIN_DIR.mkdir(parents=True, exist_ok=True)
         state = events.load_state()
         resume = None
@@ -180,6 +187,10 @@ class Brain:
         events.emit("brain_connected", resume=resume, model=b["model"], provider=b.get("provider", "claude"))
 
     async def stop(self) -> None:
+        async with self._conn_lock:
+            await self._stop()
+
+    async def _stop(self) -> None:
         if self._reader:
             self._reader.cancel()
         if self.client:
@@ -190,9 +201,10 @@ class Brain:
         self.client = None
 
     async def new_session(self) -> None:
-        await self.stop()
-        events.save_state(brain_session_id=None)
-        await self._connect(None)
+        async with self._conn_lock:
+            await self._stop()
+            events.save_state(brain_session_id=None)
+            await self._connect(None)
 
     # ---------- turns ----------
     @property
@@ -213,6 +225,8 @@ class Brain:
         """Deliver a new user message while a turn is running. Claude Code picks it up at the next step
         without abandoning the current task (and starts a new turn if the current one just ended)."""
         events.emit("request", source=source, text=text, injected=True)
+        async with self._conn_lock:
+            pass
         await self.client.query(self._with_notes(
             "(Новая реплика пользователя, пока ты выполнял предыдущую просьбу. Предыдущую не бросай, если он явно "
             "не отменил её. Сначала выполни/ответь на эту; если по предыдущей нужен ответ, добавь его после словами "
@@ -221,6 +235,8 @@ class Brain:
     async def ask(self, text: str, source: str = "voice") -> str:
         """Send one user message and wait until Claude finishes the turn. Returns the final text."""
         async with self._turn_lock:
+            async with self._conn_lock:  # a (re)connect in progress: wait for it
+                pass
             if self.client is None or (self._reader and self._reader.done()):
                 events.emit("brain_restart", reason="client not running")
                 await self.stop()
@@ -321,12 +337,19 @@ class Brain:
         return settings["permissions"]["ask"]
 
     async def _can_use_tool(self, name: str, inp: dict, ctx) -> PermissionResultAllow | PermissionResultDeny:
-        if not providers.is_claude(self.cfg) and not providers.risky(name, inp, self._ask_rules()):
+        if name == "AskUserQuestion":  # a question card on the island, answered by click or voice
+            answers = await self.asker(inp.get("questions") or [])
+            if answers is None:
+                return PermissionResultDeny(message="Пользователь не ответил или отказался. Не повторяй вопрос; "
+                                                    "продолжай без этого или спроси обычной репликой.")
+            return PermissionResultAllow(updated_input={**inp, "answers": answers})
+        hard = providers.risky(name, inp, self._ask_rules())  # an ask-rule (rm -rf, sudo…), not a classifier doubt
+        if not providers.is_claude(self.cfg) and not hard:
             return PermissionResultAllow(updated_input=inp)  # no classifier: everything but the ask-rules runs
         desc = getattr(ctx, "title", None) or describe_tool(name, inp)
         reason = getattr(ctx, "decision_reason", None) or ""
         events.emit("approval_request", tool=name, desc=desc, reason=reason)
-        ok = await self.approver(desc, reason)
+        ok = await self.approver(desc, reason, hard)
         events.emit("approval_result", tool=name, allowed=ok)
         if ok:
             return PermissionResultAllow(updated_input=inp)

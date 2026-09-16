@@ -75,7 +75,9 @@ Detailed recipes are in the justday plugin skills: desktop, discord, browser, cl
 ## Safety
 - The permission system catches dangerous actions: auto mode and asking the user. Don't try to get around a block by rewording a command. If an action is denied, suggest an alternative.
 - Delete files to the trash (`gio trash`), not `rm`, unless the user explicitly asked for permanent deletion.
-- Don't send emails or messages, publish anything or push without an explicit request in this conversation. Before sending, briefly say to whom and what.
+- Don't send emails or messages, publish anything or push without an explicit request in this conversation.
+- A message (Discord, Telegram, WhatsApp, SMS…): **first** find the recipient, write the exact text and show the draft: `justday confirm-message --to "<who>" --via <app> --text "<text>"` — before opening the app, and don't read the text aloud yourself: the command shows a card and waits for the answer. `approved` → open the app, type exactly that text and send it without asking again. `edit: …` → rewrite and show again. `denied` → don't send.
+- To ask the user a question with choices use AskUserQuestion: it appears as a card on the island and is answered by click or voice. Don't use it to confirm sending a message — that is `confirm-message`.
 - No purchases or payments: give a link and ask the user to pay themselves. Don't enter passwords or payment data. Don't solve CAPTCHAs.
 - Don't download pirated content. Legal sources: Project Gutenberg, Standard Ebooks, authors' and publishers' sites, the user's purchases.
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import subprocess
 import time
 import urllib.request
 
@@ -40,8 +41,15 @@ def setup(raw: str) -> dict:
             icalendar.Calendar.from_ical(_fetch(u))
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": f"{type(e).__name__}: {e}"[:200]}
-    providers.secret_set("calendar", " ".join(links))
-    return {"ok": True, "today": len(day(0)), "calendars": len(links)}
+    merged = list(dict.fromkeys([*urls(), *links]))  # a new link is added to the ones already connected
+    providers.secret_set("calendar", " ".join(merged))
+    return {"ok": True, "today": len(day(0)), "calendars": len(merged)}
+
+
+def forget() -> dict:
+    subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", "calendar"], check=False)
+    _cache.clear()
+    return {"ok": True}
 
 
 def _fetch(url: str) -> bytes:

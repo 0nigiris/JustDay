@@ -24,6 +24,7 @@
       "Bash(justday claude result:*)",
       "Bash(justday contacts:*)",
       "Bash(justday compose-mail:*)",
+      "Bash(justday confirm-message:*)",
       "Bash(gtk-launch:*)",
       "Bash(xdg-open:*)",
       "Bash(playerctl:*)",

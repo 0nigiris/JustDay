@@ -307,6 +307,11 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", required=True, help="contact name or alias, e.g. мама")
     sp.add_argument("--about", default="", help="what the letter should say")
     sp.add_argument("--attach", action="append", default=[], help="file to attach (repeatable)")
+    sp = sub.add_parser("confirm-message", help="show a message draft on the island and wait for the user's answer "
+                                                "(run it BEFORE opening the messenger)")
+    sp.add_argument("--to", required=True, help="who, as the user calls them")
+    sp.add_argument("--via", default="", help="Discord, Telegram, WhatsApp…")
+    sp.add_argument("--text", required=True, help="the exact text that will be sent")
     sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")
     sp.add_argument("action", choices=["get", "set"])
     sp.add_argument("key", nargs="?")
@@ -333,7 +338,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
     sp = sub.add_parser("calendar", help="private calendar from iCal links: setup | today | tomorrow | week")
-    sp.add_argument("action", choices=["setup", "today", "tomorrow", "week", "test"])
+    sp.add_argument("action", choices=["setup", "today", "tomorrow", "week", "test", "forget"])
     sp = sub.add_parser("voiceprint", help="personal voice profile: status | enroll | record KIND INDEX SECONDS | finish | reset | mode off|wake|always")
     sp.add_argument("action", choices=["status", "enroll", "record", "finish", "reset", "mode"])
     sp.add_argument("args", nargs="*")
@@ -495,11 +500,14 @@ def main(argv: list[str] | None = None) -> None:
         from . import calendar_lane
 
         if a.action == "setup":
-            print("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Несколько ссылок — через пробел.")
+            print("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Несколько ссылок — через пробел; "
+                  "новые добавляются к уже подключённым (убрать все: justday calendar forget).")
             import getpass
 
             value = (os.environ.get("JUSTDAY_SECRET") or getpass.getpass("ссылка(и) (ввод скрыт): ")).strip()
             _print(calendar_lane.setup(value))
+        elif a.action == "forget":
+            _print(calendar_lane.forget())
         elif a.action == "test":
             _print({"configured": bool(calendar_lane.urls()), "calendars": len(calendar_lane.urls())})
         else:
@@ -526,6 +534,10 @@ def main(argv: list[str] | None = None) -> None:
         _contacts_cmd(a)
     elif a.cmd == "compose-mail":
         r = control("mail_compose", timeout=120, to=a.to, about=a.about, attach=[os.path.abspath(f) for f in a.attach])
+        print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
+        sys.exit(0 if r.get("ok") else 1)
+    elif a.cmd == "confirm-message":
+        r = control("confirm_message", timeout=140, to=a.to, via=a.via, text=a.text)
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
         sys.exit(0 if r.get("ok") else 1)
     elif a.cmd == "restart":

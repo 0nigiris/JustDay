@@ -176,7 +176,7 @@ class Daemon:
                                                 a["max_utterance_seconds"])
         self.stt = STT(self.cfg["stt"])
         self.tts = TTS(self.cfg["tts"])
-        self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve)
+        self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
         self._subs: set[asyncio.StreamWriter] = set()
         self._notify_proc: asyncio.subprocess.Process | None = None
         self._state = "idle"
@@ -186,6 +186,9 @@ class Daemon:
         self._speech_q: asyncio.Queue[str | None] = asyncio.Queue()
         self._speech_gen = 0
         self._approval: asyncio.Future | None = None
+        self._ask_choices: list[str] = []
+        self._ask_free = False
+        self._preapproved_until = 0.0  # a message draft the user approved: its "send" needs no second question
         self._last_mic_use = time.monotonic()
         self._notify_id = 0
         self._wake = None
@@ -233,6 +236,8 @@ class Daemon:
 
     def _on_event(self, kind: str, data: dict) -> None:
         """Journal event → Dynamic Island message (full texts, icons, cards)."""
+        if kind == "turn_done":
+            self._preapproved_until = 0.0  # an approved draft covers only the task it was made for
         if kind == "tool":
             msg = {"kind": "tool", "detail": data.get("label") or data.get("desc", ""),
                    "icon": tool_icon(data.get("name", ""), data.get("input", ""))}
@@ -478,11 +483,9 @@ class Daemon:
 
     async def handle_utterance(self, text: str, source: str = "voice") -> None:
         if self._approval and not self._approval.done():
-            if YES.search(text) and not NO.search(text):
-                self._approval.set_result(True)
-                return
-            if NO.search(text):
-                self._approval.set_result(False)
+            ans = self._match_answer(text)
+            if ans is not None:
+                self._approval.set_result(ans)
                 return
         if STOP_WORDS.search(text) and len(text.split()) <= 6:
             await self.cancel_all()
@@ -644,8 +647,9 @@ class Daemon:
         if self._listen_cancel:
             self._discard_recording = True  # cancel ≠ "finish the phrase": drop what was recorded
             self._listen_cancel.set()
+        self._preapproved_until = 0.0
         if self._approval and not self._approval.done():
-            self._approval.set_result(False)
+            self._approval.set_result("deny")
         while not self._event_queue.empty():
             self._event_queue.get_nowait()
         await self.brain.interrupt()
@@ -675,39 +679,111 @@ class Daemon:
             self.listen(followup=True)
         return reply
 
-    # ---------------- approvals ----------------
-    async def _approve(self, desc: str, reason: str) -> bool:
+    # ---------------- approvals and questions ----------------
+    async def _ask(self, speech: str, choices: list[str] | None = None, free_text: bool = False,
+                   notify: tuple[str, str] | None = None) -> str | None:
+        """Wait for the user's answer: an island button, the voice, or (no island running) a desktop notification.
+        Returns "allow" / "deny", one of `choices`, the user's own words (`free_text`), or None after 120 s.
+        A click counts at once — no waiting for the question to be read out."""
         loop = asyncio.get_running_loop()
-        self._approval = loop.create_future()
-        events.emit("approval_wait", desc=desc)
+        fut = self._approval = loop.create_future()
+        self._ask_choices, self._ask_free = choices or [], free_text
         self.state = "approval"
-        # the command itself is shown on the island / in the notification; reading "rm минус rf…" aloud helps nobody
-        await self.say(t("Нужно подтверждение. Разрешить?"))
-        proc = await asyncio.create_subprocess_exec(
-            "notify-send", "-a", "JustDay", "-u", "critical", "-i", "dialog-warning", "--wait",
-            f"--action=allow={t('Разрешить')}", f"--action=deny={t('Отклонить')}",
-            t("JustDay просит подтверждение"), f"{desc[:400]}\n{reason[:200]}",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        await self.say(speech)
+        side: list[asyncio.Task] = []
+        proc = None
+        if notify and not self._subs:
+            proc = await asyncio.create_subprocess_exec(
+                "notify-send", "-a", "JustDay", "-u", "critical", "-i", "dialog-warning", "--wait",
+                f"--action=allow={t('Разрешить')}", f"--action=deny={t('Отклонить')}",
+                t("JustDay просит подтверждение"), f"{notify[0][:400]}\n{notify[1][:200]}",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
 
-        async def from_notification():
-            out, _ = await proc.communicate()
-            choice = out.decode().strip()
-            if choice in ("allow", "deny") and not self._approval.done():
-                self._approval.set_result(choice == "allow")
+            async def from_notification():
+                out, _ = await proc.communicate()
+                choice = out.decode().strip()
+                if choice in ("allow", "deny") and not fut.done():
+                    fut.set_result(choice)
 
-        note_task = asyncio.create_task(from_notification())
-        await self.wait_speech_done()
-        self.listen(followup=True)
+            side.append(asyncio.create_task(from_notification()))
+        spoken = asyncio.create_task(self.wait_speech_done())
+        deadline = loop.time() + 120
         try:
-            return await asyncio.wait_for(asyncio.shield(self._approval), timeout=120)
-        except TimeoutError:
-            return False
+            await asyncio.wait({fut, spoken}, timeout=120, return_when=asyncio.FIRST_COMPLETED)
+            if not fut.done():
+                self.listen(followup=True)  # the question has been read out: now a spoken answer is welcome too
+                await asyncio.wait({fut}, timeout=max(0.0, deadline - loop.time()))
+            return fut.result() if fut.done() else None
         finally:
-            self.state = "thinking"
-            note_task.cancel()
-            if proc.returncode is None:
+            if not spoken.done():
+                spoken.cancel()
+                self.stop_speaking()
+            if fut.done() and self.state == "listening" and self._listen_cancel:  # clicked while we listened
+                self._discard_recording = True
+                self._listen_cancel.set()
+            self.state = "thinking" if self.brain.busy else "idle"
+            for task in side:
+                task.cancel()
+            if proc and proc.returncode is None:
                 proc.kill()
             self._approval = None
+            self._ask_choices, self._ask_free = [], False
+
+    def _match_answer(self, text: str) -> str | None:
+        """A spoken reply to the pending question, or None if it is not an answer."""
+        norm = re.sub(r"[^\w ]+", " ", text.lower().replace("ё", "е")).strip()
+        for c in self._ask_choices:
+            cn = re.sub(r"[^\w ]+", " ", c.lower().replace("ё", "е")).strip()
+            if cn and (cn in norm or (len(norm) > 2 and norm in cn)):
+                return c
+        long = len(norm.split()) > 3  # "да, но добавь смайлик" is a correction, not a yes
+        yes, no = bool(YES.search(text)) and not NO.search(text), bool(NO.search(text))
+        if not (self._ask_free and long):
+            if yes:
+                return self._ask_choices[0] if self._ask_choices else "allow"
+            if no and not self._ask_choices:
+                return "deny"
+        return text if self._ask_free else None
+
+    async def _approve(self, desc: str, reason: str, hard: bool = True) -> bool:
+        if not hard and time.monotonic() < self._preapproved_until:
+            events.emit("approval_auto", desc=desc)  # the user already approved this in the draft card
+            return True
+        return await self._ask(t("Нужно подтверждение. Разрешить?"), notify=(desc, reason)) == "allow"
+
+    async def _answer_questions(self, questions: list[dict]) -> dict | None:
+        """The brain's AskUserQuestion, shown as a card with the options as buttons; answered by click or voice."""
+        answers: dict[str, str] = {}
+        try:
+            for q in questions[:4]:
+                labels = [o.get("label", "") for o in q.get("options", []) if o.get("label")]
+                self.publish(kind="card", card={"type": "question", "question": q.get("question", ""),
+                                                "header": q.get("header", ""), "options": q.get("options", [])})
+                spoken = q.get("question", "")
+                if labels:
+                    spoken += " " + (t("{a} или {b}?", a=", ".join(labels[:-1]), b=labels[-1]) if len(labels) > 1 else labels[0])
+                ans = await self._ask(spoken, choices=labels, free_text=True)
+                if ans in (None, "deny"):
+                    return None
+                answers[q.get("question", "")] = labels[0] if ans == "allow" and labels else ans
+            return answers
+        finally:
+            self.publish(kind="card_close")
+
+    async def confirm_message(self, to: str, via: str, text: str) -> dict:
+        """A message draft shown BEFORE the brain opens the messenger. Approved → sending is pre-approved."""
+        self.publish(kind="card", card={"type": "message_draft", "to": to, "via": via, "body": text})
+        where = f"{to} ({via})" if via else to
+        ans = await self._ask(t("{to}: «{text}». Отправить?", to=where, text=text), free_text=True)
+        self.publish(kind="card_close")
+        if ans == "allow":
+            self._preapproved_until = time.monotonic() + 180
+            return {"ok": True, "result": "approved: the user approved exactly this text. Now open the app and send it; "
+                                          "do not ask again (sending is pre-approved for 3 minutes)."}
+        if ans in (None, "deny"):
+            return {"ok": True, "result": "denied: do not send it" + (" (no answer)" if ans is None else "")}
+        return {"ok": True, "result": f"edit: the user said «{ans}». Rewrite the text accordingly and run "
+                                      f"confirm-message again before sending."}
 
     # ---------------- background: wake word, mic idle, worker reports ----------------
     def _setup_wakeword(self) -> None:
@@ -916,7 +992,7 @@ class Daemon:
             elif cmd in ("approve", "deny"):
                 pending = self._approval is not None and not self._approval.done()
                 if pending:
-                    self._approval.set_result(cmd == "approve")
+                    self._approval.set_result(cmd == "approve" and (self._ask_choices or ["allow"])[0] or "deny")
                 resp = {"ok": pending, "error": None if pending else "nothing awaits approval"}
             elif cmd == "new_session":
                 await self.brain.new_session()
@@ -925,6 +1001,13 @@ class Daemon:
                 events.emit("heard", text=req["text"], seconds=0)
                 asyncio.create_task(self.handle_utterance(req["text"], source="island"))
                 resp = {"ok": True}
+            elif cmd == "answer":  # a question card button: the option label
+                pending = self._approval is not None and not self._approval.done()
+                if pending:
+                    self._approval.set_result(str(req.get("value", "")))
+                resp = {"ok": pending}
+            elif cmd == "confirm_message":
+                resp = await self.confirm_message(req.get("to", ""), req.get("via", ""), req.get("text", ""))
             elif cmd == "mail_compose":  # from the brain: draft locally, confirm by voice / island, never echo the address
                 result = await asyncio.get_running_loop().run_in_executor(
                     None, self.mail.compose, req["to"], req.get("about", ""), req.get("attach") or [])

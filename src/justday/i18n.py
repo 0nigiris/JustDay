@@ -20,6 +20,8 @@ EN = {
     "Отменено": "Cancelled",
     "Не получилось связаться с мозгом. Подробности в логе.": "Couldn't reach the brain. Details are in the log.",
     "Нужно подтверждение. Разрешить?": "Confirmation needed. Allow?",
+    "{to}: «{text}». Отправить?": "{to}: “{text}”. Send it?",
+    "{a} или {b}?": "{a} or {b}?",
     "Разрешить": "Allow",
     "Отклонить": "Deny",
     "JustDay просит подтверждение": "JustDay needs confirmation",

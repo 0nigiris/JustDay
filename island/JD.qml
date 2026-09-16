@@ -187,9 +187,12 @@ Singleton {
             notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
             notifTimer.restart()
             break
+        case "card_close": card = null; break
         case "card":
             card = m.card
-            cardTimer.interval = m.card.type === "mail_draft" ? 90000 : (m.card.type === "mail_sent" ? 3500 : 25000)
+            // cards waiting for an answer stay until the daemon closes them (it gives up after 120 s)
+            cardTimer.interval = ["message_draft", "question"].includes(m.card.type) ? 130000
+                               : m.card.type === "mail_draft" ? 90000 : (m.card.type === "mail_sent" ? 3500 : 25000)
             cardTimer.restart()
             break
         }

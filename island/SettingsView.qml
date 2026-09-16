@@ -522,6 +522,61 @@ Item {
         onLinkActivated: link => Quickshell.execDetached(["xdg-open", link])
     }
 
+    // a step-by-step guide that folds open; steps may contain links
+    component Guide: Rectangle {
+        id: gd
+        property string title: ""
+        property var steps: []
+        property bool open: false
+        Layout.fillWidth: true
+        Layout.topMargin: 4
+        implicitHeight: gcol.implicitHeight + 20
+        radius: 12
+        color: win.card
+        ColumnLayout {
+            id: gcol
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10; leftMargin: 14; rightMargin: 14 }
+            spacing: 8
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Glyph { name: "info"; size: 16 }
+                Text { text: gd.title; color: win.t1; font.family: win.font; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                Glyph { name: gd.open ? "chevron-up" : "chevron-down"; size: 16 }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: gd.open = !gd.open }
+            }
+            Repeater {
+                model: gd.open ? gd.steps : []
+                RowLayout {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Rectangle {
+                        Layout.alignment: Qt.AlignTop
+                        implicitWidth: 20; implicitHeight: 20; radius: 10
+                        color: Qt.rgba(10 / 255, 132 / 255, 1, 0.22)
+                        Text { anchors.centerIn: parent; text: index + 1; color: "#409cff"; font.family: win.font; font.pixelSize: 11; font.weight: Font.Bold }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: modelData
+                        wrapMode: Text.Wrap
+                        color: win.t1
+                        font.family: win.font
+                        font.pixelSize: 12
+                        lineHeight: 1.15
+                        textFormat: Text.StyledText
+                        linkColor: "#409cff"
+                        onLinkActivated: link => Quickshell.execDetached(["xdg-open", link])
+                        HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                    }
+                }
+            }
+        }
+    }
+
     // ═════════════════════ pages ═════════════════════
     Component {
         id: generalPage
@@ -1043,7 +1098,20 @@ Item {
                     }
                 }
             }
-            Note { text: JD.tr("Нужна двухэтапная аутентификация Google. Создать пароль приложения: <a href='https://myaccount.google.com/apppasswords'>myaccount.google.com/apppasswords</a>") }
+            Guide {
+                title: JD.tr("Как подключить Gmail — по шагам (2 минуты)")
+                open: !win.get("mail.address")
+                steps: [
+                    JD.tr("Включите двухэтапную аутентификацию, если её ещё нет: <a href='https://myaccount.google.com/signinoptions/twosv'>myaccount.google.com → Безопасность → Двухэтапная аутентификация</a>. Без неё Google не даст создать пароль приложения."),
+                    JD.tr("Откройте <a href='https://myaccount.google.com/apppasswords'>myaccount.google.com/apppasswords</a> и войдите в аккаунт."),
+                    JD.tr("В поле «Название приложения» напишите <b>JustDay</b> и нажмите «Создать»."),
+                    JD.tr("Google покажет пароль из 16 букв в жёлтой рамке. Скопируйте его (пробелы можно оставить). Он показывается один раз."),
+                    JD.tr("Вставьте свой адрес Gmail и этот пароль в поля выше и нажмите «Подключить». Если всё верно, внизу появится «Почта подключена» и число писем во входящих."),
+                    JD.tr("Проверьте голосом: «проверь почту». Письма читает и пересказывает локальная модель, в облако они не уходят."),
+                    JD.tr("Не работает? «Неверный пароль» — создайте новый пароль приложения (старый нельзя посмотреть второй раз). IMAP в Gmail сейчас всегда включён, отдельно его включать не нужно. Отключить доступ: удалите пароль «JustDay» на той же странице.")
+                ]
+            }
+
             GroupTitle { text: JD.tr("КАЛЕНДАРЬ") }
             Group {
                 id: calGroup
@@ -1052,21 +1120,41 @@ Item {
                 Row {
                     title: JD.tr("Ссылка iCal")
                     subtitle: JD.tr("Google Календарь → Настройки → ваш календарь → «Закрытый адрес в формате iCal». Только чтение, без пароля")
-                    Field { id: calUrl; echoMode: TextInput.Password; placeholderText: win.d.calendar ? "••••••••" : "https://calendar.google.com/…/basic.ics"; implicitWidth: 260 }
+                    Field { id: calUrl; echoMode: TextInput.Password; placeholderText: win.d.calendar ? JD.tr("добавить ещё одну ссылку…") : "https://calendar.google.com/…/basic.ics"; implicitWidth: 260 }
                 }
                 Row {
                     title: ""
-                    Btn {
-                        text: calGroup.busy ? JD.tr("Проверяю…") : JD.tr("Подключить"); primary: true; busy: calGroup.busy; enabled: !!calUrl.text.trim()
-                        onClicked: {
-                            calGroup.busy = true
-                            win.run(["calendar", "setup"], r => { calGroup.busy = false; win.notify(r.ok ? JD.tr("Календарь подключён: сегодня событий ") + r.today : JD.tr("Не получилось: ") + (r.error || "")); calUrl.text = ""; win.reload() },
-                                    { JUSTDAY_SECRET: calUrl.text.trim() })
+                    RowLayout {
+                        spacing: 8
+                        Btn {
+                            visible: !!win.d.calendar
+                            text: JD.tr("Отключить все"); danger: true
+                            onClicked: win.run(["calendar", "forget"], () => { win.notify(JD.tr("Календари отключены")); win.reload() })
+                        }
+                        Btn {
+                            text: calGroup.busy ? JD.tr("Проверяю…") : JD.tr("Подключить"); primary: true; busy: calGroup.busy; enabled: !!calUrl.text.trim()
+                            onClicked: {
+                                calGroup.busy = true
+                                win.run(["calendar", "setup"], r => { calGroup.busy = false; win.notify(r.ok ? JD.tr("Календарь подключён: сегодня событий ") + r.today : JD.tr("Не получилось: ") + (r.error || "")); calUrl.text = ""; win.reload() },
+                                        { JUSTDAY_SECRET: calUrl.text.trim() })
+                            }
                         }
                     }
                 }
             }
-            Note { text: JD.tr("Спросите: «что у меня сегодня?», «какие встречи завтра?». За 2 часа до события оно появится на острове при наведении.") }
+            Guide {
+                title: JD.tr("Как подключить Google Календарь — по шагам")
+                open: !win.d.calendar
+                steps: [
+                    JD.tr("Откройте <a href='https://calendar.google.com/calendar/r/settings'>calendar.google.com → Настройки</a> на компьютере (в телефонном приложении этого пункта нет)."),
+                    JD.tr("Слева в разделе «Настройки моих календарей» нажмите на нужный календарь (обычно он называется вашим именем)."),
+                    JD.tr("Прокрутите вниз до блока «Интеграция календаря» и найдите «<b>Закрытый адрес в формате iCal</b>» (не «Общедоступный»). Нажмите на значок копирования; Google может попросить подтвердить."),
+                    JD.tr("Вставьте ссылку (она заканчивается на <b>basic.ics</b>) в поле «Ссылка iCal» выше и нажмите «Подключить». Появится «Календарь подключён» и число событий на сегодня."),
+                    JD.tr("Несколько календарей (работа, семья): повторите шаги для каждого — ссылки добавляются, а не заменяют друг друга."),
+                    JD.tr("Спросите: «что у меня сегодня?», «какие встречи завтра?». За 2 часа до события оно появится на острове при наведении."),
+                    JD.tr("Ссылка даёт только чтение и хранится в связке ключей KDE. Если она утекла — там же в настройках Google нажмите «Сбросить», старая перестанет работать.")
+                ]
+            }
 
             GroupTitle { text: JD.tr("ПОВЕДЕНИЕ") }
             Group {

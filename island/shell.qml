@@ -545,14 +545,19 @@ ShellRoot {
 
             CardHeader {
                 Layout.fillWidth: true
-                icon: cv.c.type === "calendar" ? "view-calendar" : "mail-message"
-                tint: cv.c.type === "mail_sent" ? JD.accentGreen : cv.c.type === "calendar" ? JD.accentOrange : JD.accentRed
-                title: ({ mail_draft: JD.tr("Новое письмо"), mail_sent: JD.tr("Письмо отправлено"), mail_read: cv.c.subject || JD.tr("Письмо"),
+                icon: cv.c.type === "calendar" ? "view-calendar" : cv.c.type === "message_draft" ? "mail-send"
+                    : cv.c.type === "question" ? "dialog-question" : "mail-message"
+                tint: cv.c.type === "mail_sent" ? JD.accentGreen : cv.c.type === "calendar" ? JD.accentOrange
+                    : ["message_draft", "question"].includes(cv.c.type) ? JD.accentBlue : JD.accentRed
+                title: ({ message_draft: JD.tr("Сообщение") + (cv.c.to ? " · " + cv.c.to : ""), question: cv.c.header || JD.tr("Вопрос"),
+                          mail_draft: JD.tr("Новое письмо"), mail_sent: JD.tr("Письмо отправлено"), mail_read: cv.c.subject || JD.tr("Письмо"),
                           mail_list: JD.tr("Почта"), calendar: JD.tr("Календарь · ") + (cv.c.when || "") })[cv.c.type] || JD.tr("Почта")
-                subtitle: ({ mail_draft: JD.tr("черновик · проверьте перед отправкой"), mail_sent: JD.tr("Кому: ") + (cv.c.to || ""),
+                subtitle: ({ message_draft: (cv.c.via ? cv.c.via + " · " : "") + JD.tr("проверьте перед отправкой"), question: JD.tr("выберите или ответьте голосом"),
+                             mail_draft: JD.tr("черновик · проверьте перед отправкой"), mail_sent: JD.tr("Кому: ") + (cv.c.to || ""),
                              mail_read: JD.tr("от ") + (cv.c.from || ""), mail_list: JD.tr("важные непрочитанные · обработано локально"),
                              calendar: (cv.c.items || []).length ? (cv.c.items || []).length + JD.tr(" · обработано локально") : JD.tr("свободно") })[cv.c.type] || ""
-                IconButton { icon: "window-close"; size: 26; onClicked: JD.card = null }
+                IconButton { icon: "window-close"; size: 26
+                             onClicked: { if (["message_draft", "question"].includes(cv.c.type)) JD.send({ cmd: "deny" }); JD.card = null } }
             }
 
             // draft: To / Subject / Body + Send
@@ -568,7 +573,7 @@ ShellRoot {
                 Label1 { text: cv.c.subject || JD.tr("без темы"); Layout.fillWidth: true }
             }
             Rectangle {
-                visible: cv.c.type === "mail_draft" || cv.c.type === "mail_read"
+                visible: ["mail_draft", "mail_read", "message_draft", "question"].includes(cv.c.type)
                 Layout.fillWidth: true
                 implicitHeight: Math.min(200, bodyText.implicitHeight + 24)
                 radius: 14
@@ -582,7 +587,7 @@ ShellRoot {
                         font.family: JD.fontFamily
                         id: bodyText
                         width: parent.width
-                        text: cv.c.type === "mail_read" ? (cv.c.text || "") : (cv.c.body || "")
+                        text: cv.c.type === "mail_read" ? (cv.c.text || "") : cv.c.type === "question" ? (cv.c.question || "") : (cv.c.body || "")
                         wrapMode: Text.Wrap
                         color: JD.text1
                         font.pixelSize: 14
@@ -598,6 +603,44 @@ ShellRoot {
                 PillButton { label: JD.tr("Не отправлять"); onClicked: JD.send({ cmd: "type", text: JD.tr("не отправляй") }) }
                 PillButton { label: JD.tr("Изменить голосом"); onClicked: JD.send({ cmd: "toggle" }) }
                 PillButton { label: JD.tr("Отправить"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "type", text: JD.tr("да, отправляй") }) }
+            }
+
+            // message draft: shown before the assistant opens the messenger
+            RowLayout {
+                visible: cv.c.type === "message_draft"
+                Layout.alignment: Qt.AlignRight
+                spacing: 10
+                PillButton { label: JD.tr("Не отправлять"); onClicked: JD.send({ cmd: "deny" }) }
+                PillButton { label: JD.tr("Изменить голосом"); onClicked: JD.send({ cmd: "listen" }) }
+                PillButton { label: JD.tr("Отправить"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "approve" }) }
+            }
+
+            // the assistant's question: one button per option
+            Repeater {
+                model: cv.c.type === "question" ? (cv.c.options || []) : []
+                Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: optCol.implicitHeight + 16
+                    radius: 12
+                    color: optHover.hovered ? JD.fill2 : JD.fill1
+                    ColumnLayout {
+                        id: optCol
+                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
+                        spacing: 1
+                        Label1 { text: modelData.label; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                        Label2 { visible: !!modelData.description; text: modelData.description || ""; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                    }
+                    HoverHandler { id: optHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: JD.send({ cmd: "answer", value: modelData.label }) }
+                }
+            }
+            RowLayout {
+                visible: cv.c.type === "question"
+                Layout.alignment: Qt.AlignRight
+                spacing: 10
+                PillButton { label: JD.tr("Пропустить"); onClicked: JD.send({ cmd: "deny" }) }
+                PillButton { label: JD.tr("Ответить голосом"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "listen" }) }
             }
 
             // calendar events
