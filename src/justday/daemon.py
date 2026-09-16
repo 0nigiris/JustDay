@@ -178,6 +178,7 @@ class Daemon:
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve)
         self._subs: set[asyncio.StreamWriter] = set()
+        self._notify_proc: asyncio.subprocess.Process | None = None
         self._state = "idle"
         self._workers_active = 0
         self._listen_cancel: asyncio.Event | None = None
@@ -729,8 +730,8 @@ class Daemon:
         rule = "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
         while True:
             try:
-                proc = await asyncio.create_subprocess_exec("dbus-monitor", "--session", rule,
-                                                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                proc = self._notify_proc = await asyncio.create_subprocess_exec(
+                    "dbus-monitor", "--session", rule, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
                 buf: list[str] = []
                 async for raw in proc.stdout:
                     line = raw.decode("utf-8", "replace")
@@ -958,10 +959,21 @@ class Daemon:
         stop = asyncio.Event()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop.set)
-        async with server:
-            await stop.wait()
+        await stop.wait()
+        # Python 3.12's Server.wait_closed() waits for every client, and the island never hangs up — close them first.
+        server.close()
+        for w in list(self._subs):
+            w.close()
+        if self._notify_proc and self._notify_proc.returncode is None:
+            self._notify_proc.kill()
         self.mic.stop()
-        await self.brain.stop()
+        try:
+            await asyncio.wait_for(self.brain.stop(), 5)
+        except Exception:  # noqa: BLE001
+            log.exception("brain stop")
+        events.emit("daemon_stopped")
+        logging.shutdown()
+        os._exit(0)  # executor threads (STT/TTS/mail calls) must not keep a restart waiting
 
 
 def main() -> None:
