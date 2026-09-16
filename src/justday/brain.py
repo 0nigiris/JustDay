@@ -179,6 +179,8 @@ class Brain:
             await self._connect(None)
 
     async def _connect(self, resume: str | None) -> None:
+        if self.cfg["brain"].get("provider") == "ollama_cloud":
+            await asyncio.get_running_loop().run_in_executor(None, providers.ensure_cloud_model, self.cfg["brain"]["model"])
         self.client = ClaudeSDKClient(self._options(resume))
         await self.client.connect()
         self.session_id = resume

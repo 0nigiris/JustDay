@@ -21,8 +21,13 @@ VOICES = [
 MODELS = {  # suggested models per provider (any id works)
     "claude": ["sonnet", "opus", "haiku"],
     "ollama": ["qwen3.5:9b", "qwen3.5:4b", "gemma4:e4b"],
-    # free tool-capable models listed by openrouter.ai/api/v1/models (Sept 2026); the list changes over time
-    "openrouter": ["nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-lightning:free"],
+    # ollama.com/search?c=cloud, tool-capable (Sept 2026)
+    "ollama_cloud": ["kimi-k3:cloud", "glm-5.3:cloud", "deepseek-v4-flash:cloud", "minimax-m3:cloud", "qwen3.5:cloud",
+                     "gpt-oss:120b-cloud"],
+    # free tool-capable models listed by openrouter.ai/api/v1/models (Sept 2026); the list changes over time.
+    # openrouter/free picks whichever free model is up
+    "openrouter": ["openrouter/free", "nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free",
+                   "google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-lightning:free"],
     "deepseek": ["deepseek-v4-pro", "deepseek-flash"],
     "custom": [],
 }
@@ -125,8 +130,11 @@ def models() -> dict:
     out = []
     for name, p in providers.PROVIDERS.items():
         has_key = True if not p.get("secret") else bool(providers.secret_get(p["secret"]))
-        out.append({"id": name, "desc": p["desc"], "needs_key": bool(p.get("secret")), "has_key": has_key,
-                    "suggested": MODELS.get(name, [])})
+        item = {"id": name, "desc": p["desc"], "needs_key": bool(p.get("secret")), "has_key": has_key,
+                "suggested": MODELS.get(name, [])}
+        if p.get("cloud_signin"):
+            item["account"] = providers.cloud_account()
+        out.append(item)
     return {"current": {"provider": b.get("provider", "claude"), "model": b["model"], "base_url": b.get("base_url", ""),
                         "effort": b.get("effort", "low")}, "providers": out}
 
@@ -136,7 +144,8 @@ def local_models() -> list[str]:
     if not ollama.exists():
         return []
     p = subprocess.run([str(ollama), "list"], capture_output=True, text=True, env={"OLLAMA_HOST": "127.0.0.1:11434"})
-    return [line.split()[0] for line in p.stdout.splitlines()[1:] if line.strip() and not line.startswith("hf.co/")]
+    names = [line.split()[0] for line in p.stdout.splitlines()[1:] if line.strip() and not line.startswith("hf.co/")]
+    return [n for n in names if not n.endswith("cloud")]  # `…:cloud` run on ollama.com, not on this GPU
 
 
 def memory_files() -> dict:

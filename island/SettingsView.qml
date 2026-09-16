@@ -994,7 +994,7 @@ Item {
                     title: JD.tr("Провайдер")
                     subtitle: mp.info.desc || ""
                     Segmented {
-                        options: [{ value: "claude", label: "Claude" }, { value: "ollama", label: JD.tr("Локальная") }, { value: "openrouter", label: "OpenRouter" },
+                        options: [{ value: "claude", label: "Claude" }, { value: "ollama_cloud", label: JD.tr("Бесплатная") }, { value: "ollama", label: JD.tr("Локальная") }, { value: "openrouter", label: "OpenRouter" },
                                   { value: "deepseek", label: "DeepSeek" }, { value: "custom", label: JD.tr("Свой адрес") }]
                         current: mp.provider
                         onPicked: v => {
@@ -1039,6 +1039,22 @@ Item {
                         }
                     }
                 }
+                Row {
+                    visible: !!mp.info.account
+                    readonly property var acc: mp.info.account || ({})
+                    title: JD.tr("Аккаунт Ollama")
+                    subtitle: acc.signed_in ? JD.tr("Вход выполнен") + (acc.user ? ": " + acc.user : "")
+                            : acc.error ? acc.error : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
+                    RowLayout {
+                        spacing: 8
+                        Btn {
+                            visible: !acc.signed_in && !!acc.signin_url
+                            text: JD.tr("Войти"); primary: true
+                            onClicked: Quickshell.execDetached(["xdg-open", acc.signin_url])
+                        }
+                        Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
+                    }
+                }
                 Row { visible: mp.provider === "custom"; title: JD.tr("Адрес API"); subtitle: JD.tr("Anthropic-совместимый, например LiteLLM"); Field { key: "brain.base_url"; placeholderText: "http://127.0.0.1:4000" } }
                 Row {
                     visible: mp.provider === "claude"
@@ -1053,8 +1069,9 @@ Item {
             }
             Note {
                 text: mp.provider === "claude" ? JD.tr("Используются лимиты вашей подписки Claude. Вход: команда <tt>claude</tt>, затем /login.")
+                    : mp.provider === "ollama_cloud" ? JD.tr("Большие открытые модели бесплатно: нажмите «Войти», создайте аккаунт на ollama.com и подтвердите подключение этого компьютера, затем «Проверить» и «Перезапустить». Лимиты бесплатного плана сбрасываются каждые 5 часов и раз в неделю. Запросы (ваши фразы и снимки экрана) обрабатываются на серверах Ollama; почта и календарь всё равно остаются локальными.")
                     : mp.provider === "ollama" ? JD.tr("Всё на вашей видеокарте, ничего не уходит в интернет. Модель слабее Claude в сложных действиях с окнами.")
-                    : mp.provider === "openrouter" ? JD.tr("Модели с суффиксом :free бесплатны с лимитами. Ключ: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>")
+                    : mp.provider === "openrouter" ? JD.tr("Модели с суффиксом :free и openrouter/free бесплатны: 50 запросов в день (одна просьба — несколько запросов), 1000 — если однажды пополнить счёт на $10. Ключ бесплатный: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>")
                     : mp.provider === "deepseek" ? JD.tr("Ключ: <a href='https://platform.deepseek.com/api_keys'>platform.deepseek.com</a>")
                     : JD.tr("Любой сервер с Anthropic Messages API. Для провайдеров только с OpenAI API поставьте LiteLLM.")
             }
@@ -1394,7 +1411,7 @@ Item {
             PageTitle { title: JD.tr("Приватность"); subtitle: JD.tr("Что остаётся на компьютере, а что уходит в облако") }
             Group {
                 Row { title: JD.tr("Только на компьютере"); subtitle: JD.tr("Звук и распознавание речи, голос, мгновенные команды, почта, ключи и пароли, журнал") ; Glyph { name: "house"; size: 18 } }
-                Row { title: JD.tr("Уходит модели"); subtitle: (win.get("brain.provider") === "ollama" ? JD.tr("Ничего: модель локальная. ") : JD.tr("Текст просьб, профиль и память, то, что ассистент прочитал инструментами (команды, файлы, скриншоты). ")) + JD.tr("Телеметрия Claude Code выключена"); Glyph { name: "cloud"; size: 18 } }
+                Row { title: JD.tr("Уходит модели"); subtitle: (win.get("brain.provider") === "ollama" ? JD.tr("Ничего: модель локальная. ") : win.get("brain.provider") === "ollama_cloud" ? JD.tr("Серверам Ollama: текст просьб, память и то, что ассистент прочитал инструментами. ") : JD.tr("Текст просьб, профиль и память, то, что ассистент прочитал инструментами (команды, файлы, скриншоты). ")) + JD.tr("Телеметрия Claude Code выключена"); Glyph { name: "cloud"; size: 18 } }
             }
             GroupTitle { text: JD.tr("НАСТРОЙКИ") }
             Group {

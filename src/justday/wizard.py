@@ -23,7 +23,11 @@ WIZ_EN = {
     "Claude по подписке Pro/Max — лучшее качество": "Claude with a Pro/Max subscription — best quality",
     "(вход выполнен)": "(signed in)", "Локальная модель на видеокарте — бесплатно и приватно": "Local model on your GPU — free and private",
     "(нужно ≥10 ГБ видеопамяти)": "(needs ≥10 GB VRAM)", "OpenRouter — есть бесплатные модели, нужен ключ": "OpenRouter — free models available, needs a key",
-    "DeepSeek — дёшево, нужен ключ": "DeepSeek — cheap, needs a key", "Выберите": "Choose",
+    "DeepSeek — дёшево, нужен ключ": "DeepSeek — cheap, needs a key", "Бесплатно: большие модели в облаке Ollama — нужен только бесплатный аккаунт": "Free: large models in Ollama's cloud — only a free account needed",
+    "Ставлю Ollama (~1,4 ГБ)…": "Installing Ollama (~1.4 GB)…",
+    "Откроется ollama.com: создайте бесплатный аккаунт и подтвердите подключение компьютера.": "ollama.com will open: create a free account and confirm connecting this computer.",
+    "  Нажмите Enter, когда подтвердите… ": "  Press Enter once confirmed… ",
+    "Вход пока не виден — позже: justday model signin": "Sign-in not detected yet — later: justday model signin", "Выберите": "Choose",
     "Сейчас откроется Claude Code: выполните {a}, затем {b}.": "Claude Code will open now: run {a}, then {b}.", "Открыть": "Open",
     "Ставлю Ollama и модель Qwen 3.5 9B (~8 ГБ)…": "Installing Ollama and the Qwen 3.5 9B model (~8 GB)…",
     "Ключ создаётся здесь: {url}": "Create a key here: {url}", "  Вставьте ключ (ввод скрыт): ": "  Paste the key (hidden): ",
@@ -123,6 +127,7 @@ def step_model() -> None:
     big_gpu = vram_mb() >= 10000
     options = [
         ("claude", W("Claude по подписке Pro/Max — лучшее качество") + (f" {G}" + W("(вход выполнен)") + R if status.get("loggedIn") else "")),
+        ("ollama_cloud", W("Бесплатно: большие модели в облаке Ollama — нужен только бесплатный аккаунт")),
         ("ollama", W("Локальная модель на видеокарте — бесплатно и приватно") + ("" if big_gpu else f" {Y}" + W("(нужно ≥10 ГБ видеопамяти)") + R)),
         ("openrouter", W("OpenRouter — есть бесплатные модели, нужен ключ")),
         ("deepseek", W("DeepSeek — дёшево, нужен ключ")),
@@ -135,6 +140,22 @@ def step_model() -> None:
             print("  " + W("Сейчас откроется Claude Code: выполните {a}, затем {b}.", a=f"{B}/login{R}", b=f"{B}/exit{R}"))
             if yes(W("Открыть")):
                 sh(["claude"])
+    elif provider == "ollama_cloud":
+        if providers.cloud_account().get("error"):  # no local Ollama yet: it forwards the cloud models
+            print("  " + W("Ставлю Ollama (~1,4 ГБ)…"))
+            sh([str(config.REPO_DIR / "scripts" / "setup-local-llm.sh"), manage.MODELS["ollama_cloud"][0]])
+        acc = providers.cloud_account()
+        if not acc["signed_in"] and acc.get("signin_url"):
+            print("  " + W("Откроется ollama.com: создайте бесплатный аккаунт и подтвердите подключение компьютера."))
+            print(f"  {B}{acc['signin_url']}{R}")
+            subprocess.run(["xdg-open", acc["signin_url"]], check=False)
+            input(W("  Нажмите Enter, когда подтвердите… "))
+        model = manage.MODELS["ollama_cloud"][0]
+        providers.ensure_cloud_model(model)
+        config.set_value("brain", "provider", "ollama_cloud")
+        config.set_value("brain", "model", model)
+        if not providers.cloud_account()["signed_in"]:
+            print(f"  {Y}" + W("Вход пока не виден — позже: justday model signin") + R)
     elif provider == "ollama":
         if not manage.local_models():
             print("  " + W("Ставлю Ollama и модель Qwen 3.5 9B (~8 ГБ)…"))

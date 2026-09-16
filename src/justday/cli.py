@@ -297,8 +297,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--model", default=None)
     sp.add_argument("--timeout", type=float, default=1800)
 
-    sp = sub.add_parser("model", help="which model drives the agent: list | status | use PROVIDER [MODEL]")
-    sp.add_argument("action", choices=["list", "status", "use"], nargs="?", default="status")
+    sp = sub.add_parser("model", help="which model drives the agent: list | status | use PROVIDER [MODEL] | signin (free Ollama cloud)")
+    sp.add_argument("action", choices=["list", "status", "use", "signin"], nargs="?", default="status")
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("contacts", help="address book JustDay learns: list | find QUERY | set NAME key=value… | forget NAME")
     sp.add_argument("action", choices=["list", "find", "set", "forget"])
@@ -648,9 +648,22 @@ def _model_cmd(a) -> None:
             key = ""
             if p.get("secret"):
                 key = " [ключ есть]" if providers.secret_get(p["secret"]) else f" [нужен ключ: justday secret set {p['secret']}]"
-            print(f"{mark} {name:<11} {p['desc']}{key}")
-        print("\nпримеры: justday model use claude sonnet | justday model use ollama qwen3.5:9b | "
-              "justday model use openrouter nvidia/nemotron-3-super-120b-a12b:free")
+            if p.get("cloud_signin"):
+                acc = providers.cloud_account()
+                key = f" [вход: {acc.get('user') or 'выполнен'}]" if acc["signed_in"] else " [нужен вход: justday model signin]"
+            print(f"{mark} {name:<12} {p['desc']}{key}")
+        print("\nбесплатно: justday model use ollama_cloud kimi-k3:cloud (после justday model signin) | "
+              "justday model use openrouter openrouter/free | justday model use ollama qwen3.5:9b (на вашей видеокарте)"
+              "\nплатно: justday model use claude sonnet | justday model use deepseek deepseek-v4-pro")
+    elif a.action == "signin":
+        acc = providers.cloud_account()
+        if acc["signed_in"]:
+            print(f"уже выполнен вход в Ollama: {acc.get('user') or ''}".strip())
+        elif acc.get("signin_url"):
+            print(f"Откройте и войдите (бесплатный аккаунт, карта не нужна):\n  {acc['signin_url']}")
+            subprocess.run(["xdg-open", acc["signin_url"]], check=False)
+        else:
+            sys.exit(acc.get("error") or "Ollama не ответила")
     elif a.action == "status":
         print(f"provider: {b.get('provider', 'claude')}\nmodel:    {b['model']}"
               + (f"\nbase_url: {b['base_url']}" if b.get("base_url") else ""))
@@ -665,6 +678,10 @@ def _model_cmd(a) -> None:
             config.set_value("brain", "base_url", a.args[2])
         config.set_value("brain", "provider", name)
         config.set_value("brain", "model", model)
+        if name == "ollama_cloud":
+            providers.ensure_cloud_model(model)
+            if not providers.cloud_account()["signed_in"]:
+                print("нужен бесплатный аккаунт Ollama: justday model signin")
         cfg = config.load()
         try:
             providers.env(cfg)

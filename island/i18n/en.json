@@ -364,5 +364,15 @@
 "Прокрутите вниз до блока «Интеграция календаря» и найдите «<b>Закрытый адрес в формате iCal</b>» (не «Общедоступный»). Нажмите на значок копирования; Google может попросить подтвердить.": "Scroll down to “Integrate calendar” and find “<b>Secret address in iCal format</b>” (not the public one). Click the copy icon; Google may ask you to confirm.",
 "Вставьте ссылку (она заканчивается на <b>basic.ics</b>) в поле «Ссылка iCal» выше и нажмите «Подключить». Появится «Календарь подключён» и число событий на сегодня.": "Paste the link (it ends with <b>basic.ics</b>) into the “iCal link” field above and press “Connect”. You'll see “Calendar connected” and today's number of events.",
 "Несколько календарей (работа, семья): повторите шаги для каждого — ссылки добавляются, а не заменяют друг друга.": "Several calendars (work, family): repeat the steps for each — links are added, not replaced.",
-"Ссылка даёт только чтение и хранится в связке ключей KDE. Если она утекла — там же в настройках Google нажмите «Сбросить», старая перестанет работать.": "The link is read-only and kept in the KDE keyring. If it leaks, press “Reset” in the same Google settings and the old one stops working."
+"Ссылка даёт только чтение и хранится в связке ключей KDE. Если она утекла — там же в настройках Google нажмите «Сбросить», старая перестанет работать.": "The link is read-only and kept in the KDE keyring. If it leaks, press “Reset” in the same Google settings and the old one stops working.",
+"Бесплатная": "Free",
+"Аккаунт Ollama": "Ollama account",
+"Вход выполнен": "Signed in",
+"Нужен бесплатный аккаунт на ollama.com — карта не нужна": "Needs a free ollama.com account — no card",
+"Войти": "Sign in",
+"Большие открытые модели бесплатно: нажмите «Войти», создайте аккаунт на ollama.com и подтвердите подключение этого компьютера, затем «Проверить» и «Перезапустить». Лимиты бесплатного плана сбрасываются каждые 5 часов и раз в неделю. Запросы (ваши фразы и снимки экрана) обрабатываются на серверах Ollama; почта и календарь всё равно остаются локальными.": "Large open models for free: press “Sign in”, create an ollama.com account and confirm connecting this computer, then “Check” and “Restart”. Free-plan limits reset every 5 hours and weekly. Requests (your phrases and screenshots) are processed on Ollama's servers; mail and calendar still stay local.",
+"Модели с суффиксом :free и openrouter/free бесплатны: 50 запросов в день (одна просьба — несколько запросов), 1000 — если однажды пополнить счёт на $10. Ключ бесплатный: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>": "Models ending in :free and openrouter/free cost nothing: 50 requests a day (one request of yours is several), 1000 once you've topped up $10. The key is free: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>",
+"облако Ollama": "Ollama cloud",
+"50 в день": "50 a day",
+"Серверам Ollama: текст просьб, память и то, что ассистент прочитал инструментами. ": "To Ollama's servers: your requests, memory and what the assistant read with tools. "
 }

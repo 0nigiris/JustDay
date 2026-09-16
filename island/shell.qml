@@ -841,8 +841,9 @@ ShellRoot {
                     Repeater {
                         model: [
                             { id: "claude", label: "Claude", model: "sonnet", hint: JD.tr("подписка") },
+                            { id: "ollama_cloud", label: JD.tr("Бесплатная"), model: "kimi-k3:cloud", hint: JD.tr("облако Ollama") },
                             { id: "ollama", label: JD.tr("Локальная"), model: "qwen3.5:9b", hint: JD.tr("приватно") },
-                            { id: "openrouter", label: "OpenRouter", model: "nvidia/nemotron-3-super-120b-a12b:free", hint: JD.tr("бесплатно") },
+                            { id: "openrouter", label: "OpenRouter", model: "openrouter/free", hint: JD.tr("50 в день") },
                             { id: "deepseek", label: "DeepSeek", model: "deepseek-v4-pro", hint: JD.tr("ключ") }
                         ]
                         Rectangle {

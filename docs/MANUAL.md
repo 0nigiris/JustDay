@@ -325,9 +325,11 @@ justday model list                                   # провайдеры и �
 justday model status
 justday model use claude sonnet                      # подписка Claude (по умолчанию)
 justday model use claude opus
+justday model signin                                 # бесплатный аккаунт Ollama (откроется ollama.com)
+justday model use ollama_cloud kimi-k3:cloud         # бесплатно, большие модели в облаке Ollama
 justday model use ollama qwen3.5:9b                  # локально, бесплатно, приватно
 justday secret set openrouter                        # ключ вводится скрыто, хранится в связке ключей
-justday model use openrouter nvidia/nemotron-3-super-120b-a12b:free
+justday model use openrouter openrouter/free         # бесплатно, 50 запросов в день
 justday secret set deepseek
 justday model use deepseek deepseek-v4-pro
 justday secret set custom
@@ -337,13 +339,20 @@ systemctl --user restart justday && justday new-session   # применить
 
 **Память, навыки и профиль при смене модели сохраняются**: они лежат в файлах, а не в модели ([раздел 6](#6-память)).
 
+### Бесплатные модели
+- **«Бесплатная» (`ollama_cloud`)** — вариант по умолчанию для тех, у кого нет подписки. Большие открытые модели (Kimi K3, GLM 5.3, DeepSeek V4 Flash, MiniMax M3, Qwen 3.5, gpt-oss 120B) работают на серверах Ollama, а запросы идут через вашу локальную Ollama. Нужен только бесплатный аккаунт на ollama.com, карта не нужна: Настройки → Модель → «Бесплатная» → «Войти». В JustDay не хранится ни ключ, ни пароль: вход привязан к самой Ollama. Лимиты бесплатного плана считаются по времени видеокарт и сбрасываются каждые 5 часов и раз в неделю.
+- **OpenRouter** — модели с суффиксом `:free` и маршрутизатор `openrouter/free`: бесплатный ключ, 50 запросов в день (1000 — если однажды пополнить счёт на $10). Одна просьба к ассистенту — это несколько запросов, так что хватает на пару десятков дел в день.
+- **Локальная** (`ollama`) — бесплатно и полностью приватно, но слабее и занимает видеопамять.
+- Почему нет бесплатных моделей OpenCode Zen: их условия разрешают бесплатный доступ только из самого OpenCode, сервер отвечает «free tier can only be used in OpenCode».
+
 ### Сравнение
 | Провайдер | Цена | Приватность | Качество управления ПК | Особенности |
 |---|---|---|---|---|
 | `claude` (Sonnet 5) | лимиты подписки Pro/Max | данные у Anthropic (30 дней при выключенном обучении) | лучшее | auto-режим с классификатором, Claude in Chrome |
 | `claude` + fast mode | только usage credits, $10/$50 за 1M токенов | то же | то же, ответы до 2,5× быстрее | включается `/fast` в Claude Code; платно сверх подписки |
 | `ollama` (Qwen 3.5 9B) | бесплатно | ничего не уходит | заметно слабее на сложных GUI-задачах | первый запрос ~20 с (модель читает системный промпт), дальше 2–5 с; занимает ~7 ГБ видеопамяти |
-| `openrouter` | есть бесплатные модели (`:free`, с лимитами) | данные у OpenRouter и провайдера модели | зависит от модели | ключ на openrouter.ai/keys |
+| `ollama_cloud` (Kimi K3 и др.) | бесплатно, лимиты раз в 5 ч и в неделю | данные у Ollama | хорошее, зависит от модели | нужен бесплатный аккаунт ollama.com; модели отмечены `:cloud` |
+| `openrouter` | есть бесплатные модели (`:free`, 50 запросов в день) | данные у OpenRouter и провайдера модели | зависит от модели | ключ на openrouter.ai/keys |
 | `deepseek` | дёшево | данные у DeepSeek | хорошее | прямой Anthropic-совместимый API |
 | `custom` | как настроите | как настроите | как настроите | для провайдеров только с OpenAI-API (например, NVIDIA NIM с Nemotron) поставьте [LiteLLM](https://docs.litellm.ai/) как переходник |
 
