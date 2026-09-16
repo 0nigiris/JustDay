@@ -58,12 +58,17 @@ class STT:
 
     vocabulary = ""  # set by the daemon: base prompt + names the user actually says (contacts, apps, assistant)
 
-    def transcribe_head(self, pcm16: np.ndarray, prompt: str) -> str:
-        """The first second or two of a phrase, to hear whether it starts with the assistant's name."""
+    def transcribe_head(self, pcm16: np.ndarray) -> tuple[str, list[tuple[str, float]], float]:
+        """The first second or two of a phrase, to hear whether it starts with the assistant's name.
+        No prompt on purpose: with the names as a prompt Whisper "hears" them in any unclear speech.
+        Returns (text, [(word, probability)…], highest no-speech probability)."""
         segments, _info = self.load().transcribe(
             pcm16.astype(np.float32) / 32768.0, language=self.cfg["language"] or None, beam_size=1,
-            initial_prompt=prompt, condition_on_previous_text=False, without_timestamps=True)
-        return " ".join(s.text.strip() for s in segments).strip()
+            condition_on_previous_text=False, word_timestamps=True)
+        segments = list(segments)
+        words = [(w.word.strip(), float(w.probability)) for seg in segments for w in (seg.words or [])]
+        no_speech = max((float(seg.no_speech_prob) for seg in segments), default=1.0)
+        return " ".join(seg.text.strip() for seg in segments).strip(), words, no_speech
 
     def transcribe(self, pcm16: np.ndarray) -> str:
         model = self.load()

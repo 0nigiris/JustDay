@@ -53,7 +53,8 @@ DEFAULTS: dict = {
         "sample_rate": 48000,
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase
-    "wakeword": {"enabled": False, "names": True, "model": "hey_jarvis", "threshold": 0.5},
+    # wake_names: which names wake it (empty = the assistant name only)
+    "wakeword": {"enabled": False, "names": True, "wake_names": [], "model": "hey_jarvis", "threshold": 0.5},
     "brain": {
         # claude | ollama | openrouter | deepseek | custom — see `justday model list`
         "provider": "claude",

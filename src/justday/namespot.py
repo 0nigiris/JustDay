@@ -21,12 +21,16 @@ log = logging.getLogger("justday.namespot")
 HEAD_S = 1.6  # how much of the phrase Whisper reads to look for the name
 TAIL_MAX_S = 8.0  # speech kept after the name while Whisper is busy
 END_SILENCE_S = 0.5
+MIN_NAME_PROB = 0.4  # Whisper's confidence in the name itself (real calls: 0.4–0.8)
 
 # how Whisper spells the names in Russian and English; checked against the first words only
 SPELLINGS = {
-    "джарвис": ["джарвис", "джарвиз", "джервис", "жарвис", "jarvis", "jervis", "charvis"],
+    "джарвис": ["джарвис", "джарвиз", "джарвес", "джервис", "жарвис", "jarvis", "jervis", "charvis"],
     "justday": ["justday", "джастдей", "джастдэй", "джаст дей", "джаст дэй", "just day", "jastday", "джасдей"],
 }
+
+
+FILLERS = ("эй", "хей", "окей", "ok", "okay", "hey", "привет")  # allowed before the name
 
 
 def _norm(s: str) -> str:
@@ -45,7 +49,7 @@ def spellings(names: list[str]) -> list[str]:
 
 def split_name(text: str, variants: list[str]) -> tuple[bool, str]:
     """(starts with a name, the rest of the phrase, normalized). «Эй»/«hey»/«окей» before the name are allowed."""
-    words = re.sub(r"^(эй|хей|окей|ok|okay|hey|привет)\s+", "", _norm(text))
+    words = re.sub(rf"^({'|'.join(FILLERS)})\s+", "", _norm(text))
     for v in variants:
         if words == v or words.startswith(v + " "):
             return True, words[len(v):].strip()
@@ -67,14 +71,14 @@ class NameSpotter:
     `clip` starts with the name; `continuing` = there is a command after it (keep the audio: `take_tail()` returns
     (mic seq, frame) pairs said since the clip) rather than just the name and a pause (listen afresh)."""
 
-    def __init__(self, transcribe: Callable[[np.ndarray, str], str], names: list[str], seq: Callable[[], int],
+    def __init__(self, transcribe: Callable[[np.ndarray], tuple[str, list[tuple[str, float]], float]],
+                 names: list[str], seq: Callable[[], int],
                  on_wake: Callable[[np.ndarray, bool, Callable[[], list[tuple[int, np.ndarray]]]], None]):
         from openwakeword.vad import VAD
 
         self.vad = VAD()
         self.transcribe = transcribe
         self.variants = spellings(names)
-        self.prompt = ", ".join(names) + "."
         self.on_wake = on_wake
         self.seq = seq
         self._pre: list[np.ndarray] = []
@@ -125,6 +129,17 @@ class NameSpotter:
                 with self._lock:
                     self._pending = False
 
+    def believable(self, text: str, words: list[tuple[str, float]], no_speech: float) -> bool:
+        """Whisper invents names in murmur and background talk: demand a clearly spoken first word and a real phrase."""
+        if no_speech > 0.5 or not words:
+            return False
+        first = [p for w, p in words[:3] if _norm(w) and _norm(w) not in FILLERS]
+        if not first or first[0] < MIN_NAME_PROB:
+            return False
+        tokens = _norm(text).split()
+        names = sum(t in self.variants for t in tokens)
+        return names <= 1  # "JustDay, JustDay, JustDay." is a hallucination, not a call
+
     def _take_tail(self) -> list[tuple[int, np.ndarray]]:
         """Frames heard after the clip; stops collecting (the recorder takes over from here)."""
         with self._lock:
@@ -135,11 +150,14 @@ class NameSpotter:
         while True:
             clip, still_talking = self._jobs.get()
             try:
-                text = self.transcribe(clip, self.prompt)
+                text, words, no_speech = self.transcribe(clip)
             except Exception:  # noqa: BLE001
                 log.exception("name spotting failed")
-                text = ""
+                text, words, no_speech = "", [], 1.0
             hit, rest = split_name(text, self.variants) if text else (False, "")
+            if hit and not self.believable(text, words, no_speech):
+                log.info("name ignored (unsure): %r %s no_speech=%.2f", text, words[:3], no_speech)
+                hit = False
             if hit:
                 log.info("name heard: %r", text)
                 # "Джарвис…" with speech going on → keep it; "Джарвис." + pause → a normal listen with a beep

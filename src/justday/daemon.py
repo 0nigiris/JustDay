@@ -819,8 +819,9 @@ class Daemon:
         self.mic.subscribe(on_frame)
         if w.get("names", True):
             u = self.cfg["user"]
-            names = [n for n in [u["assistant_name"], *u.get("assistant_aliases", [])] if n]
-            self._names = namespot.spellings(names)
+            # only the main name wakes it («Джарвис»); the other names are for talking, not for waking
+            names = [n for n in (w.get("wake_names") or [u["assistant_name"]]) if n]
+            self._names = namespot.spellings([n for n in [u["assistant_name"], *u.get("assistant_aliases", [])] if n])
 
             def on_name(clip, continuing, take_tail) -> None:  # Whisper thread
                 self._wake_cooldown = time.monotonic() + 2.5  # "Hey Jarvis" must not toggle it off again
