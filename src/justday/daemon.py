@@ -420,7 +420,8 @@ class Daemon:
 
         def level(frame: np.ndarray) -> None:
             rms = float(np.sqrt((frame.astype(np.float32) ** 2).mean())) / 32768.0
-            loop.call_soon_threadsafe(lambda: self.publish(level=round(min(1.0, rms * 12), 3)))
+            db = 20 * np.log10(rms + 1e-9)  # −50 dBFS (room) … −20 dBFS (loud speech) → 0…1, like a VU meter
+            loop.call_soon_threadsafe(lambda: self.publish(level=round(min(1.0, max(0.0, (db + 50) / 30)), 3)))
 
         self.mic.subscribe(level)
         try:

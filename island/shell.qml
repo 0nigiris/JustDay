@@ -332,7 +332,7 @@ ShellRoot {
     component Waveform: Item {
         id: wave
         property real t: 0
-        FrameAnimation { running: wave.visible; onTriggered: { wave.t += frameTime; JD.level *= 0.92 } }
+        FrameAnimation { running: wave.visible; onTriggered: { wave.t += frameTime; JD.level *= Math.pow(0.9, frameTime * 60) } }
         Row {
             anchors.centerIn: parent
             spacing: 3
@@ -344,7 +344,9 @@ ShellRoot {
                     radius: 2
                     color: JD.accentCyan
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 4 + 18 * Math.min(1, JD.level * (0.55 + 0.45 * Math.abs(Math.sin(wave.t * 7 + index * 1.3))))
+                    // a slow ripple keeps the bars alive in silence; the voice level drives the rest
+                    height: 4 + 3 * (0.5 + 0.5 * Math.sin(wave.t * 4 - index * 0.9))
+                            + 15 * Math.min(1, JD.level * (0.55 + 0.45 * Math.abs(Math.sin(wave.t * 9 + index * 1.3))))
                     Behavior on height { NumberAnimation { duration: 70 } }
                 }
             }
