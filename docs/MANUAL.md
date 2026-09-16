@@ -281,6 +281,20 @@ sudo udevadm control --reload && sudo udevadm trigger --name-match=uinput
 
 Честное ограничение: каждый ход облачной модели ~2–4 с плюс кадр, поэтому медленный паркур проходится, а быстрые реакции (шутеры, уклонения) пока нет.
 
+#### Minecraft: мод-мост
+В Minecraft Java ассистент не смотрит на картинку, а получает точные данные от клиентского мода **JustDay Bridge** (`minecraft/`, Fabric 1.21.10). Мод знает координаты, блоки вокруг, инвентарь, мобов и прицел, умеет крафтить настоящими кликами в инвентаре и на верстаке, ставить и использовать блоки. Ходьбу и добычу выполняет [Baritone](https://github.com/cabaletta/baritone). Навык `plugin/skills/minecraft` содержит пошаговый план «каменные инструменты с нуля».
+```bash
+~/JustDay/minecraft/install.sh          # собрать мод, скачать Baritone 1.16.0 (SHA-1 проверяется), положить в mods
+justday mc ping                          # Minecraft запущен и мир открыт?
+justday mc state                         # координаты, здоровье, инвентарь, мобы рядом
+justday mc find block='#log' radius=48   # ближайшие брёвна
+justday mc baritone command="mine 6 oak_log" && justday mc wait timeout=120
+justday mc craft item=wooden_pickaxe     # 3×3 открывает верстак в радиусе 4,5 блока
+```
+- Мод слушает только Unix-сокет `$XDG_RUNTIME_DIR/justday-minecraft.sock` с правами владельца. Сам он ничего не делает и в чат не пишет.
+- Для сборки нужен JDK 21+ с `javac`. Скрипт ищет его сам (в том числе JBR из IntelliJ), иначе подскажет `sudo dnf install java-21-openjdk-devel`.
+- **Baritone на серверах часто запрещён.** В одиночной игре можно всё, на сервере ассистент сначала спросит вас.
+
 ### Программы: установка через JII
 
 Если установлен [JII (Just Install It)](https://github.com/0nigiris/JII), JustDay ставит и удаляет программы голосом: «установи OBS», «поставь телеграм и VLC», «удали Zoom», «обнови всё», «откуда у меня Discord?». Навык `plugin/skills/software`:
@@ -510,6 +524,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `src/justday/contacts.py` | записная книжка |
 | `src/justday/calendar_lane.py` | приватный календарь по iCal-ссылкам |
 | `src/justday/namespot.py` | пробуждение по имени: начало каждой фразы → Whisper, команда в том же вдохе сохраняется |
+| `minecraft/` | мод JustDay Bridge для Minecraft (Fabric 1.21.10, Java): сокет, состояние, поиск блоков, крафт, установка, Baritone |
 | `src/justday/voiceprint.py` | «под мой голос»: отпечаток голоса (CAM++), дообучение «Hey Jarvis», подбор паузы |
 | `src/justday/i18n.py`, `island/i18n/en.json`, `brain/PERSONA.en.md` | английский язык: реплики демона, интерфейс острова, персона |
 | `plugin/bin/relmouse.py` | виртуальная относительная мышь (uinput) для камеры в играх |
@@ -519,7 +534,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `plugin/bin/kwin_live.py` | kwin-mcp, заранее подключённый к рабочему столу, плюс инструменты `look`/`act` с метками |
 | `brain/PERSONA.md` | характер и правила: молчать на действиях, скорость, приватность, безопасность |
 | `brain/settings.json` | разрешения, запреты, отключение телеметрии |
-| `plugin/skills/*/SKILL.md` | рецепты: desktop, discord, browser, claude-code, files, games, software (JII), email, kindle |
+| `plugin/skills/*/SKILL.md` | рецепты: desktop, discord, browser, claude-code, files, games, minecraft, software (JII), email, kindle |
 | `install.sh`, `uninstall.sh`, `scripts/*` | установка, миграция, локальная модель, горячие клавиши, профиль |
 
 ---

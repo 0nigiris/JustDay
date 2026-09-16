@@ -1,0 +1,23 @@
+{
+	"schemaVersion": 1,
+	"id": "justday-bridge",
+	"version": "${version}",
+	"name": "JustDay Bridge",
+	"description": "Lets the JustDay voice assistant see and control your own character: position, blocks, inventory, walking (Baritone), mining, crafting. Local Unix socket only; does nothing until JustDay asks.",
+	"authors": ["0nigiris"],
+	"contact": {"sources": "https://github.com/0nigiris/JustDay"},
+	"license": "GPL-3.0-or-later",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["dev.justday.bridge.Bridge"]
+	},
+	"depends": {
+		"fabricloader": ">=0.17.0",
+		"minecraft": "~1.21.10",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"baritone": "*"
+	}
+}

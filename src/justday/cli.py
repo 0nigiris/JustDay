@@ -312,6 +312,10 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", required=True, help="who, as the user calls them")
     sp.add_argument("--via", default="", help="Discord, Telegram, WhatsApp…")
     sp.add_argument("--text", required=True, help="the exact text that will be sent")
+    sp = sub.add_parser("mc", help="Minecraft bridge: state | find block=… | baritone command='mine 3 oak_log' | wait | "
+                                   "craft item=… count=N | place item=… | use x= y= z= | mine x= y= z= | select item=… | look | close | stop | ping")
+    sp.add_argument("command")
+    sp.add_argument("args", nargs="*", help="key=value")
     sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")
     sp.add_argument("action", choices=["get", "set"])
     sp.add_argument("key", nargs="?")
@@ -536,6 +540,8 @@ def main(argv: list[str] | None = None) -> None:
         r = control("mail_compose", timeout=120, to=a.to, about=a.about, attach=[os.path.abspath(f) for f in a.attach])
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
         sys.exit(0 if r.get("ok") else 1)
+    elif a.cmd == "mc":
+        _mc_cmd(a)
     elif a.cmd == "confirm-message":
         r = control("confirm_message", timeout=140, to=a.to, via=a.via, text=a.text)
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
@@ -689,6 +695,34 @@ def _model_cmd(a) -> None:
             print(f"внимание: {e}")
         print(f"мозг: {name} / {model}. Память, навыки и инструменты остаются те же.")
         _restart_hint()
+
+
+def _mc_cmd(a) -> None:
+    """One request to the JustDay Bridge mod inside Minecraft (Unix socket, owner-only)."""
+    import re
+
+    req: dict = {"cmd": a.command}
+    for kv in a.args:
+        k, _, v = kv.partition("=")
+        req[k] = int(v) if re.fullmatch(r"-?\d+", v) else float(v) if re.fullmatch(r"-?\d+\.\d*", v) else v
+    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "justday-minecraft.sock")
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(float(req.get("timeout", 60)) + 20)
+    try:
+        s.connect(path)
+    except OSError:
+        _print({"ok": False, "error": "Minecraft with the JustDay Bridge mod is not running (install: minecraft/install.sh)"})
+        sys.exit(1)
+    s.sendall((json.dumps(req, ensure_ascii=False) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    r = json.loads(buf or b'{"ok": false, "error": "no answer"}')
+    _print(r)
+    sys.exit(0 if r.get("ok") else 1)
 
 
 def _secret_cmd(a) -> None:
