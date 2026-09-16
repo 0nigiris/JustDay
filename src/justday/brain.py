@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import time
 from collections.abc import Awaitable, Callable
@@ -37,6 +38,13 @@ from .i18n import t
 log = logging.getLogger("justday.brain")
 
 BRAIN_DIR = config.DATA_DIR / "brain"
+
+
+# What a model writes when it means "nothing to say": never read aloud (the daemon plays the "done" chime instead).
+SILENCE = re.compile(
+    r"^[\s\W]*(no (further )?(response|reply|answer)( is)?( requested| needed| required| necessary)?|"
+    r"nothing (else )?to (say|add|report)|silen(ce|t)|end of turn|done|ok(ay)?|"
+    r"ответ не (нужен|требуется)|без ответа|молча|нечего (сказать|добавить)|готово|ок)[\s\W]*$", re.I)
 
 
 def describe_tool(name: str, inp: dict) -> str:
@@ -258,6 +266,9 @@ class Brain:
         self._spoke_in_turn = False
 
     async def _speak(self, text: str) -> None:
+        if SILENCE.match(text):
+            events.emit("say_suppressed", text=text[:200], reason="placeholder")
+            return
         if self.cancelled:
             events.emit("say_suppressed", text=text[:200])
             return
