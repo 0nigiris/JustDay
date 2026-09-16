@@ -347,7 +347,6 @@ ShellRoot {
                     // a slow ripple keeps the bars alive in silence; the voice level drives the rest
                     height: 4 + 3 * (0.5 + 0.5 * Math.sin(wave.t * 4 - index * 0.9))
                             + 15 * Math.min(1, JD.level * (0.55 + 0.45 * Math.abs(Math.sin(wave.t * 9 + index * 1.3))))
-                    Behavior on height { NumberAnimation { duration: 70 } }
                 }
             }
         }
