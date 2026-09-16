@@ -40,7 +40,7 @@ justday logs -f                  # что он слышит и делает
 
 ## English
 
-JustDay is a voice AI assistant for Linux (KDE Plasma 6, Wayland). Press a mouse button or say “Hey Jarvis”, speak, and it acts: opens apps and sites, controls windows, mouse and keyboard, finds files, launches and plays games, reads and writes mail, answers about your calendar, delegates coding to Claude Code and reviews the result. It talks back in a neural voice and lives in a **Dynamic Island** at the top of the screen.
+JustDay is a voice AI assistant for Linux (KDE Plasma 6, Wayland). Press a mouse button or just say “Jarvis, …”, speak, and it acts: opens apps and sites, controls windows, mouse and keyboard, finds files, launches and plays games, reads and writes mail, answers about your calendar, delegates coding to Claude Code and reviews the result. It talks back in a neural voice and lives in a **Dynamic Island** at the top of the screen.
 
 - **Any model:** Claude subscription, local Ollama (free, nothing leaves the computer), OpenRouter, DeepSeek or any Anthropic-compatible endpoint. Memory, skills and the address book are shared across models.
 - **Private by design:** speech recognition, voice, instant commands, mail and calendar run locally; Claude Code telemetry is off; secrets live in the system keyring.

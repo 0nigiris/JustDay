@@ -58,6 +58,13 @@ class STT:
 
     vocabulary = ""  # set by the daemon: base prompt + names the user actually says (contacts, apps, assistant)
 
+    def transcribe_head(self, pcm16: np.ndarray, prompt: str) -> str:
+        """The first second or two of a phrase, to hear whether it starts with the assistant's name."""
+        segments, _info = self.load().transcribe(
+            pcm16.astype(np.float32) / 32768.0, language=self.cfg["language"] or None, beam_size=1,
+            initial_prompt=prompt, condition_on_previous_text=False, without_timestamps=True)
+        return " ".join(s.text.strip() for s in segments).strip()
+
     def transcribe(self, pcm16: np.ndarray) -> str:
         model = self.load()
         audio = pcm16.astype(np.float32) / 32768.0

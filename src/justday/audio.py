@@ -41,6 +41,7 @@ class Microphone:
         self._thread: threading.Thread | None = None
         self._subscribers: list = []
         self._lock = threading.Lock()
+        self.seq = 0  # number of the frame being delivered (read it inside a subscriber)
 
     def start(self) -> None:
         if self._proc and self._proc.poll() is None:
@@ -67,6 +68,7 @@ class Microphone:
             if not data or len(data) < nbytes:
                 break
             frame = np.frombuffer(data, dtype=np.int16)
+            self.seq += 1
             with self._lock:
                 subs = list(self._subscribers)
             for cb in subs:
@@ -98,21 +100,33 @@ class UtteranceRecorder:
         self.no_speech_timeout_s = no_speech_timeout_s
         self.max_s = max_s
 
-    async def record(self, cancel: asyncio.Event) -> np.ndarray | None:
+    async def record(self, cancel: asyncio.Event, prefill=None) -> np.ndarray | None:
+        """`prefill()` → (mic seq, frame) pairs already heard (speech in progress, e.g. after the assistant's name)."""
         loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue()
-        cb = lambda f: loop.call_soon_threadsafe(q.put_nowait, f)  # noqa: E731
+        cb = lambda f: loop.call_soon_threadsafe(q.put_nowait, (self.mic.seq, f))  # noqa: E731
         self.vad.reset_states()
         frames: list[np.ndarray] = []
         pre_roll: list[np.ndarray] = []
         speech = False
         silence = 0.0
         started = time.monotonic()
+        held: list[np.ndarray] = []
         self.mic.subscribe(cb)
         try:
+            if prefill is not None:
+                # frames are delivered one at a time to every subscriber in order, so everything before the first
+                # frame we got has already reached the prefill source: no gap and no overlap
+                try:
+                    first = await asyncio.wait_for(q.get(), timeout=2)
+                finally:
+                    got, prefill = prefill(), None  # always collect it: the source keeps buffering until asked
+                frames = [f for s, f in got if s < first[0]]
+                speech = True
+                held.append(first[1])
             while not cancel.is_set():
                 try:
-                    frame = await asyncio.wait_for(q.get(), timeout=0.5)
+                    frame = held.pop() if held else (await asyncio.wait_for(q.get(), timeout=0.5))[1]
                 except TimeoutError:
                     if time.monotonic() - started > self.no_speech_timeout_s and not speech:
                         return None

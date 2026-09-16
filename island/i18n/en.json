@@ -336,5 +336,9 @@
 "Проверять автоматически": "Check automatically",
 "Раз в 6 часов; на острове появится кнопка": "Every 6 hours; a button appears on the island",
 "Отменено": "Cancelled",
-"Ассистент, голос, остров и распознавание речи. Нужен перезапуск ассистента": "The assistant, voice, island and speech recognition. Requires restarting the assistant"
+"Ассистент, голос, остров и распознавание речи. Нужен перезапуск ассистента": "The assistant, voice, island and speech recognition. Requires restarting the assistant",
+"Слово пробуждения": "Wake word",
+"«Hey Jarvis» без кнопки. Микрофон слушает постоянно, звук не покидает компьютер": "“Hey Jarvis” without a key. The microphone listens all the time; audio never leaves the computer",
+"По имени": "By name",
+"«Джарвис, …» и «JustDay, …» — можно сразу с командой. Начало каждой фразы распознаётся локально": "“Jarvis, …” and “JustDay, …”, command included. The start of each phrase is recognized locally"
 }

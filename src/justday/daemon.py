@@ -17,7 +17,7 @@ import time
 
 import numpy as np
 
-from . import audio, calendar_lane, config, events, fastpath, mail, voiceprint, workers
+from . import audio, calendar_lane, config, events, fastpath, mail, namespot, voiceprint, workers
 from .i18n import lang, t
 from .brain import Brain
 from .stt import STT
@@ -190,6 +190,8 @@ class Daemon:
         self._notify_id = 0
         self._wake = None
         self._wake_cooldown = 0.0
+        self._names: list[str] = []  # spellings of the assistant's names, for trimming them off a woken phrase
+        self._quiet_until = 0.0  # the assistant's own voice may still echo in the room
         self._event_queue: asyncio.Queue[str] = asyncio.Queue()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._spoken = 0
@@ -213,6 +215,8 @@ class Daemon:
     @state.setter
     def state(self, value: str) -> None:
         if value != self._state:
+            if self._state == "speaking":
+                self._quiet_until = time.monotonic() + 0.8
             self._state = value
             self.publish(state=value)
 
@@ -399,18 +403,27 @@ class Daemon:
                 if self._listen_cancel:
                     self._listen_cancel.set()
 
-    def listen(self, followup: bool = False) -> None:
+    def listen(self, followup: bool = False, prefill=None) -> bool:
         if self._listen_task and not self._listen_task.done():
-            return
-        self._listen_task = asyncio.create_task(self._listen_once(followup))
+            return False
+        self._listen_task = asyncio.create_task(self._listen_once(followup, prefill))
+        return True
 
-    async def _listen_once(self, followup: bool) -> None:
+    def _wake_by_name(self, prefill, take_tail) -> None:
+        """«Джарвис, …» was heard. `prefill` is set when a command follows the name in the same breath."""
+        if self.state in ("listening", "transcribing", "speaking") or not self.listen(prefill=prefill):
+            take_tail()
+            return
+        self._holding = False
+        self._activation = "wake"
+
+    async def _listen_once(self, followup: bool, prefill=None) -> None:
         self.mic.start()
         self._last_mic_use = time.monotonic()
         self.state = "listening"
         self._listen_cancel = asyncio.Event()
         self._discard_recording = False
-        if not followup:
+        if not followup and prefill is None:  # mid-phrase after the name: a beep would land in the recording
             await self.earcon("listen")
         events.emit("listen_start", followup=followup)
         rec = self.recorder
@@ -425,7 +438,7 @@ class Daemon:
 
         self.mic.subscribe(level)
         try:
-            pcm = await rec.record(self._listen_cancel)
+            pcm = await rec.record(self._listen_cancel, prefill)
         finally:
             self.mic.unsubscribe(level)
         self._last_mic_use = time.monotonic()
@@ -455,6 +468,8 @@ class Daemon:
             events.emit("listen_cancelled", text=text)
             return
         self.state = "thinking" if self.brain.busy else "idle"
+        if self._activation == "wake" and self._names:
+            text = namespot.strip_name(text, self._names)
         events.emit("heard", text=text, seconds=round(len(pcm) / audio.RATE, 1))
         if not text:
             await self.earcon("error")
@@ -582,6 +597,9 @@ class Daemon:
             restart.append("language")
         if new["tts"]["engine"] != old["tts"]["engine"]:
             restart.append("tts")
+        names = lambda c: (c["user"]["assistant_name"], c["user"].get("assistant_aliases"))  # noqa: E731
+        if self._names and names(new) != names(old):  # the name spotter was built with the old names
+            restart.append("wakeword")
         self.publish(settings=settings_snapshot(new))
         events.emit("settings_reloaded", restart_needed=restart)
         return restart
@@ -723,6 +741,24 @@ class Daemon:
                 loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self.toggle(source="wake")))
 
         self.mic.subscribe(on_frame)
+        if w.get("names", True):
+            u = self.cfg["user"]
+            names = [n for n in [u["assistant_name"], *u.get("assistant_aliases", [])] if n]
+            self._names = namespot.spellings(names)
+
+            def on_name(clip, continuing, take_tail) -> None:  # Whisper thread
+                self._wake_cooldown = time.monotonic() + 2.5  # "Hey Jarvis" must not toggle it off again
+                events.emit("wakeword", name=True, continuing=continuing)
+                if continuing:
+                    prefill = lambda: [(-1, clip), *take_tail()]  # noqa: E731
+                else:
+                    take_tail()
+                    prefill = None
+                loop.call_soon_threadsafe(self._wake_by_name, prefill, lambda: prefill and prefill())
+
+            spotter = namespot.NameSpotter(self.stt.transcribe_head, names, lambda: self.mic.seq, on_name)
+            self.mic.subscribe(lambda f: spotter.feed(
+                f, self.state in ("idle", "thinking") and time.monotonic() > max(self._quiet_until, self._wake_cooldown)))
         self.mic.start()
 
     async def _watch_notifications(self) -> None:

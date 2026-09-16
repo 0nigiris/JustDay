@@ -29,8 +29,9 @@ neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VR
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
 
 [wakeword]
-enabled = false             # "Hey Jarvis" (English openWakeWord model) — keeps the mic open, audio stays local
-threshold = 0.5
+enabled = false             # wake without a key — keeps the mic open, audio stays local
+names = true                # «Джарвис, …» / «JustDay, …» (Whisper reads the start of each phrase); off = only "Hey Jarvis"
+threshold = 0.5             # "Hey Jarvis" (English openWakeWord model)
 
 [voiceprint]                # Settings → Voice → "Tune to my voice" (justday voiceprint enroll)
 mode = "off"                # off | wake (wake word and follow-ups must be you) | always

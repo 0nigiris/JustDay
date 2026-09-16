@@ -187,6 +187,13 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 | Meta+Shift+J или сказать «стоп» | То же самое |
 | Новое нажатие, пока JustDay работает | Новая просьба добавляется к текущей работе, старая не отменяется |
 
+### Без кнопки: по имени
+Настройки → Голос и звук → «Слово пробуждения» (`justday config set wakeword.enabled true`). После этого микрофон слушает постоянно, и JustDay просыпается:
+- **по имени**: «Джарвис, открой калькулятор» или «JustDay, громкость 30». Команду можно сказать сразу, без паузы. Если сказать только «Джарвис» и замолчать, прозвучит сигнал, и он выслушает фразу. Имена берутся из «Имя ассистента» и «Другие имена»;
+- **по «Hey Jarvis»**: английская модель openWakeWord.
+
+Имя ищется так: детектор речи замечает начало фразы, и Whisper распознаёт её первые 1,6 секунды. Это происходит только на компьютере, звук никуда не уходит и не сохраняется. Пока JustDay говорит сам, имя не ищется, чтобы он не разбудил себя. Отключить только имена: «По имени» в тех же настройках (`wakeword.names = false`). С видеокартой распознавание начала фразы занимает доли секунды, без неё около секунды.
+
 ### Dynamic Island сверху экрана
 Чёрный «остров» на [Quickshell](https://quickshell.org) (`island/`), который плавно меняет размер под содержимое:
 - **спрятан**, пока JustDay простаивает; **наведите курсор на верхний край** по центру экрана — выедет плашка с именем и временем;
@@ -254,7 +261,7 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 | Режим | Поведение |
 |---|---|
 | Нет (`off`) | отвечает всем |
-| Слово и ответы (`wake`) | «Hey Jarvis» и ответы без кнопки принимаются только от вас; кнопка слушает любого |
+| Слово и ответы (`wake`) | Пробуждение по имени или «Hey Jarvis» и ответы без кнопки принимаются только от вас; кнопка слушает любого |
 | Всегда (`always`) | чужой голос отбрасывается всегда, на острове «Голос не узнан» |
 
 Всё хранится в `~/.local/share/justday/voiceprint/` и никуда не отправляется. Команды: `justday voiceprint status | enroll | reset | mode off|wake|always`.
@@ -432,7 +439,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `[audio]` | `input`/`output` (часть имени устройства PipeWire), `earcons`, `silence_seconds`, `followup_seconds`, `double_tap_seconds`, `max_utterance_seconds`, `no_speech_timeout_seconds` |
 | `[stt]` | `model` (large-v3-turbo / small), `device` (cuda/cpu), `compute_type`, `language`, `initial_prompt` (подсказка словами: имена, названия) |
 | `[tts]` | `engine` (qwen/silero/espeak/none), `voice` (нейроголос: jarvis, friday или свой), `neural_quality` (fast/best), `speaker` (Silero: aidar, eugene, baya, kseniya, xenia) |
-| `[wakeword]` | `enabled` (слово «Hey Jarvis», модель английская), `threshold` |
+| `[wakeword]` | `enabled` (слово пробуждения), `names` (просыпаться по имени «Джарвис»/«JustDay»), `threshold` («Hey Jarvis», модель английская) |
 | `[voiceprint]` | `mode`: off / wake / always ([«Под мой голос»](#под-мой-голос)) |
 | `[island]` | `animations` (spring/smooth/off), `hover_reveal`, `show_weather`, `show_events`, `show_notifications`, `city`, `screen` (например DP-2) |
 | `[updates]` | `check` (проверять обновления), `interval_hours` |
@@ -484,6 +491,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `src/justday/manage.py`, `wizard.py` | данные для настроек, мастер первой настройки |
 | `src/justday/contacts.py` | записная книжка |
 | `src/justday/calendar_lane.py` | приватный календарь по iCal-ссылкам |
+| `src/justday/namespot.py` | пробуждение по имени: начало каждой фразы → Whisper, команда в том же вдохе сохраняется |
 | `src/justday/voiceprint.py` | «под мой голос»: отпечаток голоса (CAM++), дообучение «Hey Jarvis», подбор паузы |
 | `src/justday/i18n.py`, `island/i18n/en.json`, `brain/PERSONA.en.md` | английский язык: реплики демона, интерфейс острова, персона |
 | `plugin/bin/relmouse.py` | виртуальная относительная мышь (uinput) для камеры в играх |
@@ -586,13 +594,12 @@ journalctl --user -u justday-ollama -f
 
 ## 14. Планы
 
-Сделано из прошлых планов: настройка под голос, уведомления на острове, календарь, английский язык, автообновление, клавиши с длительностью и камера для игр.
+Сделано из прошлых планов: настройка под голос, пробуждение по имени, уведомления на острове, календарь, английский язык, автообновление, клавиши с длительностью и камера для игр.
 
 Дальше:
 - **Быстрый игровой цикл** на локальной модели зрения: «кадр → действие» за доли секунды, чтобы проходить не только медленный паркур.
 - **Вход в Google без пароля приложения** (OAuth), когда у проекта будет проверенная регистрация.
 - **Другие окружения:** GNOME и Hyprland (сейчас только KDE Plasma 6).
-- **Слово пробуждения с любым именем** («Джарвис», «JustDay»), а не только «Hey Jarvis».
 
 ---
 

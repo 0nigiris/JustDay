@@ -892,7 +892,8 @@ Item {
                 Row { title: JD.tr("Пауза в конце фразы"); subtitle: JD.tr("Сколько тишины считать концом просьбы"); SSlider { key: "audio.silence_seconds"; from: 0.5; to: 2.0; step: 0.1; unit: JD.tr(" с") } }
                 Row { title: JD.tr("Ждать ответа на вопрос"); subtitle: JD.tr("Слушать без кнопки после вопроса ассистента (0 — выкл)"); SSlider { key: "audio.followup_seconds"; from: 0; to: 15; step: 1; decimals: 0; unit: JD.tr(" с") } }
                 Row { title: JD.tr("Двойное нажатие = отмена"); subtitle: JD.tr("Максимальный промежуток между нажатиями (0 — выкл)"); SSlider { key: "audio.double_tap_seconds"; from: 0; to: 0.6; step: 0.05; decimals: 2; unit: JD.tr(" с") } }
-                Row { title: JD.tr("Слово «Hey Jarvis»"); subtitle: JD.tr("Микрофон слушает постоянно, звук не покидает компьютер"); Toggle { checked: !!win.get("wakeword.enabled"); onToggled: v => win.set("wakeword.enabled", v) } }
+                Row { title: JD.tr("Слово пробуждения"); subtitle: JD.tr("«Hey Jarvis» без кнопки. Микрофон слушает постоянно, звук не покидает компьютер"); Toggle { checked: !!win.get("wakeword.enabled"); onToggled: v => win.set("wakeword.enabled", v) } }
+                Row { visible: !!win.get("wakeword.enabled"); title: JD.tr("По имени"); subtitle: JD.tr("«Джарвис, …» и «JustDay, …» — можно сразу с командой. Начало каждой фразы распознаётся локально"); Toggle { checked: win.get("wakeword.names") !== false; onToggled: v => win.set("wakeword.names", v) } }
             }
         }
     }
