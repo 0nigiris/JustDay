@@ -182,6 +182,14 @@ def t_mail():
     return f"{m['address']}: {mail.count(m['query'])} unread important"
 
 
+def t_software():
+    import shutil
+
+    if not shutil.which("jii"):
+        return "JII not installed (optional, for «установи …»): https://github.com/0nigiris/JII"
+    return subprocess.run(["jii", "--version"], capture_output=True, text=True, timeout=10).stdout.strip()
+
+
 def t_daemon():
     r = control("status", timeout=5)
     if not r.get("ok"):
@@ -226,7 +234,7 @@ def screenshot(all_screens: bool = False, full: bool = False) -> dict:
 
 TESTS = {"daemon": t_daemon, "mic": t_mic, "tts": t_tts, "stt": t_stt, "llm": t_llm, "mcp": t_mcp,
          "desktop": t_desktop, "browser": t_browser, "files": t_files, "claude": t_claude, "memory": t_memory,
-         "hotkey": t_hotkey, "local_llm": t_local_llm, "mail": t_mail}
+         "hotkey": t_hotkey, "local_llm": t_local_llm, "mail": t_mail, "software": t_software}
 
 
 def memory_dir():

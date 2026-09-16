@@ -52,7 +52,7 @@ def tool_icon(name: str, inp: str) -> str:
     if name == "Bash":
         cmd = inp.lower()
         for needle, icon in (("youtube", "youtube"), ("yt-dlp", "youtube"), ("justday claude", "applications-development"),
-                             ("justday games", "applications-games"), ("steam", "steam"), ("justday apps", "application-x-executable"),
+                             ("jii ", "system-software-install"), ("justday games", "applications-games"), ("steam", "steam"), ("justday apps", "application-x-executable"),
                              ("justday windows", "preferences-system-windows"), ("xdg-open http", "internet-web-browser"),
                              ("playerctl", "media-playback-start"), ("wpctl", "audio-volume-high"), ("git ", "git"),
                              ("kitty", "utilities-terminal"), ("plocate", "system-search"), ("fd ", "system-search")):

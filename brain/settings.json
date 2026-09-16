@@ -30,6 +30,13 @@
       "Bash(wpctl get-volume:*)",
       "Bash(wpctl set-volume:*)",
       "Bash(wpctl set-mute:*)",
+      "Bash(jii search:*)",
+      "Bash(jii info:*)",
+      "Bash(jii how:*)",
+      "Bash(jii list:*)",
+      "Bash(jii history:*)",
+      "Bash(jii install:*)",
+      "Bash(jii sources --json:*)",
       "Bash(pgrep:*)",
       "Bash(plocate:*)",
       "Bash(notify-send:*)"
@@ -64,7 +71,17 @@
       "Bash(gh repo delete:*)",
       "Bash(gh release create:*)",
       "Bash(npm publish:*)",
-      "Bash(cargo publish:*)"
+      "Bash(cargo publish:*)",
+      "Bash(jii remove:*)",
+      "Bash(jii uninstall:*)",
+      "Bash(jii update:*)",
+      "Bash(jii sources add:*)",
+      "Bash(jii sources remove:*)",
+      "Bash(jii sources disable:*)",
+      "Bash(jii sources enable:*)",
+      "Bash(jii doctor:*)",
+      "Bash(jii setup:*)",
+      "Bash(jii cache clear:*)"
     ],
     "deny": [
       "Bash(justday mail:*)",

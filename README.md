@@ -8,6 +8,7 @@
 - **Быстро.** Простые команды выполняются без ИИ за доли секунды; действия в окнах — пачками с точными метками кнопок.
 - **Живой голос.** Qwen3-TTS на вашей видеокарте: встроенные «Джарвис» и «Пятница», голос по описанию или из записи.
 - **Под ваш голос.** Как у Siri: минута контрольных фраз — и он узнаёт ваш тембр и темп, а чужие голоса может игнорировать.
+- **Ставит программы.** «Установи OBS» — через [JII](https://github.com/0nigiris/JII): лучший источник (Fedora, Flathub, COPR…), только доверенные, пароль в системном окне.
 - **Русский и English.** Интерфейс, голос и ответы на выбранном языке.
 
 ## Установка
@@ -44,6 +45,7 @@ JustDay is a voice AI assistant for Linux (KDE Plasma 6, Wayland). Press a mouse
 
 - **Any model:** Claude subscription, local Ollama (free, nothing leaves the computer), OpenRouter, DeepSeek or any Anthropic-compatible endpoint. Memory, skills and the address book are shared across models.
 - **Private by design:** speech recognition, voice, instant commands, mail and calendar run locally; Claude Code telemetry is off; secrets live in the system keyring.
+- **Installs software** by voice through [JII (Just Install It)](https://github.com/0nigiris/JII): the best trusted source, root only via the system password dialog.
 - **English UI and voice:** choose English in the setup wizard (or Settings → General).
 
 ```bash
