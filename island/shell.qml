@@ -133,33 +133,59 @@ ShellRoot {
                 }
             }
 
-            // Every view is laid out at its own natural size; the island springs to it and cross-fades.
-            PeekView { id: peekView; shown: island.mode === "peek" }
-            ListeningView { id: listeningView; shown: island.mode === "listening" }
-            ThinkingView { id: thinkingView; shown: island.mode === "thinking" || island.mode === "transcribing" }
-            FlashView { id: flashView; shown: island.mode === "flash" }
-            NotificationView { id: notificationView; shown: island.mode === "notification" }
-            AnswerView { id: answerView; shown: island.mode === "answer" }
-            ApprovalView { id: approvalView; shown: island.mode === "approval" }
-            CardView { id: cardView; shown: island.mode === "card" }
-            ExpandedView { id: expandedView; shown: island.mode === "expanded" }
-            View {
-                id: settingsHolder
-                shown: island.mode === "settings"
-                implicitWidth: 940
-                implicitHeight: 640
-                Loader {
-                    anchors.fill: parent
-                    active: settingsHolder.shown || settingsHolder.opacity > 0.01
-                    sourceComponent: SettingsView {}
+            // Every view is laid out at its own natural size; the island springs to it and the view follows.
+            // The stage is masked to the island's *rounded* shape, so nothing pokes out of the corners while it grows.
+            Item {
+                id: islandMask
+                anchors.fill: parent
+                visible: false
+                layer.enabled: true
+                Rectangle { anchors.fill: parent; radius: island.radius; antialiasing: true }
+            }
+            Item {
+                id: stage
+                anchors.fill: parent
+                layer.enabled: JD.animOn
+                layer.smooth: true
+                layer.effect: MultiEffect { maskEnabled: true; maskSource: islandMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+                PeekView { id: peekView; shown: island.mode === "peek" }
+                ListeningView { id: listeningView; shown: island.mode === "listening" }
+                ThinkingView { id: thinkingView; shown: island.mode === "thinking" || island.mode === "transcribing" }
+                FlashView { id: flashView; shown: island.mode === "flash" }
+                NotificationView { id: notificationView; shown: island.mode === "notification" }
+                AnswerView { id: answerView; shown: island.mode === "answer" }
+                ApprovalView { id: approvalView; shown: island.mode === "approval" }
+                CardView { id: cardView; shown: island.mode === "card" }
+                ExpandedView { id: expandedView; shown: island.mode === "expanded" }
+                View {
+                    id: settingsHolder
+                    shown: island.mode === "settings"
+                    implicitWidth: 940
+                    implicitHeight: 640
+                    Loader {
+                        anchors.fill: parent
+                        active: settingsHolder.shown || settingsHolder.opacity > 0.01
+                        sourceComponent: SettingsView {}
+                    }
                 }
             }
         }
 
-        // soft shadow under the island
+        // soft shadow under the island. Its source is a plain copy of the shape: with the island itself as the
+        // source, the effect draws the island again (border included) and that copy shows as a ring while it grows
+        Rectangle {
+            id: shadowShape
+            width: island.width
+            height: island.height
+            radius: island.radius
+            color: JD.ink
+            visible: false
+            layer.enabled: true
+        }
         MultiEffect {
-            source: island
+            source: shadowShape
             anchors.fill: island
+            scale: island.scale
             z: -1
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.55)
@@ -172,16 +198,33 @@ ShellRoot {
 
     // ═════════════════════ building blocks ═════════════════════
     component View: Item {
+        id: view
         property bool shown: false
+        // how far the island has grown towards this view's size (the island springs, the content rides along):
+        // the content fades in over the last part of the growth and settles from 94 % to full size with it
+        readonly property real fit: Math.min(1, parent.width / Math.max(1, implicitWidth), parent.height / Math.max(1, implicitHeight))
+        readonly property real reveal: JD.animOn ? Math.max(0, Math.min(1, (fit - 0.55) / 0.4)) : 1
+        property real fade: shown ? 1 : 0
+        Behavior on fade { enabled: JD.animOn; NumberAnimation { duration: view.shown ? 180 : 110; easing.type: Easing.OutCubic } }
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         width: implicitWidth
         height: implicitHeight
-        opacity: shown ? 1 : 0
-        scale: shown ? 1 : 0.94
+        transformOrigin: Item.Top
+        opacity: shown ? fade * reveal : fade
+        scale: 0.94 + 0.06 * (shown ? reveal : fade)
         visible: opacity > 0.01
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: shown ? 240 : 120; easing.type: Easing.OutCubic } }
-        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 320; easing.type: JD.animStyle === "smooth" ? Easing.OutCubic : Easing.OutBack; easing.overshoot: 1.2 } }
+    }
+
+    // put `TextSwap on text {}` on a Text: a new text fades out the old one and fades itself in
+    component TextSwap: Behavior {
+        id: sw
+        enabled: JD.animOn
+        SequentialAnimation {
+            NumberAnimation { target: sw.targetProperty.object; property: "opacity"; to: 0; duration: 70; easing.type: Easing.InQuad }
+            PropertyAction {}
+            NumberAnimation { target: sw.targetProperty.object; property: "opacity"; to: 1; duration: 170; easing.type: Easing.OutCubic }
+        }
     }
 
     component Label1: Text {
@@ -375,9 +418,9 @@ ShellRoot {
             Label1 {
                 id: oneLine
                 text: tv.line
+                TextSwap on text {}
                 Layout.fillWidth: true
-                opacity: JD.detailOpen ? 0 : 1
-                Behavior on opacity { NumberAnimation { duration: 150 } }
+                visible: !JD.detailOpen
             }
             Label2 { text: tv.elapsed >= 3 ? tv.elapsed + JD.tr(" с") : ""; font.features: { "tnum": 1 } }
             IconButton {
@@ -417,7 +460,7 @@ ShellRoot {
                 color: Qt.rgba(JD.flashColor.r, JD.flashColor.g, JD.flashColor.b, 0.2)
                 Icon { anchors.centerIn: parent; name: JD.flashIcon; fallback: "dialog-ok"; implicitSize: 16 }
             }
-            Label1 { text: JD.flashText; Layout.maximumWidth: 520 }
+            Label1 { text: JD.flashText; TextSwap on text {} Layout.maximumWidth: 520 }
             Text { font.family: JD.fontFamily; text: JD.flashColor === JD.accentRed ? "" : "✓"; color: JD.accentGreen; font.pixelSize: 15; font.weight: Font.Bold }
         }
     }
@@ -439,8 +482,8 @@ ShellRoot {
                 spacing: 1
                 Layout.fillWidth: true
                 Label2 { text: n.app || ""; color: JD.text3; font.pixelSize: 11; Layout.fillWidth: true }
-                Label1 { text: n.summary || ""; Layout.fillWidth: true; Layout.maximumWidth: 460 }
-                Label2 { visible: !!n.body; text: (n.body || "").replace(/\s+/g, " "); wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true; Layout.maximumWidth: 460 }
+                Label1 { text: n.summary || ""; TextSwap on text {} Layout.fillWidth: true; Layout.maximumWidth: 460 }
+                Label2 { visible: !!n.body; text: (n.body || "").replace(/\s+/g, " "); TextSwap on text {} wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true; Layout.maximumWidth: 460 }
             }
         }
     }
@@ -460,8 +503,8 @@ ShellRoot {
         ColumnLayout {
             spacing: 1
             Layout.fillWidth: true
-            Label1 { text: title; font.pixelSize: 14; Layout.fillWidth: true }
-            Label2 { text: subtitle; visible: !!subtitle; Layout.fillWidth: true }
+            Label1 { text: title; TextSwap on text {} font.pixelSize: 14; Layout.fillWidth: true }
+            Label2 { text: subtitle; TextSwap on text {} visible: !!subtitle; Layout.fillWidth: true }
         }
     }
 
@@ -488,6 +531,7 @@ ShellRoot {
                     id: answerText
                     width: parent.width
                     text: JD.answer
+                    TextSwap on text {}
                     wrapMode: Text.Wrap
                     color: JD.text1
                     font.pixelSize: 15

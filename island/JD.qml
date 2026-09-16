@@ -189,6 +189,7 @@ Singleton {
             break
         case "card_close": card = null; break
         case "card":
+            if (!m.card) { card = null; break }
             card = m.card
             // cards waiting for an answer stay until the daemon closes them (it gives up after 120 s)
             cardTimer.interval = ["message_draft", "question"].includes(m.card.type) ? 130000
