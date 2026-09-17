@@ -18,6 +18,8 @@ EN = {
     "Почта · локально": "Mail · local",
     "Локальная модель для почты не отвечает.": "The local mail model is not responding.",
     "Отменено": "Cancelled",
+    "картинка": "picture", "видео": "video", "звук": "audio", "озвучка": "voice-over", "3D-модель": "3D model",
+    "субтитры": "subtitles",
     "Не получилось связаться с мозгом. Подробности в логе.": "Couldn't reach the brain. Details are in the log.",
     "Нужно подтверждение. Разрешить?": "Confirmation needed. Allow?",
     "{to}: «{text}». Отправить?": "{to}: “{text}”. Send it?",

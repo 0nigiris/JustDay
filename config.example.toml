@@ -10,6 +10,7 @@ assistant_aliases = ["JustDay"]  # other names it answers to
 language = "ru"             # ru | en — island, settings, spoken replies (set [stt] language too)
 
 [audio]
+microphone = true           # false = keyboard only (Meta+K): no mic, no wake word, speech recognition never loads
 input = ""                  # substring of a PipeWire source name (pactl list short sources), "" = default
 output = ""                 # substring of a sink name, "" = default
 earcons = true              # short beeps when listening starts
@@ -23,7 +24,7 @@ device = "cuda"             # cuda | cpu
 language = "ru"             # "" = auto-detect
 
 [tts]
-engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | silero | espeak | none
+engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | silero | espeak | none (text-only replies)
 voice = "jarvis"            # neural voice: jarvis, friday or one you designed/cloned (justday voice list)
 neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
@@ -79,6 +80,13 @@ address = ""
 query = "category:primary is:unread newer_than:7d"   # what counts as important (Gmail search)
 announce = true             # say "новое письмо от …" when important mail arrives
 poll_seconds = 180
+
+[studio]                    # local creative studio (justday studio …); found automatically in ~/ai-local/ComfyUI or ~/ComfyUI
+# comfy_dir = "~/ai-local/ComfyUI"
+# python = "~/ai-local/venv/bin/python"
+# url = "http://127.0.0.1:8188"
+# rmbg_dir = "~/pinokio/api/RMBG-2-Studio.git"   # background removal (RMBG-2.0)
+free_after = true           # unload models from VRAM after every job
 
 [apps.aliases]              # spoken name → desktop id for instant launches (justday apps find <name> shows ids)
 # "дискорд" = "org.equicord.equibop"

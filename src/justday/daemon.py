@@ -14,6 +14,7 @@ import shutil
 import signal
 import subprocess
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -52,7 +53,7 @@ def tool_icon(name: str, inp: str) -> str:
     if name == "Bash":
         cmd = inp.lower()
         for needle, icon in (("youtube", "youtube"), ("yt-dlp", "youtube"), ("justday claude", "applications-development"),
-                             ("jii ", "system-software-install"), ("justday games", "applications-games"), ("steam", "steam"), ("justday apps", "application-x-executable"),
+                             ("jii ", "system-software-install"), ("justday studio", "applications-graphics"), ("justday games", "applications-games"), ("steam", "steam"), ("justday apps", "application-x-executable"),
                              ("justday windows", "preferences-system-windows"), ("xdg-open http", "internet-web-browser"),
                              ("playerctl", "media-playback-start"), ("wpctl", "audio-volume-high"), ("git ", "git"),
                              ("kitty", "utilities-terminal"), ("plocate", "system-search"), ("fd ", "system-search")):
@@ -101,7 +102,18 @@ def settings_snapshot(cfg: dict) -> dict:
             "language": cfg["user"].get("language", "ru"),
             "earcons": cfg["audio"]["earcons"], "notifications": cfg["ui"]["notifications"],
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
-            "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"]}
+            "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
+            "microphone": cfg["audio"].get("microphone", True), "voice": cfg["tts"]["engine"] != "none",
+            "hotkeys": _hotkeys()}
+
+
+def _hotkeys() -> dict:
+    from . import manage
+
+    try:
+        return manage.hotkeys()
+    except (OSError, subprocess.SubprocessError):
+        return {}
 
 
 WMO = {0: ("Ясно", "sun"), 1: ("Малооблачно", "cloud-sun"), 2: ("Переменная облачность", "cloud-sun"), 3: ("Пасмурно", "cloud"),
@@ -397,6 +409,9 @@ class Daemon:
         self._holding = False
         self._activation = source
         self.stop_speaking()
+        if not self.mic_on():  # keyboard mode: the talk key opens the text field
+            self.publish(kind="compose")
+            return "compose"
         self.listen()
         return "listening"
 
@@ -408,7 +423,14 @@ class Daemon:
                 if self._listen_cancel:
                     self._listen_cancel.set()
 
+    def mic_on(self) -> bool:
+        return self.cfg["audio"].get("microphone", True)
+
     def listen(self, followup: bool = False, prefill=None) -> bool:
+        if not self.mic_on():  # no microphone: typed answers only (the island shows a reply field)
+            if not followup and prefill is None:
+                self.publish(kind="compose")
+            return False
         if self._listen_task and not self._listen_task.done():
             return False
         self._listen_task = asyncio.create_task(self._listen_once(followup, prefill))
@@ -581,12 +603,22 @@ class Daemon:
         """Apply config changes without a restart where possible; returns the sections that still need one."""
         old, new = self.cfg, config.load()
         self.cfg = new
+        restart: list[str] = []
         a = new["audio"]
         self.tts.cfg = new["tts"]
         self.recorder.silence_s = a["silence_seconds"]
         self.recorder.no_speech_timeout_s = a["no_speech_timeout_seconds"]
         self.recorder.max_s = a["max_utterance_seconds"]
-        if a["input"] != old["audio"]["input"]:
+        if a.get("microphone", True) != old["audio"].get("microphone", True):
+            if not a.get("microphone", True):
+                if self._listen_cancel:
+                    self._listen_cancel.set()
+                self.mic.stop()
+            elif self._wake:
+                self.mic.start()
+            elif new["wakeword"]["enabled"]:
+                restart.append("wakeword")  # it was never set up without a microphone
+        if a["input"] != old["audio"]["input"] and a.get("microphone", True):
             self.mic.stop()  # listen() starts it again on the new device
             self.mic.source = audio.find_node(a["input"]) if a["input"] else None
             if self._wake:
@@ -595,11 +627,9 @@ class Daemon:
             self.player.sink = audio.find_node(a["output"], "sinks") if a["output"] else None
         self.brain.cfg["user"] = new["user"]
         self.stt.vocabulary = vocabulary(new)
-        restart = [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
+        restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
         if new["user"].get("language") != old["user"].get("language"):
             restart.append("language")
-        if new["tts"]["engine"] != old["tts"]["engine"]:
-            restart.append("tts")
         names = lambda c: (c["user"]["assistant_name"], c["user"].get("assistant_aliases"))  # noqa: E731
         if self._names and names(new) != names(old):  # the name spotter was built with the old names
             restart.append("wakeword")
@@ -788,7 +818,7 @@ class Daemon:
     # ---------------- background: wake word, mic idle, worker reports ----------------
     def _setup_wakeword(self) -> None:
         w = self.cfg["wakeword"]
-        if not w["enabled"]:
+        if not w["enabled"] or not self.mic_on():
             return
         import openwakeword
         from openwakeword.model import Model
@@ -942,6 +972,34 @@ class Daemon:
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                 asyncio.create_task(self.run_turn(self._event_queue.get_nowait(), source="event"))
 
+    MEDIA_KIND = {"image": "image", "edit": "image", "upscale": "image", "nobg": "image", "gif": "image",
+                  "music": "music", "speech": "speech", "3d": "3d", "subs": "text"}
+
+    async def studio_done(self, job: dict, kind: str, what: str, quiet: bool) -> dict:
+        from . import studio
+
+        media = self.MEDIA_KIND.get(kind, "video")
+        file = job.get("file") or ""
+        label = {"image": t("картинка"), "video": t("видео"), "music": t("звук"),
+                 "speech": t("озвучка"), "3d": t("3D-модель"), "text": t("субтитры")}[media]
+        card = {"type": "media", "kind": media, "label": label, "file": file, "name": Path(file).name,
+                "failed": job.get("state") == "failed", "error": job.get("error", "")}
+        if file and media in ("image", "video"):
+            thumb = config.RUNTIME_DIR / "justday-thumb" / (Path(file).stem + ".jpg")
+            thumb.parent.mkdir(exist_ok=True)
+            got = await asyncio.get_running_loop().run_in_executor(None, studio.thumbnail, file, thumb)
+            card["thumb"] = str(got) if got else ""
+        elif job.get("preview"):  # a 3D model: the picture it was made from
+            card["thumb"] = job["preview"]
+        self.publish(kind="card", card=card)
+        if not quiet:  # a background job: the brain tells the user in its own words
+            state = "готово: " + file if job.get("state") == "done" else "не получилось: " + str(job.get("error"))
+            self._event_queue.put_nowait(
+                f"[Событие JustDay] Фоновая задача студии ({kind}: «{what[:120]}») — {state}. Карточка с файлом уже "
+                "на острове. Коротко скажи пользователю (одна фраза, без пути к файлу); если не получилось — предложи "
+                "попробовать иначе.")
+        return {"ok": True}
+
     # ---------------- control socket ----------------
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -998,9 +1056,17 @@ class Daemon:
             elif cmd == "new_session":
                 await self.brain.new_session()
                 resp = {"ok": True}
+            elif cmd == "compose":  # keyboard shortcut: open the text field (with the selected text, if any)
+                self.stop_speaking()
+                self.publish(kind="compose", text=req.get("text", ""), context=req.get("context") or {})
+                resp = {"ok": True}
             elif cmd == "type":  # text typed into the Dynamic Island: same routing as speech
                 events.emit("heard", text=req["text"], seconds=0)
-                asyncio.create_task(self.handle_utterance(req["text"], source="island"))
+                text, ctx = req["text"], req.get("context") or {}
+                if ctx.get("selection"):  # "explain this", "translate this" about the text selected on screen
+                    text += ("\n\n[Текст, выделенный пользователем" + (f" в окне «{ctx['window']}»" if ctx.get("window") else "")
+                             + f":]\n{ctx['selection'][:6000]}")
+                asyncio.create_task(self.handle_utterance(text, source="island"))
                 resp = {"ok": True}
             elif cmd == "answer":  # a question card button: the option label
                 pending = self._approval is not None and not self._approval.done()
@@ -1043,6 +1109,9 @@ class Daemon:
                 resp = {"ok": True}
             elif cmd == "record_sample":  # voice cloning sample: record N seconds, transcribe locally
                 resp = await self.record_sample(float(req.get("seconds", 12)))
+            elif cmd == "studio_done":  # a studio file is ready (or failed): card on the island; background jobs are reported
+                resp = await self.studio_done(req.get("job") or {}, req.get("kind", ""), req.get("what", ""),
+                                              bool(req.get("quiet")))
             elif cmd == "reload_settings":  # after `justday config set`: hot-apply what can be
                 resp = {"ok": True, "restart_needed": self.reload_settings()}
             else:
@@ -1069,7 +1138,8 @@ class Daemon:
         os.chmod(config.SOCKET_PATH, 0o600)
         asyncio.create_task(self._speech_worker())
         # Warm up models in the background so the first command is fast.
-        loop.run_in_executor(None, self.stt.load)
+        if self.mic_on():  # keyboard-only setups never load speech recognition
+            loop.run_in_executor(None, self.stt.load)
         loop.run_in_executor(None, self.tts.load)
         await self.brain.start()
         self._setup_wakeword()

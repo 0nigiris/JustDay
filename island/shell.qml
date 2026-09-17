@@ -31,9 +31,9 @@ ShellRoot {
         function snapshot(path: string): void { island.grabToImage(r => r.saveToFile(path)) }
     }
 
-    // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1): a colourful "wallpaper" so the black island is visible in headless sessions
+    // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1 or a picture path): a "wallpaper" so the black island is visible in headless sessions
     Loader {
-        active: Quickshell.env("JUSTDAY_ISLAND_WALLPAPER") === "1"
+        active: !!Quickshell.env("JUSTDAY_ISLAND_WALLPAPER")
         sourceComponent: PanelWindow {
             anchors { top: true; bottom: true; left: true; right: true }
             exclusionMode: ExclusionMode.Ignore
@@ -48,6 +48,12 @@ ShellRoot {
                     GradientStop { position: 1; color: "#f8b195" }
                 }
             }
+            Image {
+                anchors.fill: parent
+                visible: Quickshell.env("JUSTDAY_ISLAND_WALLPAPER") !== "1"
+                source: visible ? "file://" + Quickshell.env("JUSTDAY_ISLAND_WALLPAPER") : ""
+                fillMode: Image.PreserveAspectCrop
+            }
         }
     }
 
@@ -60,8 +66,10 @@ ShellRoot {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "justday-island"
-        readonly property bool big: island.mode === "expanded" || island.mode === "settings"
-        WlrLayershell.keyboardFocus: big ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        readonly property bool big: island.mode === "expanded" || island.mode === "settings" || island.mode === "compose"
+        // the text field takes the keyboard at once (it was opened by a shortcut); menus only on click
+        WlrLayershell.keyboardFocus: island.mode === "compose" ? WlrKeyboardFocus.Exclusive
+                                   : big ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         implicitWidth: 1000
         implicitHeight: 720
         color: "transparent"
@@ -95,7 +103,7 @@ ShellRoot {
             id: island
             readonly property string mode: JD.mode
             readonly property Item content: ({
-                expanded: expandedView, settings: settingsHolder, approval: approvalView, card: cardView, listening: listeningView,
+                expanded: expandedView, settings: settingsHolder, compose: composeView, approval: approvalView, card: cardView, listening: listeningView,
                 notification: notificationView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
                 peek: peekView, hidden: peekView })[mode]
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden"].includes(mode) && !JD.detailOpen
@@ -125,7 +133,7 @@ ShellRoot {
             HoverHandler { onHoveredChanged: JD.islandHovered = hovered }
 
             TapHandler {
-                enabled: !["expanded", "settings", "approval", "card"].includes(island.mode)
+                enabled: !["expanded", "settings", "approval", "card", "compose"].includes(island.mode)
                 onTapped: {
                     if (island.mode === "answer") { JD.answerOpen = false; return }
                     if (island.mode === "notification") { JD.notification = null; return }
@@ -157,6 +165,7 @@ ShellRoot {
                 ApprovalView { id: approvalView; shown: island.mode === "approval" }
                 CardView { id: cardView; shown: island.mode === "card" }
                 ExpandedView { id: expandedView; shown: island.mode === "expanded" }
+                ComposeView { id: composeView; shown: island.mode === "compose" }
                 View {
                     id: settingsHolder
                     shown: island.mode === "settings"
@@ -510,7 +519,7 @@ ShellRoot {
 
     component AnswerView: View {
         implicitWidth: 600
-        implicitHeight: Math.min(380, answerText.implicitHeight + 70)
+        implicitHeight: Math.min(430, answerText.implicitHeight + 116)
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
@@ -520,6 +529,10 @@ ShellRoot {
                 Ring { size: 18 }
                 Label1 { text: JD.assistantName; Layout.fillWidth: true }
                 Label2 { text: JD.dstate === "speaking" ? JD.tr("говорит") : "" }
+                IconButton {
+                    icon: "edit-copy"; size: 26
+                    onClicked: { Quickshell.execDetached(["wl-copy", "--", JD.answer]); JD.flash(JD.tr("Скопировано"), "edit-copy", JD.accentGreen); JD.answerOpen = false }
+                }
             }
             Flickable {
                 Layout.fillWidth: true
@@ -538,6 +551,21 @@ ShellRoot {
                     lineHeight: 1.18
                     textFormat: Text.PlainText
                 }
+            }
+            // reply: opens the text field (or press the shortcut)
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 34
+                radius: 17
+                color: replyHover.hovered ? JD.fill2 : JD.fill1
+                Behavior on color { ColorAnimation { duration: 120 } }
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 14; rightMargin: 12 }
+                    Label2 { text: JD.tr("Ответить…"); color: JD.text3; Layout.fillWidth: true }
+                    Label2 { text: JD.hotkeys.type || ""; color: JD.text3; font.pixelSize: 11 }
+                }
+                HoverHandler { id: replyHover; cursorShape: Qt.IBeamCursor }
+                TapHandler { onTapped: JD.openCompose() }
             }
         }
     }
@@ -580,6 +608,8 @@ ShellRoot {
     component CardView: View {
         id: cv
         readonly property var c: JD.card || ({})
+        readonly property string mediaIcon: ({ image: "image-x-generic", video: "video-x-generic", music: "audio-x-generic",
+                                               speech: "audio-x-generic", "3d": "application-x-blender" })[c.kind] || "folder-pictures"
         implicitWidth: 600
         implicitHeight: cardCol.implicitHeight + 36
         ColumnLayout {
@@ -590,18 +620,65 @@ ShellRoot {
             CardHeader {
                 Layout.fillWidth: true
                 icon: cv.c.type === "calendar" ? "view-calendar" : cv.c.type === "message_draft" ? "mail-send"
-                    : cv.c.type === "question" ? "dialog-question" : "mail-message"
+                    : cv.c.type === "question" ? "dialog-question" : cv.c.type === "media" ? cv.mediaIcon : "mail-message"
                 tint: cv.c.type === "mail_sent" ? JD.accentGreen : cv.c.type === "calendar" ? JD.accentOrange
+                    : cv.c.type === "media" ? JD.accentPurple
                     : ["message_draft", "question"].includes(cv.c.type) ? JD.accentBlue : JD.accentRed
                 title: ({ message_draft: JD.tr("Сообщение") + (cv.c.to ? " · " + cv.c.to : ""), question: cv.c.header || JD.tr("Вопрос"),
                           mail_draft: JD.tr("Новое письмо"), mail_sent: JD.tr("Письмо отправлено"), mail_read: cv.c.subject || JD.tr("Письмо"),
-                          mail_list: JD.tr("Почта"), calendar: JD.tr("Календарь · ") + (cv.c.when || "") })[cv.c.type] || JD.tr("Почта")
+                          mail_list: JD.tr("Почта"), calendar: JD.tr("Календарь · ") + (cv.c.when || ""),
+                          media: cv.c.failed ? JD.tr("Не получилось") : JD.tr("Готово") + " · " + (cv.c.label || "") })[cv.c.type] || JD.tr("Почта")
                 subtitle: ({ message_draft: (cv.c.via ? cv.c.via + " · " : "") + JD.tr("проверьте перед отправкой"), question: JD.tr("выберите или ответьте голосом"),
                              mail_draft: JD.tr("черновик · проверьте перед отправкой"), mail_sent: JD.tr("Кому: ") + (cv.c.to || ""),
                              mail_read: JD.tr("от ") + (cv.c.from || ""), mail_list: JD.tr("важные непрочитанные · обработано локально"),
-                             calendar: (cv.c.items || []).length ? (cv.c.items || []).length + JD.tr(" · обработано локально") : JD.tr("свободно") })[cv.c.type] || ""
+                             calendar: (cv.c.items || []).length ? (cv.c.items || []).length + JD.tr(" · обработано локально") : JD.tr("свободно"),
+                             media: cv.c.failed ? (cv.c.error || "") : (cv.c.name || "") })[cv.c.type] || ""
                 IconButton { icon: "window-close"; size: 26
                              onClicked: { if (["message_draft", "question"].includes(cv.c.type)) JD.send({ cmd: "deny" }); JD.card = null } }
+            }
+
+            // a finished picture / video / track / model from the studio
+            ClippingRectangle {
+                id: previewBox
+                visible: cv.c.type === "media" && !!cv.c.thumb
+                property real ratio: 0.5625  // height / width, set once the picture is loaded
+                Layout.fillWidth: true
+                // the card is 600 wide (564 inside): a fixed width keeps the layout from re-polishing itself
+                implicitHeight: Math.min(300, 564 * ratio)
+                radius: 14
+                color: JD.fill1
+                Image {
+                    id: preview
+                    anchors.fill: parent
+                    source: cv.c.type === "media" && cv.c.thumb ? "file://" + cv.c.thumb : ""
+                    sourceSize.width: 1128
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    cache: false
+                    // (sourceSize.height stays 0 when only the width is requested — the implicit size is the real one)
+                    onStatusChanged: if (status === Image.Ready && implicitWidth > 0) previewBox.ratio = implicitHeight / implicitWidth
+                    opacity: status === Image.Ready ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: JD.dur(220); easing.type: Easing.OutCubic } }
+                }
+                Rectangle {
+                    visible: cv.c.kind === "video"
+                    anchors.centerIn: parent
+                    width: 52; height: 52; radius: 26
+                    color: Qt.rgba(0, 0, 0, 0.55)
+                    Icon { anchors.centerIn: parent; name: "media-playback-start"; implicitSize: 24 }
+                }
+                TapHandler { onTapped: Quickshell.execDetached(["xdg-open", cv.c.file]) }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+            }
+            RowLayout {
+                visible: cv.c.type === "media" && !cv.c.failed
+                Layout.alignment: Qt.AlignRight
+                spacing: 10
+                PillButton { label: JD.tr("Показать в папке"); onClicked: { Quickshell.execDetached(["dolphin", "--select", cv.c.file]); JD.card = null } }
+                PillButton { visible: cv.c.kind === "image"; label: JD.tr("Копировать")
+                             onClicked: { Quickshell.execDetached(["sh", "-c", 'wl-copy < "$1"', "sh", cv.c.file]); JD.flash(JD.tr("Скопировано"), "edit-copy", JD.accentGreen); JD.card = null } }
+                PillButton { label: JD.tr("Открыть"); tint: JD.accentPurple; labelColor: "white"
+                             onClicked: { Quickshell.execDetached(["xdg-open", cv.c.file]); JD.card = null } }
             }
 
             // draft: To / Subject / Body + Send
@@ -758,6 +835,204 @@ ShellRoot {
         }
     }
 
+    // ───────────── the text field (Spotlight-like) ─────────────
+    component ComposeView: View {
+        id: cmp
+        implicitWidth: 660
+        implicitHeight: cmpCol.implicitHeight + 32
+        property int recall: -1               // index in JD.sent / history while browsing with ↑↓
+        property int pick: 0                  // highlighted slash command
+        readonly property var recallList: JD.sent.concat(JD.history.map(h => h.q).filter(q => q && !JD.sent.includes(q)))
+        readonly property var commands: [
+            { cmd: "/new", title: JD.tr("Новый разговор"), icon: "document-new", run: () => JD.send({ cmd: "new_session" }) },
+            { cmd: "/stop", title: JD.tr("Остановить всё"), icon: "media-playback-stop", run: () => JD.send({ cmd: "stop" }) },
+            { cmd: "/image", title: JD.tr("Нарисовать картинку"), icon: "image-x-generic", fill: JD.tr("Нарисуй ") },
+            { cmd: "/video", title: JD.tr("Сделать видео"), icon: "video-x-generic", fill: JD.tr("Сделай видео: ") },
+            { cmd: "/music", title: JD.tr("Сделать музыку"), icon: "audio-x-generic", fill: JD.tr("Сделай трек: ") },
+            { cmd: "/install", title: JD.tr("Установить программу"), icon: "system-software-install", fill: JD.tr("Установи ") },
+            { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
+            { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: "audio-input-microphone",
+              run: () => JD.run(["config", "set", "audio.microphone", String(!JD.micOn)]) },
+            { cmd: "/menu", title: JD.tr("Меню"), icon: "view-grid", run: () => { JD.expanded = true } },
+            { cmd: "/settings", title: JD.tr("Настройки"), icon: "configure", run: () => JD.openSettings("general") },
+            { cmd: "/keys", title: JD.tr("Сочетания клавиш"), icon: "input-keyboard", run: () => JD.openSettings("buttons") },
+            { cmd: "/help", title: JD.tr("Руководство"), icon: "help-contents", run: () => JD.openManual() }
+        ]
+        readonly property var matches: {
+            const t = field.text
+            if (!t.startsWith("/") || t.includes(" ")) return []
+            return commands.filter(c => c.cmd.startsWith(t.toLowerCase()) || c.title.toLowerCase().includes(t.slice(1).toLowerCase())).slice(0, 8)
+        }
+        onMatchesChanged: pick = 0
+
+        function focusField() {
+            field.text = JD.composeText
+            field.cursorPosition = field.length
+            recall = -1
+            field.forceActiveFocus()
+        }
+        onShownChanged: if (shown) focusField()
+        Connections { target: JD; function onComposeSerialChanged() { if (cmp.shown) cmp.focusField() } }
+
+        function runCommand(c) {
+            if (c.fill) { field.text = c.fill; field.cursorPosition = field.length; return }
+            JD.composeOpen = false
+            c.run()
+        }
+        function browse(step) {
+            const list = recallList
+            if (!list.length) return
+            recall = Math.max(-1, Math.min(list.length - 1, recall + step))
+            field.text = recall < 0 ? "" : list[recall]
+            field.cursorPosition = field.length
+        }
+
+        ColumnLayout {
+            id: cmpCol
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+            spacing: 10
+
+            RowLayout {
+                spacing: 12
+                Ring { size: 22; Layout.alignment: Qt.AlignTop; Layout.topMargin: 3 }
+                Flickable {
+                    id: fieldFlick
+                    Layout.fillWidth: true
+                    implicitHeight: Math.min(field.implicitHeight, 6 * 21)
+                    contentHeight: field.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    function ensureVisible(r) {
+                        if (contentY >= r.y) contentY = r.y
+                        else if (contentY + height <= r.y + r.height) contentY = r.y + r.height - height
+                    }
+                    TextEdit {
+                        id: field
+                        width: fieldFlick.width
+                        font.family: JD.fontFamily
+                        font.pixelSize: 17
+                        color: JD.text1
+                        selectionColor: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.5)
+                        wrapMode: TextEdit.Wrap
+                        selectByMouse: true
+                        textFormat: TextEdit.PlainText
+                        onCursorRectangleChanged: fieldFlick.ensureVisible(cursorRectangle)
+                        Text {
+                            visible: !field.text && !field.preeditText
+                            text: JD.composeContext.selection ? JD.tr("Что сделать с выделенным? Объясни, переведи, ответь…")
+                                                              : JD.tr("Спросите или попросите что-нибудь…")
+                            color: JD.text3
+                            font: field.font
+                        }
+                        Keys.onPressed: event => {
+                            const k = event.key
+                            if (k === Qt.Key_Escape) { JD.composeOpen = false; event.accepted = true; return }
+                            if (cmp.matches.length) {
+                                if (k === Qt.Key_Down || k === Qt.Key_Up) {
+                                    cmp.pick = (cmp.pick + (k === Qt.Key_Down ? 1 : -1) + cmp.matches.length) % cmp.matches.length
+                                    event.accepted = true; return
+                                }
+                                if (k === Qt.Key_Tab || k === Qt.Key_Return || k === Qt.Key_Enter) {
+                                    cmp.runCommand(cmp.matches[cmp.pick]); event.accepted = true; return
+                                }
+                            }
+                            if ((k === Qt.Key_Return || k === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
+                                JD.submit(field.text); event.accepted = true; return
+                            }
+                            if (k === Qt.Key_Up && (field.cursorRectangle.y < 4 || cmp.recall >= 0)) { cmp.browse(1); event.accepted = true; return }
+                            if (k === Qt.Key_Down && cmp.recall >= 0) { cmp.browse(-1); event.accepted = true; return }
+                            if (k === Qt.Key_Backspace && !field.text && JD.composeContext.selection) {
+                                JD.composeContext = ({}); event.accepted = true; return
+                            }
+                        }
+                    }
+                }
+                IconButton {
+                    visible: JD.micOn
+                    Layout.alignment: Qt.AlignTop
+                    icon: "audio-input-microphone"; size: 30
+                    onClicked: { JD.composeOpen = false; JD.send({ cmd: "listen" }) }
+                }
+                Rectangle {
+                    Layout.alignment: Qt.AlignTop
+                    implicitWidth: 30; implicitHeight: 30; radius: 15
+                    color: field.text.trim() ? JD.accentBlue : JD.fill1
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Icon { anchors.centerIn: parent; name: "go-up"; implicitSize: 16 }
+                    TapHandler { onTapped: JD.submit(field.text) }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                }
+            }
+
+            // selected text that goes along with the request
+            Rectangle {
+                visible: !!JD.composeContext.selection
+                Layout.fillWidth: true
+                implicitHeight: 34
+                radius: 10
+                color: JD.fill1
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 10; rightMargin: 4 }
+                    spacing: 8
+                    Icon { name: "edit-select-text"; fallback: "format-text-bold"; implicitSize: 16 }
+                    Label2 {
+                        Layout.fillWidth: true
+                        text: JD.tr("Выделенное: ") + "«" + (JD.composeContext.selection || "").replace(/\s+/g, " ") + "»"
+                    }
+                    IconButton { icon: "window-close"; size: 24; onClicked: JD.composeContext = ({}) }
+                }
+            }
+
+            // slash commands
+            Repeater {
+                model: cmp.matches
+                Rectangle {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    implicitHeight: 36
+                    radius: 10
+                    color: index === cmp.pick ? JD.fill2 : (cmdHover.hovered ? JD.fill1 : "transparent")
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 12 }
+                        spacing: 10
+                        Icon { name: modelData.icon; implicitSize: 18 }
+                        Label1 { text: modelData.title; font.weight: Font.Normal; Layout.fillWidth: true }
+                        Label2 { text: modelData.cmd; color: JD.text3; font.family: "monospace" }
+                    }
+                    HoverHandler { id: cmdHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: cmp.runCommand(modelData) }
+                }
+            }
+
+            // key hints
+            RowLayout {
+                spacing: 14
+                Repeater {
+                    model: [
+                        { k: "↵", t: JD.tr("отправить") }, { k: "⇧↵", t: JD.tr("строка") },
+                        { k: "↑", t: JD.tr("прошлые") }, { k: "/", t: JD.tr("команды") }, { k: "Esc", t: JD.tr("закрыть") }
+                    ]
+                    RowLayout {
+                        required property var modelData
+                        spacing: 5
+                        Rectangle {
+                            implicitWidth: Math.max(18, kt.implicitWidth + 8); implicitHeight: 18; radius: 5
+                            color: JD.fill1
+                            Text { id: kt; anchors.centerIn: parent; text: modelData.k; color: JD.text2; font.family: JD.fontFamily; font.pixelSize: 10; font.weight: Font.DemiBold }
+                        }
+                        Text { text: modelData.t; color: JD.text3; font.family: JD.fontFamily; font.pixelSize: 11 }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: (JD.settings.provider || "") + (JD.settings.model ? " · " + JD.settings.model : "")
+                    color: JD.text3; font.family: JD.fontFamily; font.pixelSize: 11
+                }
+            }
+        }
+    }
+
     // ───────────── expanded control center ─────────────
     component Tile: Rectangle {
         id: tile
@@ -790,7 +1065,6 @@ ShellRoot {
         implicitWidth: 680
         implicitHeight: col.implicitHeight + 40
 
-        onShownChanged: if (shown) input.forceActiveFocus()
         function setting(key, value) { JD.run(["config", "set", key, String(value)]) }
 
         ColumnLayout {
@@ -839,32 +1113,29 @@ ShellRoot {
                 }
             }
 
-            // ask by text
+            // ask by text: opens the text field
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 44
                 radius: 22
-                color: JD.fill1
-                border.width: input.activeFocus ? 1 : 0
-                border.color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.7)
+                color: askHover.hovered ? JD.fill2 : JD.fill1
+                Behavior on color { ColorAnimation { duration: 120 } }
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 16
                     anchors.rightMargin: 6
                     spacing: 8
-                    TextInput {
-                        font.family: JD.fontFamily
-                        id: input
-                        Layout.fillWidth: true
-                        color: JD.text1
-                        font.pixelSize: 14
-                        clip: true
-                        selectByMouse: true
-                        onAccepted: if (text.trim()) { JD.send({ cmd: "type", text: text }); text = ""; JD.expanded = false }
-                        Text { font.family: JD.fontFamily; text: JD.tr("Спросите или попросите что-нибудь…"); color: JD.text3; font.pixelSize: 14; visible: !input.text && !input.preeditText }
+                    Text { font.family: JD.fontFamily; text: JD.tr("Спросите или попросите что-нибудь…"); color: JD.text3; font.pixelSize: 14; Layout.fillWidth: true }
+                    Rectangle {
+                        visible: !!JD.hotkeys.type
+                        implicitWidth: hk.implicitWidth + 12; implicitHeight: 22; radius: 6
+                        color: JD.fill1
+                        Text { id: hk; anchors.centerIn: parent; text: JD.hotkeys.type || ""; color: JD.text2; font.family: JD.fontFamily; font.pixelSize: 11 }
                     }
-                    IconButton { icon: "audio-input-microphone"; size: 32; onClicked: { JD.expanded = false; JD.send({ cmd: "toggle" }) } }
+                    IconButton { visible: JD.micOn; icon: "audio-input-microphone"; size: 32; onClicked: { JD.expanded = false; JD.send({ cmd: "listen" }) } }
                 }
+                HoverHandler { id: askHover; cursorShape: Qt.IBeamCursor }
+                TapHandler { onTapped: JD.openCompose() }
             }
 
             // quick toggles

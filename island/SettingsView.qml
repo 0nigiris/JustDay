@@ -44,7 +44,7 @@ Item {
         o[parts[parts.length - 1]] = value
         d = Object.assign({}, d)  // notify bindings
         Quickshell.execDetached(["justday", "config", "set", path, Array.isArray(value) ? value.join(",") : String(value)])
-        if (/^(brain|stt|wakeword|local_llm)\./.test(path) || path === "tts.engine") restartNeeded = true
+        if (/^(brain|stt|wakeword|local_llm)\./.test(path)) restartNeeded = true
     }
     function notify(text) { toast = text; toastTimer.restart() }
 
@@ -583,6 +583,32 @@ Item {
         ColumnLayout {
             spacing: 6
             PageTitle { title: JD.tr("Общие"); subtitle: JD.tr("Как зовут ассистента и как он обращается к вам") }
+            GroupTitle { text: JD.tr("КАК ОБЩАТЬСЯ") }
+            Group {
+                Row {
+                    title: JD.tr("Просьбы")
+                    subtitle: win.get("audio.microphone") === false
+                        ? JD.tr("Только с клавиатуры: ") + ((win.d.hotkeys && win.d.hotkeys.type) || "Meta+K") + JD.tr(" открывает поле ввода. Микрофон не используется, распознавание речи не загружается")
+                        : JD.tr("Голосом и текстом. Текст: ") + ((win.d.hotkeys && win.d.hotkeys.type) || "Meta+K") + JD.tr(" или клик по острову")
+                    Segmented {
+                        options: [{ value: true, label: JD.tr("Голос и текст") }, { value: false, label: JD.tr("Только текст") }]
+                        current: win.get("audio.microphone") !== false
+                        onPicked: v => { win.set("audio.microphone", v); win.notify(v ? JD.tr("Микрофон включён") : JD.tr("Только текст — микрофон выключен")) }
+                    }
+                }
+                Row {
+                    title: JD.tr("Отвечать голосом")
+                    subtitle: win.get("tts.engine") === "none" ? JD.tr("Ответы только текстом на острове") : JD.tr("Ответы звучат и показываются на острове")
+                    Toggle {
+                        checked: win.get("tts.engine") !== "none"
+                        onToggled: v => {
+                            if (v) win.set("tts.engine", win.get("tts.previous_engine") || "silero")
+                            else { win.set("tts.previous_engine", win.get("tts.engine")); win.set("tts.engine", "none") }
+                        }
+                    }
+                }
+            }
+            GroupTitle { text: JD.tr("ИМЯ") }
             Group {
                 Row { title: JD.tr("Имя ассистента"); subtitle: JD.tr("Показывается на острове"); Field { key: "user.assistant_name" } }
                 Row { title: JD.tr("Другие имена"); subtitle: JD.tr("Через запятую, на все он откликается"); Field { key: "user.assistant_aliases" } }
@@ -962,12 +988,16 @@ Item {
                 Row { title: JD.tr("Говорить"); subtitle: JD.tr("Нажать — слушает до паузы, зажать — пока держите"); Field { id: talkKey; text: win.d.hotkeys ? win.d.hotkeys.talk : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Кнопка мыши"); subtitle: JD.tr("Вторая клавиша «говорить», например F19 с G502"); Field { id: extraKey; text: win.d.hotkeys ? win.d.hotkeys.extra : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Отменить всё"); Field { id: cancelKey; text: win.d.hotkeys ? win.d.hotkeys.cancel : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Написать"); subtitle: JD.tr("Поле ввода на острове; выделенный на экране текст прикрепляется сам"); Field { id: typeKey; text: win.d.hotkeys ? win.d.hotkeys.type : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Да / разрешить"); subtitle: JD.tr("Ответить на вопрос острова, не отрываясь от клавиатуры"); Field { id: yesKey; text: win.d.hotkeys ? win.d.hotkeys.yes : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Нет / отклонить"); Field { id: noKey; text: win.d.hotkeys ? win.d.hotkeys.no : ""; implicitWidth: 180 } }
                 Row {
                     title: ""
                     Btn {
                         text: JD.tr("Применить")
                         primary: true
-                        onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text],
+                        onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text,
+                                            "--type", typeKey.text, "--yes", yesKey.text, "--no", noKey.text],
                                            r => win.notify(r.ok ? JD.tr("Сочетания обновлены") : JD.tr("Не получилось")))
                     }
                 }
@@ -975,7 +1005,8 @@ Item {
             Note {
                 text: JD.tr("<b>Кнопка на мыши Logitech (G502 и др.)</b>: назначьте ей клавишу F19 через libratbag, например<br>") +
                       JD.tr("<tt>ratbagctl &lt;мышь&gt; profile 0 button 5 action set key KEY_F19</tt>. F13 не подходит: в KDE она открывает Системные настройки.<br><br>") +
-                      JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».")
+                      JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».<br><br>") +
+                      JD.tr("<b>В поле ввода</b>: Enter — отправить, Shift+Enter — новая строка, ↑/↓ — прошлые просьбы, Tab — подсказка команды, Esc — закрыть. Начните с <tt>/</tt>, чтобы увидеть быстрые команды. Пустое поле убрать выделенный текст: Backspace.")
             }
         }
     }

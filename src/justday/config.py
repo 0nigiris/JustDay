@@ -26,6 +26,7 @@ DEFAULTS: dict = {
              "language": "ru"},  # ru | en — assistant replies, voice lines and the island
     "audio": {
         # Substring of a PipeWire source node name; empty = system default source.
+        "microphone": True,  # false = keyboard only: no mic, no wake word, speech recognition never loads
         "input": "",
         "output": "",
         "earcons": True,
@@ -51,6 +52,7 @@ DEFAULTS: dict = {
         "silero_model_url": "https://models.silero.ai/models/tts/ru/v5_5_ru.pt",
         "speaker": "eugene",
         "sample_rate": 48000,
+        "previous_engine": "",  # remembered when voice replies are switched off
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase
     # wake_names: which names wake it (empty = the assistant name only)
@@ -103,6 +105,8 @@ DEFAULTS: dict = {
         "announce": True,  # say "новое письмо от …" when important mail arrives
         "poll_seconds": 180,
     },
+    # Local creative studio (justday studio): ComfyUI is found automatically; empty = auto
+    "studio": {"comfy_dir": "", "python": "", "url": "", "rmbg_dir": "", "free_after": True},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},
 }

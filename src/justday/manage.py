@@ -115,13 +115,20 @@ def _shortcut(desktop_id: str) -> list[str]:
 
 
 def hotkeys() -> dict:
-    talk, cancel = _shortcut("net.local.justday.desktop"), _shortcut("net.local.justday-stop.desktop")
-    return {"talk": talk[0] if talk else "", "extra": talk[1] if len(talk) > 1 else "", "cancel": cancel[0] if cancel else ""}
+    talk = _shortcut("net.local.justday.desktop")
+    first = lambda name: (_shortcut(f"net.local.justday-{name}.desktop") or [""])[0]  # noqa: E731
+    return {"talk": talk[0] if talk else "", "extra": talk[1] if len(talk) > 1 else "", "cancel": first("stop"),
+            "type": first("type"), "yes": first("yes"), "no": first("no")}
 
 
-def set_hotkeys(talk: str, extra: str, cancel: str) -> dict:
+def set_hotkeys(talk: str, extra: str, cancel: str, type_: str | None = None, yes: str | None = None,
+                no: str | None = None) -> dict:
     script = config.REPO_DIR / "scripts" / "setup-hotkey.sh"
-    p = subprocess.run([str(script), "--talk", talk, "--extra", extra, "--cancel", cancel], capture_output=True, text=True)
+    cur = hotkeys()
+    pick = lambda given, name, default: cur[name] or default if given is None else given  # noqa: E731
+    args = ["--talk", talk, "--extra", extra, "--cancel", cancel, "--type", pick(type_, "type", "Meta+K"),
+            "--yes", pick(yes, "yes", "Meta+Y"), "--no", pick(no, "no", "Meta+N")]
+    p = subprocess.run([str(script), *args], capture_output=True, text=True)
     return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(), **hotkeys()}
 
 

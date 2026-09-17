@@ -34,10 +34,38 @@ Singleton {
 
     // ───────────── UI state ─────────────
     property bool expanded: false
+    // the text field (Meta+K, click, or the talk key in keyboard mode)
+    property bool composeOpen: false
+    property string composeText: ""
+    property var composeContext: ({})     // {selection} — text selected on screen when the field was opened
+    property int composeSerial: 0         // bumps on every open, so a second press re-focuses the field
+    property var sent: []                 // what was typed this session, newest first (↑ in the field)
+    readonly property var hotkeys: settings.hotkeys || ({})
+    readonly property bool micOn: settings.microphone !== false
+    readonly property bool voiceOn: settings.voice !== false
+    function openCompose(text, context) {
+        composeText = text || ""
+        composeContext = context || ({})
+        settingsOpen = false
+        expanded = false
+        composeOpen = true
+        composeSerial++
+    }
+    function submit(text) {
+        text = text.trim()
+        if (!text) return
+        const msg = { cmd: "type", text: text }
+        if (composeContext.selection) msg.context = composeContext
+        send(msg)
+        sent = [text].concat(sent.filter(t => t !== text)).slice(0, 30)
+        composeOpen = false
+        composeContext = ({})
+        composeText = ""
+    }
     property bool settingsOpen: false
     property string settingsPage: "general"
     function openSettings(page) { settingsPage = page || "general"; settingsOpen = true; expanded = false }
-    function closeAll() { settingsOpen = false; expanded = false }
+    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false }
     function openManual() { Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md"]); closeAll() }
 
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off
@@ -52,6 +80,7 @@ Singleton {
     property bool islandHovered: false
 
     readonly property string mode: {
+        if (composeOpen && !approvalText) return "compose"
         if (expanded && !approvalText && !settingsOpen) return "expanded"
         if (approvalText) return "approval"
         if (settingsOpen) return "settings"
@@ -187,6 +216,7 @@ Singleton {
             notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
             notifTimer.restart()
             break
+        case "compose": openCompose(m.text, m.context); break
         case "card_close": card = null; break
         case "card":
             if (!m.card) { card = null; break }
@@ -209,7 +239,8 @@ Singleton {
     Timer { id: notifTimer; interval: 5000; onTriggered: if (jd.islandHovered) restart(); else jd.notification = null }
     Timer {
         id: answerTimer
-        interval: Math.min(15000, 4000 + jd.answer.length * 45)
+        // without a voice the text is all there is: give time to read it
+        interval: jd.voiceOn && jd.micOn ? Math.min(15000, 4000 + jd.answer.length * 45) : Math.min(60000, 8000 + jd.answer.length * 70)
         onTriggered: if (jd.islandHovered) restart(); else jd.answerOpen = false
     }
     Timer { id: cardTimer; onTriggered: if (jd.islandHovered) restart(); else jd.card = null }

@@ -261,6 +261,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("status")
     sub.add_parser("approve", help="allow the action JustDay is asking about")
     sub.add_parser("deny", help="deny the action JustDay is asking about")
+    sp = sub.add_parser("compose", help="keyboard shortcut: open the island's text field (takes the selected text along)")
+    sp.add_argument("text", nargs="*")
+    sp.add_argument("--no-selection", action="store_true")
     sub.add_parser("new-session", help="forget the current conversation (memory is kept)")
     sp = sub.add_parser("logs", help="show recent events")
     sp.add_argument("-f", "--follow", action="store_true")
@@ -316,6 +319,11 @@ def main(argv: list[str] | None = None) -> None:
                                    "craft item=… count=N | place item=… | use x= y= z= | mine x= y= z= | select item=… | look | close | stop | ping")
     sp.add_argument("command")
     sp.add_argument("args", nargs="*", help="key=value")
+    sp = sub.add_parser("studio", help="local creative studio: status | image | edit | upscale | nobg | video | animate | "
+                                       "music | 3d | speech | subs | cut | join | audio | burn | vertical | nopause | "
+                                       "speed | gif | slideshow | info | jobs | job ID | stop  (key=value options)")
+    sp.add_argument("action")
+    sp.add_argument("args", nargs="*", help="text / files, then key=value")
     sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")
     sp.add_argument("action", choices=["get", "set"])
     sp.add_argument("key", nargs="?")
@@ -338,6 +346,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--talk", default="Meta+J")
     sp.add_argument("--extra", default="F19")
     sp.add_argument("--cancel", default="Meta+Shift+J")
+    sp.add_argument("--type", dest="type_", default=None, help="open the text field (default Meta+K)")
+    sp.add_argument("--yes", default=None, help="answer yes / allow (default Meta+Y)")
+    sp.add_argument("--no", default=None, help="answer no / deny (default Meta+N)")
     sp = sub.add_parser("autostart", help="start JustDay with the session: on | off | status")
     sp.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
@@ -370,6 +381,8 @@ def main(argv: list[str] | None = None) -> None:
         _print(control("say", timeout=120, text=" ".join(a.text)))
     elif a.cmd in ("approve", "deny"):
         _print(control(a.cmd))
+    elif a.cmd == "compose":
+        _print(control("compose", text=" ".join(a.text), context={} if a.no_selection else _screen_context()))
     elif a.cmd == "status":
         _print(control("status"))
     elif a.cmd == "new-session":
@@ -478,7 +491,11 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "hotkey":
         from . import manage
 
-        _print(manage.hotkeys() if a.action == "get" else manage.set_hotkeys(a.talk, a.extra, a.cancel))
+        if a.action == "get":
+            _print(manage.hotkeys())
+        else:
+            _print(manage.set_hotkeys(a.talk, a.extra, a.cancel, a.type_, a.yes, a.no))
+            control("reload_settings", timeout=5)  # the island shows the keys in its hints
     elif a.cmd == "autostart":
         from . import manage
 
@@ -542,6 +559,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0 if r.get("ok") else 1)
     elif a.cmd == "mc":
         _mc_cmd(a)
+    elif a.cmd == "studio":
+        _studio_cmd(a)
     elif a.cmd == "confirm-message":
         r = control("confirm_message", timeout=140, to=a.to, via=a.via, text=a.text)
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
@@ -557,6 +576,97 @@ def main(argv: list[str] | None = None) -> None:
         _secret_cmd(a)
     elif a.cmd == "mail":
         _mail_cmd(a)
+
+
+def _screen_context() -> dict:
+    """The text selected right now (primary selection) — for "explain this", "translate this"."""
+    try:
+        sel = subprocess.run(["wl-paste", "--primary", "--no-newline", "--type", "text/plain"],
+                             capture_output=True, text=True, timeout=1).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        sel = ""
+    if not sel:
+        return {}
+    return {"selection": sel[:6000]}  # (the active window lookup takes ~0.7 s — too slow for a shortcut)
+
+
+def _studio_cmd(a) -> None:
+    from . import studio
+
+    words = [x for x in a.args if "=" not in x or x.startswith(("/", "~", "."))]
+    kw = dict(x.split("=", 1) for x in a.args if x not in words)
+    text = " ".join(words)
+    opt = kw.get
+    num = lambda k, d: float(kw[k]) if k in kw else d  # noqa: E731
+    seed = int(kw["seed"]) if "seed" in kw else None
+    out = opt("out")
+    act = a.action
+    try:
+        if act == "status":
+            r = studio.status()
+        elif act == "image":
+            r = studio.image(text or opt("prompt", ""), opt("size", "square"), out, seed,
+                             transparent=opt("transparent", "") in ("1", "true", "yes"))
+        elif act == "edit":
+            r = studio.edit(words[0], " ".join(words[1:]) or opt("prompt", ""), out, seed)
+        elif act == "upscale":
+            r = studio.upscale(text, out)
+        elif act == "nobg":
+            r = studio.remove_bg(text, out)
+        elif act in ("video", "animate"):
+            src = words[0] if act == "animate" else opt("image")
+            prompt = " ".join(words[1:]) if act == "animate" else text
+            r = studio.video(prompt or opt("prompt", "gentle natural motion, cinematic"), num("seconds", 3),
+                             opt("size", "wide"), out, seed, src)
+        elif act == "music":
+            r = studio.music(text or opt("tags", ""), num("seconds", 30), opt("lyrics", ""), out, seed)
+        elif act == "3d":
+            is_file = bool(words) and os.path.isfile(os.path.expanduser(words[0]))
+            r = studio.model3d(words[0] if is_file else None, "" if is_file else text, out, seed,
+                               stl=opt("stl", "1") not in ("0", "false"))
+        elif act == "speech":
+            r = studio.speech(text or opt("text", ""), out, opt("voice", ""))
+        elif act == "subs":
+            r = studio.transcribe(text, out, opt("language", ""))
+        elif act == "cut":
+            r = studio.cut(text, opt("from", "0"), opt("to", ""), out)
+        elif act == "join":
+            r = studio.join(words, out)
+        elif act == "audio":
+            r = studio.add_audio(words[0], words[1], out, num("volume", 0.35), opt("replace", "") in ("1", "true"))
+        elif act == "burn":
+            r = studio.subtitles(words[0], words[1] if len(words) > 1 else None, out, opt("burn", "1") != "0")
+        elif act == "vertical":
+            r = studio.vertical(text, out, opt("mode", "blur"))
+        elif act == "nopause":
+            r = studio.trim_silence(text, out, num("pause", 0.6))
+        elif act == "speed":
+            r = studio.speed(words[0], float(words[1]) if len(words) > 1 else num("x", 1.5), out)
+        elif act == "gif":
+            r = studio.gif(text, out, int(num("width", 480)), int(num("fps", 12)), opt("from", ""), num("seconds", 0))
+        elif act == "slideshow":
+            r = studio.slideshow(words, out, num("each", 3.0), opt("music", ""), opt("size", "1920x1080"))
+        elif act == "info":
+            r = studio.probe(text)
+        elif act == "jobs":
+            r = studio.jobs()
+        elif act == "job":
+            job = studio.load_job(text)
+            r = studio.summary(studio.wait(job, num("wait", 0)))
+        elif act == "free":
+            studio.free()
+            r = {"ok": True}
+        elif act == "stop":
+            r = {"stopped": studio.stop_engine()}
+        else:
+            sys.exit(f"unknown studio action {act}")
+    except (RuntimeError, OSError, IndexError, ValueError) as e:
+        _print({"state": "failed", "error": str(e) or type(e).__name__})
+        sys.exit(1)
+    if isinstance(r, dict) and r.get("state") == "done" and act not in ("image", "edit", "upscale", "music", "job"):
+        control("studio_done", timeout=5, job=r, kind=act, what=text[:80], quiet=True)
+    _print(r)
+    sys.exit(1 if isinstance(r, dict) and r.get("state") == "failed" else 0)
 
 
 def _contacts_cmd(a) -> None:

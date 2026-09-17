@@ -40,6 +40,18 @@ WIZ_EN = {
     "Микрофоны не найдены — будет использован системный по умолчанию.": "No microphones found — the system default will be used.",
     "Системный по умолчанию": "System default", "Какой микрофон": "Which microphone", "Кнопка": "Button",
     "Сочетание, чтобы говорить": "Shortcut to talk",
+    "Как общаться": "How to talk to it", "Как вы будете давать просьбы": "How will you give requests",
+    "Голосом и текстом": "By voice and text",
+    "Только текстом — без микрофона (школа, офис, библиотека)": "Text only — no microphone (school, office, library)",
+    "Поле ввода открывается сочетанием Meta+K или кликом по острову. Микрофон не используется.":
+        "The text field opens with Meta+K or a click on the island. The microphone is not used.",
+    "Видеокарты NVIDIA нет — распознавание речи будет на процессоре (модель small).":
+        "No NVIDIA card — speech recognition will run on the CPU (small model).",
+    "Отвечать голосом (иначе только текст на острове)": "Speak the replies (otherwise text on the island only)",
+    "Кнопки": "Shortcuts", "Главное сочетание (открывает поле ввода)": "Main shortcut (opens the text field)",
+    "Написать текстом (выделенный текст прикрепится)": "Type a request (selected text is attached)",
+    "Ответить на вопрос острова: Meta+Y — да, Meta+N — нет.": "Answer the island's question: Meta+Y — yes, Meta+N — no.",
+    "Написать:   Meta+K — поле ввода; «/» — быстрые команды": "Type:       Meta+K — the text field; “/” — quick commands",
     "Кнопка на мыши: игровые мыши Logitech можно перепрошить на F19 (см. руководство, раздел «Установка»).": "Mouse button: Logitech gaming mice can be remapped to F19 (see the manual, “Installation”).",
     "Вторая клавиша «говорить» (например F19, пусто — нет)": "Second talk key (e.g. F19, empty — none)",
     "Сочетание «отменить всё»": "Shortcut to cancel everything", "сочетания зарегистрированы": "shortcuts registered",
@@ -174,7 +186,10 @@ def step_model() -> None:
 
 
 def step_voice() -> None:
-    title(3, W("Голос"))
+    title(4, W("Голос"))
+    if not config.load()["audio"].get("microphone", True) and not yes(W("Отвечать голосом (иначе только текст на острове)"), False):
+        config.set_value("tts", "engine", "none")
+        return
     if vram_mb() >= 8000:
         engine = choose(W("Какой голос"), [("qwen", W("Нейросетевой, живой (Qwen3-TTS, загрузка ~4 ГБ)")),
                                             ("silero", W("Простой и быстрый (Silero, звучит роботизированно)"))], 1)
@@ -193,7 +208,18 @@ def step_voice() -> None:
 
 
 def step_mic() -> None:
-    title(4, W("Микрофон"))
+    title(3, W("Как общаться"))
+    mode = choose(W("Как вы будете давать просьбы"), [
+        ("voice", W("Голосом и текстом")),
+        ("text", W("Только текстом — без микрофона (школа, офис, библиотека)"))], 1)
+    config.set_value("audio", "microphone", mode == "voice")
+    if mode == "text":
+        print(f"  {D}" + W("Поле ввода открывается сочетанием Meta+K или кликом по острову. Микрофон не используется.") + R)
+        return
+    if not vram_mb():  # no NVIDIA card: a smaller recognizer keeps up on the CPU
+        print(f"  {D}" + W("Видеокарты NVIDIA нет — распознавание речи будет на процессоре (модель small).") + R)
+        config.set_value("stt", "device", "cpu")
+        config.set_value("stt", "model", "small")
     sources = manage.audio_devices()["sources"]
     if not sources:
         print(f"  {Y}" + W("Микрофоны не найдены — будет использован системный по умолчанию.") + R)
@@ -205,14 +231,20 @@ def step_mic() -> None:
 
 
 def step_button() -> None:
-    title(5, W("Кнопка"))
-    talk = ask(W("Сочетание, чтобы говорить"), "Meta+J")
-    print(f"  {D}" + W("Кнопка на мыши: игровые мыши Logitech можно перепрошить на F19 (см. руководство, раздел «Установка»).") + R)
-    extra = ask(W("Вторая клавиша «говорить» (например F19, пусто — нет)"), "F19")
+    title(5, W("Кнопки"))
+    voice = config.load()["audio"].get("microphone", True)
+    talk = ask(W("Сочетание, чтобы говорить") if voice else W("Главное сочетание (открывает поле ввода)"), "Meta+J")
+    extra = ""
+    if voice:
+        print(f"  {D}" + W("Кнопка на мыши: игровые мыши Logitech можно перепрошить на F19 (см. руководство, раздел «Установка»).") + R)
+        extra = ask(W("Вторая клавиша «говорить» (например F19, пусто — нет)"), "F19")
     cancel = ask(W("Сочетание «отменить всё»"), "Meta+Shift+J")
-    r = manage.set_hotkeys(talk, extra, cancel)
+    type_ = ask(W("Написать текстом (выделенный текст прикрепится)"), "Meta+K")
+    r = manage.set_hotkeys(talk, extra, cancel, type_, "Meta+Y", "Meta+N")
     print(f"  {G}✓{R} " + (W("сочетания зарегистрированы") if r["ok"] else Y + W("не получилось: {e}", e=r["output"]) + R))
-    print(f"  {D}" + W("Нажмите — слушает до паузы; зажмите — пока держите; нажмите дважды — отмена.") + R)
+    if voice:
+        print(f"  {D}" + W("Нажмите — слушает до паузы; зажмите — пока держите; нажмите дважды — отмена.") + R)
+    print(f"  {D}" + W("Ответить на вопрос острова: Meta+Y — да, Meta+N — нет.") + R)
 
 
 def step_mail() -> None:
@@ -241,7 +273,7 @@ def run_wizard() -> None:
     if lang == "en" and config.load()["user"]["address_as"] == "сэр":
         config.set_value("user", "address_as", "sir")
     print(f"\n{B}" + W("JustDay — первая настройка") + f"{R}  {D}" + W("(Enter — оставить как есть; всё меняется потом в настройках острова)") + R)
-    for step in (step_names, step_model, step_voice, step_mic, step_button, step_mail, step_weather):
+    for step in (step_names, step_model, step_mic, step_voice, step_button, step_mail, step_weather):
         try:
             step()
         except KeyboardInterrupt:
@@ -252,7 +284,9 @@ def run_wizard() -> None:
         subprocess.run(["systemctl", "--user", "try-restart", unit], capture_output=True)
     name = config.load()["user"]["assistant_name"]
     print(f"\n{G}{B}" + W("Готово!") + R)
-    print("  " + W("Говорить:   {name} слушает по вашей кнопке — попробуйте «{name}, какая погода?»", name=name))
+    if config.load()["audio"].get("microphone", True):
+        print("  " + W("Говорить:   {name} слушает по вашей кнопке — попробуйте «{name}, какая погода?»", name=name))
+    print("  " + W("Написать:   Meta+K — поле ввода; «/» — быстрые команды"))
     print("  " + W("Настройки:  клик по острову сверху экрана → шестерёнка"))
     print("  " + W("Если что-то не так: {doctor}, руководство — {manual}", doctor=f"{B}justday doctor{R}",
                    manual=config.REPO_DIR / "docs" / "MANUAL.md") + "\n")
