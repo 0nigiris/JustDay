@@ -19,7 +19,7 @@ repo = Path(__file__).resolve().parents[2]
 eng = server._engine
 print(eng.session_start(screen_width=1600, screen_height=900), flush=True)
 env = eng._session_env()
-env.update(JUSTDAY_SOCKET=str(work / "fake.sock"), HOME=os.path.expanduser("~"),
+env.update(JUSTDAY_SOCKET=str(work / "fake.sock"), HOME=os.path.expanduser("~"), JUSTDAY_ISLAND_MUTE="1",
            JUSTDAY_ISLAND_WALLPAPER=os.environ.get("JUSTDAY_ISLAND_WALLPAPER", "1"))  # or a picture for screenshots
 for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"):
     env.pop(k, None)

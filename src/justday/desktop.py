@@ -9,6 +9,7 @@ import difflib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import time
@@ -79,8 +80,16 @@ def find_apps(query: str, limit: int = 5) -> list[dict]:
     return [dict(a, score=round(s, 2)) for s, a in scored[:limit] if s > 0.45]
 
 
+def detached(cmd: list[str]) -> list[str]:
+    """Run a program in its own systemd scope, like the app launcher does — not inside justday.service,
+    so restarting the assistant never takes the user's game or editor down with it."""
+    if shutil.which("systemd-run"):
+        return ["systemd-run", "--user", "--scope", "--collect", "--quiet", "--slice=app.slice", "--", *cmd]
+    return cmd
+
+
 def launch_app_id(desktop_id: str) -> None:
-    subprocess.Popen(["gtk-launch", desktop_id], start_new_session=True,
+    subprocess.Popen(detached(["gtk-launch", desktop_id]), start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(HOME))
 
 
@@ -150,7 +159,7 @@ def launch_game(query: str) -> dict:
         cmd = ["gtk-launch", match["id"]]
     else:
         cmd = ["xdg-open", f"heroic://launch/{match['id']}"]
-    subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(detached(cmd), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return {**match, "command": " ".join(cmd)}
 
 

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import audio, calendar_lane, config, events, fastpath, mail, namespot, voiceprint, workers
+from . import audio, calendar_lane, config, events, fastpath, mail, media, namespot, voiceprint, workers
 from .i18n import lang, t
 from .brain import Brain
 from .stt import STT
@@ -52,7 +52,8 @@ def tool_icon(name: str, inp: str) -> str:
         return "games-hint"
     if name == "Bash":
         cmd = inp.lower()
-        for needle, icon in (("youtube", "youtube"), ("yt-dlp", "youtube"), ("justday claude", "applications-development"),
+        for needle, icon in (("justday play", "media-playback-start"), ("justday video", "video-x-generic"),
+                             ("justday player", "media-playback-start"), ("youtube", "youtube"), ("yt-dlp", "youtube"), ("justday claude", "applications-development"),
                              ("jii ", "system-software-install"), ("justday studio", "applications-graphics"), ("justday games", "applications-games"), ("steam", "steam"), ("justday apps", "application-x-executable"),
                              ("justday windows", "preferences-system-windows"), ("xdg-open http", "internet-web-browser"),
                              ("playerctl", "media-playback-start"), ("wpctl", "audio-volume-high"), ("git ", "git"),
@@ -104,7 +105,7 @@ def settings_snapshot(cfg: dict) -> dict:
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
             "microphone": cfg["audio"].get("microphone", True), "voice": cfg["tts"]["engine"] != "none",
-            "hotkeys": _hotkeys()}
+            "hotkeys": _hotkeys(), "media": cfg["media"]}
 
 
 def _hotkeys() -> dict:
@@ -221,6 +222,10 @@ class Daemon:
         self._weather_city = ""
         self.mail = mail.MailAssistant()
         self.stt.vocabulary = vocabulary(self.cfg)
+        # our own music player (background mpv) and the video playing inside the island, if any
+        self.music = media.MusicPlayer(self._on_player, int(self.cfg["media"]["volume"]))
+        self._player_state: dict | None = None
+        self.island_video: dict | None = None
 
     # ---------------- live status (overlay) ----------------
     @property
@@ -234,6 +239,8 @@ class Daemon:
                 self._quiet_until = time.monotonic() + 0.8
             self._state = value
             self.publish(state=value)
+            if self.music.alive and self.cfg["media"]["duck"]:  # music steps back while we talk
+                asyncio.create_task(self.music.duck(value in ("listening", "speaking", "approval")))
 
     def publish(self, **msg) -> None:
         """Push a status update to every `subscribe` client (the on-screen indicator). Loop thread only."""
@@ -510,7 +517,12 @@ class Daemon:
                 self._approval.set_result(ans)
                 return
         if STOP_WORDS.search(text) and len(text.split()) <= 6:
+            if self.music.playing and not self.brain.busy and self._speech_q.empty():  # "стоп" over music: the music
+                await self.music.pause()
+                return
             await self.cancel_all()
+            return
+        if await self.media_fast(text):
             return
         gen = self._cancel_gen
         done = await asyncio.get_running_loop().run_in_executor(None, fastpath.try_handle, text)
@@ -625,6 +637,8 @@ class Daemon:
                 self.mic.start()
         if a["output"] != old["audio"]["output"]:
             self.player.sink = audio.find_node(a["output"], "sinks") if a["output"] else None
+        if new["media"]["volume"] != old["media"]["volume"]:
+            asyncio.create_task(self.music.set_volume(int(new["media"]["volume"])))
         self.brain.cfg["user"] = new["user"]
         self.stt.vocabulary = vocabulary(new)
         restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
@@ -972,19 +986,227 @@ class Daemon:
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                 asyncio.create_task(self.run_turn(self._event_queue.get_nowait(), source="event"))
 
+    # ---------------- music and video ----------------
+    def _on_player(self, state: dict | None) -> None:
+        self._player_state = state
+        self.publish(player=state)
+
+    async def media_fast(self, text: str) -> bool:
+        """"пауза" / "следующая" for our player and "включи песню …" / "включи видео …" — without the brain."""
+        act = media.control_word(text)
+        if act and (self.music.active or self.island_video):
+            r = await self.media_control(act)
+            if r.get("ok"):
+                events.emit("fast", text=text, desc=r.get("done", act))
+                self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {r.get('done', act)}. Не повторяй.]")
+                await self.earcon("done")
+                return True
+        req = media.parse(text)
+        if not req:
+            return False
+        kind, query = req
+
+        async def go():
+            r = await (self.play_music(query) if kind == "music" else self.play_video(query))
+            if r.get("ok"):
+                self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {r.get('done', '')}. Не повторяй.]")
+            elif r.get("error") != "cancelled":
+                self.publish(kind="error", detail=t("Не нашёл «{q}»", q=query))
+                await self.say(t("Не получилось включить: {e}", e=r.get("error", "")[:120]))
+
+        asyncio.create_task(go())
+        return True
+
+    async def play_music(self, query: str, count: int = 1, mode: str = "replace") -> dict:
+        """Find the song on YouTube, download its audio, play it. `count` > 1: the rest follow in the background."""
+        loop = asyncio.get_running_loop()
+        query = query.strip()
+        if not query:
+            if self.music.active:
+                await self.music.resume()
+                return {"ok": True, "done": t("музыка продолжается")}
+            return {"ok": False, "error": "what to play?"}
+        path = Path(query).expanduser()
+        try:
+            await self.music.ensure()
+            if query.startswith(("/", "~", "./")) and path.exists():  # a file or a folder of music
+                files = sorted(p for p in (path.rglob("*") if path.is_dir() else [path])
+                               if p.suffix.lower() in (".mp3", ".m4a", ".opus", ".ogg", ".flac", ".wav", ".webm", ".aac"))
+                if not files:
+                    return {"ok": False, "error": "no music files there"}
+                tracks = [media.local_track(str(p)) for p in files[:500]]
+                await self.music.load(tracks, mode)
+                self._pause_videos()
+                return {"ok": True, "title": tracks[0]["title"], "queued": len(tracks) - 1,
+                        "done": t("играет {what}", what=tracks[0]["title"])}
+            self.music.set_loading({"title": query, "progress": 0})
+            entries = await loop.run_in_executor(None, media.find, query, "music", max(1, min(25, count)))
+            if not entries:
+                raise RuntimeError("nothing found")
+            self.music.set_loading({"title": entries[0]["title"], "progress": 0})
+            first = await loop.run_in_executor(None, media.download_audio, entries[0], self._progress(self.music.set_loading, entries[0]["title"]))
+        except Exception as e:  # noqa: BLE001
+            self.music.set_loading(None)
+            log.warning("play failed: %s", e)
+            return {"ok": False, "error": str(e)}
+        self.music.set_loading(None)
+        await self.music.load([first], mode)
+        self._pause_videos()
+        if len(entries) > 1:
+            asyncio.create_task(self._queue_rest(entries[1:]))
+        name = f"{first['artist']} — {first['title']}" if first.get("artist") else first["title"]
+        events.emit("media_play", title=name, file=first["file"])
+        return {"ok": True, "title": first["title"], "artist": first.get("artist", ""), "file": first["file"],
+                "queued": len(entries) - 1, "done": t("играет {what}", what=name)}
+
+    def _progress(self, setter, title: str):
+        """A yt-dlp progress callback (worker thread) → the island, in 5 % steps."""
+        loop, last = asyncio.get_running_loop(), [-1]
+
+        def cb(p: float) -> None:
+            step = int(p * 20)
+            if step != last[0]:
+                last[0] = step
+                loop.call_soon_threadsafe(setter, {"title": title, "progress": round(p, 2)})
+        return cb
+
+    async def _queue_rest(self, entries: list[dict]) -> None:
+        loop = asyncio.get_running_loop()
+        for e in entries:
+            try:
+                track = await loop.run_in_executor(None, media.download_audio, e, None)
+            except Exception as ex:  # noqa: BLE001
+                log.info("skip %s: %s", e.get("title"), ex)
+                continue
+            if not self.music.active:  # stopped meanwhile
+                return
+            await self.music.load([track], "append")
+
+    def _pause_videos(self) -> None:
+        if self.island_video:
+            self.publish(kind="video_cmd", action="pause")
+        media.window_command("set_property", "pause", True)
+
+    WHERE_WORDS = [("browser", re.compile(r"ютуб|youtube|браузер|browser|сайт", re.I)),
+                   ("window", re.compile(r"окн|окош|отдельн|плеер|window|весь экран|fullscreen", re.I)),
+                   ("island", re.compile(r"остров|здесь|тут|сверху|island|here", re.I))]
+
+    async def _ask_where(self, e: dict) -> str | None:
+        opts = [{"label": t("В острове"), "description": t("прямо здесь, поверх окон"), "icon": "go-top"},
+                {"label": t("В окне"), "description": t("отдельный плеер, есть весь экран"), "icon": "window-new"},
+                {"label": "YouTube", "description": t("в браузере, с комментариями"), "icon": "internet-web-browser"}]
+        dur = f" · {e['duration'] // 60}:{e['duration'] % 60:02d}" if e.get("duration") else ""
+        self.publish(kind="card", card={"type": "question", "header": t("Где включить видео?"), "options": opts,
+                                        "question": e["title"] + (f"\n{e['channel']}{dur}" if e.get("channel") else ""),
+                                        "thumb": e.get("thumb_url", "")})
+        try:
+            ans = await self._ask(t("Где включить: в острове, в окне или на ютубе?"), choices=[o["label"] for o in opts],
+                                  free_text=True)
+        finally:
+            self.publish(kind="card_close")
+        if ans in (None, "deny"):
+            return None
+        if ans == "allow":
+            return "island"
+        return next((w for w, rx in self.WHERE_WORDS if rx.search(ans)), None)
+
+    async def play_video(self, query: str, where: str = "") -> dict:
+        loop = asyncio.get_running_loop()
+        query = query.strip()
+        path = Path(query).expanduser()
+        try:
+            if query.startswith(("/", "~", "./")) and path.exists():
+                e = {"id": "", "title": path.stem, "channel": "", "duration": 0, "url": str(path), "thumb_url": "", "file": str(path)}
+            else:
+                self.publish(kind="tool", detail=t("Ищу видео: {q}", q=query), icon="youtube")
+                found = await loop.run_in_executor(None, media.find, query, "video")
+                if not found:
+                    return {"ok": False, "error": "nothing found"}
+                e = found[0]
+        except Exception as ex:  # noqa: BLE001
+            return {"ok": False, "error": str(ex)}
+        where = where or self.cfg["media"]["video_where"]
+        if where not in media.WHERE:
+            where = await self._ask_where(e)
+            if where is None:
+                return {"ok": False, "error": "cancelled", "result": "the user did not choose where to play it"}
+        if self.music.playing:
+            await self.music.pause()
+        done = {"island": t("видео в острове"), "window": t("видео в окне"), "browser": t("видео на YouTube")}[where]
+        if where == "browser" and not e.get("file"):
+            media.open_browser(e["url"])
+        elif where == "window" or (where == "browser" and e.get("file")):
+            media.open_window(e.get("file") or e["url"], title=e["title"])
+        else:
+            self.island_video = {"title": e["title"], "channel": e.get("channel", ""), "url": e["url"],
+                                 "thumb": e.get("thumb_url", ""), "file": e.get("file", ""), "progress": 0.0}
+            self.publish(video=self.island_video)
+            if not e.get("file"):
+                def progress(v: dict) -> None:
+                    if self.island_video and self.island_video.get("url") == e["url"]:
+                        self.island_video["progress"] = v["progress"]
+                        self.publish(video=self.island_video)
+                try:
+                    got = await loop.run_in_executor(None, media.download_video, e, self._progress(progress, e["title"]))
+                except Exception as ex:  # noqa: BLE001
+                    self.island_video = None
+                    self.publish(video=None)
+                    return {"ok": False, "error": str(ex)}
+                if not self.island_video or self.island_video.get("url") != e["url"]:
+                    return {"ok": False, "error": "cancelled", "result": "the user closed the video while it loaded"}
+                self.island_video.update(file=got["file"], thumb=got.get("thumb") or self.island_video["thumb"], progress=1.0)
+                self.publish(video=self.island_video)
+        events.emit("media_video", title=e["title"], where=where)
+        return {"ok": True, "title": e["title"], "where": where, "url": e["url"], "done": done + ": " + e["title"]}
+
+    async def media_control(self, action: str, value=None) -> dict:
+        """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | status"""
+        m = self.music
+        if action == "status":
+            return {"ok": True, "music": m.state(), "island_video": self.island_video}
+        if self.island_video and action in ("pause", "resume", "toggle", "stop", "restart"):
+            if action == "stop":
+                self.island_video = None
+                self.publish(video=None)
+            else:
+                self.publish(kind="video_cmd", action=action)
+            return {"ok": True, "done": {"pause": t("пауза"), "resume": t("воспроизведение"), "toggle": t("пауза"),
+                                         "stop": t("видео закрыто"), "restart": t("сначала")}[action]}
+        if not m.alive or not m.state():
+            args = ["cycle", "pause"] if action == "toggle" else ["set_property", "pause", action == "pause"]
+            if action in ("pause", "resume", "toggle") and media.window_command(*args):  # the video window
+                return {"ok": True, "done": t("пауза") if action == "pause" else t("воспроизведение")}
+            return {"ok": False, "error": "nothing is playing"}
+        if action == "seek":
+            await m.seek(float(value or 0))
+        elif action == "volume":
+            v = int(value if value is not None else m.volume)
+            await m.set_volume(v)
+            config.set_value("media", "volume", v)
+            self.cfg["media"]["volume"] = v
+        elif action == "restart":
+            await m.seek(0)
+        elif action in ("pause", "resume", "toggle", "next", "prev", "stop"):
+            await getattr(m, action)()
+        else:
+            return {"ok": False, "error": f"unknown action {action}"}
+        return {"ok": True, "done": {"pause": t("пауза"), "resume": t("воспроизведение"), "toggle": t("пауза"),
+                                     "next": t("следующий трек"), "prev": t("предыдущий трек"), "stop": t("музыка выключена"),
+                                     "restart": t("сначала"), "seek": t("перемотал"), "volume": t("громкость {n}%", n=m.volume)}[action]}
+
     MEDIA_KIND = {"image": "image", "edit": "image", "upscale": "image", "nobg": "image", "gif": "image",
                   "music": "music", "speech": "speech", "3d": "3d", "subs": "text"}
 
     async def studio_done(self, job: dict, kind: str, what: str, quiet: bool) -> dict:
         from . import studio
 
-        media = self.MEDIA_KIND.get(kind, "video")
+        mk = self.MEDIA_KIND.get(kind, "video")
         file = job.get("file") or ""
         label = {"image": t("картинка"), "video": t("видео"), "music": t("звук"),
-                 "speech": t("озвучка"), "3d": t("3D-модель"), "text": t("субтитры")}[media]
-        card = {"type": "media", "kind": media, "label": label, "file": file, "name": Path(file).name,
+                 "speech": t("озвучка"), "3d": t("3D-модель"), "text": t("субтитры")}[mk]
+        card = {"type": "media", "kind": mk, "label": label, "file": file, "name": Path(file).name,
                 "failed": job.get("state") == "failed", "error": job.get("error", "")}
-        if file and media in ("image", "video"):
+        if file and mk in ("image", "video"):
             thumb = config.RUNTIME_DIR / "justday-thumb" / (Path(file).stem + ".jpg")
             thumb.parent.mkdir(exist_ok=True)
             got = await asyncio.get_running_loop().run_in_executor(None, studio.thumbnail, file, thumb)
@@ -1008,7 +1230,8 @@ class Daemon:
             if cmd == "subscribe":
                 self._subs.add(writer)
                 hello = {"state": self.state, "workers": self._workers_active, "settings": settings_snapshot(self.cfg),
-                         "history": recent_history(), "weather": self.weather, "update": self.update_info}
+                         "history": recent_history(), "weather": self.weather, "update": self.update_info,
+                         "player": self._player_state, "video": self.island_video}
                 writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
                 await writer.drain()
                 await reader.read()  # hold the connection until the client goes away
@@ -1112,6 +1335,26 @@ class Daemon:
             elif cmd == "studio_done":  # a studio file is ready (or failed): card on the island; background jobs are reported
                 resp = await self.studio_done(req.get("job") or {}, req.get("kind", ""), req.get("what", ""),
                                               bool(req.get("quiet")))
+            elif cmd == "media_play":  # justday play: YouTube → file → our player
+                resp = await self.play_music(req.get("query", ""), int(req.get("count", 1)), req.get("mode", "replace"))
+            elif cmd == "media_video":  # justday video: asks where (island / window / YouTube) unless told
+                resp = await self.play_video(req.get("query", ""), req.get("where", ""))
+            elif cmd == "media":  # player buttons and `justday player ACTION`
+                resp = await self.media_control(req.get("action", "status"), req.get("value"))
+            elif cmd == "video_state":  # the island reports its video (playing / position / closed)
+                if req.get("closed"):
+                    self.island_video = None
+                    self.publish(video=None)
+                elif self.island_video:
+                    self.island_video.update(playing=bool(req.get("playing")), pos=float(req.get("pos") or 0))
+                resp = {"ok": True}
+            elif cmd == "video_popout":  # island video → its own window, from the same second
+                v = self.island_video or {}
+                if v.get("file"):
+                    media.open_window(v["file"], float(req.get("pos") or 0), v.get("title", ""), bool(req.get("fullscreen")))
+                self.island_video = None
+                self.publish(video=None)
+                resp = {"ok": True}
             elif cmd == "reload_settings":  # after `justday config set`: hot-apply what can be
                 resp = {"ok": True, "restart_needed": self.reload_settings()}
             else:
@@ -1142,6 +1385,8 @@ class Daemon:
             loop.run_in_executor(None, self.stt.load)
         loop.run_in_executor(None, self.tts.load)
         await self.brain.start()
+        if await self.music.attach():  # music that kept playing through a daemon restart
+            log.info("music player reattached")
         self._setup_wakeword()
         asyncio.create_task(self._housekeeping())
         if shutil.which("dbus-monitor"):

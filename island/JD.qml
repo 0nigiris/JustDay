@@ -62,10 +62,41 @@ Singleton {
         composeContext = ({})
         composeText = ""
     }
+    // ───────────── our music player and the video inside the island ─────────────
+    property var player: null           // {title, artist, thumb, color, pos, duration, paused, index, count, next, volume, loading}
+    property real playerAt: Date.now()  // when `pos` was reported: the island counts on by itself between updates
+    property bool playerOpen: false     // the big player (a click on the music pill)
+    property var video: null            // {title, channel, thumb, file, progress} — a video playing inside the island
+    property bool videoBig: false
+    signal videoCommand(string action)  // pause / resume / toggle / restart from the daemon ("пауза" by voice)
+    readonly property var mediaCfg: settings.media || ({})
+    readonly property bool musicOn: !!player && (!!player.file || !!player.loading)
+    // the pill stays while music plays and for a little while after a pause
+    property bool pauseGrace: false
+    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false && (!player.paused || !!player.loading || pauseGrace || peeking)
+    Timer { id: graceTimer; interval: 6000; onTriggered: jd.pauseGrace = false }
+    function media(action, value) { send({ cmd: "media", action: action, value: value === undefined ? null : value }) }
+    function playerPos(now) {
+        if (!player) return 0
+        const p = player.pos + (player.paused || player.loading ? 0 : (now - playerAt) / 1000)
+        return player.duration > 0 ? Math.min(player.duration, p) : p
+    }
+    function fmtTime(s) {
+        s = Math.max(0, Math.floor(s))
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60
+        return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0")
+    }
+    // the cover's colour, made vivid enough for bars on black
+    function artTint(c) {
+        if (!c) return accentPink
+        const q = Qt.color(c)
+        return Qt.hsla(q.hslHue < 0 ? 0.95 : q.hslHue, Math.max(0.55, q.hslSaturation), Math.min(0.68, Math.max(0.52, q.hslLightness)), 1)
+    }
+
     property bool settingsOpen: false
     property string settingsPage: "general"
     function openSettings(page) { settingsPage = page || "general"; settingsOpen = true; expanded = false }
-    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false }
+    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false; playerOpen = false }
     function openManual() { Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md"]); closeAll() }
 
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off
@@ -86,11 +117,14 @@ Singleton {
         if (settingsOpen) return "settings"
         if (card) return "card"
         if (dstate === "listening") return "listening"
+        if (video) return "video"                      // stays while the assistant works: a caption line shows it
+        if (playerOpen && musicOn) return "player"
         if (notification) return "notification"
         if (flashText) return "flash"
         if (answerOpen) return "answer"
         if (dstate === "transcribing") return "transcribing"
         if (dstate === "thinking" || dstate === "speaking") return "thinking"
+        if (musicShown && workers === 0) return "music"
         if (peeking || workers > 0) return "peek"
         return "hidden"
     }
@@ -109,6 +143,7 @@ Singleton {
     readonly property color accentOrange: "#ff9f0a"
     readonly property color accentRed: "#ff453a"
     readonly property color accentPurple: "#bf5af2"
+    readonly property color accentPink: "#fc3c44"
     readonly property string fontFamily: "Inter"
 
     // ───────────── language ─────────────
@@ -189,6 +224,14 @@ Singleton {
         if (m.update !== undefined) update = m.update
         if (m.next_event !== undefined) nextEvent = m.next_event
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
+        if (m.player !== undefined) {
+            const was = player
+            if (m.player && m.player.paused && was && !was.paused) { pauseGrace = true; graceTimer.restart() }
+            player = m.player
+            playerAt = Date.now()
+            if (!m.player) playerOpen = false
+        }
+        if (m.video !== undefined) { video = m.video; if (!m.video) videoBig = false }
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
             dstate = m.state
@@ -217,6 +260,7 @@ Singleton {
             notifTimer.restart()
             break
         case "compose": openCompose(m.text, m.context); break
+        case "video_cmd": videoCommand(m.action); break
         case "card_close": card = null; break
         case "card":
             if (!m.card) { card = null; break }

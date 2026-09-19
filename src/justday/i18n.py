@@ -68,6 +68,16 @@ EN = {
     "экран заблокирован": "screen locked", "громкость {n}%": "volume {n}%", "открыл {what}": "opened {what}",
     "запустил {what}": "launched {what}", "закрыл {what}": "closed {what}", "свернул {what}": "minimized {what}",
     "переключил на {what}": "switched to {what}",
+    # player
+    "играет {what}": "playing {what}", "музыка продолжается": "music resumed", "музыка выключена": "music stopped",
+    "сначала": "from the start", "перемотал": "skipped to the spot", "видео закрыто": "video closed",
+    "Не нашёл «{q}»": "Couldn't find “{q}”", "Не получилось включить: {e}": "Couldn't play it: {e}",
+    "Ищу видео: {q}": "Looking for a video: {q}", "Где включить видео?": "Where should the video play?",
+    "В острове": "In the island", "прямо здесь, поверх окон": "right here, above the windows",
+    "В окне": "In a window", "отдельный плеер, есть весь экран": "a separate player, can go fullscreen",
+    "в браузере, с комментариями": "in the browser, with comments",
+    "Где включить: в острове, в окне или на ютубе?": "Where should I play it: in the island, in a window or on YouTube?",
+    "видео в острове": "video in the island", "видео в окне": "video in a window", "видео на YouTube": "video on YouTube",
     # mail
     "Отправил.": "Sent.",
     "Хорошо, не отправляю.": "Okay, not sending.",

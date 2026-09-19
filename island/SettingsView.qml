@@ -112,6 +112,7 @@ Item {
                         { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
                         { id: "widgets", title: JD.tr("Виджеты"), icon: "cloud-sun", tint: "#32ade6" },
                         { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
+                        { id: "media", title: JD.tr("Музыка и видео"), icon: "music", tint: "#fc3c44" },
                         { id: "buttons", title: JD.tr("Кнопки"), icon: "keyboard", tint: "#0a84ff" },
                         { id: "model", title: JD.tr("Модель"), icon: "cpu", tint: "#bf5af2" },
                         { id: "mail", title: JD.tr("Почта и календарь"), icon: "mail", tint: "#ff453a" },
@@ -208,7 +209,7 @@ Item {
                     y: 26
                     width: Math.min(700, scroller.width - 64)
                     active: !win.loading
-                    sourceComponent: ({ general: generalPage, appearance: appearancePage, widgets: widgetsPage, voice: voicePage, buttons: buttonsPage, model: modelPage, mail: mailPage,
+                    sourceComponent: ({ general: generalPage, appearance: appearancePage, widgets: widgetsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
                                         people: peoplePage, memory: memoryPage, privacy: privacyPage, diagnostics: diagnosticsPage,
                                         about: aboutPage })[win.page]
                     onLoaded: { scroller.contentY = 0; pageIn.restart() }
@@ -975,6 +976,55 @@ Item {
                 Row { title: JD.tr("Двойное нажатие = отмена"); subtitle: JD.tr("Максимальный промежуток между нажатиями (0 — выкл)"); SSlider { key: "audio.double_tap_seconds"; from: 0; to: 0.6; step: 0.05; decimals: 2; unit: JD.tr(" с") } }
                 Row { title: JD.tr("Слово пробуждения"); subtitle: JD.tr("«Hey Jarvis» без кнопки. Микрофон слушает постоянно, звук не покидает компьютер"); Toggle { checked: !!win.get("wakeword.enabled"); onToggled: v => win.set("wakeword.enabled", v) } }
                 Row { visible: !!win.get("wakeword.enabled"); title: JD.tr("По имени"); subtitle: JD.tr("«Джарвис, …» и «JustDay, …» — можно сразу с командой. Начало каждой фразы распознаётся локально"); Toggle { checked: win.get("wakeword.names") !== false; onToggled: v => win.set("wakeword.names", v) } }
+            }
+        }
+    }
+
+    Component {
+        id: mediaPage
+        ColumnLayout {
+            spacing: 6
+            PageTitle { title: JD.tr("Музыка и видео"); subtitle: JD.tr("Свой плеер: песни с YouTube скачиваются и играют прямо на острове") }
+            GroupTitle { text: JD.tr("ВИДЕО") }
+            Group {
+                Row {
+                    title: JD.tr("Где включать видео")
+                    subtitle: ({ ask: JD.tr("Каждый раз спрашивать: в острове, в окне или на YouTube"),
+                                 island: JD.tr("Прямо в острове, поверх окон"), window: JD.tr("В отдельном окне плеера"),
+                                 browser: JD.tr("На сайте YouTube в браузере") })[win.get("media.video_where") || "ask"]
+                    Segmented {
+                        options: [{ value: "ask", label: JD.tr("Спрашивать") }, { value: "island", label: JD.tr("Остров") },
+                                  { value: "window", label: JD.tr("Окно") }, { value: "browser", label: "YouTube" }]
+                        current: win.get("media.video_where") || "ask"
+                        onPicked: v => { win.set("media.video_where", v); win.notify(JD.tr("Сохранено")) }
+                    }
+                }
+            }
+            GroupTitle { text: JD.tr("МУЗЫКА") }
+            Group {
+                Row {
+                    title: JD.tr("Плеер на острове")
+                    subtitle: JD.tr("Пока играет музыка — обложка и эквалайзер сверху экрана, клик открывает плеер")
+                    Toggle { checked: win.get("media.show_player") !== false; onToggled: v => win.set("media.show_player", v) }
+                }
+                Row {
+                    title: JD.tr("Приглушать музыку")
+                    subtitle: JD.tr("Тише, пока ассистент слушает и отвечает")
+                    Toggle { checked: win.get("media.duck") !== false; onToggled: v => win.set("media.duck", v) }
+                }
+                Row {
+                    title: JD.tr("Громкость плеера")
+                    SSlider { key: "media.volume"; from: 0; to: 130; step: 5; decimals: 0; unit: "%" }
+                }
+                Row {
+                    title: JD.tr("Скачанная музыка")
+                    subtitle: JD.tr("Песни сохраняются и потом играют без интернета")
+                    Btn { text: JD.tr("Открыть папку"); onClicked: Quickshell.execDetached(["sh", "-c", 'xdg-open "$(xdg-user-dir MUSIC)/JustDay/YouTube"']) }
+                }
+            }
+            Note {
+                text: JD.tr("Скажите или напишите: «включи песню Believer», «включи видео про чёрные дыры», «пауза», «следующая», «громче». ") +
+                      JD.tr("Можно и списком: «включи пять песен Linkin Park».")
             }
         }
     }

@@ -81,6 +81,12 @@ query = "category:primary is:unread newer_than:7d"   # what counts as important 
 announce = true             # say "новое письмо от …" when important mail arrives
 poll_seconds = 180
 
+[media]                     # own player: songs from YouTube are downloaded and play in a background mpv
+video_where = "ask"         # ask | island | window | browser — where "включи видео …" plays
+volume = 70                 # the player's own volume, 0–130
+duck = true                 # quieter while the assistant listens or speaks
+show_player = true          # cover + equaliser on the island while music plays
+
 [studio]                    # local creative studio (justday studio …); found automatically in ~/ai-local/ComfyUI or ~/ComfyUI
 # comfy_dir = "~/ai-local/ComfyUI"
 # python = "~/ai-local/venv/bin/python"

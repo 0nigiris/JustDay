@@ -11,6 +11,9 @@ Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
+# Programs and games the assistant starts must outlive a daemon restart: only the daemon itself is stopped
+# (it shuts its own helpers down), everything it launched keeps running.
+KillMode=process
 # The daemon only listens on a user-only Unix socket; no network ports.
 
 [Install]

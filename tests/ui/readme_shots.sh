@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Screenshots for the README: the island in its main states, in an isolated headless KWin.
-#   tests/ui/readme_shots.sh WORKDIR WALLPAPER.png [VIDEO_THUMB.jpg]
-# Needs kwin-mcp (uv tool install kwin-mcp). Results: WORKDIR/<scene>.png (1600×900).
+#   tests/ui/readme_shots.sh WORKDIR WALLPAPER.png [VIDEO_THUMB.jpg] [COVER.jpg] [CLIP.mp4]
+# Needs kwin-mcp (uv tool install kwin-mcp). Results: WORKDIR/<scene>.png (1600×900) and
+# WORKDIR/island-<scene>.png — cut around the island, as in docs/assets.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-J=$(realpath -m "$1"); WALL=$(realpath "$2"); THUMB=${3:+$(realpath "$3")}
+J=$(realpath -m "$1"); WALL=$(realpath "$2"); THUMB=${3:+$(realpath "$3")}; COVER=${4:+$(realpath "$4")}; CLIP=${5:+$(realpath "$5")}
 mkdir -p "$J"
 cat > "$J/hello.json" <<'EOF'
 {"state": "idle", "workers": 0,
@@ -12,7 +13,8 @@ cat > "$J/hello.json" <<'EOF'
    "notifications": true, "wakeword": true, "mail": true, "mail_announce": true, "accessibility": true,
    "island": {"animations": "spring", "show_weather": true, "show_events": true, "show_notifications": true},
    "microphone": true, "voice": true,
-   "hotkeys": {"talk": "Meta+J", "extra": "F19", "cancel": "Meta+Shift+J", "type": "Meta+K", "yes": "Meta+Y", "no": "Meta+N"}},
+   "hotkeys": {"talk": "Meta+J", "extra": "F19", "cancel": "Meta+Shift+J", "type": "Meta+K", "yes": "Meta+Y", "no": "Meta+N"},
+   "media": {"video_where": "ask", "show_player": true, "volume": 70, "duck": true}},
  "history": [{"ts": "14:52", "q": "поставь OBS", "a": "OBS Studio установлен с Flathub."},
              {"ts": "14:40", "q": "нарисуй обои с космосом", "a": "Готово, обои в Изображениях."},
              {"ts": "14:31", "q": "что у меня завтра", "a": "Завтра в 10:00 созвон с Ильёй."}],
@@ -24,14 +26,20 @@ JUSTDAY_ISLAND_WALLPAPER="$WALL" "$(uv tool dir)/kwin-mcp/bin/python" "$repo/tes
 sleep 8
 pid=$(qs list --all | awk -v d="wayland-mcp" '/Process ID/ {p=$3} /Display connection/ && $0 ~ d {print p}' | tail -1)
 
-ev() { echo "$1" > "$J/events.fifo"; }
-shot() { sleep "${2:-1.6}"; echo "shot $1" > "$J/ctl"; sleep 0.9; }
+ev() { printf '%s\n' "$1" > "$J/events.fifo"; }  # printf: zsh's echo would expand \n inside the JSON
 ipc() { qs ipc --pid "$pid" call island "$@"; }
+# the island's box on screen (the window is 1000 px wide, centred on the 1600 px screen) + a margin of wallpaper
+cut() {
+  local g; g=$(ipc status | python3 -c 'import json,sys; x,y,w,h,_=json.load(sys.stdin)["island"]; print(int(300+x-46), int(w+92), int(y+h+46))')
+  set -- "$1" $g
+  ffmpeg -v error -y -i "$J/$1.png" -vf "crop=$3:$4:$2:0" "$J/island-$1.png"
+}
+shot() { sleep "${2:-1.6}"; echo "shot $1" > "$J/ctl"; sleep 0.9; cut "$1"; }
 
 ipc peek; shot peek
 ev '{"state":"listening","level":0.1}'
 for _ in 1 2 3 4 5 6 7 8; do ev "{\"level\":0.$((RANDOM % 7 + 2))}"; sleep 0.08; done
-echo "shot listening" > "$J/ctl"; sleep 1
+echo "shot listening" > "$J/ctl"; sleep 1; cut listening
 ev '{"state":"thinking"}'; ev '{"kind":"heard","detail":"какая завтра погода в Праге"}'; sleep 0.8
 ev '{"kind":"tool","detail":"Ищу в интернете: погода в Праге завтра","icon":"system-search"}'; shot thinking
 ev '{"state":"speaking"}'
@@ -44,13 +52,27 @@ echo "key Escape" > "$J/ctl"; sleep 0.8
 ev '{"kind":"compose","text":"/"}'; shot slash
 echo "key Escape" > "$J/ctl"; sleep 0.8
 if [[ -n "$THUMB" ]]; then
-  ev "{\"kind\":\"card\",\"card\":{\"type\":\"media\",\"kind\":\"video\",\"label\":\"видео\",\"file\":\"$THUMB\",\"name\":\"2026-09-17 red sports car.mp4\",\"thumb\":\"$THUMB\"}}"
+  ev "{\"kind\":\"card\",\"card\":{\"type\":\"media\",\"kind\":\"video\",\"label\":\"видео\",\"file\":\"$THUMB\",\"name\":\"2026-09-19 kitten.mp4\",\"thumb\":\"$THUMB\"}}"
   shot media 2.2
   ev '{"kind":"card_close"}'; sleep 0.6
 fi
 ev '{"kind":"card","card":{"type":"message_draft","to":"Илья","via":"Discord","body":"Привет! Когда сможешь поиграть? Я свободен после шести."}}'
 shot message 2
 ev '{"kind":"card_close"}'; sleep 0.6
+if [[ -n "$COVER" ]]; then
+  ev "{\"player\":{\"title\":\"Believer\",\"artist\":\"Imagine Dragons\",\"thumb\":\"$COVER\",\"color\":\"#c0662b\",\"file\":\"/x.m4a\",\"pos\":78,\"duration\":203,\"paused\":false,\"index\":0,\"count\":6,\"next\":\"Thunder\",\"volume\":70,\"loading\":null}}"
+  shot music 1.8
+  echo "click 800 28" > "$J/ctl"; shot player 2
+  echo "key Escape" > "$J/ctl"; sleep 0.8
+fi
+if [[ -n "$CLIP" ]]; then
+  ev "{\"kind\":\"card\",\"card\":{\"type\":\"question\",\"header\":\"Где включить видео?\",\"question\":\"A cat meowing for 20 seconds\\nCat World · 0:20\",\"thumb\":\"${THUMB:-}\",\"options\":[{\"label\":\"В острове\",\"description\":\"прямо здесь, поверх окон\",\"icon\":\"go-top\"},{\"label\":\"В окне\",\"description\":\"отдельный плеер, есть весь экран\",\"icon\":\"window-new\"},{\"label\":\"YouTube\",\"description\":\"в браузере, с комментариями\",\"icon\":\"internet-web-browser\"}]}}"
+  shot where 2.4
+  ev '{"kind":"card_close"}'; sleep 0.6
+  ev "{\"video\":{\"title\":\"A cat meowing for 20 seconds\",\"channel\":\"Cat World\",\"thumb\":\"\",\"file\":\"$CLIP\",\"url\":\"https://www.youtube.com/watch?v=09nyvwzzM3Q\",\"progress\":1}}"
+  sleep 3; echo "click 800 200" > "$J/ctl"; shot video 1.2
+  ev '{"video":null}'; ev '{"player":null}'; sleep 0.8
+fi
 ipc expand; shot menu 2
 ipc settingsPage general; shot settings 2.5
 ipc collapse; sleep 0.5

@@ -1,6 +1,6 @@
 ---
 name: browser
-description: Web and browser tasks — open sites, web search, YouTube search and playing a video, reading pages, clicking/filling forms in the user's logged-in browser, downloads. Use whenever the request involves the internet or a website.
+description: Web and browser tasks — open sites, web search, YouTube search and opening a video page, reading pages, clicking/filling forms in the user's logged-in browser, downloads. Use whenever the request involves the internet or a website.
 ---
 
 # Browser & web
@@ -11,7 +11,8 @@ Pick the lightest tool that does the job:
 |---|---|
 | Answer a question from the internet | `WebSearch` / `WebFetch` (no browser window) |
 | Just open a site / search page for the user | `xdg-open "<url>"` (default browser) |
-| Find and play a YouTube video | `yt-dlp` search → `xdg-open` watch URL |
+| Listen to / watch something | skill **media** (`justday play`, `justday video`) — JustDay's own player |
+| Open a YouTube video page in the browser | `yt-dlp` search → `xdg-open` watch URL |
 | Multi-step interaction, logged-in sites, forms, reading a live page | `claude-in-chrome` MCP tools |
 | Download a file | `curl -L --fail -o ~/Downloads/<name> "<url>"` |
 

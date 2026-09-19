@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -324,6 +325,16 @@ def main(argv: list[str] | None = None) -> None:
                                        "speed | gif | slideshow | info | jobs | job ID | stop  (key=value options)")
     sp.add_argument("action")
     sp.add_argument("args", nargs="*", help="text / files, then key=value")
+    sp = sub.add_parser("play", help="play music: finds it on YouTube, downloads the audio, plays in JustDay's player "
+                                     "(count=N for several songs, next=1 / add=1 to queue); also a file or a folder")
+    sp.add_argument("query", nargs="+")
+    sp = sub.add_parser("video", help="play a video (search words or a link): where=island|window|browser, "
+                                      "asks the user when not given (Settings → Медиа)")
+    sp.add_argument("query", nargs="+")
+    sp = sub.add_parser("player", help="JustDay's player: status | pause | resume | toggle | next | prev | restart | stop | "
+                                       "seek SECONDS | volume 0-130")
+    sp.add_argument("action", nargs="?", default="status")
+    sp.add_argument("value", nargs="?")
     sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")
     sp.add_argument("action", choices=["get", "set"])
     sp.add_argument("key", nargs="?")
@@ -561,6 +572,21 @@ def main(argv: list[str] | None = None) -> None:
         _mc_cmd(a)
     elif a.cmd == "studio":
         _studio_cmd(a)
+    elif a.cmd in ("play", "video"):
+        words = [w for w in a.query if not re.match(r"^(count|next|add|where)=", w)]
+        kw = dict(w.split("=", 1) for w in a.query if w not in words)
+        q = " ".join(words)
+        if a.cmd == "play":
+            mode = "next" if kw.get("next") in ("1", "true") else "append" if kw.get("add") in ("1", "true") else "replace"
+            r = control("media_play", timeout=300, query=q, count=int(kw.get("count", 1)), mode=mode)
+        else:
+            r = control("media_video", timeout=900, query=q, where=kw.get("where", ""))
+        print(json.dumps(r, ensure_ascii=False))
+        sys.exit(0 if r.get("ok") else 1)
+    elif a.cmd == "player":
+        r = control("media", timeout=15, action=a.action, value=a.value)
+        print(json.dumps(r, ensure_ascii=False, indent=1))
+        sys.exit(0 if r.get("ok") else 1)
     elif a.cmd == "confirm-message":
         r = control("confirm_message", timeout=140, to=a.to, via=a.via, text=a.text)
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")

@@ -15,7 +15,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from . import config, events, providers
+from . import config, desktop, events, providers
 
 WORKER_SETTINGS = json.dumps({"worktree": {"bgIsolation": "none"}})
 WORKER_RULES = (
@@ -161,7 +161,7 @@ def open_terminal(ident: str | None, cwd: str | None = None) -> None:
         cmd = [term, "--workdir", wd, "-e", *args]
     else:
         raise RuntimeError("no terminal emulator found (kitty/konsole)")
-    subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(desktop.detached(cmd), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def pending_reports() -> tuple[list[dict], int]:

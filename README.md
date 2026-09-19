@@ -15,6 +15,7 @@
   <a href="#что-умеет">Что умеет</a> ·
   <a href="#как-выглядит">Как выглядит</a> ·
   <a href="#голосом-или-с-клавиатуры">Клавиатура</a> ·
+  <a href="#музыка-и-видео">Музыка и видео</a> ·
   <a href="#студия">Студия</a> ·
   <a href="#модели">Модели</a> ·
   <a href="#приватность">Приватность</a> ·
@@ -116,8 +117,8 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 </td>
 <td valign="top">
 
-**🌍 Русский и English**<br>
-Интерфейс, голос, мастер и ответы — на выбранном языке.
+**🎵 Свой плеер**<br>
+«Включи песню…» — скачает с YouTube и сыграет прямо в острове: обложка, эквалайзер, очередь. Видео — в острове, в окне или на YouTube, как скажете.
 
 </td>
 </tr>
@@ -137,12 +138,16 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 <td align="center"><img src="docs/assets/island-message.png" alt="Черновик сообщения"><br><sub><b>Сообщение</b> — ничего не уходит без вашего «да»</sub></td>
 </tr>
 <tr>
+<td align="center"><img src="docs/assets/island-player.png" alt="Плеер"><br><img src="docs/assets/island-music.png" alt="Играет" width="40%"><br><sub><b>Музыка</b> — пока играет, сверху обложка и эквалайзер; клик открывает плеер</sub></td>
+<td align="center"><img src="docs/assets/island-video.png" alt="Видео в острове"><br><sub><b>Видео прямо в острове</b> — или в окне, или на YouTube: Джарвис спросит</sub></td>
+</tr>
+<tr>
 <td align="center"><img src="docs/assets/island-slash.png" alt="Быстрые команды"><br><sub><b>/</b> — быстрые команды: новый разговор, картинка, видео, микрофон…</sub></td>
 <td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — модель, переключатели, музыка, уведомления, недавнее</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/assets/island-thinking.png" alt="Работает" width="70%"><br><img src="docs/assets/island-listening.png" alt="Слушает" width="45%"><br><sub>Что делает прямо сейчас — человеческими словами</sub></td>
-<td align="center"><img src="docs/assets/island-settings.png" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове: 12 разделов</sub></td>
+<td align="center"><img src="docs/assets/island-settings.png" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове: 13 разделов</sub></td>
 </tr>
 </table>
 
@@ -157,6 +162,24 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 | В поле ввода: <kbd>Enter</kbd> · <kbd>Shift</kbd>+<kbd>Enter</kbd> · <kbd>↑</kbd> · <kbd>/</kbd> · <kbd>Esc</kbd> | отправить · новая строка · прошлые просьбы · команды · закрыть |
 
 **Без микрофона** (школа, офис, библиотека): *Настройки → Общие → Просьбы → «Только текст»*. Микрофон не открывается, распознавание речи даже не загружается, а ответы можно оставить только текстом (*«Отвечать голосом»*). Все сочетания меняются в *Настройки → Кнопки*.
+
+## Музыка и видео
+
+«Джарвис, включи песню Believer» — через 3–5 секунд она играет. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно и списком: «включи пять песен Linkin Park», «поставь что-нибудь для учёбы».
+
+- Пока играет музыка, сверху висит **живая пилюля**: обложка, название и эквалайзер в цвет обложки. Клик открывает плеер с перемоткой и очередью.
+- «пауза», «дальше», «назад», «выключи музыку» работают мгновенно, без ИИ. Пока Джарвис слушает или говорит, музыка становится тише.
+- Плеер — отдельная служба, поэтому музыка не прерывается, даже если перезапустить ассистента.
+
+«Включи видео про чёрные дыры» — Джарвис найдёт ролик и **спросит, где его показать**:
+
+<p align="center"><img src="docs/assets/island-where.png" alt="Где включить видео" width="560"></p>
+
+- **В острове** — ролик загружается (до 720p) и играет прямо сверху экрана. Поверх него идут подписи ассистента, двойной клик открывает видео на весь экран.
+- **В окне** — отдельный плеер mpv, стартует сразу.
+- **YouTube** — страница в браузере, с комментариями.
+
+Чтобы не спрашивал каждый раз, выберите вариант в *Настройки → Музыка и видео*.
 
 ## Студия
 
@@ -203,6 +226,9 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 ```bash
 justday ask "открой дискорд"          # просьба текстом из терминала
 justday compose                       # открыть поле ввода на острове
+justday play "Imagine Dragons Believer"   # песня с YouTube в свой плеер (count=5 — несколько)
+justday video "черные дыры" where=island  # видео: island | window | browser (без where — спросит)
+justday player next                   # pause | resume | next | prev | stop | seek 60 | volume 50
 justday studio image "a red fox, watercolor" size=wide
 justday studio vertical ~/Videos/clip.mp4
 justday setup                         # мастер настройки заново
@@ -247,6 +273,7 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 ```
 
 - **Voice or keyboard.** <kbd>Meta</kbd>+<kbd>J</kbd> to talk, <kbd>Meta</kbd>+<kbd>K</kbd> to type (the text you have selected on screen is attached), <kbd>Meta</kbd>+<kbd>Y</kbd>/<kbd>N</kbd> to answer the island. A **text-only mode** never opens the microphone — handy at school or in an office.
+- **Its own music & video player.** “Play Believer” — the song is found on YouTube, downloaded and played right in the island (cover, equaliser, queue, instant “pause”/“next”). Videos play in the island, in a window or on YouTube — it asks where.
 - **Local creative studio.** Pictures, photo edits, background removal, text/image-to-video, music with vocals, 3D models (GLB/STL), voice-over, subtitles and montage (cut, join, music, burned-in subtitles, 9:16, pause removal, GIF, slideshow) — on your own GPU through ComfyUI, free and offline.
 - **Any model, free ones included:** Claude subscription, Ollama's free cloud models, OpenRouter's free tier, DeepSeek, local Ollama or any Anthropic-compatible endpoint. Memory, skills and the address book are shared across models.
 - **Private by design:** speech recognition, the voice, mail, calendar and the studio run locally; Claude Code telemetry is off; secrets live in the system keyring. Messages are sent only after you confirm.

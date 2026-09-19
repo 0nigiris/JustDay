@@ -10,6 +10,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
+import QtMultimedia
 
 ShellRoot {
     id: root
@@ -66,7 +67,7 @@ ShellRoot {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "justday-island"
-        readonly property bool big: island.mode === "expanded" || island.mode === "settings" || island.mode === "compose"
+        readonly property bool big: ["expanded", "settings", "compose", "player"].includes(island.mode)
         // the text field takes the keyboard at once (it was opened by a shortcut); menus only on click
         WlrLayershell.keyboardFocus: island.mode === "compose" ? WlrKeyboardFocus.Exclusive
                                    : big ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
@@ -105,8 +106,8 @@ ShellRoot {
             readonly property Item content: ({
                 expanded: expandedView, settings: settingsHolder, compose: composeView, approval: approvalView, card: cardView, listening: listeningView,
                 notification: notificationView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
-                peek: peekView, hidden: peekView })[mode]
-            readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden"].includes(mode) && !JD.detailOpen
+                peek: peekView, hidden: peekView, music: musicView, player: playerView, video: videoView })[mode]
+            readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music"].includes(mode) && !JD.detailOpen
 
             width: mode === "hidden" ? 140 : Math.max(120, content.implicitWidth)
             height: mode === "hidden" ? 8 : content.implicitHeight
@@ -133,8 +134,9 @@ ShellRoot {
             HoverHandler { onHoveredChanged: JD.islandHovered = hovered }
 
             TapHandler {
-                enabled: !["expanded", "settings", "approval", "card", "compose"].includes(island.mode)
+                enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video"].includes(island.mode)
                 onTapped: {
+                    if (island.mode === "music") { JD.playerOpen = true; return }
                     if (island.mode === "answer") { JD.answerOpen = false; return }
                     if (island.mode === "notification") { JD.notification = null; return }
                     JD.expanded = true
@@ -157,6 +159,9 @@ ShellRoot {
                 layer.smooth: true
                 layer.effect: MultiEffect { maskEnabled: true; maskSource: islandMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
                 PeekView { id: peekView; shown: island.mode === "peek" }
+                MusicView { id: musicView; shown: island.mode === "music" }
+                PlayerView { id: playerView; shown: island.mode === "player" }
+                VideoView { id: videoView; shown: island.mode === "video" }
                 ListeningView { id: listeningView; shown: island.mode === "listening" }
                 ThinkingView { id: thinkingView; shown: island.mode === "thinking" || island.mode === "transcribing" }
                 FlashView { id: flashView; shown: island.mode === "flash" }
@@ -497,6 +502,403 @@ ShellRoot {
         }
     }
 
+    // ───────────── music & video ─────────────
+    // album cover (a file or a YouTube thumbnail link), cropped to a rounded square
+    component Art: ClippingRectangle {
+        id: art
+        property string src: ""
+        property real size: 26
+        implicitWidth: size
+        implicitHeight: size
+        radius: Math.round(size * 0.24)
+        color: JD.fill2
+        Icon { anchors.centerIn: parent; name: "audio-x-generic"; implicitSize: art.size * 0.55; visible: artImg.status !== Image.Ready }
+        Image {
+            id: artImg
+            anchors.fill: parent
+            source: art.src ? (art.src.startsWith("http") ? art.src : "file://" + art.src) : ""
+            sourceSize.height: art.size * 2
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            opacity: status === Image.Ready ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: JD.dur(260) } }
+        }
+    }
+
+    // equaliser bars in the cover's colour; they settle down when the music pauses
+    component EqBars: Item {
+        id: eq
+        property color tint: JD.accentPink
+        property bool playing: true
+        property real t: 0
+        implicitWidth: 22
+        implicitHeight: 18
+        FrameAnimation { running: eq.visible && eq.playing && JD.animOn; onTriggered: eq.t += frameTime }
+        Row {
+            anchors.centerIn: parent
+            spacing: 2.5
+            Repeater {
+                model: 4
+                Rectangle {
+                    required property int index
+                    width: 3
+                    radius: 1.5
+                    color: eq.tint
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: eq.playing ? 4 + 13 * Math.abs(Math.sin(eq.t * (3.1 + index * 1.7) + index * 1.9) * Math.sin(eq.t * (1.3 + index * 0.6) + index))
+                                       : 3 + (index % 2)
+                    Behavior on height { enabled: !eq.playing && JD.animOn; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                }
+            }
+        }
+    }
+
+    // ▶ / ❚❚ drawn in any colour (theme icons are light-only)
+    component PlayGlyph: Item {
+        id: pg
+        property bool paused: true
+        property real size: 20
+        property color tint: "black"
+        implicitWidth: size
+        implicitHeight: size
+        Row {
+            visible: !pg.paused
+            anchors.centerIn: parent
+            spacing: pg.size * 0.22
+            Rectangle { width: pg.size * 0.26; height: pg.size * 0.8; radius: width * 0.3; color: pg.tint }
+            Rectangle { width: pg.size * 0.26; height: pg.size * 0.8; radius: width * 0.3; color: pg.tint }
+        }
+        Shape {
+            visible: pg.paused
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: pg.tint
+                strokeColor: pg.tint
+                strokeWidth: pg.size * 0.08
+                joinStyle: ShapePath.RoundJoin
+                startX: pg.size * 0.26; startY: pg.size * 0.12
+                PathLine { x: pg.size * 0.9; y: pg.size * 0.5 }
+                PathLine { x: pg.size * 0.26; y: pg.size * 0.88 }
+                PathLine { x: pg.size * 0.26; y: pg.size * 0.12 }
+            }
+        }
+    }
+
+    // a thin progress line: click or drag to jump
+    component SeekBar: Item {
+        id: sb
+        property real value: 0          // 0…1
+        property color tint: JD.text1
+        property real dragValue: -1
+        signal seek(real frac)
+        implicitHeight: 16
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            height: sbHover.hovered || sb.dragValue >= 0 ? 7 : 5
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.16)
+            Behavior on height { NumberAnimation { duration: 120 } }
+            Rectangle {
+                width: parent.width * Math.max(0, Math.min(1, sb.dragValue >= 0 ? sb.dragValue : sb.value))
+                height: parent.height
+                radius: parent.radius
+                color: sb.tint
+            }
+        }
+        HoverHandler { id: sbHover; cursorShape: Qt.PointingHandCursor }
+        MouseArea {
+            anchors.fill: parent
+            function at(x) { return Math.max(0, Math.min(1, x / width)) }
+            onPressed: m => sb.dragValue = at(m.x)
+            onPositionChanged: m => { if (pressed) sb.dragValue = at(m.x) }
+            onReleased: { sb.seek(sb.dragValue); sb.dragValue = -1 }
+        }
+    }
+
+    // the live activity: cover · title · bars (a click opens the player)
+    component MusicView: View {
+        id: mv
+        readonly property var p: JD.player || ({})
+        readonly property bool loading: !!p.loading
+        readonly property string label: loading ? JD.tr("Загружаю") + " «" + (p.loading.title || "") + "»" : (p.title || "")
+        implicitWidth: mrow.implicitWidth + 24
+        implicitHeight: 40
+        RowLayout {
+            id: mrow
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 8 }
+            spacing: 10
+            Item {
+                implicitWidth: 26; implicitHeight: 26
+                Art { anchors.fill: parent; size: 26; src: mv.loading ? "" : (mv.p.thumb || ""); visible: !mv.loading }
+                Ring { anchors.centerIn: parent; size: 20; visible: mv.loading; spinning: true; tint: JD.accentPink }
+            }
+            Label1 { text: mv.label; TextSwap on text {} Layout.maximumWidth: 230 }
+            Label2 {
+                visible: mv.loading && (mv.p.loading.progress || 0) > 0
+                text: Math.round((mv.p.loading ? mv.p.loading.progress : 0) * 100) + "%"
+                font.features: { "tnum": 1 }
+            }
+            EqBars { visible: !mv.loading; tint: JD.artTint(mv.p.color); playing: !mv.p.paused }
+        }
+    }
+
+    // the big player: cover, title, progress, buttons
+    component PlayerView: View {
+        id: pl
+        readonly property var p: JD.player || ({})
+        readonly property color tint: JD.artTint(p.color)
+        property real now: Date.now()
+        Timer { interval: 250; repeat: true; running: pl.visible && !pl.p.paused; onTriggered: pl.now = Date.now() }
+        readonly property real pos: { pl.now; return JD.playerPos(Date.now()) }
+        implicitWidth: 520
+        implicitHeight: plCol.implicitHeight + 36
+        // the cover's colour glows through from the top
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.24) }
+                GradientStop { position: 0.75; color: "transparent" }
+            }
+        }
+        ColumnLayout {
+            id: plCol
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
+            spacing: 10
+            RowLayout {
+                spacing: 14
+                Art { size: 78; src: pl.p.thumb || "" }
+                ColumnLayout {
+                    spacing: 2
+                    Layout.fillWidth: true
+                    Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 17; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
+                    Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
+                    Label2 {
+                        visible: !!pl.p.next
+                        text: JD.tr("Далее: ") + (pl.p.next || "") + (pl.p.count > 2 ? "  ·  " + (pl.p.count - pl.p.index - 1) + JD.tr(" в очереди") : "")
+                        color: JD.text3; font.pixelSize: 11; Layout.fillWidth: true
+                    }
+                }
+                IconButton { icon: "window-close"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
+            }
+            SeekBar {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                tint: pl.tint
+                value: pl.p.duration > 0 ? pl.pos / pl.p.duration : 0
+                onSeek: frac => {
+                    const to = frac * (pl.p.duration || 0)
+                    JD.media("seek", to)
+                    JD.player = Object.assign({}, JD.player, { pos: to })
+                    JD.playerAt = Date.now()
+                }
+            }
+            RowLayout {
+                Layout.topMargin: -8
+                Label2 { text: JD.fmtTime(pl.pos); color: JD.text3; font.pixelSize: 11; font.features: { "tnum": 1 } }
+                Item { Layout.fillWidth: true }
+                Label2 { text: "−" + JD.fmtTime((pl.p.duration || 0) - pl.pos); color: JD.text3; font.pixelSize: 11; font.features: { "tnum": 1 } }
+            }
+            RowLayout {
+                spacing: 14
+                IconButton { icon: "document-open-folder"; size: 30; onClicked: { Quickshell.execDetached(["dolphin", "--select", pl.p.file]); JD.closeAll() } }
+                Item { Layout.fillWidth: true }
+                IconButton { icon: "media-skip-backward"; size: 38; onClicked: JD.media("prev") }
+                Rectangle {
+                    implicitWidth: 54; implicitHeight: 54; radius: 27
+                    color: ppHover.hovered ? Qt.lighter(pl.tint, 1.15) : pl.tint
+                    scale: ppTap.pressed ? 0.92 : 1
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    PlayGlyph { anchors.centerIn: parent; paused: !!pl.p.paused; size: 20; tint: "black" }
+                    HoverHandler { id: ppHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { id: ppTap; onTapped: { JD.media("toggle"); JD.player = Object.assign({}, JD.player, { pos: pl.pos, paused: !pl.p.paused }); JD.playerAt = Date.now() } }
+                }
+                IconButton { icon: "media-skip-forward"; size: 38; onClicked: JD.media("next") }
+                Item { Layout.fillWidth: true }
+                IconButton { icon: "media-playback-stop"; size: 30; onClicked: { JD.media("stop"); JD.playerOpen = false } }
+            }
+        }
+    }
+
+    // a video inside the island (downloaded first; played by Qt right here)
+    component VideoView: View {
+        id: vv
+        readonly property var v: JD.video || ({})
+        readonly property bool ready: !!v.file
+        property bool ended: false
+        readonly property bool busyLine: ["thinking", "speaking", "transcribing"].includes(JD.dstate) || JD.answerOpen
+        implicitWidth: JD.videoBig ? 960 : 640
+        implicitHeight: Math.round(implicitWidth * 9 / 16)
+
+        function close() {
+            player.stop()
+            JD.send({ cmd: "video_state", closed: true })
+            JD.video = null
+        }
+        function popout(fullscreen) {
+            const at = player.position / 1000
+            player.stop()
+            JD.send({ cmd: "video_popout", pos: at, fullscreen: fullscreen })
+            JD.video = null
+        }
+        function toggle() {
+            if (vv.ended) { player.position = 0; vv.ended = false; player.play() }
+            else if (player.playbackState === MediaPlayer.PlayingState) player.pause()
+            else player.play()
+        }
+
+        MediaPlayer {
+            id: player
+            source: vv.ready ? "file://" + vv.v.file : ""
+            videoOutput: screenOut
+            audioOutput: AudioOutput {
+                // quieter while the assistant listens or talks
+                volume: ["listening", "speaking", "approval"].includes(JD.dstate) ? 0.25 : 1.0
+                muted: Quickshell.env("JUSTDAY_ISLAND_MUTE") === "1"  // the headless test stand stays silent
+            }
+            onSourceChanged: { vv.ended = false; if (source.toString() !== "") play() }
+            onPlaybackStateChanged: JD.send({ cmd: "video_state", playing: playbackState === MediaPlayer.PlayingState, pos: position / 1000 })
+            onMediaStatusChanged: if (mediaStatus === MediaPlayer.EndOfMedia) { vv.ended = true; endTimer.restart() }
+        }
+        Timer { id: endTimer; interval: 12000; onTriggered: if (vv.ended) { if (JD.islandHovered) restart(); else vv.close() } }
+        Connections {
+            target: JD
+            function onVideoCommand(action) {
+                if (action === "pause") player.pause()
+                else if (action === "resume") player.play()
+                else if (action === "toggle") vv.toggle()
+                else if (action === "restart") { player.position = 0; player.play() }
+            }
+        }
+        HoverHandler { id: vHover }
+        readonly property bool chrome: vHover.hovered || player.playbackState !== MediaPlayer.PlayingState
+
+        ClippingRectangle {
+            anchors.fill: parent
+            radius: 29
+            color: "black"
+
+            // while it downloads: the thumbnail, dimmed, with progress
+            Image {
+                anchors.fill: parent
+                visible: !vv.ready
+                source: vv.v.thumb ? (vv.v.thumb.startsWith("http") ? vv.v.thumb : "file://" + vv.v.thumb) : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                opacity: 0.4
+            }
+            ColumnLayout {
+                visible: !vv.ready
+                anchors.centerIn: parent
+                width: parent.width * 0.6
+                spacing: 12
+                Ring { size: 34; spinning: true; tint: JD.accentPink; Layout.alignment: Qt.AlignHCenter }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 5; radius: 2.5
+                    color: Qt.rgba(1, 1, 1, 0.18)
+                    Rectangle { width: parent.width * (vv.v.progress || 0); height: parent.height; radius: 2.5; color: JD.text1
+                                Behavior on width { NumberAnimation { duration: 300 } } }
+                }
+                Label2 { text: JD.tr("Загружаю видео…") + " " + Math.round((vv.v.progress || 0) * 100) + "%"; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
+            }
+
+            VideoOutput { id: screenOut; anchors.fill: parent; visible: vv.ready; fillMode: VideoOutput.PreserveAspectFit }
+
+            TapHandler { enabled: vv.ready; onTapped: vv.toggle(); onDoubleTapped: vv.popout(true) }
+
+            // big play sign while paused / replay at the end
+            Rectangle {
+                visible: vv.ready && player.playbackState !== MediaPlayer.PlayingState
+                anchors.centerIn: parent
+                width: 64; height: 64; radius: 32
+                color: Qt.rgba(0, 0, 0, 0.55)
+                Icon { anchors.centerIn: parent; name: vv.ended ? "media-repeat-single" : "media-playback-start"; implicitSize: 28 }
+            }
+
+            // top: title and buttons
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; top: parent.top }
+                height: 84
+                opacity: vv.chrome ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                gradient: Gradient {
+                    GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.82) }
+                    GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.45) }
+                    GradientStop { position: 1; color: "transparent" }
+                }
+                RowLayout {
+                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 24; rightMargin: 16; topMargin: 12 }
+                    spacing: 8
+                    ColumnLayout {
+                        spacing: 0
+                        Layout.fillWidth: true
+                        Label1 { text: vv.v.title || ""; Layout.fillWidth: true }
+                        Label2 { text: vv.v.channel || ""; visible: !!vv.v.channel; font.pixelSize: 11; Layout.fillWidth: true }
+                    }
+                    IconButton { icon: JD.videoBig ? "view-restore" : "view-fullscreen"; size: 28; onClicked: JD.videoBig = !JD.videoBig }
+                    IconButton { icon: "window-new"; size: 28; visible: vv.ready; onClicked: vv.popout(false) }
+                    IconButton { icon: "internet-web-browser"; size: 28; visible: !!vv.v.url && vv.v.url.startsWith("http")
+                                 onClicked: { Quickshell.execDetached(["xdg-open", vv.v.url + (player.position > 3000 ? "&t=" + Math.floor(player.position / 1000) + "s" : "")]); vv.close() } }
+                    IconButton { icon: "window-close"; size: 28; onClicked: vv.close() }
+                }
+            }
+
+            // bottom: play/pause, time, progress
+            Rectangle {
+                visible: vv.ready
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 60
+                opacity: vv.chrome && !vv.busyLine ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "transparent" }
+                    GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.75) }
+                }
+                RowLayout {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 22; rightMargin: 26; bottomMargin: 12 }
+                    spacing: 12
+                    IconButton { icon: player.playbackState === MediaPlayer.PlayingState ? "media-playback-pause" : "media-playback-start"; size: 30; onClicked: vv.toggle() }
+                    Label2 { text: JD.fmtTime(player.position / 1000) + " / " + JD.fmtTime(player.duration / 1000); color: JD.text1; font.pixelSize: 11; font.features: { "tnum": 1 } }
+                    SeekBar {
+                        Layout.fillWidth: true
+                        tint: JD.accentPink
+                        value: player.duration > 0 ? player.position / player.duration : 0
+                        onSeek: frac => { player.position = frac * player.duration; vv.ended = false }
+                    }
+                }
+            }
+
+            // the assistant keeps working over the video: its words run as a caption
+            Rectangle {
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 16 }
+                width: Math.min(parent.width - 48, capRow.implicitWidth + 28)
+                height: capRow.implicitHeight + 14
+                radius: 14
+                color: Qt.rgba(0, 0, 0, 0.72)
+                opacity: vv.busyLine ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                RowLayout {
+                    id: capRow
+                    anchors.centerIn: parent
+                    width: Math.min(implicitWidth, vv.width - 76)
+                    spacing: 10
+                    Ring { size: 16 }
+                    Label1 {
+                        text: JD.answerOpen ? JD.answer : (JD.activity || JD.tr("Думаю…"))
+                        font.weight: Font.Medium
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 2
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: vv.width - 110
+                    }
+                }
+            }
+        }
+    }
+
     // ───────────── cards ─────────────
     component CardHeader: RowLayout {
         property string icon: ""
@@ -628,7 +1030,7 @@ ShellRoot {
                           mail_draft: JD.tr("Новое письмо"), mail_sent: JD.tr("Письмо отправлено"), mail_read: cv.c.subject || JD.tr("Письмо"),
                           mail_list: JD.tr("Почта"), calendar: JD.tr("Календарь · ") + (cv.c.when || ""),
                           media: cv.c.failed ? JD.tr("Не получилось") : JD.tr("Готово") + " · " + (cv.c.label || "") })[cv.c.type] || JD.tr("Почта")
-                subtitle: ({ message_draft: (cv.c.via ? cv.c.via + " · " : "") + JD.tr("проверьте перед отправкой"), question: JD.tr("выберите или ответьте голосом"),
+                subtitle: ({ message_draft: (cv.c.via ? cv.c.via + " · " : "") + JD.tr("проверьте перед отправкой"), question: JD.micOn ? JD.tr("выберите или ответьте голосом") : JD.tr("выберите вариант"),
                              mail_draft: JD.tr("черновик · проверьте перед отправкой"), mail_sent: JD.tr("Кому: ") + (cv.c.to || ""),
                              mail_read: JD.tr("от ") + (cv.c.from || ""), mail_list: JD.tr("важные непрочитанные · обработано локально"),
                              calendar: (cv.c.items || []).length ? (cv.c.items || []).length + JD.tr(" · обработано локально") : JD.tr("свободно"),
@@ -640,17 +1042,17 @@ ShellRoot {
             // a finished picture / video / track / model from the studio
             ClippingRectangle {
                 id: previewBox
-                visible: cv.c.type === "media" && !!cv.c.thumb
+                visible: (cv.c.type === "media" || cv.c.type === "question") && !!cv.c.thumb
                 property real ratio: 0.5625  // height / width, set once the picture is loaded
                 Layout.fillWidth: true
                 // the card is 600 wide (564 inside): a fixed width keeps the layout from re-polishing itself
-                implicitHeight: Math.min(300, 564 * ratio)
+                implicitHeight: Math.min(cv.c.type === "question" ? 210 : 300, 564 * ratio)
                 radius: 14
                 color: JD.fill1
                 Image {
                     id: preview
                     anchors.fill: parent
-                    source: cv.c.type === "media" && cv.c.thumb ? "file://" + cv.c.thumb : ""
+                    source: cv.c.thumb ? (cv.c.thumb.startsWith("http") ? cv.c.thumb : "file://" + cv.c.thumb) : ""
                     sourceSize.width: 1128
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
@@ -661,14 +1063,14 @@ ShellRoot {
                     Behavior on opacity { NumberAnimation { duration: JD.dur(220); easing.type: Easing.OutCubic } }
                 }
                 Rectangle {
-                    visible: cv.c.kind === "video"
+                    visible: cv.c.kind === "video" || cv.c.type === "question"
                     anchors.centerIn: parent
                     width: 52; height: 52; radius: 26
                     color: Qt.rgba(0, 0, 0, 0.55)
                     Icon { anchors.centerIn: parent; name: "media-playback-start"; implicitSize: 24 }
                 }
-                TapHandler { onTapped: Quickshell.execDetached(["xdg-open", cv.c.file]) }
-                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { enabled: cv.c.type === "media"; onTapped: Quickshell.execDetached(["xdg-open", cv.c.file]) }
+                HoverHandler { cursorShape: cv.c.type === "media" ? Qt.PointingHandCursor : Qt.ArrowCursor }
             }
             RowLayout {
                 visible: cv.c.type === "media" && !cv.c.failed
@@ -694,7 +1096,7 @@ ShellRoot {
                 Label1 { text: cv.c.subject || JD.tr("без темы"); Layout.fillWidth: true }
             }
             Rectangle {
-                visible: ["mail_draft", "mail_read", "message_draft", "question"].includes(cv.c.type)
+                visible: ["mail_draft", "mail_read", "message_draft", "question"].includes(cv.c.type) && !cardCol.tiles
                 Layout.fillWidth: true
                 implicitHeight: Math.min(200, bodyText.implicitHeight + 24)
                 radius: 14
@@ -736,9 +1138,58 @@ ShellRoot {
                 PillButton { label: JD.tr("Отправить"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "approve" }) }
             }
 
-            // the assistant's question: one button per option
+            // the assistant's question: one button per option (options with icons sit side by side as tiles)
+            readonly property bool tiles: cv.c.type === "question" && (cv.c.options || []).length > 0 && (cv.c.options || []).length <= 4
+                                          && (cv.c.options || []).every(o => !!o.icon)
+            Label1 {
+                visible: cardCol.tiles && !!cv.c.question
+                text: cv.c.question || ""
+                font.weight: Font.Medium
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                visible: cardCol.tiles
+                Layout.fillWidth: true
+                spacing: 10
+                Repeater {
+                    model: cardCol.tiles ? cv.c.options : []
+                    Rectangle {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitHeight: tileCol.implicitHeight + 24
+                        radius: 16
+                        color: tHover.hovered ? JD.fill2 : JD.fill1
+                        border.width: index === 0 ? 1 : 0
+                        border.color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.6)
+                        scale: tTap.pressed ? 0.96 : 1
+                        Behavior on scale { NumberAnimation { duration: 120 } }
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        ColumnLayout {
+                            id: tileCol
+                            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
+                            spacing: 4
+                            Icon { name: modelData.icon; implicitSize: 26; Layout.alignment: Qt.AlignHCenter }
+                            Label1 { text: modelData.label; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
+                            Label2 { text: modelData.description || ""; font.pixelSize: 11; color: JD.text3; horizontalAlignment: Text.AlignHCenter
+                                     wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
+                            Text {
+                                visible: index === 0 && !!JD.hotkeys.yes
+                                text: JD.hotkeys.yes || ""
+                                color: JD.text3; font.family: JD.fontFamily; font.pixelSize: 10
+                                Layout.alignment: Qt.AlignHCenter
+                            }
+                        }
+                        HoverHandler { id: tHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { id: tTap; onTapped: JD.send({ cmd: "answer", value: modelData.label }) }
+                    }
+                }
+            }
             Repeater {
-                model: cv.c.type === "question" ? (cv.c.options || []) : []
+                model: cv.c.type === "question" && !cardCol.tiles ? (cv.c.options || []) : []
                 Rectangle {
                     required property var modelData
                     Layout.fillWidth: true
@@ -761,7 +1212,7 @@ ShellRoot {
                 Layout.alignment: Qt.AlignRight
                 spacing: 10
                 PillButton { label: JD.tr("Пропустить"); onClicked: JD.send({ cmd: "deny" }) }
-                PillButton { label: JD.tr("Ответить голосом"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "listen" }) }
+                PillButton { visible: JD.micOn; label: JD.tr("Ответить голосом"); tint: JD.accentBlue; onClicked: JD.send({ cmd: "listen" }) }
             }
 
             // calendar events
@@ -848,6 +1299,8 @@ ShellRoot {
             { cmd: "/stop", title: JD.tr("Остановить всё"), icon: "media-playback-stop", run: () => JD.send({ cmd: "stop" }) },
             { cmd: "/image", title: JD.tr("Нарисовать картинку"), icon: "image-x-generic", fill: JD.tr("Нарисуй ") },
             { cmd: "/video", title: JD.tr("Сделать видео"), icon: "video-x-generic", fill: JD.tr("Сделай видео: ") },
+            { cmd: "/play", title: JD.tr("Включить песню"), icon: "media-playback-start", fill: JD.tr("Включи песню ") },
+            { cmd: "/watch", title: JD.tr("Включить видео"), icon: "video-x-generic", fill: JD.tr("Включи видео ") },
             { cmd: "/music", title: JD.tr("Сделать музыку"), icon: "audio-x-generic", fill: JD.tr("Сделай трек: ") },
             { cmd: "/install", title: JD.tr("Установить программу"), icon: "system-software-install", fill: JD.tr("Установи ") },
             { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
@@ -1194,13 +1647,14 @@ ShellRoot {
                 }
             }
 
-            // now playing
+            // now playing: our player first, otherwise any MPRIS player (browser, Spotify…)
             Rectangle {
-                visible: !!ev.player
+                visible: JD.musicOn || !!ev.player
                 Layout.fillWidth: true
                 implicitHeight: 64
                 radius: 18
                 color: JD.fill1
+                TapHandler { enabled: JD.musicOn; onTapped: { JD.expanded = false; JD.playerOpen = true } }
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 10
@@ -1209,17 +1663,21 @@ ShellRoot {
                         implicitWidth: 44; implicitHeight: 44; radius: 10
                         color: JD.fill2
                         Icon { anchors.centerIn: parent; name: "media-album-cover"; fallback: "audio-x-generic"; implicitSize: 22; visible: art.status !== Image.Ready }
-                        Image { id: art; anchors.fill: parent; source: ev.player ? ev.player.trackArtUrl : ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                        Image { id: art; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; asynchronous: true
+                                source: JD.musicOn ? (JD.player.thumb ? "file://" + JD.player.thumb : "") : (ev.player ? ev.player.trackArtUrl : "") }
                     }
                     ColumnLayout {
                         spacing: 0
                         Layout.fillWidth: true
-                        Label1 { text: ev.player ? (ev.player.trackTitle || ev.player.identity) : ""; Layout.fillWidth: true }
-                        Label2 { text: ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true }
+                        Label1 { text: JD.musicOn ? (JD.player.title || "") : ev.player ? (ev.player.trackTitle || ev.player.identity) : ""; Layout.fillWidth: true }
+                        Label2 { text: JD.musicOn ? (JD.player.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true }
                     }
-                    IconButton { icon: "media-skip-backward"; onClicked: ev.player.previous() }
-                    IconButton { icon: ev.player && ev.player.isPlaying ? "media-playback-pause" : "media-playback-start"; size: 36; onClicked: ev.player.togglePlaying() }
-                    IconButton { icon: "media-skip-forward"; onClicked: ev.player.next() }
+                    IconButton { icon: "media-skip-backward"; onClicked: JD.musicOn ? JD.media("prev") : ev.player.previous() }
+                    IconButton {
+                        icon: (JD.musicOn ? !JD.player.paused : ev.player && ev.player.isPlaying) ? "media-playback-pause" : "media-playback-start"; size: 36
+                        onClicked: JD.musicOn ? JD.media("toggle") : ev.player.togglePlaying()
+                    }
+                    IconButton { icon: "media-skip-forward"; onClicked: JD.musicOn ? JD.media("next") : ev.player.next() }
                 }
             }
 

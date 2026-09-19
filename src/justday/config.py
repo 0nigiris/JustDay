@@ -107,6 +107,10 @@ DEFAULTS: dict = {
     },
     # Local creative studio (justday studio): ComfyUI is found automatically; empty = auto
     "studio": {"comfy_dir": "", "python": "", "url": "", "rmbg_dir": "", "free_after": True},
+    # Own player: music from YouTube is downloaded to ~/Music/JustDay/YouTube and plays in a background mpv.
+    # video_where: ask | island | window | browser — where "включи видео …" plays
+    # duck: the music gets quieter while the assistant listens or speaks
+    "media": {"video_where": "ask", "volume": 70, "duck": True, "show_player": True},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},
 }
