@@ -88,6 +88,40 @@ def detached(cmd: list[str]) -> list[str]:
     return cmd
 
 
+def tray_items() -> list[dict]:
+    """Apps that live in the system tray (StatusNotifierItem): Telegram and Discord usually have no window at all."""
+    out: list[dict] = []
+    try:
+        raw = subprocess.run(["qdbus-qt6", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+                              "org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems"],
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return out
+    for line in raw.splitlines():
+        service, _, path = line.strip().partition("/")
+        if not service or not path:
+            continue
+        path = "/" + path
+        try:
+            prop = lambda name: subprocess.run(  # noqa: E731
+                ["qdbus-qt6", service, path, "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierItem", name],
+                capture_output=True, text=True, timeout=5).stdout.strip()
+            out.append({"service": service, "path": path, "id": prop("Id"), "title": prop("Title")})
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return out
+
+
+def tray_activate(item: dict) -> bool:
+    """The same as a left click on the tray icon: the app unhides its window."""
+    try:
+        r = subprocess.run(["qdbus-qt6", item["service"], item["path"], "org.kde.StatusNotifierItem.Activate", "0", "0"],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0
+
+
 def launch_app_id(desktop_id: str) -> None:
     subprocess.Popen(detached(["gtk-launch", desktop_id]), start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(HOME))

@@ -146,7 +146,7 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 <td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — музыка, переключатели, громкость, быстрые действия, модель, уведомления и недавнее</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/assets/island-notification.png" alt="Уведомление"><br><sub><b>Уведомления</b> — ⌄ раскрывает всё сообщение, ✕ убирает, клик открывает приложение</sub></td>
+<td align="center"><img src="docs/assets/island-notification.png" alt="Уведомление"><br><sub><b>Уведомления</b> — ⌄ раскрывает всё сообщение, ✕ убирает, клик открывает приложение — даже если оно свёрнуто в трей</sub></td>
 <td align="center"><img src="docs/assets/island-where.png" alt="Где включить видео"><br><sub><b>Видео</b> — сам спросит, где показать</sub></td>
 </tr>
 <tr>

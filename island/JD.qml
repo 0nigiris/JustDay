@@ -155,6 +155,53 @@ Singleton {
     readonly property color accentPink: "#fc3c44"
     readonly property string fontFamily: "Inter"
 
+    // ───────────── icons ─────────────
+    // The island draws its own set (lucide, one white stroke) so the menu never mixes
+    // styles with whatever icon theme the desktop happens to use. Names that are not
+    // in the table (an app's own icon on a notification) still come from the theme.
+    readonly property var glyphs: ({
+        "window-close": "x", "dialog-close": "x", "configure": "settings",
+        "go-up": "chevron-up", "go-down": "chevron-down", "go-top": "panel-top", "go-next": "chevron-right",
+        "audio-input-microphone": "mic", "audio-speakers": "headphones", "audio-volume-high": "volume-2",
+        "audio-volume-medium": "volume-2", "audio-volume-muted": "volume-x", "audio-x-generic": "music",
+        "audio-lines": "audio-lines",
+        "preferences-desktop-notification-bell": "bell", "preferences-system": "settings",
+        "media-playback-start": "play", "media-playback-pause": "pause", "media-playback-stop": "square",
+        "media-skip-forward": "skip-forward", "media-skip-backward": "skip-back",
+        "media-playlist-shuffle": "shuffle", "media-playlist-repeat": "repeat", "media-repeat-single": "repeat-1",
+        "view-media-playlist": "list-music", "view-fullscreen": "maximize-2", "view-preview": "monitor",
+        "view-grid": "layout-grid", "view-refresh": "refresh-cw",
+        "image-x-generic": "image", "video-x-generic": "video", "applications-graphics": "palette",
+        "system-software-install": "package", "system-software-update": "download", "system-run": "sparkles",
+        "document-new": "message-square-plus", "document-open-folder": "folder-open", "folder-open": "folder-open",
+        "document-edit": "text-cursor", "edit-copy": "copy", "edit-select-text": "text-cursor",
+        "format-text-bold": "text-cursor", "edit-find": "search", "search": "search",
+        "utilities-terminal": "terminal", "help-contents": "book-open", "internet-web-browser": "globe",
+        "window-new": "app-window", "input-keyboard": "keyboard",
+        "dialog-warning": "circle-alert", "dialog-ok": "check", "dialog-information": "info",
+        "appointment-soon": "calendar-clock", "user-identity": "user-round", "trash-empty": "trash",
+        // what tool_icon() sends while the assistant works
+        "input-mouse": "mouse-pointer-click", "system-search": "search", "document-open": "file-text",
+        "applications-development": "code", "games-hint": "wand-sparkles", "youtube": "circle-play",
+        "applications-games": "gamepad-2", "steam": "gamepad-2", "application-x-executable": "app-window",
+        "preferences-system-windows": "app-window", "git": "git-branch", "help-about": "circle-help",
+        "moon": "moon", "cloud": "cloud"
+    })
+    // every file in island/icons, so a view can also name a lucide icon directly
+    readonly property var localIcons: [
+        "activity", "app-window", "audio-lines", "bell", "bell-ring", "book-open", "bot", "brain", "calendar-clock",
+        "check", "chevron-down", "circle-help", "code", "gamepad-2", "git-branch", "chevron-right", "chevron-up", "circle-alert", "circle-play", "cloud", "cloud-fog",
+        "cloud-lightning", "cloud-rain", "cloud-snow", "cloud-sun", "copy", "cpu", "download", "external-link",
+        "file-text", "folder-open", "globe", "headphones", "house", "image", "info", "keyboard", "key-round",
+        "layout-grid", "list-music", "log-out", "mail", "maximize-2", "message-circle", "message-square-plus", "mic",
+        "monitor", "moon", "mouse-pointer-click", "music", "package", "palette", "panel-top", "pause", "play", "plus", "power",
+        "refresh-cw", "repeat", "repeat-1", "rotate-ccw", "search", "settings", "shield", "shuffle", "skip-back",
+        "skip-forward", "sparkles", "square", "sun", "terminal", "text-cursor", "trash", "user-round", "users",
+        "video", "volume-2", "volume-x", "wand-sparkles", "x", "zap"
+    ]
+    // "" when the island has no glyph of its own for this name
+    function glyph(name) { return name ? (glyphs[name] || (localIcons.indexOf(name) >= 0 ? name : "")) : "" }
+
     // ───────────── language ─────────────
     // UI strings are written in Russian; tr() swaps them for island/i18n/<lang>.json when another language is chosen
     readonly property string lang: settings.language || "ru"

@@ -2,6 +2,7 @@
 // Talks to the daemon over $XDG_RUNTIME_DIR/justday.sock: `subscribe` for live status, one-shot commands back.
 // Run: qs -p <repo>/island        (service: justday-island.service)
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Shapes
 import QtQuick.Effects
@@ -73,7 +74,7 @@ ShellRoot {
         WlrLayershell.keyboardFocus: island.mode === "compose" ? WlrKeyboardFocus.Exclusive
                                    : big ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         implicitWidth: 1000
-        implicitHeight: 720
+        implicitHeight: 880
         color: "transparent"
 
         // clicks pass through everywhere except the island (and the whole area while expanded, to close on outside click)
@@ -300,12 +301,39 @@ ShellRoot {
         }
     }
 
-    component Icon: IconImage {
+    // One icon language for the whole island: lucide strokes from island/icons (JD.glyphs),
+    // with the desktop's own icon theme left for the things the theme owns — app icons.
+    component Icon: Item {
+        id: ic
         property string name: ""
         property string fallback: "system-run"
-        implicitSize: 18
-        source: Quickshell.iconPath(name || fallback, fallback)
-
+        property real implicitSize: 18
+        property color tint: JD.text1
+        readonly property string glyph: JD.glyph(name) || JD.glyph(fallback)
+        implicitWidth: implicitSize
+        implicitHeight: implicitSize
+        Image {
+            id: glyphImage
+            anchors.fill: parent
+            visible: !!ic.glyph && ic.tint === JD.text1
+            source: ic.glyph ? Quickshell.shellDir + "/icons/" + ic.glyph + ".svg" : ""
+            sourceSize: Qt.size(ic.implicitSize * 2, ic.implicitSize * 2)
+            smooth: true
+        }
+        MultiEffect {
+            anchors.fill: parent
+            visible: !!ic.glyph && ic.tint !== JD.text1
+            source: glyphImage
+            colorization: 1
+            colorizationColor: ic.tint
+            brightness: 1
+        }
+        IconImage {
+            anchors.fill: parent
+            visible: !ic.glyph
+            implicitSize: ic.implicitSize
+            source: Quickshell.iconPath(ic.name || ic.fallback, ic.fallback)
+        }
     }
 
     component PillButton: Rectangle {
@@ -590,12 +618,22 @@ ShellRoot {
     component Art: ClippingRectangle {
         id: art
         property string src: ""
+        property color tint: JD.text1     // the track's colour, for the placeholder
         property real size: 26
         implicitWidth: size
         implicitHeight: size
         radius: Math.round(size * 0.24)
         color: JD.fill2
-        Icon { anchors.centerIn: parent; name: "audio-x-generic"; implicitSize: art.size * 0.55; visible: artImg.status !== Image.Ready }
+        // no cover yet (a local file, a station): a record-sleeve gradient, not a grey file icon
+        Rectangle {
+            anchors.fill: parent
+            visible: artImg.status !== Image.Ready
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(art.tint.r, art.tint.g, art.tint.b, 0.30) }
+                GradientStop { position: 1; color: Qt.rgba(art.tint.r, art.tint.g, art.tint.b, 0.10) }
+            }
+            Icon { anchors.centerIn: parent; name: "music"; implicitSize: art.size * 0.46; opacity: 0.75 }
+        }
         Image {
             id: artImg
             anchors.fill: parent
@@ -704,6 +742,7 @@ ShellRoot {
     component MusicView: View {
         id: mv
         readonly property var p: JD.player || ({})
+        readonly property color tint: JD.artTint(p.color)
         readonly property bool loading: !!p.loading
         readonly property string label: loading ? JD.tr("Загружаю") + " «" + (p.loading.title || "") + "»" : (p.title || "")
         implicitWidth: mrow.implicitWidth + 24
@@ -714,7 +753,7 @@ ShellRoot {
             spacing: 10
             Item {
                 implicitWidth: 26; implicitHeight: 26
-                Art { anchors.fill: parent; size: 26; src: mv.loading ? "" : (mv.p.thumb || ""); visible: !mv.loading }
+                Art { anchors.fill: parent; size: 26; tint: mv.tint; src: mv.loading ? "" : (mv.p.thumb || ""); visible: !mv.loading }
                 Ring { anchors.centerIn: parent; size: 20; visible: mv.loading; spinning: true; tint: JD.accentPink }
             }
             Label1 { text: mv.label; TextSwap on text {} Layout.maximumWidth: 230 }
@@ -723,7 +762,7 @@ ShellRoot {
                 text: Math.round((mv.p.loading ? mv.p.loading.progress : 0) * 100) + "%"
                 font.features: { "tnum": 1 }
             }
-            EqBars { visible: !mv.loading; tint: JD.artTint(mv.p.color); playing: !mv.p.paused }
+            EqBars { visible: !mv.loading; tint: mv.tint; playing: !mv.p.paused }
         }
     }
 
@@ -782,7 +821,7 @@ ShellRoot {
             spacing: 10
             RowLayout {
                 spacing: 14
-                Art { size: 84; src: pl.p.thumb || "" }
+                Art { size: 84; tint: pl.tint; src: pl.p.thumb || "" }
                 ColumnLayout {
                     spacing: 2
                     Layout.fillWidth: true
@@ -833,7 +872,6 @@ ShellRoot {
                 ModeButton {
                     icon: pl.p.repeat === "one" ? "media-repeat-single" : "media-playlist-repeat"
                     on: !!pl.p.repeat && pl.p.repeat !== "off"
-                    badge: pl.p.repeat === "one" ? "1" : ""
                     tint: pl.tint
                     onClicked: {
                         const next = ({ off: "all", all: "one", one: "off" })[pl.p.repeat || "off"]
@@ -889,7 +927,7 @@ ShellRoot {
                     RowLayout {
                         anchors { fill: parent; leftMargin: 8; rightMargin: 12 }
                         spacing: 10
-                        Art { size: 30; src: modelData.thumb || "" }
+                        Art { size: 30; tint: pl.tint; src: modelData.thumb || "" }
                         ColumnLayout {
                             spacing: 0
                             Layout.fillWidth: true
@@ -1752,7 +1790,7 @@ ShellRoot {
             width: Math.max(parent.height, parent.width * Math.min(1, ps.shown))
             height: parent.height
             radius: parent.radius
-            color: Qt.rgba(1, 1, 1, psHover.hovered || ps.dragValue >= 0 ? 0.30 : 0.22)
+            color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, psHover.hovered || ps.dragValue >= 0 ? 0.40 : 0.28)
             Behavior on width { enabled: ps.dragValue < 0; NumberAnimation { duration: 140 } }
         }
         MouseArea {
@@ -1795,7 +1833,7 @@ ShellRoot {
         readonly property var sink: Pipewire.defaultAudioSink
         PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
         implicitWidth: 740
-        implicitHeight: col.implicitHeight + 40
+        implicitHeight: Math.min(col.implicitHeight + 40, 800)
         SystemClock { id: evClock; precision: SystemClock.Minutes }
 
         function setting(key, value) { JD.run(["config", "set", key, String(value)]) }
@@ -1805,9 +1843,19 @@ ShellRoot {
             else setting("tts.engine", JD.settings.tts_previous || "silero")
         }
 
+        Flickable {
+            id: evFlick
+            anchors.fill: parent
+            contentHeight: col.implicitHeight + 40
+            clip: true
+            interactive: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
+
         ColumnLayout {
             id: col
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
+            x: 20
+            y: 20
+            width: evFlick.width - 40
             spacing: 14
 
             // ── header: who, what it is doing · time, date, weather · settings
@@ -1925,7 +1973,7 @@ ShellRoot {
                         spacing: 8
                         RowLayout {
                             spacing: 12
-                            Art { size: 62; src: np.own ? (np.p.thumb || "") : (ev.player ? ev.player.trackArtUrl || "" : "") }
+                            Art { size: 62; tint: np.tint; src: np.own ? (np.p.thumb || "") : (ev.player ? ev.player.trackArtUrl || "" : "") }
                             ColumnLayout {
                                 spacing: 1
                                 Layout.fillWidth: true
@@ -1952,7 +2000,7 @@ ShellRoot {
                             IconButton { icon: "media-skip-forward"; size: 34; onClicked: np.own ? JD.media("next") : ev.player.next() }
                             Item { Layout.fillWidth: true }
                             ModeButton { visible: np.own; icon: np.p.repeat === "one" ? "media-repeat-single" : "media-playlist-repeat"
-                                         on: !!np.p.repeat && np.p.repeat !== "off"; badge: np.p.repeat === "one" ? "1" : ""; tint: np.tint
+                                         on: !!np.p.repeat && np.p.repeat !== "off"; tint: np.tint
                                          onClicked: JD.media("repeat", ({ off: "all", all: "one", one: "off" })[np.p.repeat || "off"]) }
                         }
                     }
@@ -1995,7 +2043,8 @@ ShellRoot {
                     Tile { icon: "audio-input-microphone"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
                            on: JD.micOn; tint: JD.accentCyan; onToggled: ev.setting("audio.microphone", !JD.micOn) }
                     Tile { icon: "audio-speakers"; title: JD.tr("Голос"); onText: JD.tr("отвечает вслух"); offText: JD.tr("только текстом"); on: JD.voiceOn; tint: JD.accentBlue; onToggled: ev.toggleVoice() }
-                    Tile { icon: "audio-volume-high"; title: JD.tr("Звуки"); on: !!JD.settings.earcons; tint: JD.accentOrange
+                    Tile { icon: "audio-lines"; title: JD.tr("Звуки"); onText: JD.tr("сигналы"); offText: JD.tr("тишина")
+                           on: !!JD.settings.earcons; tint: JD.accentOrange
                            onToggled: ev.setting("audio.earcons", !JD.settings.earcons) }
                     Tile { icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); onText: JD.tr("на острове"); offText: JD.tr("не беспокоить")
                            on: JD.island.show_notifications !== false; tint: JD.accentPurple
@@ -2100,6 +2149,7 @@ ShellRoot {
                     Layout.alignment: Qt.AlignTop
                     spacing: 4
                     RowLayout {
+                        Layout.preferredHeight: 18
                         SectionLabel { text: JD.tr("УВЕДОМЛЕНИЯ"); Layout.fillWidth: true }
                         Label2 { text: JD.tr("очистить"); color: JD.accentBlue; font.pixelSize: 11
                                  TapHandler { onTapped: JD.notifications = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
@@ -2137,7 +2187,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.alignment: Qt.AlignTop
                     spacing: 4
-                    SectionLabel { text: JD.tr("НЕДАВНЕЕ") }
+                    SectionLabel { text: JD.tr("НЕДАВНЕЕ"); Layout.preferredHeight: 18; verticalAlignment: Text.AlignVCenter }
                     Repeater {
                         model: JD.history.slice(0, 3)
                         Rectangle {
@@ -2161,6 +2211,7 @@ ShellRoot {
                     }
                 }
             }
+        }
         }
     }
 }
