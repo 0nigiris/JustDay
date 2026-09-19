@@ -67,6 +67,11 @@ _CONTROLS = [
     (re.compile(r"^(предыдущ\w+|назад|previous)( трек| песн\w+| track| song)?$"), "prev"),
     (re.compile(r"^(выключи|вырубай|выруби|убери|stop|turn off) (музыку|песню|плеер|the music|music)$"), "stop"),
     (re.compile(r"^(заново|сначала|с начала|replay|restart)( трек| песню| track| song)?$"), "restart"),
+    (re.compile(r"^((выключи|убери|отключи|сними) (с )?повтор\w*|без повтора|не повторяй|repeat off|stop repeating)$"), "repeat_off"),
+    (re.compile(r"^(повторяй|повтор|зацикли) (все|всё|плейлист|альбом|очередь|список)|repeat all$"), "repeat_all"),
+    (re.compile(r"^((поставь |включи )?(на )?повтор\w*|повторяй|зацикли)( (эту|этот|это|песню|трек))*$|^repeat( this| one)?( song| track)?$"), "repeat_one"),
+    (re.compile(r"^(выключи перемешивание|по порядку|не перемешивай|shuffle off)$"), "shuffle_off"),
+    (re.compile(r"^(перемешай|перемешать|включи перемешивание|в случайном порядке|вперемешку|shuffle( on)?)( все| всё| песни| плейлист| очередь)?$"), "shuffle_on"),
 ]
 
 
@@ -151,8 +156,9 @@ def split_title(title: str, channel: str, artist: str = "", track: str = "") -> 
     if m:
         left, right = m.group(1).strip(), m.group(2).strip(" \"'«»")
         norm = lambda x: re.sub(r"\W+", "", x.lower())  # noqa: E731
-        if ch and norm(right) == norm(ch) != norm(left):  # "In The End - Linkin Park" on Linkin Park's channel
-            return left.strip(" \"'«»"), right
+        if ch and norm(right).startswith(norm(ch)) and not norm(left).startswith(norm(ch)):
+            # "In The End - Linkin Park", "Foreword - Linkin Park (Meteora)" on Linkin Park's channel
+            return left.strip(" \"'«»"), ch
         return right, left
     return t, ch
 
@@ -310,6 +316,40 @@ def find(query: str, kind: str = "music", count: int = 1) -> list[dict]:
     return [e for e in search(query, 5) if not e["live"]][:1] or search(query, 1)
 
 
+def search_playlists(query: str, n: int = 6) -> list[dict]:
+    """YouTube playlists (albums, "best of", mixes) for a query."""
+    import urllib.parse
+    url = "https://www.youtube.com/results?" + urllib.parse.urlencode({"search_query": query, "sp": "EgIQAw=="})
+    r = _ytdlp("--flat-playlist", "-J", "--playlist-end", str(n), url, timeout=30)
+    if r.returncode:
+        raise RuntimeError((r.stderr.strip().splitlines() or ["YouTube search failed"])[-1])
+    return [{"title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",
+             "url": e.get("url") or f"https://www.youtube.com/playlist?list={e['id']}"}
+            for e in json.loads(r.stdout).get("entries") or [] if e.get("id")]
+
+
+def playlist(query: str, limit: int = 100) -> tuple[str, list[dict]]:
+    """(name, songs) of a playlist: a link, or the best playlist found for an album / artist / mood.
+    Official uploads (the artist's own channel or «… - Topic») win over fan compilations."""
+    if is_url(query):
+        url = query
+    else:
+        found = search_playlists(query)
+        if not found:
+            raise RuntimeError("no playlist found")
+        words = {w for w in re.findall(r"\w+", query.lower()) if len(w) > 2}
+        official = lambda p: any(w in p["channel"].lower() for w in words) or p["channel"].endswith(" - Topic")  # noqa: E731
+        url = next((p for p in found if official(p)), found[0])["url"]
+    r = _ytdlp("--flat-playlist", "-J", "--playlist-end", str(limit), url, timeout=60)
+    if r.returncode:
+        raise RuntimeError((r.stderr.strip().splitlines() or ["cannot open the playlist"])[-1])
+    d = json.loads(r.stdout)
+    songs = [_entry(e) for e in d.get("entries") or [] if e.get("id") and e.get("title") not in ("[Deleted video]", "[Private video]")]
+    if not songs:
+        raise RuntimeError("the playlist is empty")
+    return d.get("title") or query, songs
+
+
 # ───────────── video outside the island ─────────────
 def open_browser(url: str, start: float = 0) -> None:
     if start > 3 and "youtube.com/watch" in url:
@@ -350,7 +390,7 @@ def window_command(*args) -> bool:
 class MusicPlayer:
     """Background mpv. `on_change(state | None)` is called on the event loop whenever the island should update."""
 
-    PROPS = ("pause", "time-pos", "duration", "playlist", "playlist-pos", "idle-active", "volume")
+    PROPS = ("pause", "time-pos", "duration", "playlist", "playlist-pos", "idle-active", "volume", "loop-file", "loop-playlist")
 
     def __init__(self, on_change: Callable[[dict | None], None], volume: int = 70) -> None:
         self.on_change = on_change
@@ -365,6 +405,10 @@ class MusicPlayer:
         self._last_pub: tuple = ()
         self._task: asyncio.Task | None = None
         self.loading: dict | None = None  # {"title", "progress"} while a song downloads
+        self.shuffle = False
+        self._order: dict[str, int] = {}
+        self._seq = 0
+        self.source = ""  # what is playing as a whole: a playlist / album / artist name
 
     # connection
     @property
@@ -478,7 +522,12 @@ class MusicPlayer:
         cur = playlist[pos]["filename"] if isinstance(pos, int) and 0 <= pos < len(playlist) else ""
         t = self._tracks.get(cur) or (track_for(cur) if cur else {})
         nxt = playlist[pos + 1]["filename"] if isinstance(pos, int) and 0 <= pos < len(playlist) - 1 else ""
-        return {"title": t.get("title") or (self.loading or {}).get("title", ""), "artist": t.get("artist", ""),
+        start = pos if isinstance(pos, int) and pos >= 0 else 0
+        queue = [{"i": i, "title": (self._tracks.get(f["filename"]) or track_for(f["filename"])).get("title", ""),
+                  "artist": (self._tracks.get(f["filename"]) or {}).get("artist", ""),
+                  "thumb": (self._tracks.get(f["filename"]) or {}).get("thumb", "")}
+                 for i, f in enumerate(playlist[max(0, start - 2):start + 40], max(0, start - 2))]
+        return {"repeat": self.repeat, "shuffle": self.shuffle, "source": self.source, "queue": queue,"title": t.get("title") or (self.loading or {}).get("title", ""), "artist": t.get("artist", ""),
                 "thumb": t.get("thumb", ""), "color": t.get("color", ""), "file": cur, "url": t.get("url", ""),
                 "pos": round(float(p.get("time-pos") or 0), 1), "duration": round(float(p.get("duration") or t.get("duration") or 0), 1),
                 "paused": bool(p.get("pause")) or not cur, "index": pos if isinstance(pos, int) else -1, "count": len(playlist),
@@ -488,10 +537,17 @@ class MusicPlayer:
     def _changed(self, force: bool = False) -> None:
         s = self.state()
         key = None if s is None else (s["file"], s["paused"], int(s["pos"]), s["duration"], s["count"], s["index"],
-                                      s["volume"], json.dumps(s["loading"]))
+                                      s["volume"], json.dumps(s["loading"]), s["repeat"], s["shuffle"], s["source"])
         if force or key != self._last_pub:
             self._last_pub = key
             self.on_change(s)
+
+    @property
+    def repeat(self) -> str:
+        """off | all | one"""
+        lf, lp = self._props.get("loop-file"), self._props.get("loop-playlist")
+        on = lambda v: v not in (None, False, "no", 0)  # noqa: E731
+        return "one" if on(lf) else "all" if on(lp) else "off"
 
     @property
     def active(self) -> bool:
@@ -506,12 +562,24 @@ class MusicPlayer:
     # control
     async def load(self, tracks: list[dict], mode: str = "replace") -> None:
         """mode: replace (play now) | append (after the queue) | next (right after the current song)."""
+        import random
         await self.ensure()
+        if mode == "replace":
+            self.shuffle = False
+            self._order.clear()
         for i, t in enumerate(tracks):
             self._tracks[t["file"]] = t
+            self._seq += 1
+            self._order.setdefault(t["file"], self._seq)  # the order songs were added: "shuffle off" returns to it
             flag = {"replace": "replace" if i == 0 else "append", "append": "append-play", "next": "insert-next"}[mode]
             if mode == "next" and i:
                 flag = "append"
+            if flag in ("append", "append-play") and self.shuffle:  # shuffled: new songs land somewhere after this one
+                pos = await self.command("get_property", "playlist-pos")
+                count = await self.command("get_property", "playlist-count") or 0
+                if isinstance(pos, int) and 0 <= pos < count - 1:
+                    await self.command("loadfile", t["file"], "insert-at", random.randint(pos + 1, count))
+                    continue
             await self.command("loadfile", t["file"], flag)
         if mode == "replace":
             await self.command("set_property", "pause", False)
@@ -534,12 +602,52 @@ class MusicPlayer:
         else:
             await self.command("playlist-prev", "force")
 
+    async def jump(self, index: int) -> None:
+        await self.command("playlist-play-index", int(index))
+        await self.resume()
+
+    async def set_repeat(self, mode: str) -> None:
+        """off | all | one | cycle (off → all → one → off, like a phone)"""
+        if mode == "cycle":
+            mode = {"off": "all", "all": "one", "one": "off"}[self.repeat]
+        await self.command("set_property", "loop-file", "inf" if mode == "one" else "no")
+        await self.command("set_property", "loop-playlist", "inf" if mode == "all" else "no")
+
+    async def _reorder(self, target: list[str]) -> None:
+        live = [f["filename"] for f in await self.command("get_property", "playlist") or []]
+        for i, name in enumerate(target):
+            j = live.index(name) if name in live else -1
+            if j > i:
+                await self.command("playlist-move", j, i)
+                live.insert(i, live.pop(j))
+
+    async def set_shuffle(self, on: bool | None = None) -> None:
+        """Like a phone: the song that plays stays and goes first, the rest is shuffled after it;
+        switching it off puts everything back in the order it was added."""
+        import random
+        on = (not self.shuffle) if on is None else on
+        files = [f["filename"] for f in await self.command("get_property", "playlist") or []]
+        pos = await self.command("get_property", "playlist-pos")
+        if on != self.shuffle and files:
+            cur = files[pos] if isinstance(pos, int) and 0 <= pos < len(files) else None
+            if on:
+                rest = [f for f in files if f != cur]
+                random.shuffle(rest)
+                target = ([cur] if cur else []) + rest
+            else:
+                target = sorted(files, key=lambda f: self._order.get(f, 1 << 30))
+            await self._reorder(target)
+        self.shuffle = on
+        self._changed(force=True)
+
     async def seek(self, seconds: float) -> None:
         await self.command("seek", max(0.0, seconds), "absolute")
 
     async def stop(self) -> None:
         await self.command("stop")
         self._tracks.clear()
+        self.source = ""
+        self.shuffle = False
         self.loading = None
         self._changed(force=True)
 

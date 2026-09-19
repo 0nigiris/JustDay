@@ -27,8 +27,9 @@ from .tts import TTS, normalize, split_sentences
 log = logging.getLogger("justday.daemon")
 
 # Bare acknowledgements ("Готово.", "Открыл терминал.") are replaced by the "done" earcon.
-ACK = re.compile(r"^\W*(готово|сделано|сделал|есть|окей|ок|хорошо|выполнено|принято|done|"
-                 r"(открыл|запустил|включил|закрыл|свернул|переключил|поставил|выключил)[\w\s«»\"'.-]{0,40})\W*$", re.I)
+ACK = re.compile(r"^\W*(?:(?:готово|окей|ок|хорошо|done|ok)\W+)?(готово|сделано|сделал|есть|окей|ок|хорошо|выполнено|принято|done|"
+                 r"(открыл|запустил|включил|закрыл|свернул|переключил|поставил|выключил|включаю|ставлю|запускаю|"
+                 r"включено|играет|играю|вот|now playing|playing)[\w\s«»\"'.,:—–-]{0,70})\W*$", re.I)
 STOP_WORDS = re.compile(r"\b(стоп|хватит|отмена|отмени|отменяй|замолчи|заткнись|stop|cancel|never ?mind|shut up|be quiet)\b", re.I)
 YES = re.compile(r"\b(да|давай|разрешаю|разреши|подтверждаю|конечно|ок|окей|можно|делай|yes|yeah|sure|ok|okay|allow|go ahead|do it)\b", re.I)
 NO = re.compile(r"\b(нет|не надо|отмена|отклон\w*|запрещаю|стоп|no|nope|don'?t|deny|cancel)\b", re.I)
@@ -94,7 +95,24 @@ def parse_notification(raw: str) -> dict | None:
     d = DESKTOP_RX.search(raw)
     unq = lambda s: s.replace('\\"', '"')  # noqa: E731
     return {"app": unq(m["app"]), "icon": (d.group(1) if d else "") or m["icon"], "summary": unq(m["summary"]),
-            "body": re.sub(r"<[^>]+>", "", unq(m["body"]))[:300]}
+            "desktop": d.group(1) if d else "", "body": re.sub(r"<[^>]+>", "", unq(m["body"]))[:4000]}
+
+
+def open_notification_app(app: str, desktop_id: str) -> str:
+    """A tap on a notification on the island: bring its app forward (or start it). The exact chat opens only when
+    Plasma's own popup is clicked — the island only watches notifications, it cannot press their buttons."""
+    from . import desktop
+
+    terms = [t for t in (desktop_id.rsplit(".", 1)[-1] if desktop_id else "", app) if t]
+    for term in terms:
+        if desktop.windows("focus", term):
+            return "focused"
+    apps = desktop.list_apps()
+    hit = next((a for a in apps if desktop_id and a["id"] == desktop_id), None) or (desktop.find_apps(app, 1) or [None])[0]
+    if hit and (hit["id"] == desktop_id or hit.get("score", 0) >= 0.8):
+        desktop.launch_app_id(hit["id"])
+        return "launched"
+    return "not found"
 
 
 def settings_snapshot(cfg: dict) -> dict:
@@ -105,6 +123,7 @@ def settings_snapshot(cfg: dict) -> dict:
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
             "microphone": cfg["audio"].get("microphone", True), "voice": cfg["tts"]["engine"] != "none",
+            "tts_engine": cfg["tts"]["engine"], "tts_previous": cfg["tts"].get("previous_engine", ""),
             "hotkeys": _hotkeys(), "media": cfg["media"]}
 
 
@@ -1017,7 +1036,8 @@ class Daemon:
         asyncio.create_task(go())
         return True
 
-    async def play_music(self, query: str, count: int = 1, mode: str = "replace") -> dict:
+    async def play_music(self, query: str, count: int = 1, mode: str = "replace", playlist: bool = False,
+                         shuffle: bool = False) -> dict:
         """Find the song on YouTube, download its audio, play it. `count` > 1: the rest follow in the background."""
         loop = asyncio.get_running_loop()
         query = query.strip()
@@ -1035,14 +1055,29 @@ class Daemon:
                 if not files:
                     return {"ok": False, "error": "no music files there"}
                 tracks = [media.local_track(str(p)) for p in files[:500]]
+                if shuffle:
+                    import random
+                    random.shuffle(tracks)
                 await self.music.load(tracks, mode)
+                if mode == "replace":
+                    self.music.source = path.name if path.is_dir() else ""
+                    self.music.shuffle = shuffle
                 self._pause_videos()
                 return {"ok": True, "title": tracks[0]["title"], "queued": len(tracks) - 1,
                         "done": t("играет {what}", what=tracks[0]["title"])}
             self.music.set_loading({"title": query, "progress": 0})
-            entries = await loop.run_in_executor(None, media.find, query, "music", max(1, min(25, count)))
+            source = ""
+            if playlist or (media.is_url(query) and "list=" in query):  # an album / playlist / "best of"
+                source, entries = await loop.run_in_executor(None, media.playlist, query)
+            else:
+                entries = await loop.run_in_executor(None, media.find, query, "music", max(1, min(25, count)))
+                if count > 1:
+                    source = query
             if not entries:
                 raise RuntimeError("nothing found")
+            if shuffle:
+                import random
+                random.shuffle(entries)
             self.music.set_loading({"title": entries[0]["title"], "progress": 0})
             first = await loop.run_in_executor(None, media.download_audio, entries[0], self._progress(self.music.set_loading, entries[0]["title"]))
         except Exception as e:  # noqa: BLE001
@@ -1051,6 +1086,11 @@ class Daemon:
             return {"ok": False, "error": str(e)}
         self.music.set_loading(None)
         await self.music.load([first], mode)
+        if mode == "replace":
+            self.music.source = source
+            await self.music.set_repeat("off")
+        if shuffle:
+            self.music.shuffle = True
         self._pause_videos()
         if len(entries) > 1:
             asyncio.create_task(self._queue_rest(entries[1:]))
@@ -1188,11 +1228,23 @@ class Daemon:
             await m.seek(0)
         elif action in ("pause", "resume", "toggle", "next", "prev", "stop"):
             await getattr(m, action)()
+        elif action == "jump":
+            await m.jump(int(value or 0))
+        elif action in ("repeat", "repeat_off", "repeat_all", "repeat_one"):
+            await m.set_repeat(action[7:] if "_" in action else (value or "cycle"))
+            await asyncio.sleep(0.05)
+            action = "repeat_" + m.repeat
+        elif action in ("shuffle", "shuffle_on", "shuffle_off"):
+            await m.set_shuffle(None if action == "shuffle" and value in (None, "toggle") else
+                                action == "shuffle_on" or value in ("on", "1", "true", True))
+            action = "shuffle_on" if m.shuffle else "shuffle_off"
         else:
             return {"ok": False, "error": f"unknown action {action}"}
         return {"ok": True, "done": {"pause": t("пауза"), "resume": t("воспроизведение"), "toggle": t("пауза"),
                                      "next": t("следующий трек"), "prev": t("предыдущий трек"), "stop": t("музыка выключена"),
-                                     "restart": t("сначала"), "seek": t("перемотал"), "volume": t("громкость {n}%", n=m.volume)}[action]}
+                                     "restart": t("сначала"), "seek": t("перемотал"), "volume": t("громкость {n}%", n=m.volume),
+                                     "jump": t("переключил"), "repeat_off": t("повтор выключен"), "repeat_all": t("повтор всего"),
+                                     "repeat_one": t("повтор песни"), "shuffle_on": t("вперемешку"), "shuffle_off": t("по порядку")}[action]}
 
     MEDIA_KIND = {"image": "image", "edit": "image", "upscale": "image", "nobg": "image", "gif": "image",
                   "music": "music", "speech": "speech", "3d": "3d", "subs": "text"}
@@ -1336,11 +1388,15 @@ class Daemon:
                 resp = await self.studio_done(req.get("job") or {}, req.get("kind", ""), req.get("what", ""),
                                               bool(req.get("quiet")))
             elif cmd == "media_play":  # justday play: YouTube → file → our player
-                resp = await self.play_music(req.get("query", ""), int(req.get("count", 1)), req.get("mode", "replace"))
+                resp = await self.play_music(req.get("query", ""), int(req.get("count", 1)), req.get("mode", "replace"),
+                                             bool(req.get("playlist")), bool(req.get("shuffle")))
             elif cmd == "media_video":  # justday video: asks where (island / window / YouTube) unless told
                 resp = await self.play_video(req.get("query", ""), req.get("where", ""))
             elif cmd == "media":  # player buttons and `justday player ACTION`
                 resp = await self.media_control(req.get("action", "status"), req.get("value"))
+            elif cmd == "notification_open":  # a tap on a notification: its app comes forward
+                resp = {"ok": True, "result": await asyncio.get_running_loop().run_in_executor(
+                    None, open_notification_app, req.get("app", ""), req.get("desktop", ""))}
             elif cmd == "video_state":  # the island reports its video (playing / position / closed)
                 if req.get("closed"):
                     self.island_video = None

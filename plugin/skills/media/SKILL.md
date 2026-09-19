@@ -6,22 +6,30 @@ description: Play music and videos — "включи песню/трек/муз�
 # Music and video (`justday play` / `justday video` / `justday player`)
 
 JustDay has its own player. Don't open YouTube in the browser to *play* something — use these commands.
-Each prints JSON (`ok`, `title`, `done`). The island already shows what plays (cover, bars, a player on click):
-say at most one short sentence, or nothing (the done chime is enough). Never read file paths aloud.
+Each prints JSON (`ok`, `title`, `done`). The island already shows what plays (cover, bars, a player on click).
+**After starting music or a video say NOTHING** — no "включено", no "играет …", no artist or title: your final
+reply is empty (the done chime is enough). If you picked the wrong thing, the user will say so. Speak only on an
+error ("не нашёл …") or when the user asked a question. Never read file paths aloud.
 
 ## Music
 | Want | Command |
 |---|---|
 | a song | `justday play "Imagine Dragons Believer"` — write the query as it would be on YouTube (artist + title in their original language/spelling: «имэджин драгонс» → `Imagine Dragons`) |
+| an album / a playlist / "best of" | `justday play "Linkin Park Meteora" playlist=1` — the whole album in order (official uploads preferred); a YouTube playlist link works too |
+| shuffled | add `shuffle=1` («включи вперемешку …», «перемешай») |
 | several songs / an artist / a mood | `justday play "Linkin Park" count=8`, `justday play "lofi hip hop for studying" count=10` — the first starts in ~3 s, the rest queue up in the background |
 | add to the queue | `… add=1` (after the queue) · `… next=1` (right after the current song) |
 | a local file or a folder | `justday play ~/Music/album` |
 | a YouTube link | `justday play "https://youtu.be/…"` |
 | control | `justday player pause \| resume \| toggle \| next \| prev \| restart \| stop` |
 | jump / volume | `justday player seek 90` · `justday player volume 40` (the player's own level, 0–130) |
+| repeat | `justday player repeat one` (this song, «на повтор») · `repeat all` (the whole queue) · `repeat off` |
+| shuffle | `justday player shuffle on` / `off` |
+| a song from the queue | `justday player jump 4` (index from `status` → `queue`) |
 | what is playing | `justday player status` |
 
 Songs are saved to ~/Music/JustDay/YouTube and play from disk next time (offline too).
+Artist without a song («включи Linkin Park») → their top songs: `count=15`. An album («альбом Meteora») → `playlist=1`.
 "включи что-нибудь" without a hint: pick by the time of day and what the user usually likes (memory), count=10, and name the choice in 3–5 words.
 System volume ("громче", "тише") is `wpctl`, not the player.
 

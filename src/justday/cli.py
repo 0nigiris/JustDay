@@ -326,13 +326,13 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action")
     sp.add_argument("args", nargs="*", help="text / files, then key=value")
     sp = sub.add_parser("play", help="play music: finds it on YouTube, downloads the audio, plays in JustDay's player "
-                                     "(count=N for several songs, next=1 / add=1 to queue); also a file or a folder")
+                                     "(count=N for several songs, playlist=1 for an album/playlist, shuffle=1, next=1 / add=1 to queue); also a file or a folder")
     sp.add_argument("query", nargs="+")
     sp = sub.add_parser("video", help="play a video (search words or a link): where=island|window|browser, "
                                       "asks the user when not given (Settings → Медиа)")
     sp.add_argument("query", nargs="+")
     sp = sub.add_parser("player", help="JustDay's player: status | pause | resume | toggle | next | prev | restart | stop | "
-                                       "seek SECONDS | volume 0-130")
+                                       "seek SECONDS | volume 0-130 | repeat off|all|one | shuffle on|off | jump INDEX")
     sp.add_argument("action", nargs="?", default="status")
     sp.add_argument("value", nargs="?")
     sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")
@@ -573,12 +573,14 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "studio":
         _studio_cmd(a)
     elif a.cmd in ("play", "video"):
-        words = [w for w in a.query if not re.match(r"^(count|next|add|where)=", w)]
+        words = [w for w in a.query if not re.match(r"^(count|next|add|where|playlist|album|shuffle)=", w)]
         kw = dict(w.split("=", 1) for w in a.query if w not in words)
         q = " ".join(words)
         if a.cmd == "play":
             mode = "next" if kw.get("next") in ("1", "true") else "append" if kw.get("add") in ("1", "true") else "replace"
-            r = control("media_play", timeout=300, query=q, count=int(kw.get("count", 1)), mode=mode)
+            yes = lambda k: kw.get(k) in ("1", "true", "yes")  # noqa: E731
+            r = control("media_play", timeout=300, query=q, count=int(kw.get("count", 1)), mode=mode,
+                        playlist=yes("playlist") or yes("album"), shuffle=yes("shuffle"))
         else:
             r = control("media_video", timeout=900, query=q, where=kw.get("where", ""))
         print(json.dumps(r, ensure_ascii=False))

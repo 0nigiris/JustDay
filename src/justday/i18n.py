@@ -77,6 +77,8 @@ EN = {
     "В окне": "In a window", "отдельный плеер, есть весь экран": "a separate player, can go fullscreen",
     "в браузере, с комментариями": "in the browser, with comments",
     "Где включить: в острове, в окне или на ютубе?": "Where should I play it: in the island, in a window or on YouTube?",
+    "переключил": "switched", "повтор выключен": "repeat off", "повтор всего": "repeat all", "повтор песни": "repeat one",
+    "вперемешку": "shuffle on", "по порядку": "shuffle off",
     "видео в острове": "video in the island", "видео в окне": "video in a window", "видео на YouTube": "video on YouTube",
     # mail
     "Отправил.": "Sent.",

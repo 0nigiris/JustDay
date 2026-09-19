@@ -138,12 +138,16 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 <td align="center"><img src="docs/assets/island-message.png" alt="Черновик сообщения"><br><sub><b>Сообщение</b> — ничего не уходит без вашего «да»</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/assets/island-player.png" alt="Плеер"><br><img src="docs/assets/island-music.png" alt="Играет" width="40%"><br><sub><b>Музыка</b> — пока играет, сверху обложка и эквалайзер; клик открывает плеер</sub></td>
+<td align="center"><img src="docs/assets/island-player.png" alt="Плеер"><br><img src="docs/assets/island-music.png" alt="Играет" width="40%"><br><sub><b>Музыка</b> — альбомы и плейлисты, очередь, перемешивание и повтор; пока играет, сверху обложка и эквалайзер</sub></td>
 <td align="center"><img src="docs/assets/island-video.png" alt="Видео в острове"><br><sub><b>Видео прямо в острове</b> — или в окне, или на YouTube: Джарвис спросит</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/assets/island-slash.png" alt="Быстрые команды"><br><sub><b>/</b> — быстрые команды: новый разговор, картинка, видео, микрофон…</sub></td>
-<td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — модель, переключатели, музыка, уведомления, недавнее</sub></td>
+<td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — музыка, переключатели, громкость, быстрые действия, модель, уведомления и недавнее</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/island-notification.png" alt="Уведомление"><br><sub><b>Уведомления</b> — ⌄ раскрывает всё сообщение, ✕ убирает, клик открывает приложение</sub></td>
+<td align="center"><img src="docs/assets/island-where.png" alt="Где включить видео"><br><sub><b>Видео</b> — сам спросит, где показать</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/assets/island-thinking.png" alt="Работает" width="70%"><br><img src="docs/assets/island-listening.png" alt="Слушает" width="45%"><br><sub>Что делает прямо сейчас — человеческими словами</sub></td>
@@ -165,15 +169,13 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 
 ## Музыка и видео
 
-«Джарвис, включи песню Believer» — через 3–5 секунд она играет. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно и списком: «включи пять песен Linkin Park», «поставь что-нибудь для учёбы».
+«Джарвис, включи песню Believer» — через 3–5 секунд она играет, без лишних слов. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно альбом или плейлист целиком («включи альбом Meteora»), исполнителя («включи Linkin Park»), вперемешку или на повтор.
 
 - Пока играет музыка, сверху висит **живая пилюля**: обложка, название и эквалайзер в цвет обложки. Клик открывает плеер с перемоткой и очередью.
-- «пауза», «дальше», «назад», «выключи музыку» работают мгновенно, без ИИ. Пока Джарвис слушает или говорит, музыка становится тише.
+- «пауза», «дальше», «назад», «перемешай», «на повтор», «выключи повтор», «выключи музыку» работают мгновенно, без ИИ. В плеере те же кнопки и очередь: клик по песне включает её. Пока Джарвис слушает или говорит, музыка становится тише.
 - Плеер — отдельная служба, поэтому музыка не прерывается, даже если перезапустить ассистента.
 
 «Включи видео про чёрные дыры» — Джарвис найдёт ролик и **спросит, где его показать**:
-
-<p align="center"><img src="docs/assets/island-where.png" alt="Где включить видео" width="560"></p>
 
 - **В острове** — ролик загружается (до 720p) и играет прямо сверху экрана. Поверх него идут подписи ассистента, двойной клик открывает видео на весь экран.
 - **В окне** — отдельный плеер mpv, стартует сразу.
@@ -228,7 +230,8 @@ justday ask "открой дискорд"          # просьба тексто
 justday compose                       # открыть поле ввода на острове
 justday play "Imagine Dragons Believer"   # песня с YouTube в свой плеер (count=5 — несколько)
 justday video "черные дыры" where=island  # видео: island | window | browser (без where — спросит)
-justday player next                   # pause | resume | next | prev | stop | seek 60 | volume 50
+justday play "Linkin Park Meteora" playlist=1 shuffle=1   # альбом вперемешку
+justday player repeat one             # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50
 justday studio image "a red fox, watercolor" size=wide
 justday studio vertical ~/Videos/clip.mp4
 justday setup                         # мастер настройки заново

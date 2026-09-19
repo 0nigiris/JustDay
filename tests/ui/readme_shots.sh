@@ -60,11 +60,19 @@ ev '{"kind":"card","card":{"type":"message_draft","to":"Илья","via":"Discord
 shot message 2
 ev '{"kind":"card_close"}'; sleep 0.6
 if [[ -n "$COVER" ]]; then
-  ev "{\"player\":{\"title\":\"Believer\",\"artist\":\"Imagine Dragons\",\"thumb\":\"$COVER\",\"color\":\"#c0662b\",\"file\":\"/x.m4a\",\"pos\":78,\"duration\":203,\"paused\":false,\"index\":0,\"count\":6,\"next\":\"Thunder\",\"volume\":70,\"loading\":null}}"
+  ev "{\"player\":{\"title\":\"Believer\",\"artist\":\"Imagine Dragons\",\"thumb\":\"$COVER\",\"color\":\"#c0662b\",\"file\":\"/x.m4a\",\"pos\":78,\"duration\":203,\"paused\":false,\"index\":1,\"count\":6,\"next\":\"Thunder\",\"volume\":70,\"loading\":null,\"repeat\":\"one\",\"shuffle\":true,\"source\":\"Evolve\",\"queue\":[{\"i\":0,\"title\":\"Next To Me\",\"artist\":\"Imagine Dragons\"},{\"i\":1,\"title\":\"Believer\",\"artist\":\"Imagine Dragons\",\"thumb\":\"$COVER\"},{\"i\":2,\"title\":\"Thunder\",\"artist\":\"Imagine Dragons\"},{\"i\":3,\"title\":\"Whatever It Takes\",\"artist\":\"Imagine Dragons\"},{\"i\":4,\"title\":\"Walking The Wire\",\"artist\":\"Imagine Dragons\"},{\"i\":5,\"title\":\"Rise Up\",\"artist\":\"Imagine Dragons\"}]}}"
   shot music 1.8
-  echo "click 800 28" > "$J/ctl"; shot player 2
+  echo "click 800 28" > "$J/ctl"; sleep 2
+  g=$(ipc status | python3 -c 'import json,sys; x,y,w,h,_=json.load(sys.stdin)["island"]; print(int(300+x+18+60), int(y+h-33))')
+  echo "click $g" > "$J/ctl"; shot player 2   # with the queue open
   echo "key Escape" > "$J/ctl"; sleep 0.8
 fi
+ev '{"kind":"notification","notification":{"app":"Telegram","icon":"org.telegram.desktop","desktop":"org.telegram.desktop","summary":"Илья","body":"Привет! Ты завтра сможешь поиграть? Я думал после шести собраться в Minecraft: у нас там недостроенный замок, и ещё хочу показать мод, который нашёл вчера. Если не сможешь — напиши, перенесём на субботу."}}'
+sleep 1.4
+g=$(ipc status | python3 -c 'import json,sys; x,y,w,h,_=json.load(sys.stdin)["island"]; print(int(300+x+w-12-28-8-14), 35)')
+echo "click $g" > "$J/ctl"; shot notification 1.6
+g=$(ipc status | python3 -c 'import json,sys; x,y,w,h,_=json.load(sys.stdin)["island"]; print(int(300+x+w-12-14), 35)')
+echo "click $g" > "$J/ctl"; sleep 0.8   # ✕
 if [[ -n "$CLIP" ]]; then
   ev "{\"kind\":\"card\",\"card\":{\"type\":\"question\",\"header\":\"Где включить видео?\",\"question\":\"A cat meowing for 20 seconds\\nCat World · 0:20\",\"thumb\":\"${THUMB:-}\",\"options\":[{\"label\":\"В острове\",\"description\":\"прямо здесь, поверх окон\",\"icon\":\"go-top\"},{\"label\":\"В окне\",\"description\":\"отдельный плеер, есть весь экран\",\"icon\":\"window-new\"},{\"label\":\"YouTube\",\"description\":\"в браузере, с комментариями\",\"icon\":\"internet-web-browser\"}]}}"
   shot where 2.4

@@ -10,6 +10,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
+import Quickshell.Services.Pipewire
 import QtMultimedia
 
 ShellRoot {
@@ -134,11 +135,10 @@ ShellRoot {
             HoverHandler { onHoveredChanged: JD.islandHovered = hovered }
 
             TapHandler {
-                enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video"].includes(island.mode)
+                enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification"].includes(island.mode)
                 onTapped: {
                     if (island.mode === "music") { JD.playerOpen = true; return }
                     if (island.mode === "answer") { JD.answerOpen = false; return }
-                    if (island.mode === "notification") { JD.notification = null; return }
                     JD.expanded = true
                 }
             }
@@ -479,25 +479,108 @@ ShellRoot {
         }
     }
 
+    // a small round button that takes the click for itself (the rest of the notification opens the app)
+    component RoundKey: Rectangle {
+        id: rk
+        property string icon: ""
+        signal clicked()
+        implicitWidth: 28
+        implicitHeight: 28
+        radius: 14
+        color: rkArea.containsMouse ? JD.fill2 : JD.fill1
+        scale: rkArea.pressed ? 0.9 : 1
+        Behavior on scale { NumberAnimation { duration: 120 } }
+        Icon { anchors.centerIn: parent; name: rk.icon; implicitSize: 14 }
+        MouseArea { id: rkArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: rk.clicked() }
+    }
+
+    // a desktop notification: ⌄ unfolds the whole text, ✕ lets it go, a tap anywhere else opens the app
     component NotificationView: View {
+        id: nv
         readonly property var n: JD.notification || ({})
-        implicitWidth: Math.min(560, Math.max(320, nRow.implicitWidth + 36))
-        implicitHeight: nRow.implicitHeight + 26
-        RowLayout {
-            id: nRow
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 18 }
-            spacing: 12
-            Rectangle {
-                implicitWidth: 36; implicitHeight: 36; radius: 10
-                color: JD.fill1
-                Icon { anchors.centerIn: parent; name: n.icon || (n.app || "").toLowerCase(); fallback: "preferences-desktop-notification-bell"; implicitSize: 24 }
+        readonly property bool open: JD.notifExpanded
+        implicitWidth: open ? 600 : Math.min(580, Math.max(380, nRow.implicitWidth + 36))
+        implicitHeight: nCol.implicitHeight + 26
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: JD.openNotification(JD.notification)
+        }
+        ColumnLayout {
+            id: nCol
+            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 13; leftMargin: 16; rightMargin: 12 }
+            spacing: 10
+            RowLayout {
+                id: nRow
+                spacing: 12
+                Rectangle {
+                    implicitWidth: 38; implicitHeight: 38; radius: 11
+                    color: JD.fill1
+                    Layout.alignment: Qt.AlignTop
+                    Icon { anchors.centerIn: parent; name: nv.n.icon || (nv.n.app || "").toLowerCase(); fallback: "preferences-desktop-notification-bell"; implicitSize: 26 }
+                }
+                ColumnLayout {
+                    spacing: 1
+                    Layout.fillWidth: true
+                    RowLayout {
+                        spacing: 6
+                        Label2 { text: nv.n.app || ""; color: JD.text3; font.pixelSize: 11 }
+                        Label2 { text: JD.tr("· сейчас"); color: JD.text3; font.pixelSize: 11 }
+                    }
+                    Label1 { text: nv.n.summary || ""; TextSwap on text {} Layout.fillWidth: true; Layout.maximumWidth: 440 }
+                    Label2 {
+                        visible: !!nv.n.body && !nv.open
+                        text: (nv.n.body || "").replace(/\s+/g, " ")
+                        TextSwap on text {}
+                        wrapMode: Text.Wrap; maximumLineCount: 2
+                        Layout.fillWidth: true; Layout.maximumWidth: 440
+                    }
+                }
+                RoundKey {
+                    visible: !!nv.n.body
+                    Layout.alignment: Qt.AlignTop
+                    icon: nv.open ? "go-up" : "go-down"
+                    onClicked: JD.notifExpanded = !JD.notifExpanded
+                }
+                RoundKey { Layout.alignment: Qt.AlignTop; icon: "window-close"; onClicked: JD.dismissNotification() }
             }
-            ColumnLayout {
-                spacing: 1
+            // unfolded: the whole message, like a long-press preview on a phone
+            Rectangle {
+                visible: nv.open
                 Layout.fillWidth: true
-                Label2 { text: n.app || ""; color: JD.text3; font.pixelSize: 11; Layout.fillWidth: true }
-                Label1 { text: n.summary || ""; TextSwap on text {} Layout.fillWidth: true; Layout.maximumWidth: 460 }
-                Label2 { visible: !!n.body; text: (n.body || "").replace(/\s+/g, " "); TextSwap on text {} wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true; Layout.maximumWidth: 460 }
+                Layout.rightMargin: 4
+                implicitHeight: Math.min(320, fullBody.implicitHeight + 24)
+                radius: 14
+                color: JD.fill1
+                Flickable {
+                    anchors { fill: parent; margins: 12 }
+                    contentHeight: fullBody.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    MouseArea {  // the Flickable keeps clicks on the text for itself: pass them on
+                        width: parent.width
+                        height: fullBody.implicitHeight
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: JD.openNotification(JD.notification)
+                    }
+                    Text {
+                        id: fullBody
+                        width: parent.width
+                        text: nv.n.body || ""
+                        wrapMode: Text.Wrap
+                        color: JD.text1
+                        font.family: JD.fontFamily
+                        font.pixelSize: 14
+                        lineHeight: 1.18
+                        textFormat: Text.PlainText
+                    }
+                }
+            }
+            Label2 {
+                visible: nv.open
+                text: JD.tr("Нажмите, чтобы открыть ") + (nv.n.app || JD.tr("приложение"))
+                color: JD.text3; font.pixelSize: 11
+                Layout.alignment: Qt.AlignHCenter
             }
         }
     }
@@ -644,22 +727,53 @@ ShellRoot {
         }
     }
 
-    // the big player: cover, title, progress, buttons
+    // a round toggle for shuffle / repeat: lit in the cover's colour when on
+    component ModeButton: Rectangle {
+        id: mb
+        property string icon: ""
+        property bool on: false
+        property color tint: JD.accentPink
+        property string badge: ""
+        signal clicked()
+        implicitWidth: 36
+        implicitHeight: 36
+        radius: 18
+        color: on ? Qt.rgba(tint.r, tint.g, tint.b, 0.28) : (mbHover.hovered ? JD.fill2 : "transparent")
+        scale: mbTap.pressed ? 0.9 : 1
+        Behavior on color { ColorAnimation { duration: 160 } }
+        Behavior on scale { NumberAnimation { duration: 120 } }
+        Icon { anchors.centerIn: parent; name: mb.icon; implicitSize: 18; opacity: mb.on ? 1 : 0.55 }
+        Rectangle {
+            visible: !!mb.badge
+            anchors { right: parent.right; top: parent.top; rightMargin: 3; topMargin: 3 }
+            width: 13; height: 13; radius: 6.5
+            color: mb.tint
+            Text { anchors.centerIn: parent; text: mb.badge; color: "black"; font.family: JD.fontFamily; font.pixelSize: 9; font.weight: Font.Bold }
+        }
+        HoverHandler { id: mbHover; cursorShape: Qt.PointingHandCursor }
+        TapHandler { id: mbTap; onTapped: mb.clicked() }
+    }
+
+    // the big player: cover, title, progress, shuffle · prev · play · next · repeat, the queue
     component PlayerView: View {
         id: pl
         readonly property var p: JD.player || ({})
         readonly property color tint: JD.artTint(p.color)
         property real now: Date.now()
+        property bool queueOpen: false
         Timer { interval: 250; repeat: true; running: pl.visible && !pl.p.paused; onTriggered: pl.now = Date.now() }
         readonly property real pos: { pl.now; return JD.playerPos(Date.now()) }
-        implicitWidth: 520
+        readonly property var upcoming: (p.queue || []).filter(q => q.i >= (p.index || 0))
+        implicitWidth: 540
         implicitHeight: plCol.implicitHeight + 36
+        onShownChanged: if (!shown) queueOpen = false
+        function optimistic(change) { JD.player = Object.assign({}, JD.player, change); JD.playerAt = Date.now() }
         // the cover's colour glows through from the top
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0; color: Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.24) }
-                GradientStop { position: 0.75; color: "transparent" }
+                GradientStop { position: 0; color: Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.26) }
+                GradientStop { position: 0.6; color: "transparent" }
             }
         }
         ColumnLayout {
@@ -668,17 +782,18 @@ ShellRoot {
             spacing: 10
             RowLayout {
                 spacing: 14
-                Art { size: 78; src: pl.p.thumb || "" }
+                Art { size: 84; src: pl.p.thumb || "" }
                 ColumnLayout {
                     spacing: 2
                     Layout.fillWidth: true
-                    Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 17; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
-                    Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
                     Label2 {
-                        visible: !!pl.p.next
-                        text: JD.tr("Далее: ") + (pl.p.next || "") + (pl.p.count > 2 ? "  ·  " + (pl.p.count - pl.p.index - 1) + JD.tr(" в очереди") : "")
-                        color: JD.text3; font.pixelSize: 11; Layout.fillWidth: true
+                        visible: !!pl.p.source
+                        text: (pl.p.source || "").toUpperCase()
+                        color: pl.tint; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.6
+                        Layout.fillWidth: true
                     }
+                    Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 18; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
+                    Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
                 }
                 IconButton { icon: "window-close"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
             }
@@ -687,12 +802,7 @@ ShellRoot {
                 Layout.topMargin: 4
                 tint: pl.tint
                 value: pl.p.duration > 0 ? pl.pos / pl.p.duration : 0
-                onSeek: frac => {
-                    const to = frac * (pl.p.duration || 0)
-                    JD.media("seek", to)
-                    JD.player = Object.assign({}, JD.player, { pos: to })
-                    JD.playerAt = Date.now()
-                }
+                onSeek: frac => { const to = frac * (pl.p.duration || 0); JD.media("seek", to); pl.optimistic({ pos: to }) }
             }
             RowLayout {
                 Layout.topMargin: -8
@@ -701,22 +811,96 @@ ShellRoot {
                 Label2 { text: "−" + JD.fmtTime((pl.p.duration || 0) - pl.pos); color: JD.text3; font.pixelSize: 11; font.features: { "tnum": 1 } }
             }
             RowLayout {
-                spacing: 14
-                IconButton { icon: "document-open-folder"; size: 30; onClicked: { Quickshell.execDetached(["dolphin", "--select", pl.p.file]); JD.closeAll() } }
+                spacing: 10
                 Item { Layout.fillWidth: true }
-                IconButton { icon: "media-skip-backward"; size: 38; onClicked: JD.media("prev") }
+                ModeButton {
+                    icon: "media-playlist-shuffle"; on: !!pl.p.shuffle; tint: pl.tint
+                    onClicked: { JD.media("shuffle", pl.p.shuffle ? "off" : "on"); pl.optimistic({ shuffle: !pl.p.shuffle }) }
+                }
+                Item { implicitWidth: 6 }
+                IconButton { icon: "media-skip-backward"; size: 40; onClicked: JD.media("prev") }
                 Rectangle {
-                    implicitWidth: 54; implicitHeight: 54; radius: 27
+                    implicitWidth: 56; implicitHeight: 56; radius: 28
                     color: ppHover.hovered ? Qt.lighter(pl.tint, 1.15) : pl.tint
                     scale: ppTap.pressed ? 0.92 : 1
                     Behavior on scale { NumberAnimation { duration: 120 } }
                     PlayGlyph { anchors.centerIn: parent; paused: !!pl.p.paused; size: 20; tint: "black" }
                     HoverHandler { id: ppHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { id: ppTap; onTapped: { JD.media("toggle"); JD.player = Object.assign({}, JD.player, { pos: pl.pos, paused: !pl.p.paused }); JD.playerAt = Date.now() } }
+                    TapHandler { id: ppTap; onTapped: { JD.media("toggle"); pl.optimistic({ pos: pl.pos, paused: !pl.p.paused }) } }
                 }
-                IconButton { icon: "media-skip-forward"; size: 38; onClicked: JD.media("next") }
+                IconButton { icon: "media-skip-forward"; size: 40; onClicked: JD.media("next") }
+                Item { implicitWidth: 6 }
+                ModeButton {
+                    icon: pl.p.repeat === "one" ? "media-repeat-single" : "media-playlist-repeat"
+                    on: !!pl.p.repeat && pl.p.repeat !== "off"
+                    badge: pl.p.repeat === "one" ? "1" : ""
+                    tint: pl.tint
+                    onClicked: {
+                        const next = ({ off: "all", all: "one", one: "off" })[pl.p.repeat || "off"]
+                        JD.media("repeat", next); pl.optimistic({ repeat: next })
+                    }
+                }
                 Item { Layout.fillWidth: true }
+            }
+            // queue · folder · stop
+            RowLayout {
+                spacing: 8
+                Rectangle {
+                    implicitWidth: qRow.implicitWidth + 22; implicitHeight: 30; radius: 15
+                    color: pl.queueOpen ? JD.fill2 : (qHover.hovered ? JD.fill2 : JD.fill1)
+                    RowLayout {
+                        id: qRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Icon { name: "view-media-playlist"; implicitSize: 15 }
+                        Label2 {
+                            text: pl.upcoming.length > 1 ? JD.tr("Далее: ") + pl.upcoming[1].title + (pl.p.count - pl.p.index - 1 > 1 ? "  +" + (pl.p.count - pl.p.index - 2) : "")
+                                                         : JD.tr("Очередь пуста")
+                            color: JD.text2; Layout.maximumWidth: 300
+                        }
+                        Icon { name: pl.queueOpen ? "go-up" : "go-down"; implicitSize: 12; visible: (pl.p.count || 0) > 1 }
+                    }
+                    HoverHandler { id: qHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: if ((pl.p.count || 0) > 1) pl.queueOpen = !pl.queueOpen }
+                }
+                Item { Layout.fillWidth: true }
+                IconButton { icon: "document-open-folder"; size: 30; onClicked: { Quickshell.execDetached(["dolphin", "--select", pl.p.file]); JD.closeAll() } }
                 IconButton { icon: "media-playback-stop"; size: 30; onClicked: { JD.media("stop"); JD.playerOpen = false } }
+            }
+            // the queue: tap a song to play it
+            ListView {
+                id: qList
+                visible: pl.queueOpen
+                Layout.fillWidth: true
+                implicitHeight: Math.min(6, count) * 44
+                clip: true
+                spacing: 2
+                model: pl.queueOpen ? (pl.p.queue || []) : []
+                boundsBehavior: Flickable.StopAtBounds
+                onVisibleChanged: if (visible) positionViewAtIndex(Math.max(0, (pl.p.queue || []).findIndex(q => q.i === pl.p.index)), ListView.Beginning)
+                delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool current: modelData.i === pl.p.index
+                    width: qList.width
+                    height: 42
+                    radius: 10
+                    color: current ? Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.16) : (rowHover.hovered ? JD.fill1 : "transparent")
+                    opacity: modelData.i < pl.p.index ? 0.45 : 1
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 12 }
+                        spacing: 10
+                        Art { size: 30; src: modelData.thumb || "" }
+                        ColumnLayout {
+                            spacing: 0
+                            Layout.fillWidth: true
+                            Label1 { text: modelData.title; font.weight: current ? Font.DemiBold : Font.Normal; color: current ? pl.tint : JD.text1; Layout.fillWidth: true }
+                            Label2 { text: modelData.artist || ""; visible: !!modelData.artist; font.pixelSize: 11; Layout.fillWidth: true }
+                        }
+                        EqBars { visible: current; tint: pl.tint; playing: !pl.p.paused }
+                    }
+                    HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: JD.media("jump", modelData.i) }
+                }
             }
         }
     }
@@ -1487,97 +1671,215 @@ ShellRoot {
     }
 
     // ───────────── expanded control center ─────────────
+    // a control-center toggle: a round icon that lights up, the name and its state
     component Tile: Rectangle {
         id: tile
         property string icon: ""
         property string title: ""
+        property string onText: JD.tr("Вкл")
+        property string offText: JD.tr("Выкл")
         property bool on: false
+        property color tint: JD.accentBlue
         signal toggled()
         Layout.fillWidth: true
-        implicitHeight: 64
+        Layout.preferredWidth: 1
+        implicitHeight: 62
         radius: 18
-        color: on ? Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.9) : (tileHover.hovered ? JD.fill2 : JD.fill1)
+        color: tileHover.hovered ? JD.fill2 : JD.fill1
         scale: tileTap.pressed ? 0.96 : 1
-        Behavior on color { ColorAnimation { duration: 180 } }
+        Behavior on color { ColorAnimation { duration: 160 } }
         Behavior on scale { NumberAnimation { duration: 120 } }
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 12
-            spacing: 4
-            Icon { name: tile.icon; implicitSize: 18 }
-            Label1 { text: tile.title; font.pixelSize: 12; Layout.fillWidth: true }
+        RowLayout {
+            anchors { fill: parent; leftMargin: 11; rightMargin: 10 }
+            spacing: 10
+            Rectangle {
+                implicitWidth: 38; implicitHeight: 38; radius: 19
+                color: tile.on ? tile.tint : JD.fill2
+                Behavior on color { ColorAnimation { duration: 200 } }
+                Icon { anchors.centerIn: parent; name: tile.icon; implicitSize: 18 }
+            }
+            ColumnLayout {
+                spacing: 0
+                Layout.fillWidth: true
+                Label1 { text: tile.title; font.pixelSize: 12; Layout.fillWidth: true }
+                Label2 { text: tile.on ? tile.onText : tile.offText; font.pixelSize: 11; color: tile.on ? JD.text2 : JD.text3; Layout.fillWidth: true }
+            }
         }
         HoverHandler { id: tileHover; cursorShape: Qt.PointingHandCursor }
         TapHandler { id: tileTap; onTapped: tile.toggled() }
     }
 
+    component Chip: Rectangle {
+        id: chip
+        property string icon: ""
+        property string label: ""
+        property color tint: JD.fill1
+        signal clicked()
+        implicitWidth: chipRow.implicitWidth + 24
+        implicitHeight: 34
+        radius: 17
+        color: chipHover.hovered ? Qt.lighter(tint === JD.fill1 ? "#262628" : tint, 1.2) : tint
+        scale: chipTap.pressed ? 0.95 : 1
+        Behavior on scale { NumberAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: 120 } }
+        RowLayout {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: 7
+            Icon { visible: !!chip.icon; name: chip.icon; implicitSize: 15 }
+            Label1 { text: chip.label; font.pixelSize: 12; font.weight: Font.Medium }
+        }
+        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+        TapHandler { id: chipTap; onTapped: chip.clicked() }
+    }
+
+    // a wide pill slider (volume): drag or click anywhere on it; the icon mutes
+    component PillSlider: Rectangle {
+        id: ps
+        property real value: 0
+        property bool muted: false
+        property string icon: "audio-volume-high"
+        property string label: ""
+        property real dragValue: -1
+        signal moved(real v)
+        signal muteToggled()
+        readonly property real shown: dragValue >= 0 ? dragValue : (muted ? 0 : value)
+        implicitHeight: 40
+        radius: 20
+        color: JD.fill1
+        clip: true
+        Rectangle {
+            width: Math.max(parent.height, parent.width * Math.min(1, ps.shown))
+            height: parent.height
+            radius: parent.radius
+            color: Qt.rgba(1, 1, 1, psHover.hovered || ps.dragValue >= 0 ? 0.30 : 0.22)
+            Behavior on width { enabled: ps.dragValue < 0; NumberAnimation { duration: 140 } }
+        }
+        MouseArea {
+            anchors.fill: parent
+            anchors.leftMargin: 44
+            cursorShape: Qt.PointingHandCursor
+            function at(x) { return Math.max(0, Math.min(1, (x + 44) / ps.width)) }
+            onPressed: m => ps.dragValue = at(m.x)
+            onPositionChanged: m => { if (pressed) { ps.dragValue = at(m.x); ps.moved(ps.dragValue) } }
+            onReleased: { ps.moved(ps.dragValue); ps.dragValue = -1 }
+        }
+        HoverHandler { id: psHover }
+        Rectangle {
+            x: 4; anchors.verticalCenter: parent.verticalCenter
+            width: 32; height: 32; radius: 16
+            color: muteArea.containsMouse ? JD.fill2 : "transparent"
+            Icon { anchors.centerIn: parent; name: ps.muted || ps.value === 0 ? "audio-volume-muted" : ps.icon; implicitSize: 17 }
+            MouseArea { id: muteArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ps.muteToggled() }
+        }
+        Label2 {
+            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+            text: (ps.label ? ps.label + "  " : "") + Math.round(ps.shown * 100) + "%"
+            color: JD.text1; font.pixelSize: 12; font.features: { "tnum": 1 }
+        }
+    }
+
+    component SectionLabel: Text {
+        font.family: JD.fontFamily
+        font.pixelSize: 11
+        font.weight: Font.DemiBold
+        font.letterSpacing: 0.6
+        color: JD.text3
+    }
+
+    // ───────────── the control center (a click on the island) ─────────────
     component ExpandedView: View {
         id: ev
         property string pendingProvider: ""
         readonly property var player: Mpris.players.values.length ? Mpris.players.values.find(p => p.isPlaying) || Mpris.players.values[0] : null
-        implicitWidth: 680
+        readonly property var sink: Pipewire.defaultAudioSink
+        PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
+        implicitWidth: 740
         implicitHeight: col.implicitHeight + 40
+        SystemClock { id: evClock; precision: SystemClock.Minutes }
 
         function setting(key, value) { JD.run(["config", "set", key, String(value)]) }
+        function ask(text) { JD.expanded = false; JD.send({ cmd: "type", text: text }) }
+        function toggleVoice() {
+            if (JD.voiceOn) { setting("tts.previous_engine", JD.settings.tts_engine || "silero"); setting("tts.engine", "none") }
+            else setting("tts.engine", JD.settings.tts_previous || "silero")
+        }
 
         ColumnLayout {
             id: col
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
-            spacing: 16
+            spacing: 14
 
-            // header
+            // ── header: who, what it is doing · time, date, weather · settings
             RowLayout {
                 spacing: 14
-                Ring { size: 34 }
+                Ring { size: 36 }
                 ColumnLayout {
                     spacing: 1
-                    Label1 { text: JD.assistantName; font.pixelSize: 17 }
+                    Label1 { text: JD.assistantName; font.pixelSize: 18; font.weight: Font.Bold }
                     Label2 {
-                        text: ({ idle: JD.tr("Готов"), listening: JD.tr("Слушаю"), transcribing: JD.tr("Распознаю"), thinking: JD.activity || JD.tr("Работаю"),
+                        text: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
+                            : ({ idle: JD.micOn ? JD.tr("Готов · скажите имя или ") + (JD.hotkeys.talk || "Meta+J") : JD.tr("Готов · ") + (JD.hotkeys.type || "Meta+K"),
+                                 listening: JD.tr("Слушаю"), transcribing: JD.tr("Распознаю"), thinking: JD.activity || JD.tr("Работаю"),
                                  speaking: JD.tr("Говорит"), approval: JD.tr("Ждёт подтверждения"), offline: JD.tr("Демон не запущен") })[JD.dstate] || JD.dstate
-                        Layout.maximumWidth: 380
+                        color: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.text2
+                        Layout.maximumWidth: 330
                     }
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle {
-                    implicitWidth: chip.implicitWidth + 20; implicitHeight: 26; radius: 13
-                    color: JD.fill1
-                    Label2 { id: chip; anchors.centerIn: parent; text: (JD.settings.provider || "?") + " · " + (JD.settings.model || "?") }
+                ColumnLayout {
+                    spacing: 0
+                    Text { text: Qt.formatTime(evClock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 22; font.weight: Font.Bold; font.features: { "tnum": 1 }; Layout.alignment: Qt.AlignRight }
+                    Label2 { text: evClock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "dddd, d MMMM"); font.pixelSize: 11; Layout.alignment: Qt.AlignRight }
                 }
-                IconButton { icon: "configure"; size: 28; onClicked: JD.openSettings("general") }
-                IconButton { icon: "window-close"; size: 28; onClicked: JD.expanded = false }
+                Rectangle {
+                    visible: !!JD.weather
+                    implicitWidth: wRow.implicitWidth + 20; implicitHeight: 44; radius: 14
+                    color: JD.fill1
+                    RowLayout {
+                        id: wRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Image { source: JD.weather ? Quickshell.shellDir + "/icons/" + JD.weather.icon + ".svg" : ""; sourceSize: Qt.size(40, 40); Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
+                        ColumnLayout {
+                            spacing: -2
+                            Text { text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : ""; color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold }
+                            Label2 { text: JD.weather ? JD.tr(JD.weather.text || "") : ""; font.pixelSize: 10; Layout.maximumWidth: 90 }
+                        }
+                    }
+                }
+                IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
+                IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
             }
 
             // update available
             Rectangle {
                 visible: !!JD.update
                 Layout.fillWidth: true
-                implicitHeight: 48
+                implicitHeight: 46
                 radius: 16
                 color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.16)
                 RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 8
+                    anchors { fill: parent; leftMargin: 14; rightMargin: 7 }
                     spacing: 10
-                    Label1 { text: JD.tr("Доступно обновление JustDay"); Layout.fillWidth: false }
+                    Icon { name: "system-software-update"; implicitSize: 18 }
+                    Label1 { text: JD.tr("Доступно обновление JustDay") }
                     Label2 { text: JD.update ? (JD.update.changes || [])[0] || "" : ""; Layout.fillWidth: true }
                     PillButton { label: JD.tr("Обновить"); tint: JD.accentBlue; onClicked: JD.runUpdate() }
                 }
             }
 
-            // ask by text: opens the text field
+            // ── ask by text (or the mic)
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 44
-                radius: 22
+                implicitHeight: 46
+                radius: 23
                 color: askHover.hovered ? JD.fill2 : JD.fill1
                 Behavior on color { ColorAnimation { duration: 120 } }
                 RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 6
+                    anchors { fill: parent; leftMargin: 16; rightMargin: 6 }
                     spacing: 8
+                    Icon { name: "search"; fallback: "edit-find"; implicitSize: 16; opacity: 0.6 }
                     Text { font.family: JD.fontFamily; text: JD.tr("Спросите или попросите что-нибудь…"); color: JD.text3; font.pixelSize: 14; Layout.fillWidth: true }
                     Rectangle {
                         visible: !!JD.hotkeys.type
@@ -1585,150 +1887,279 @@ ShellRoot {
                         color: JD.fill1
                         Text { id: hk; anchors.centerIn: parent; text: JD.hotkeys.type || ""; color: JD.text2; font.family: JD.fontFamily; font.pixelSize: 11 }
                     }
-                    IconButton { visible: JD.micOn; icon: "audio-input-microphone"; size: 32; onClicked: { JD.expanded = false; JD.send({ cmd: "listen" }) } }
+                    IconButton { visible: JD.micOn; icon: "audio-input-microphone"; size: 34; onClicked: { JD.expanded = false; JD.send({ cmd: "listen" }) } }
                 }
                 HoverHandler { id: askHover; cursorShape: Qt.IBeamCursor }
                 TapHandler { onTapped: JD.openCompose() }
             }
 
-            // quick toggles
+            // ── now playing  |  toggles
             RowLayout {
-                spacing: 10
-                Tile { icon: "audio-volume-high"; title: JD.tr("Звуки"); on: !!JD.settings.earcons; onToggled: ev.setting("audio.earcons", !on) }
-                Tile { icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); on: !!JD.settings.notifications; onToggled: ev.setting("ui.notifications", !on) }
-                Tile { icon: "mail-message"; title: JD.settings.mail ? JD.tr("Объявлять письма") : JD.tr("Почта не настроена"); on: !!JD.settings.mail && !!JD.settings.mail_announce; onToggled: if (JD.settings.mail) ev.setting("mail.announce", !on); else JD.openSettings("mail") }
-                Tile { icon: "input-mouse"; title: JD.tr("Метки кнопок"); on: !!JD.settings.accessibility; onToggled: ev.setting("desktop.accessibility", !on) }
+                spacing: 12
+                Rectangle {
+                    id: np
+                    readonly property bool own: JD.musicOn
+                    readonly property bool any: own || !!ev.player
+                    readonly property var p: JD.player || ({})
+                    readonly property color tint: own ? JD.artTint(p.color) : JD.accentPink
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1.15
+                    implicitHeight: 136
+                    radius: 20
+                    color: JD.fill1
+                    clip: true
+                    Rectangle {
+                        visible: np.any
+                        anchors.fill: parent
+                        radius: parent.radius
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: Qt.rgba(np.tint.r, np.tint.g, np.tint.b, 0.28) }
+                            GradientStop { position: 1; color: "transparent" }
+                        }
+                    }
+                    // something plays
+                    ColumnLayout {
+                        visible: np.any
+                        anchors { fill: parent; margins: 12 }
+                        spacing: 8
+                        RowLayout {
+                            spacing: 12
+                            Art { size: 62; src: np.own ? (np.p.thumb || "") : (ev.player ? ev.player.trackArtUrl || "" : "") }
+                            ColumnLayout {
+                                spacing: 1
+                                Layout.fillWidth: true
+                                SectionLabel { text: np.own ? (np.p.source ? np.p.source.toUpperCase() : JD.tr("СЕЙЧАС ИГРАЕТ")) : (ev.player ? ev.player.identity.toUpperCase() : ""); color: np.tint; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Label1 { text: np.own ? (np.p.title || "") : ev.player ? (ev.player.trackTitle || ev.player.identity) : ""; font.pixelSize: 14; Layout.fillWidth: true }
+                                Label2 { text: np.own ? (np.p.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true }
+                            }
+                            IconButton { visible: np.own; icon: "view-fullscreen"; size: 28; Layout.alignment: Qt.AlignTop
+                                         onClicked: { JD.expanded = false; JD.playerOpen = true } }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            ModeButton { visible: np.own; icon: "media-playlist-shuffle"; on: !!np.p.shuffle; tint: np.tint
+                                         onClicked: JD.media("shuffle", np.p.shuffle ? "off" : "on") }
+                            Item { Layout.fillWidth: true }
+                            IconButton { icon: "media-skip-backward"; size: 34; onClicked: np.own ? JD.media("prev") : ev.player.previous() }
+                            Rectangle {
+                                implicitWidth: 42; implicitHeight: 42; radius: 21
+                                color: np.tint
+                                PlayGlyph { anchors.centerIn: parent; size: 16; tint: "black"; paused: np.own ? !!np.p.paused : !(ev.player && ev.player.isPlaying) }
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: np.own ? JD.media("toggle") : ev.player.togglePlaying() }
+                            }
+                            IconButton { icon: "media-skip-forward"; size: 34; onClicked: np.own ? JD.media("next") : ev.player.next() }
+                            Item { Layout.fillWidth: true }
+                            ModeButton { visible: np.own; icon: np.p.repeat === "one" ? "media-repeat-single" : "media-playlist-repeat"
+                                         on: !!np.p.repeat && np.p.repeat !== "off"; badge: np.p.repeat === "one" ? "1" : ""; tint: np.tint
+                                         onClicked: JD.media("repeat", ({ off: "all", all: "one", one: "off" })[np.p.repeat || "off"]) }
+                        }
+                    }
+                    // nothing plays
+                    ColumnLayout {
+                        visible: !np.any
+                        anchors { fill: parent; margins: 14 }
+                        spacing: 6
+                        RowLayout {
+                            spacing: 10
+                            Rectangle {
+                                implicitWidth: 44; implicitHeight: 44; radius: 12
+                                gradient: Gradient {
+                                    GradientStop { position: 0; color: "#fc3c44" }
+                                    GradientStop { position: 1; color: "#bf5af2" }
+                                }
+                                Image { anchors.centerIn: parent; source: Quickshell.shellDir + "/icons/music.svg"; sourceSize: Qt.size(44, 44); width: 22; height: 22 }
+                            }
+                            ColumnLayout {
+                                spacing: 0
+                                Label1 { text: JD.tr("Ничего не играет"); font.pixelSize: 14 }
+                                Label2 { text: JD.tr("«включи песню…», альбом или плейлист"); font.pixelSize: 11; Layout.fillWidth: true }
+                            }
+                        }
+                        Item { Layout.fillHeight: true }
+                        RowLayout {
+                            spacing: 8
+                            Chip { icon: "media-playback-start"; label: JD.tr("Включить"); onClicked: JD.openCompose(JD.tr("Включи песню ")) }
+                            Chip { icon: "document-open-folder"; label: JD.tr("Моя музыка")
+                                   onClicked: { JD.expanded = false; JD.send({ cmd: "media_play", query: "~/Music/JustDay/YouTube", mode: "replace", shuffle: true }) } }
+                        }
+                    }
+                }
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    columns: 2
+                    rowSpacing: 12
+                    columnSpacing: 12
+                    Tile { icon: "audio-input-microphone"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
+                           on: JD.micOn; tint: JD.accentCyan; onToggled: ev.setting("audio.microphone", !JD.micOn) }
+                    Tile { icon: "audio-speakers"; title: JD.tr("Голос"); onText: JD.tr("отвечает вслух"); offText: JD.tr("только текстом"); on: JD.voiceOn; tint: JD.accentBlue; onToggled: ev.toggleVoice() }
+                    Tile { icon: "audio-volume-high"; title: JD.tr("Звуки"); on: !!JD.settings.earcons; tint: JD.accentOrange
+                           onToggled: ev.setting("audio.earcons", !JD.settings.earcons) }
+                    Tile { icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); onText: JD.tr("на острове"); offText: JD.tr("не беспокоить")
+                           on: JD.island.show_notifications !== false; tint: JD.accentPurple
+                           onToggled: ev.setting("island.show_notifications", JD.island.show_notifications === false) }
+                }
             }
 
-            // model
-            ColumnLayout {
+            // ── system volume (PipeWire)
+            PillSlider {
+                visible: !!ev.sink && !!ev.sink.audio
+                Layout.fillWidth: true
+                value: ev.sink && ev.sink.audio ? ev.sink.audio.volume : 0
+                muted: ev.sink && ev.sink.audio ? ev.sink.audio.muted : false
+                label: JD.tr("Громкость")
+                onMoved: v => { if (ev.sink && ev.sink.audio) { ev.sink.audio.volume = v; if (v > 0) ev.sink.audio.muted = false } }
+                onMuteToggled: if (ev.sink && ev.sink.audio) ev.sink.audio.muted = !ev.sink.audio.muted
+            }
+
+            // ── one-tap actions
+            Flow {
+                Layout.fillWidth: true
                 spacing: 8
-                Label2 { text: JD.tr("Модель") }
+                Chip { icon: "view-preview"; label: JD.tr("Что на экране?"); onClicked: ev.ask(JD.tr("Посмотри на экран и коротко скажи, что там")) }
+                Chip { icon: "image-x-generic"; label: JD.tr("Нарисовать"); onClicked: JD.openCompose(JD.tr("Нарисуй ")) }
+                Chip { icon: "video-x-generic"; label: JD.tr("Видео"); onClicked: JD.openCompose(JD.tr("Включи видео ")) }
+                Chip { icon: "system-software-install"; label: JD.tr("Установить"); onClicked: JD.openCompose(JD.tr("Установи ")) }
+                Chip { icon: "document-new"; label: JD.tr("Новый разговор"); onClicked: { JD.send({ cmd: "new_session" }); JD.flash(JD.tr("Новый разговор"), "document-new", JD.accentGreen); JD.expanded = false } }
+                Chip { icon: "media-playback-stop"; label: JD.tr("Стоп"); visible: JD.dstate !== "idle" || JD.workers > 0; tint: Qt.rgba(JD.accentRed.r, JD.accentRed.g, JD.accentRed.b, 0.3)
+                       onClicked: JD.send({ cmd: "stop" }) }
+                Chip { icon: "utilities-terminal"; label: JD.tr("Журнал"); onClicked: { JD.expanded = false; Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) } }
+                Chip { icon: "help-contents"; label: JD.tr("Руководство"); onClicked: JD.openManual() }
+            }
+
+            // ── next event
+            Rectangle {
+                visible: !!JD.nextEvent
+                Layout.fillWidth: true
+                implicitHeight: 40
+                radius: 14
+                color: JD.fill1
                 RowLayout {
-                    spacing: 6
-                    Repeater {
-                        model: [
-                            { id: "claude", label: "Claude", model: "sonnet", hint: JD.tr("подписка") },
-                            { id: "ollama_cloud", label: JD.tr("Бесплатная"), model: "kimi-k3:cloud", hint: JD.tr("облако Ollama") },
-                            { id: "ollama", label: JD.tr("Локальная"), model: "qwen3.5:9b", hint: JD.tr("приватно") },
-                            { id: "openrouter", label: "OpenRouter", model: "openrouter/free", hint: JD.tr("50 в день") },
-                            { id: "deepseek", label: "DeepSeek", model: "deepseek-v4-pro", hint: JD.tr("ключ") }
-                        ]
-                        Rectangle {
-                            required property var modelData
-                            readonly property bool current: (ev.pendingProvider || JD.settings.provider) === modelData.id
-                            Layout.fillWidth: true
-                            implicitHeight: 50
-                            radius: 14
-                            color: current ? JD.text1 : (segHover.hovered ? JD.fill2 : JD.fill1)
-                            Behavior on color { ColorAnimation { duration: 180 } }
-                            ColumnLayout {
-                                anchors.centerIn: parent
-                                spacing: 0
-                                Text { font.family: JD.fontFamily; text: modelData.label; color: parent.parent.current ? "black" : JD.text1; font.pixelSize: 13; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
-                                Text { font.family: JD.fontFamily; text: modelData.hint; color: parent.parent.current ? Qt.rgba(0, 0, 0, 0.55) : JD.text3; font.pixelSize: 11; Layout.alignment: Qt.AlignHCenter }
-                            }
-                            HoverHandler { id: segHover; cursorShape: Qt.PointingHandCursor }
-                            TapHandler {
-                                onTapped: {
-                                    if (modelData.id === JD.settings.provider && !ev.pendingProvider) return
-                                    ev.pendingProvider = modelData.id
-                                    JD.run(["model", "use", modelData.id, modelData.model])
-                                }
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                    spacing: 10
+                    Rectangle { implicitWidth: 4; implicitHeight: 22; radius: 2; color: JD.accentOrange }
+                    Label1 { text: JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") : ""; color: JD.accentOrange }
+                    Label1 { text: JD.nextEvent ? JD.nextEvent.title : ""; font.weight: Font.Normal; Layout.fillWidth: true }
+                }
+            }
+
+            // ── model
+            RowLayout {
+                spacing: 10
+                SectionLabel { text: JD.tr("МОДЕЛЬ") }
+                Repeater {
+                    model: [
+                        { id: "claude", label: "Claude", model: "sonnet", hint: JD.tr("подписка") },
+                        { id: "ollama_cloud", label: JD.tr("Бесплатная"), model: "kimi-k3:cloud", hint: JD.tr("облако") },
+                        { id: "ollama", label: JD.tr("Локальная"), model: "qwen3.5:9b", hint: JD.tr("приватно") },
+                        { id: "openrouter", label: "OpenRouter", model: "openrouter/free", hint: JD.tr("50/день") },
+                        { id: "deepseek", label: "DeepSeek", model: "deepseek-v4-pro", hint: JD.tr("ключ") }
+                    ]
+                    Rectangle {
+                        required property var modelData
+                        readonly property bool current: (ev.pendingProvider || JD.settings.provider) === modelData.id
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        radius: 12
+                        color: current ? JD.text1 : (segHover.hovered ? JD.fill2 : JD.fill1)
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: -1
+                            Text { font.family: JD.fontFamily; text: modelData.label; color: parent.parent.current ? "black" : JD.text1; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
+                            Text { font.family: JD.fontFamily; text: modelData.hint; color: parent.parent.current ? Qt.rgba(0, 0, 0, 0.55) : JD.text3; font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
+                        }
+                        HoverHandler { id: segHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler {
+                            onTapped: {
+                                if (modelData.id === JD.settings.provider && !ev.pendingProvider) return
+                                ev.pendingProvider = modelData.id
+                                JD.run(["model", "use", modelData.id, modelData.model])
                             }
                         }
                     }
                 }
-                RowLayout {
-                    visible: !!ev.pendingProvider && ev.pendingProvider !== JD.settings.provider
-                    spacing: 10
-                    Label2 { text: JD.tr("Модель сменится после перезапуска (текущий разговор начнётся заново)"); Layout.fillWidth: true }
-                    PillButton { label: JD.tr("Перезапустить"); tint: JD.accentBlue; onClicked: { JD.run(["restart"]); ev.pendingProvider = "" } }
-                }
             }
-
-            // now playing: our player first, otherwise any MPRIS player (browser, Spotify…)
-            Rectangle {
-                visible: JD.musicOn || !!ev.player
-                Layout.fillWidth: true
-                implicitHeight: 64
-                radius: 18
-                color: JD.fill1
-                TapHandler { enabled: JD.musicOn; onTapped: { JD.expanded = false; JD.playerOpen = true } }
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 12
-                    ClippingRectangle {
-                        implicitWidth: 44; implicitHeight: 44; radius: 10
-                        color: JD.fill2
-                        Icon { anchors.centerIn: parent; name: "media-album-cover"; fallback: "audio-x-generic"; implicitSize: 22; visible: art.status !== Image.Ready }
-                        Image { id: art; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; asynchronous: true
-                                source: JD.musicOn ? (JD.player.thumb ? "file://" + JD.player.thumb : "") : (ev.player ? ev.player.trackArtUrl : "") }
-                    }
-                    ColumnLayout {
-                        spacing: 0
-                        Layout.fillWidth: true
-                        Label1 { text: JD.musicOn ? (JD.player.title || "") : ev.player ? (ev.player.trackTitle || ev.player.identity) : ""; Layout.fillWidth: true }
-                        Label2 { text: JD.musicOn ? (JD.player.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true }
-                    }
-                    IconButton { icon: "media-skip-backward"; onClicked: JD.musicOn ? JD.media("prev") : ev.player.previous() }
-                    IconButton {
-                        icon: (JD.musicOn ? !JD.player.paused : ev.player && ev.player.isPlaying) ? "media-playback-pause" : "media-playback-start"; size: 36
-                        onClicked: JD.musicOn ? JD.media("toggle") : ev.player.togglePlaying()
-                    }
-                    IconButton { icon: "media-skip-forward"; onClicked: JD.musicOn ? JD.media("next") : ev.player.next() }
-                }
-            }
-
-            // recent notifications
-            ColumnLayout {
-                visible: JD.notifications.length > 0 && JD.island.show_notifications !== false
-                spacing: 6
-                RowLayout {
-                    Label2 { text: JD.tr("Уведомления"); Layout.fillWidth: true }
-                    Label2 { text: JD.tr("очистить"); color: JD.accentBlue; TapHandler { onTapped: JD.notifications = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
-                }
-                Repeater {
-                    model: JD.notifications.slice(0, 3)
-                    RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: 10
-                        Label2 { text: modelData.ts; color: JD.text3; font.features: { "tnum": 1 } }
-                        Icon { name: modelData.icon || (modelData.app || "").toLowerCase(); fallback: "preferences-desktop-notification-bell"; implicitSize: 16 }
-                        Label1 { text: modelData.summary; font.weight: Font.Normal; Layout.preferredWidth: 220 }
-                        Label2 { text: (modelData.body || "").replace(/\s+/g, " "); Layout.fillWidth: true }
-                    }
-                }
-            }
-
-            // recent
-            ColumnLayout {
-                visible: JD.history.length > 0
-                spacing: 6
-                Label2 { text: JD.tr("Недавнее") }
-                Repeater {
-                    model: JD.history.slice(0, 4)
-                    RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: 10
-                        Label2 { text: modelData.ts; color: JD.text3; font.features: { "tnum": 1 } }
-                        Label1 { text: modelData.q; font.weight: Font.Normal; Layout.preferredWidth: 250 }
-                        Label2 { text: modelData.a; Layout.fillWidth: true }
-                    }
-                }
-            }
-
-            // footer
             RowLayout {
-                spacing: 8
-                PillButton { label: JD.tr("Новый разговор"); onClicked: JD.send({ cmd: "new_session" }) }
-                PillButton { label: JD.tr("Остановить"); onClicked: JD.send({ cmd: "stop" }) }
-                Item { Layout.fillWidth: true }
-                PillButton { label: JD.tr("Журнал"); onClicked: Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) }
-                PillButton { label: JD.tr("Руководство"); onClicked: JD.openManual() }
+                visible: !!ev.pendingProvider && ev.pendingProvider !== JD.settings.provider
+                spacing: 10
+                Label2 { text: JD.tr("Модель сменится после перезапуска (текущий разговор начнётся заново)"); Layout.fillWidth: true }
+                PillButton { label: JD.tr("Перезапустить"); tint: JD.accentBlue; onClicked: { JD.run(["restart"]); ev.pendingProvider = "" } }
+            }
+
+            // ── notifications | recent
+            RowLayout {
+                visible: (JD.notifications.length > 0 && JD.island.show_notifications !== false) || JD.history.length > 0
+                spacing: 14
+                ColumnLayout {
+                    visible: JD.notifications.length > 0 && JD.island.show_notifications !== false
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 4
+                    RowLayout {
+                        SectionLabel { text: JD.tr("УВЕДОМЛЕНИЯ"); Layout.fillWidth: true }
+                        Label2 { text: JD.tr("очистить"); color: JD.accentBlue; font.pixelSize: 11
+                                 TapHandler { onTapped: JD.notifications = [] } HoverHandler { cursorShape: Qt.PointingHandCursor } }
+                    }
+                    Repeater {
+                        model: JD.notifications.slice(0, 3)
+                        Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 46
+                            radius: 12
+                            color: nHover.hovered ? JD.fill2 : JD.fill1
+                            RowLayout {
+                                anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                                spacing: 9
+                                Icon { name: modelData.icon || (modelData.app || "").toLowerCase(); fallback: "preferences-desktop-notification-bell"; implicitSize: 22 }
+                                ColumnLayout {
+                                    spacing: 0
+                                    Layout.fillWidth: true
+                                    RowLayout {
+                                        Label1 { text: modelData.summary; font.pixelSize: 12; Layout.fillWidth: true }
+                                        Label2 { text: modelData.ts; color: JD.text3; font.pixelSize: 10; font.features: { "tnum": 1 } }
+                                    }
+                                    Label2 { text: (modelData.body || "").replace(/\s+/g, " "); font.pixelSize: 11; Layout.fillWidth: true }
+                                }
+                            }
+                            HoverHandler { id: nHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: JD.openNotification(modelData) }
+                        }
+                    }
+                }
+                ColumnLayout {
+                    visible: JD.history.length > 0
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 4
+                    SectionLabel { text: JD.tr("НЕДАВНЕЕ") }
+                    Repeater {
+                        model: JD.history.slice(0, 3)
+                        Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 46
+                            radius: 12
+                            color: hHover.hovered ? JD.fill2 : JD.fill1
+                            ColumnLayout {
+                                anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
+                                spacing: 0
+                                RowLayout {
+                                    Label1 { text: modelData.q; font.pixelSize: 12; Layout.fillWidth: true }
+                                    Label2 { text: modelData.ts; color: JD.text3; font.pixelSize: 10; font.features: { "tnum": 1 } }
+                                }
+                                Label2 { text: modelData.a || ""; font.pixelSize: 11; Layout.fillWidth: true }
+                            }
+                            HoverHandler { id: hHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: JD.openCompose(modelData.q) }
+                        }
+                    }
+                }
             }
         }
     }

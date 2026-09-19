@@ -16,6 +16,15 @@ Singleton {
     property var weather: null
     property var notification: null   // desktop notification being shown
     property var notifications: []    // recent ones for the menu
+    property bool notifExpanded: false  // the whole text, unfolded inside the island (the ⌄ button)
+    // a tap on a notification: its app comes forward (Telegram, Discord…) and the island lets it go
+    function openNotification(n) {
+        if (!n) return
+        send({ cmd: "notification_open", app: n.app || "", desktop: n.desktop || n.icon || "" })
+        if (n === notification) { notification = null; notifExpanded = false }
+        expanded = false
+    }
+    function dismissNotification() { notification = null; notifExpanded = false }
     property var nextEvent: null      // calendar event starting within 2 hours
     property var update: null      // {behind, changes} when GitHub has a newer version
     function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
@@ -256,6 +265,7 @@ Singleton {
         case "notification":
             if (island.show_notifications === false) break
             notification = m.notification
+            notifExpanded = false
             notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
             notifTimer.restart()
             break
@@ -280,7 +290,7 @@ Singleton {
         flashTimer.restart()
     }
     Timer { id: flashTimer; interval: 2200; onTriggered: jd.flashText = "" }
-    Timer { id: notifTimer; interval: 5000; onTriggered: if (jd.islandHovered) restart(); else jd.notification = null }
+    Timer { id: notifTimer; interval: 6000; onTriggered: if (jd.islandHovered || jd.notifExpanded) restart(); else jd.notification = null }
     Timer {
         id: answerTimer
         // without a voice the text is all there is: give time to read it
