@@ -226,6 +226,11 @@ def fetch_weather(city: str) -> dict | None:
             "min": round((daily.get("temperature_2m_min") or [cur["temperature_2m"]])[0])}
 
 
+# Text selected on screen is attached to a typed request; the list of recent requests shows what the
+# person actually asked, not the page they had open.
+ATTACHED = re.compile(r"\n\n\[Текст, выделенный пользователем.*", re.S)
+
+
 def recent_history(limit: int = 6) -> list[dict]:
     """Last requests with their spoken answers, for the expanded island."""
     try:
@@ -235,6 +240,14 @@ def recent_history(limit: int = 6) -> list[dict]:
             lines = f.read().decode("utf-8", "replace").splitlines()[1:]
     except OSError:
         return []
+    def said_soon_after(request_ts: str, say_ts: str) -> bool:
+        """A request that was interrupted has no answer: what is spoken an hour later (an alarm, new mail)
+        belongs to nobody, and must not be shown as its reply."""
+        try:
+            return abs(datetime.fromisoformat(say_ts) - datetime.fromisoformat(request_ts)).total_seconds() <= 300
+        except ValueError:
+            return True
+
     out: list[dict] = []
     for line in lines:
         try:
@@ -242,12 +255,14 @@ def recent_history(limit: int = 6) -> list[dict]:
         except json.JSONDecodeError:
             continue
         if e.get("kind") == "request" and e.get("source") != "event":
-            out.append({"ts": e.get("ts", "")[11:16], "q": e.get("text", ""), "a": ""})
+            out.append({"ts": e.get("ts", "")[11:16], "q": ATTACHED.sub("", e.get("text", "")).strip(), "a": "",
+                        "at": e.get("ts", "")})
         elif e.get("kind") == "fast" and e.get("text"):
-            out.append({"ts": e.get("ts", "")[11:16], "q": e["text"], "a": e.get("desc", "")})
-        elif e.get("kind") == "say" and out and not out[-1]["a"]:
+            out.append({"ts": e.get("ts", "")[11:16], "q": ATTACHED.sub("", e["text"]).strip(), "a": e.get("desc", ""),
+                        "at": e.get("ts", "")})
+        elif e.get("kind") == "say" and out and not out[-1]["a"] and said_soon_after(out[-1]["at"], e.get("ts", "")):
             out[-1]["a"] = e.get("text", "")
-    return out[-limit:][::-1]
+    return [{k: v for k, v in r.items() if k != "at"} for r in out[-limit:][::-1]]
 
 
 class Daemon:

@@ -2321,6 +2321,7 @@ ShellRoot {
                             Layout.fillWidth: true
                             implicitHeight: 46
                             radius: 12
+                            clip: true
                             color: nHover.hovered ? JD.fill2 : JD.fill1
                             RowLayout {
                                 anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
@@ -2330,10 +2331,12 @@ ShellRoot {
                                     spacing: 0
                                     Layout.fillWidth: true
                                     RowLayout {
-                                        Label1 { text: modelData.summary; font.pixelSize: 12; Layout.fillWidth: true }
+                                        Label1 { text: JD.flat(modelData.summary); font.pixelSize: 12; Layout.fillWidth: true
+                                                 maximumLineCount: 1; Layout.maximumHeight: 16 }
                                         Label2 { text: modelData.ts; color: JD.text3; font.pixelSize: 10; font.features: { "tnum": 1 } }
                                     }
-                                    Label2 { text: (modelData.body || "").replace(/\s+/g, " "); font.pixelSize: 11; Layout.fillWidth: true }
+                                    Label2 { text: JD.flat(modelData.body); font.pixelSize: 11; Layout.fillWidth: true
+                                             maximumLineCount: 1; Layout.maximumHeight: 15 }
                                 }
                             }
                             HoverHandler { id: nHover; cursorShape: Qt.PointingHandCursor }
@@ -2355,15 +2358,18 @@ ShellRoot {
                             Layout.fillWidth: true
                             implicitHeight: 46
                             radius: 12
+                            clip: true
                             color: hHover.hovered ? JD.fill2 : JD.fill1
                             ColumnLayout {
                                 anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
                                 spacing: 0
                                 RowLayout {
-                                    Label1 { text: modelData.q; font.pixelSize: 12; Layout.fillWidth: true }
+                                    Label1 { text: JD.flat(modelData.q); font.pixelSize: 12; Layout.fillWidth: true
+                                             maximumLineCount: 1; Layout.maximumHeight: 16 }
                                     Label2 { text: modelData.ts; color: JD.text3; font.pixelSize: 10; font.features: { "tnum": 1 } }
                                 }
-                                Label2 { text: modelData.a || ""; font.pixelSize: 11; Layout.fillWidth: true }
+                                Label2 { text: JD.flat(modelData.a); font.pixelSize: 11; Layout.fillWidth: true
+                                         maximumLineCount: 1; Layout.maximumHeight: 15 }
                             }
                             HoverHandler { id: hHover; cursorShape: Qt.PointingHandCursor }
                             TapHandler { onTapped: JD.openCompose(modelData.q) }
