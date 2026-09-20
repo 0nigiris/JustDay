@@ -1129,8 +1129,10 @@ class Daemon:
         once, and the island re-tints when the answer lands."""
         if (self._colors and not self._colors.done()) or time.monotonic() < self._colors_after:
             return
-        here = [{"title": state.get("title", ""), "artist": state.get("artist", ""), "source": state.get("source", "")}]
-        ahead = [{"title": q.get("title", ""), "artist": q.get("artist", ""), "source": state.get("source", "")}
+        here = [{"title": state.get("title", ""), "artist": state.get("artist", ""), "source": state.get("source", ""),
+                 "cover": state.get("cover", "")}]
+        ahead = [{"title": q.get("title", ""), "artist": q.get("artist", ""), "source": state.get("source", ""),
+                  "cover": q.get("cover", "")}
                  for q in state.get("queue", []) if q.get("i", 0) >= state.get("index", 0)]
         want = palette.unknown(here + ahead)
         if want:
@@ -1200,6 +1202,7 @@ class Daemon:
                 await self.music.load(tracks, mode)
                 if mode == "replace":
                     self.music.source = path.name if path.is_dir() else ""
+                    self.music.remember()
                     self.music.shuffle = shuffle
                 self._pause_videos()
                 return {"ok": True, "title": tracks[0]["title"], "queued": len(tracks) - 1,
@@ -1234,6 +1237,7 @@ class Daemon:
         await self.music.load([first], mode)
         if mode == "replace":
             self.music.source = source
+            self.music.remember()
             await self.music.set_repeat("off")
         if shuffle:
             self.music.shuffle = True

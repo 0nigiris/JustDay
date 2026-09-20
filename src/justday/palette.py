@@ -28,7 +28,8 @@ FILE = config.STATE_DIR / "colors.json"
 
 MAX_BATCH = 20          # tracks in one question
 TIMEOUT = 420.0         # a batch that searches the web takes a couple of minutes
-MIN_CONFIDENCE = 0.3    # below this the cover keeps its say
+MIN_CONFIDENCE = 0.6    # a colour the model is not sure of loses to the plain colour of the artwork
+RULES_V = 2             # the question changed: answers given to an older one are asked again
 
 # spoken colours, for `justday player color жёлтый`
 NAMES = {
@@ -45,13 +46,15 @@ NAMES = {
 SYSTEM = ("You choose the colour a music player glows with while a track plays. Reply with one line of "
           "JSON and nothing else.")
 
-RULES = ("Go by what the music is about, never by its cover art: a character's leitmotif takes that "
-         "character's own colour, a game or film soundtrack takes the work's signature colour, a band's "
-         "song takes the colour of that album's art direction, and anything else takes the mood of the "
-         "music. A theme named after someone you cannot place is the one case worth looking up — never "
-         "give it the franchise's own colour instead, and never guess a colour from the words in the "
-         "title. The colour is drawn on black, so keep it vivid and light enough to read: HSL saturation "
-         "at least 0.45, lightness between 0.45 and 0.7.")
+RULES = ("Each track comes with the colour of its own artwork, or with «нет цвета» when that artwork is "
+         "black, white or grey. Start there: when the artwork has a colour, that colour is the answer — it "
+         "was chosen for this music and it is what the person is looking at. Replace it only when the "
+         "music's subject plainly owns a different colour that the artwork does not show: a character's "
+         "leitmotif on a colourless sleeve, or a track sitting under a compilation cover that says nothing "
+         "about it. Never trade a vivid artwork colour for a franchise's signature colour — a Blue Lock "
+         "track on an orange cover is orange. A colour you choose yourself is drawn on black, so keep it "
+         "vivid: HSL saturation at least 0.45, lightness between 0.45 and 0.7. Confidence is how sure you "
+         "are of the colour of this very track.")
 
 _NOISE = re.compile(r"\s*[\[(](?:official|lyric|audio|video|hd|hq|4k|mv|m/v|full|прем|clip)[^\])]*[\])]", re.I)
 _NUMBER = re.compile(r"^\s*\d{1,3}\s*[.\-–)]\s+")
@@ -109,7 +112,7 @@ def color(title: str, artist: str = "") -> str:
 
 def put(title: str, artist: str, hex_color: str, why: str = "", confidence: float = 1.0, source: str = "user") -> dict:
     rec = {"hex": normalize(hex_color), "why": why[:60], "confidence": round(float(confidence), 2),
-           "source": source, "at": round(time.time()), "title": title, "artist": artist}
+           "source": source, "at": round(time.time()), "v": RULES_V, "title": title, "artist": artist}
     items = _load()
     items[key(title, artist)] = rec
     _save(items)
@@ -166,12 +169,14 @@ def resolve(tracks: list[dict], *, web: bool = True, model: str = "") -> dict[st
         return {}
     lines = []
     for i, t in enumerate(tracks, 1):
-        where = f" [альбом: {t['source']}]" if t.get("source") else ""
-        lines.append(f"{i}. «{t['title']}» — {t.get('artist') or '?'}{where}")
+        where = f", альбом: {t['source']}" if t.get("source") else ""
+        cover = normalize(t.get("cover", "")) or "нет цвета"
+        lines.append(f"{i}. «{t['title']}» — {t.get('artist') or '?'} [обложка: {cover}{where}]")
     ask = ("Tracks:\n" + "\n".join(lines) + "\n\n" + RULES + "\n"
-           + ("Search the web only for the ones you genuinely do not know (at most 5 searches in total); "
-              "answer the rest from your own knowledge.\n" if web else
-              "Answer from your own knowledge only.\n")
+           + ("A track whose artwork has no colour and whose subject you cannot place is exactly what the web "
+              "is for: look those up (at most 5 searches in total) instead of guessing from the words in the "
+              "title. Everything else is answered without searching.\n" if web else
+              "Answer from your own knowledge only; guess nothing from the words in a title.\n")
            + 'Answer: {"colors":[{"n":1,"hex":"#rrggbb","why":"≤6 words","confidence":0.0-1.0}, …]} — one entry '
              'per track, in order. A track whose subject you do not know gets confidence 0.')
     model = model or config.load()["brain"]["model"] or "sonnet"
@@ -182,7 +187,7 @@ def resolve(tracks: list[dict], *, web: bool = True, model: str = "") -> dict[st
     for t in tracks:
         items.setdefault(key(t["title"], t.get("artist", "")),
                          {"hex": "", "why": "", "confidence": 0.0, "source": "model", "at": round(time.time()),
-                          "title": t["title"], "artist": t.get("artist", "")})
+                          "v": RULES_V, "title": t["title"], "artist": t.get("artist", "")})
     for entry in got.get("colors", []):
         try:
             t = tracks[int(entry["n"]) - 1]
@@ -191,7 +196,8 @@ def resolve(tracks: list[dict], *, web: bool = True, model: str = "") -> dict[st
         hexa = normalize(str(entry.get("hex", "")))
         conf = max(0.0, min(1.0, float(entry.get("confidence", 0) or 0)))
         rec = {"hex": hexa, "why": str(entry.get("why", ""))[:60], "confidence": round(conf if hexa else 0.0, 2),
-               "source": "model", "at": round(time.time()), "title": t["title"], "artist": t.get("artist", "")}
+               "source": "model", "at": round(time.time()), "v": RULES_V,
+               "title": t["title"], "artist": t.get("artist", "")}
         items[key(t["title"], t.get("artist", ""))] = rec
         out[key(t["title"], t.get("artist", ""))] = rec
     _save(items)
@@ -199,13 +205,19 @@ def resolve(tracks: list[dict], *, web: bool = True, model: str = "") -> dict[st
 
 
 def unknown(tracks: list[dict]) -> list[dict]:
-    """The ones nobody has asked about yet, in the order they will be played."""
+    """The ones nobody has asked about yet — plus those answered before the question was last rewritten.
+
+    A colour the person chose by hand stays whatever they made it."""
     items, seen, out = _load(), set(), []
     for t in tracks:
-        if not (t.get("title") or "").strip():
+        title = (t.get("title") or "").strip()
+        # a stream whose notes were lost shows up under its URL: there is nothing to ask about there
+        if not title or title.startswith(("http://", "https://")) or len(title) > 200:
             continue
         k = key(t["title"], t.get("artist", ""))
-        if k in items or k in seen:
+        rec = items.get(k)
+        fresh = rec is not None and (rec.get("source") == "user" or rec.get("v", 1) >= RULES_V)
+        if fresh or k in seen:
             continue
         seen.add(k)
         out.append(t)

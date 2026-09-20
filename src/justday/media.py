@@ -184,8 +184,32 @@ def _save_index(idx: dict) -> None:
     tmp.replace(INDEX)
 
 
+TRACKS_STATE = config.STATE_DIR / "player_tracks.json"
+
+
+def _remember_tracks(source: str, tracks: dict) -> None:
+    """The player outlives the daemon (it is its own service): what each file in its playlist is must
+    outlive it too."""
+    try:
+        TRACKS_STATE.parent.mkdir(parents=True, exist_ok=True)
+        TRACKS_STATE.write_text(json.dumps({"source": source, "tracks": tracks}, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        log.warning("cannot save the playlist notes: %s", e)
+
+
+def _recall_tracks() -> dict:
+    try:
+        got = json.loads(TRACKS_STATE.read_text(encoding="utf-8"))
+        return got if isinstance(got, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def thumb_color(path: str) -> str:
-    """The most vivid colour of the cover (8×8 pixels): the island's bars take it on, like Apple Music."""
+    """The main colour of the cover (8×8 pixels): the island's bars take it on, like Apple Music.
+
+    The most vivid pixel wins; when a sleeve has no vivid pixel at all, its average colour is still an
+    answer — better a muted one than none, because the island has to paint something."""
     try:
         raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf", "scale=8:8:flags=area", "-f", "rawvideo",
                               "-pix_fmt", "rgb24", "-"], capture_output=True, timeout=10).stdout
@@ -200,7 +224,13 @@ def thumb_color(path: str) -> str:
         s = sat * (1 - abs(light - 0.55) * 1.4)
         if s > best_s:
             best, best_s = (raw[i], raw[i + 1], raw[i + 2]), s
-    return "#%02x%02x%02x" % best if best and best_s > 0.12 else ""
+    if best and best_s > 0.12:
+        return "#%02x%02x%02x" % best
+    px = [raw[i:i + 3] for i in range(0, len(raw) - 2, 3)]
+    if not px:
+        return ""
+    avg = tuple(round(sum(p[c] for p in px) / len(px)) for c in range(3))
+    return "#%02x%02x%02x" % avg
 
 
 def music_dir() -> Path:
@@ -507,8 +537,13 @@ class MusicPlayer:
         vol = await self.command("get_property", "volume")
         if isinstance(vol, (int, float)) and not self._ducked:
             self.volume = round(vol)
-        for f in await self.command("get_property", "playlist") or []:  # after a daemon restart
-            self._tracks.setdefault(f["filename"], track_for(f["filename"]))
+        known = _recall_tracks()                                        # after a daemon restart
+        self.source = self.source or known.get("source", "")
+        saved = known.get("tracks") or {}
+        for f in await self.command("get_property", "playlist") or []:
+            # a streamed song lives under a long yt-dlp URL: without the note taken when it started, its
+            # title on the island would be that URL
+            self._tracks.setdefault(f["filename"], saved.get(f["filename"]) or track_for(f["filename"]))
 
     async def _read(self) -> None:
         try:
@@ -573,16 +608,22 @@ class MusicPlayer:
         start = pos if isinstance(pos, int) and pos >= 0 else 0
         queue = [{"i": i, "title": (self._tracks.get(f["filename"]) or track_for(f["filename"])).get("title", ""),
                   "artist": (self._tracks.get(f["filename"]) or {}).get("artist", ""),
-                  "thumb": (self._tracks.get(f["filename"]) or {}).get("thumb", "")}
+                  "thumb": (self._tracks.get(f["filename"]) or {}).get("thumb", ""),
+                  "cover": (self._tracks.get(f["filename"]) or {}).get("color", "")}
                  for i, f in enumerate(playlist[max(0, start - 2):start + 40], max(0, start - 2))]
         return {"repeat": self.repeat, "shuffle": self.shuffle, "source": self.source, "queue": queue,"title": t.get("title") or (self.loading or {}).get("title", ""), "artist": t.get("artist", ""),
                 "thumb": t.get("thumb", ""), "file": cur, "url": t.get("url", ""),
                 # what the music is about, when that is known; otherwise the brightest pixel of the cover
                 "color": palette.color(t.get("title", ""), t.get("artist", "")) or t.get("color", ""),
+                "cover": t.get("color", ""),   # the artwork's own colour, which the question takes into account
                 "pos": round(float(p.get("time-pos") or 0), 1), "duration": round(float(p.get("duration") or t.get("duration") or 0), 1),
                 "paused": bool(p.get("pause")) or not cur, "index": pos if isinstance(pos, int) else -1, "count": len(playlist),
                 "next": (self._tracks.get(nxt) or track_for(nxt)).get("title", "") if nxt else "",
                 "volume": self.volume, "loading": self.loading}
+
+    def remember(self) -> None:
+        """Write down what is in the playlist, so a restart of the daemon knows the titles again."""
+        _remember_tracks(self.source, self._tracks)
 
     def refresh(self) -> None:
         """Republish the state although nothing in mpv moved — a track's colour has just been learned."""
@@ -635,6 +676,7 @@ class MusicPlayer:
                     await self.command("loadfile", t["file"], "insert-at", random.randint(pos + 1, count))
                     continue
             await self.command("loadfile", t["file"], flag)
+        _remember_tracks(self.source, self._tracks)
         if mode == "replace":
             await self.command("set_property", "pause", False)
 
@@ -700,6 +742,7 @@ class MusicPlayer:
     async def stop(self) -> None:
         await self.command("stop")
         self._tracks.clear()
+        _remember_tracks("", {})
         self.source = ""
         self.shuffle = False
         self.loading = None

@@ -1068,8 +1068,8 @@ Item {
                 }
                 Row {
                     title: JD.tr("Цвет трека")
-                    subtitle: ({ theme: JD.tr("Цвет того, о чём музыка: тема персонажа, палитра игры. Название трека уходит модели"),
-                                 cover: JD.tr("Самый яркий цвет обложки") })[win.get("media.color") || "theme"]
+                    subtitle: ({ theme: JD.tr("Цвет обложки, а если она ничего не говорит — цвет того, о чём музыка: тема персонажа, палитра игры. Название трека уходит модели"),
+                                 cover: JD.tr("Главный цвет обложки, без вопросов к модели") })[win.get("media.color") || "theme"]
                     Segmented {
                         options: [{ value: "theme", label: JD.tr("По теме") }, { value: "cover", label: JD.tr("По обложке") }]
                         current: win.get("media.color") || "theme"

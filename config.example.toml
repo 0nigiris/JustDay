@@ -93,8 +93,9 @@ poll_seconds = 180
 [media]                     # own player: songs from YouTube are downloaded and play in a background mpv
 video_where = "ask"         # ask | island | window | browser — where "включи видео …" plays
 volume = 70                 # the player's own volume, 0–130
-color = "theme"             # theme = the colour of what the music is about (a character's theme, a game's palette),
-                            #         asked of the model once per track; cover = the brightest colour of the artwork
+color = "theme"             # theme = the artwork's colour, and when the artwork says nothing about the music
+                            #         (a character's theme on a black sleeve) the colour of what it is about,
+                            #         asked of the model once per track; cover = the artwork's colour, no questions
 color_web = true            # let that question search the web for tracks the model does not know
 duck = true                 # quieter while the assistant listens or speaks
 show_player = true          # cover + equaliser on the island while music plays
