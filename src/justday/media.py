@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import config
+from . import config, palette
 from .desktop import detached
 
 log = logging.getLogger("justday.media")
@@ -576,11 +576,17 @@ class MusicPlayer:
                   "thumb": (self._tracks.get(f["filename"]) or {}).get("thumb", "")}
                  for i, f in enumerate(playlist[max(0, start - 2):start + 40], max(0, start - 2))]
         return {"repeat": self.repeat, "shuffle": self.shuffle, "source": self.source, "queue": queue,"title": t.get("title") or (self.loading or {}).get("title", ""), "artist": t.get("artist", ""),
-                "thumb": t.get("thumb", ""), "color": t.get("color", ""), "file": cur, "url": t.get("url", ""),
+                "thumb": t.get("thumb", ""), "file": cur, "url": t.get("url", ""),
+                # what the music is about, when that is known; otherwise the brightest pixel of the cover
+                "color": palette.color(t.get("title", ""), t.get("artist", "")) or t.get("color", ""),
                 "pos": round(float(p.get("time-pos") or 0), 1), "duration": round(float(p.get("duration") or t.get("duration") or 0), 1),
                 "paused": bool(p.get("pause")) or not cur, "index": pos if isinstance(pos, int) else -1, "count": len(playlist),
                 "next": (self._tracks.get(nxt) or track_for(nxt)).get("title", "") if nxt else "",
                 "volume": self.volume, "loading": self.loading}
+
+    def refresh(self) -> None:
+        """Republish the state although nothing in mpv moved — a track's colour has just been learned."""
+        self._changed(force=True)
 
     def _changed(self, force: bool = False) -> None:
         s = self.state()

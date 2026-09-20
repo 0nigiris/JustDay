@@ -815,7 +815,8 @@ ShellRoot {
     component MusicView: View {
         id: mv
         readonly property var p: JD.player || ({})
-        readonly property color tint: JD.artTint(p.color)
+        property color tint: JD.artTint(p.color)
+        Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
         readonly property bool loading: !!p.loading
         readonly property string label: loading ? JD.tr("Загружаю") + " «" + (p.loading.title || "") + "»" : (p.title || "")
         implicitWidth: mrow.implicitWidth + 24
@@ -870,7 +871,8 @@ ShellRoot {
     component PlayerView: View {
         id: pl
         readonly property var p: JD.player || ({})
-        readonly property color tint: JD.artTint(p.color)
+        property color tint: JD.artTint(p.color)
+        Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
         property real now: Date.now()
         property bool queueOpen: false
         property int volumeWas: 0      // where the mute button came from
@@ -2054,7 +2056,8 @@ ShellRoot {
                     readonly property bool own: JD.musicOn
                     readonly property bool any: own || !!ev.player
                     readonly property var p: JD.player || ({})
-                    readonly property color tint: own ? JD.artTint(p.color) : JD.accentPink
+                    property color tint: own ? JD.artTint(p.color) : JD.accentPink
+                    Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1.15
                     implicitHeight: 136

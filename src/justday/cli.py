@@ -332,7 +332,8 @@ def main(argv: list[str] | None = None) -> None:
                                       "asks the user when not given (Settings → Медиа)")
     sp.add_argument("query", nargs="+")
     sp = sub.add_parser("player", help="JustDay's player: status | pause | resume | toggle | next | prev | restart | stop | "
-                                       "seek SECONDS | volume 0-130 | repeat off|all|one | shuffle on|off | jump INDEX")
+                                       "seek SECONDS | volume 0-130 | repeat off|all|one | shuffle on|off | jump INDEX | "
+                                       "color жёлтый|#ffd23f|auto (the colour of the track on the island)")
     sp.add_argument("action", nargs="?", default="status")
     sp.add_argument("value", nargs="?")
     sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")

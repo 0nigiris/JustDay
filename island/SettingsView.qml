@@ -1067,6 +1067,22 @@ Item {
                     Toggle { checked: win.get("media.duck") !== false; onToggled: v => win.set("media.duck", v) }
                 }
                 Row {
+                    title: JD.tr("Цвет трека")
+                    subtitle: ({ theme: JD.tr("Цвет того, о чём музыка: тема персонажа, палитра игры. Название трека уходит модели"),
+                                 cover: JD.tr("Самый яркий цвет обложки") })[win.get("media.color") || "theme"]
+                    Segmented {
+                        options: [{ value: "theme", label: JD.tr("По теме") }, { value: "cover", label: JD.tr("По обложке") }]
+                        current: win.get("media.color") || "theme"
+                        onPicked: v => win.set("media.color", v)
+                    }
+                }
+                Row {
+                    visible: (win.get("media.color") || "theme") === "theme"
+                    title: JD.tr("Искать незнакомые треки")
+                    subtitle: JD.tr("Если модель не знает трек, она поищет его в интернете — дольше и дороже, но точнее")
+                    Toggle { checked: win.get("media.color_web") !== false; onToggled: v => win.set("media.color_web", v) }
+                }
+                Row {
                     title: JD.tr("Громкость плеера")
                     SSlider { key: "media.volume"; from: 0; to: 130; step: 5; decimals: 0; unit: "%" }
                 }

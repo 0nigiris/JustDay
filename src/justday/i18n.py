@@ -69,6 +69,8 @@ EN = {
     "запустил {what}": "launched {what}", "закрыл {what}": "closed {what}", "свернул {what}": "minimized {what}",
     "переключил на {what}": "switched to {what}",
     # player
+    "цвет обновлён": "colour updated", "цвет из обложки": "colour from the cover",
+    "цвет выбирается сам": "colour chosen automatically", "выбрано вручную": "chosen by hand",
     "играет {what}": "playing {what}", "музыка продолжается": "music resumed", "музыка выключена": "music stopped",
     "сначала": "from the start", "перемотал": "skipped to the spot", "видео закрыто": "video closed",
     "Не нашёл «{q}»": "Couldn't find “{q}”", "Не получилось включить: {e}": "Couldn't play it: {e}",

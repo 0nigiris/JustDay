@@ -23,6 +23,7 @@ error ("не нашёл …") or when the user asked a question. Never read file
 | a YouTube link | `justday play "https://youtu.be/…"` |
 | control | `justday player pause \| resume \| toggle \| next \| prev \| restart \| stop` |
 | jump / volume | `justday player seek 90` · `justday player volume 40` (the player's own level, 0–130) |
+| the colour on the island | `justday player color жёлтый` · `#ffd23f` · `cover` (take the artwork's colour) · `auto` (ask the model again). The colour of a track is chosen by what the music is about and remembered; change it only when asked |
 | repeat | `justday player repeat one` (this song, «на повтор») · `repeat all` (the whole queue) · `repeat off` |
 | shuffle | `justday player shuffle on` / `off` |
 | a song from the queue | `justday player jump 4` (index from `status` → `queue`) |

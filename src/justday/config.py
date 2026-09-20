@@ -168,7 +168,12 @@ DEFAULTS: dict = {
     # Own player: music from YouTube is downloaded to ~/Music/JustDay/YouTube and plays in a background mpv.
     # video_where: ask | island | window | browser — where "включи видео …" plays
     # duck: the music gets quieter while the assistant listens or speaks
-    "media": {"video_where": "ask", "volume": 70, "duck": True, "show_player": True},
+    # color: theme = the island takes the colour the music is about (a character's theme, a game's palette),
+    # asked of the model once per track and kept in ~/.local/state/justday/colors.json; cover = the old way,
+    # the brightest pixel of the artwork. color_web: let that question use web search for tracks the model
+    # does not know. Track titles (never the audio) leave the machine for this, like any other request.
+    "media": {"video_where": "ask", "volume": 70, "duck": True, "show_player": True,
+              "color": "theme", "color_web": True},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},
 }

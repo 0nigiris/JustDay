@@ -20,7 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
-from . import audio, calendar_lane, config, events, fastpath, mail, media, namespot, reminders, voiceprint, workers
+from . import (audio, calendar_lane, config, events, fastpath, mail, media, namespot, palette, reminders,
+               voiceprint, workers)
 from .i18n import lang, t
 from . import brain as brain_mod
 from .brain import Brain
@@ -272,6 +273,8 @@ class Daemon:
         self.mic = audio.Microphone(a["input"])
         self.player = audio.Player(a["output"], int(a.get("volume", 100)))
         self._saves: dict[tuple[str, str], asyncio.TimerHandle] = {}  # sliders: write the config once, not per pixel
+        self._colors: asyncio.Task | None = None   # one background question about track colours at a time
+        self._colors_after = 0.0                   # ... and a pause before asking again after a failure
         self.recorder = audio.UtteranceRecorder(self.mic, a["silence_seconds"], a["no_speech_timeout_seconds"],
                                                 a["max_utterance_seconds"])
         self.stt = STT(self.cfg["stt"])
@@ -1117,6 +1120,33 @@ class Daemon:
     def _on_player(self, state: dict | None) -> None:
         self._player_state = state
         self.publish(player=state)
+        if state and self.cfg["media"].get("color", "theme") == "theme":
+            self._ask_colors(state)
+
+    def _ask_colors(self, state: dict) -> None:
+        """What colour is this music about? A cover is not an answer: a black sleeve can hold a yellow
+        character's theme. The model is asked once per track, in the background, for the whole queue at
+        once, and the island re-tints when the answer lands."""
+        if (self._colors and not self._colors.done()) or time.monotonic() < self._colors_after:
+            return
+        here = [{"title": state.get("title", ""), "artist": state.get("artist", ""), "source": state.get("source", "")}]
+        ahead = [{"title": q.get("title", ""), "artist": q.get("artist", ""), "source": state.get("source", "")}
+                 for q in state.get("queue", []) if q.get("i", 0) >= state.get("index", 0)]
+        want = palette.unknown(here + ahead)
+        if want:
+            self._colors = asyncio.create_task(self._resolve_colors(want))
+
+    async def _resolve_colors(self, want: list[dict]) -> None:
+        web = bool(self.cfg["media"].get("color_web", True))
+        try:
+            got = await asyncio.to_thread(palette.resolve, want, web=web)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as e:
+            log.warning("track colours: %s", e)
+            self._colors_after = time.monotonic() + 600  # do not ask again on every tick
+            return
+        log.info("track colours: %d of %d tracks", len(got), len(want))
+        if got:
+            self.music.refresh()
 
     async def media_fast(self, text: str) -> bool:
         """"пауза" / "следующая" for our player and "включи песню …" / "включи видео …" — without the brain."""
@@ -1449,7 +1479,7 @@ class Daemon:
         return v
 
     async def media_control(self, action: str, value=None) -> dict:
-        """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | status"""
+        """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | color NAME | status"""
         m = self.music
         if action == "status":
             return {"ok": True, "music": m.state(), "island_video": self.island_video}
@@ -1473,6 +1503,25 @@ class Daemon:
             await m.set_volume(v)
             self._save_later("media", "volume", v)
             self.cfg["media"]["volume"] = v
+        elif action == "color":  # `justday player color жёлтый` — when the model got the theme wrong
+            st = m.state() or {}
+            if not st.get("title"):
+                return {"ok": False, "error": "nothing is playing"}
+            want = str(value or "").strip().lower()
+            if want in ("cover", "обложка", "off", "выкл"):   # this one track keeps the colour of its artwork
+                palette.put(st["title"], st.get("artist", ""), "", why=t("выбрано вручную"))
+                done = t("цвет из обложки")
+            elif want in ("auto", "сброс", "reset", ""):      # forget it and let the model answer again
+                palette.forget(st["title"], st.get("artist", ""))
+                done = t("цвет выбирается сам")
+            else:
+                hexa = palette.normalize(want)
+                if not hexa:
+                    return {"ok": False, "error": f"unknown colour {value!r}"}
+                palette.put(st["title"], st.get("artist", ""), hexa, why=t("выбрано вручную"))
+                done = t("цвет обновлён")
+            m.refresh()
+            return {"ok": True, "done": done, "color": (m.state() or {}).get("color", "")}
         elif action == "restart":
             await m.seek(0)
         elif action in ("pause", "resume", "toggle", "next", "prev", "stop"):
