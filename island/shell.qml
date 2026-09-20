@@ -143,6 +143,12 @@ ShellRoot {
                     JD.expanded = true
                 }
             }
+            // the menu is always one right click away — even while music, video or a notification holds the island
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                enabled: !["approval", "compose", "settings"].includes(island.mode)
+                onTapped: { JD.playerOpen = false; JD.expanded = true }
+            }
 
             // Every view is laid out at its own natural size; the island springs to it and the view follows.
             // The stage is masked to the island's *rounded* shape, so nothing pokes out of the corners while it grows.
@@ -834,6 +840,8 @@ ShellRoot {
                     Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 18; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
                     Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
                 }
+                IconButton { icon: "view-grid"; size: 26; Layout.alignment: Qt.AlignTop
+                             onClicked: { JD.playerOpen = false; JD.expanded = true } }
                 IconButton { icon: "window-close"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
             }
             SeekBar {

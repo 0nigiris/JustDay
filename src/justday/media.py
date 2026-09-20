@@ -265,6 +265,46 @@ def _download(entry: dict, kind: str, progress: Callable[[float], None] | None =
     return track
 
 
+def cached_track(entry: dict, kind: str = "music") -> dict | None:
+    """The already downloaded track for this video, if the file is still there."""
+    got = _load_index().get(f"{kind}:{entry['id']}")
+    return got if got and Path(got.get("file", "")).exists() else None
+
+
+def fetch_thumb(entry: dict) -> str:
+    """The YouTube preview as a local jpg (~30 kB): the island has a cover before the song is downloaded."""
+    vid = entry.get("id") or ""
+    if not vid or not entry.get("thumb_url"):
+        return ""
+    THUMBS.mkdir(parents=True, exist_ok=True)
+    path = THUMBS / f"{vid}.jpg"
+    if path.exists():
+        return str(path)
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(entry["thumb_url"], timeout=8) as r, open(path, "wb") as f:
+            f.write(r.read())
+    except (OSError, ValueError):
+        return ""
+    return str(path)
+
+
+def stream_track(entry: dict) -> dict:
+    """A track mpv can play straight away: one yt-dlp call for the audio URL, no download and no wait.
+
+    The link is short-lived (a few hours) — enough to listen now, while _download fills the library."""
+    r = _ytdlp("-f", "bestaudio[ext=m4a]/bestaudio", "--no-playlist", "-g", entry["url"], timeout=25)
+    url = (r.stdout or "").strip().splitlines()
+    if r.returncode or not url:
+        raise RuntimeError((r.stderr.strip().splitlines() or ["cannot open the stream"])[-1][:300])
+    title, artist = split_title(entry["title"], entry["channel"])
+    thumb = fetch_thumb(entry)
+    return {"id": entry["id"], "kind": "music", "title": title, "artist": artist,
+            "duration": int(entry.get("duration") or 0), "file": url[0], "thumb": thumb,
+            "color": thumb_color(thumb) if thumb else "", "url": entry["url"], "streaming": True}
+
+
 def download_audio(entry: dict, progress=None) -> dict:
     return _download(entry, "music", progress)
 

@@ -279,6 +279,9 @@ class Daemon:
         self._last_toggle = 0.0
         self._holding = False
         self._voice_warned = False
+        self._music_started = 0.0   # music that just started speaks for itself: the reply after it stays silent
+        self._cache_q: list[dict] = []      # songs playing from the stream, waiting to be downloaded
+        self._cache_task: asyncio.Task | None = None
         self._activation = "button"
         self._cancel_gen = 0  # bumped by cancel_all: anything started before it is dropped
         self.weather: dict | None = None
@@ -365,6 +368,12 @@ class Daemon:
     # ---------------- speech output ----------------
     async def _on_brain_text(self, text: str) -> None:
         if ACK.match(text.strip()) and len(text) < 60:
+            events.emit("ack_suppressed", text=text)
+            return
+        # «включи…» is answered by the music itself. Whatever the model wants to add about the track
+        # («это трек Тоби Фокса, включаю») answers nothing, so it is not spoken — unless it asks
+        # something or is long enough to be a real answer.
+        if time.monotonic() - self._music_started < 40 and "?" not in text and len(text) < 220:
             events.emit("ack_suppressed", text=text)
             return
         self._spoken += 1
@@ -1124,12 +1133,19 @@ class Daemon:
                 import random
                 random.shuffle(entries)
             self.music.set_loading({"title": entries[0]["title"], "progress": 0})
-            first = await loop.run_in_executor(None, media.download_audio, entries[0], self._progress(self.music.set_loading, entries[0]["title"]))
+            # Play from YouTube right away (one yt-dlp call for the audio link, a couple of seconds) instead of
+            # waiting out the whole download; the file itself lands in the library a moment later, in the
+            # background, and the next time the same song is asked for it starts from disk.
+            first = await loop.run_in_executor(None, media.cached_track, entries[0])
+            if not first:
+                first = await loop.run_in_executor(None, media.stream_track, entries[0])
+                asyncio.create_task(self._cache_track(entries[0]))
         except Exception as e:  # noqa: BLE001
             self.music.set_loading(None)
             log.warning("play failed: %s", e)
             return {"ok": False, "error": str(e)}
         self.music.set_loading(None)
+        self._music_started = time.monotonic()
         await self.music.load([first], mode)
         if mode == "replace":
             self.music.source = source
@@ -1155,11 +1171,31 @@ class Daemon:
                 loop.call_soon_threadsafe(setter, {"title": title, "progress": round(p, 2)})
         return cb
 
+    async def _cache_track(self, entry: dict) -> None:
+        """Put a song in the download queue: it plays from the stream now and lives in the library afterwards."""
+        self._cache_q.append(entry)
+        if self._cache_task is None or self._cache_task.done():
+            self._cache_task = asyncio.create_task(self._cache_worker())
+
+    async def _cache_worker(self) -> None:
+        """One download at a time, so the library fills up without stealing bandwidth from what is playing."""
+        loop = asyncio.get_running_loop()
+        while self._cache_q:
+            entry = self._cache_q.pop(0)
+            try:
+                await loop.run_in_executor(None, media.download_audio, entry, None)
+            except Exception as e:  # noqa: BLE001
+                log.info("background download of %s failed: %s", entry.get("title"), e)
+
     async def _queue_rest(self, entries: list[dict]) -> None:
+        """The rest of an album or an artist: queued from the stream (seconds), downloaded afterwards."""
         loop = asyncio.get_running_loop()
         for e in entries:
             try:
-                track = await loop.run_in_executor(None, media.download_audio, e, None)
+                track = await loop.run_in_executor(None, media.cached_track, e)
+                if not track:
+                    track = await loop.run_in_executor(None, media.stream_track, e)
+                    await self._cache_track(e)
             except Exception as ex:  # noqa: BLE001
                 log.info("skip %s: %s", e.get("title"), ex)
                 continue
