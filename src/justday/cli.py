@@ -350,8 +350,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--address", help="setup without prompts: address here, app password on stdin")
     sp = sub.add_parser("settings-data", help="JSON snapshot for the Settings window")
     sp = sub.add_parser("voice", help="voices: list | design NAME DESCRIPTION | record SECONDS | clone NAME WAV TEXT | "
-                                      "delete ID | preview TEXT | speed 1.2 | eleven [VOICE_ID] | key (reads stdin)")
-    sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "eleven", "key"])
+                                      "delete ID | preview TEXT | speed 1.2 | volume 80 | eleven [VOICE_ID] | key (reads stdin)")
+    sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "volume",
+                                       "eleven", "key"])
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("timer", help="set a timer: `justday timer 10m чай` · `justday timer` lists what is set")
     sp.add_argument("args", nargs="*")
@@ -505,6 +506,11 @@ def main(argv: list[str] | None = None) -> None:
                 config.set_value("tts", "speed", max(0.5, min(2.0, float(args[0]))))
                 control("reload_settings", timeout=10)
             _print({"speed": config.load()["tts"]["speed"]})
+        elif a.action == "volume":  # how loud the assistant is, 0–100 (the system volume stays where it is)
+            if args:
+                _print(control("volume", timeout=10, value=max(0, min(100, int(float(args[0]))))))
+            else:
+                _print({"volume": config.load()["audio"].get("volume", 100)})
         elif a.action == "key":  # the ElevenLabs key, read from stdin so it never lands in the shell history
             key = sys.stdin.read().strip()
             config.set_secret("ELEVENLABS_API_KEY", key)

@@ -73,6 +73,13 @@ Singleton {
     readonly property var hotkeys: settings.hotkeys || ({})
     readonly property bool micOn: settings.microphone !== false
     readonly property bool voiceOn: settings.voice !== false
+    // JustDay's own loudness (voice and signals), 0–100. The system volume belongs to the system.
+    readonly property int volume: settings.volume === undefined ? 100 : settings.volume
+    function setVolume(v) {
+        v = Math.max(0, Math.min(100, Math.round(v)))
+        settings = Object.assign({}, settings, { volume: v })   // the slider follows the finger, not the socket
+        send({ cmd: "volume", value: v })
+    }
     function openCompose(text, context) {
         composeText = text || ""
         composeContext = context || ({})

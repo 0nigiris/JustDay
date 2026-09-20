@@ -13,6 +13,7 @@ language = "ru"             # ru | en — island, settings, spoken replies (set 
 microphone = true           # false = keyboard only (Meta+K): no mic, no wake word, speech recognition never loads
 input = ""                  # substring of a PipeWire source name (pactl list short sources), "" = default
 output = ""                 # substring of a sink name, "" = default
+volume = 100                # how loud the assistant itself is, 0–100 (the system volume stays untouched)
 earcons = true              # short beeps when listening starts
 silence_seconds = 1.0       # pause length that ends an utterance
 followup_seconds = 6        # after the assistant asks a question, listen again without the hotkey (0 = off)

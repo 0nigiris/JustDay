@@ -153,17 +153,25 @@ class UtteranceRecorder:
 
 
 class Player:
-    """Plays int16 mono PCM through pw-play; stop() cuts playback immediately."""
+    """Plays int16 mono PCM through pw-play; stop() cuts playback immediately.
 
-    def __init__(self, sink_substring: str = ""):
+    `volume` is JustDay's own level (0–100): it sets the volume of our stream, so the assistant can be
+    made quieter without touching the system volume — and without touching what other apps play."""
+
+    def __init__(self, sink_substring: str = "", volume: int = 100):
         self.sink = find_node(sink_substring, "sinks") if sink_substring else None
+        self.volume = volume
         self._proc: asyncio.subprocess.Process | None = None
 
-    async def play(self, pcm: np.ndarray, rate: int) -> None:
-        cmd = ["pw-play", "--rate", str(rate), "--channels", "1", "--format", "s16", "--raw"]
+    def _cmd(self, rate: int) -> list[str]:
+        cmd = ["pw-play", "--rate", str(rate), "--channels", "1", "--format", "s16", "--raw",
+               "--volume", f"{max(0, min(100, int(self.volume))) / 100:.3f}"]
         if self.sink:
             cmd += ["--target", self.sink]
-        cmd.append("-")
+        return cmd + ["-"]
+
+    async def play(self, pcm: np.ndarray, rate: int) -> None:
+        cmd = self._cmd(rate)
         self._proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
@@ -179,10 +187,7 @@ class Player:
 
     async def play_stream(self, chunks, rate: int) -> None:
         """Play PCM chunks as they are generated (neural voice: speech starts before synthesis ends)."""
-        cmd = ["pw-play", "--rate", str(rate), "--channels", "1", "--format", "s16", "--raw"]
-        if self.sink:
-            cmd += ["--target", self.sink]
-        cmd.append("-")
+        cmd = self._cmd(rate)
         self._proc = proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )

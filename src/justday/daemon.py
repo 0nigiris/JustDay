@@ -174,6 +174,7 @@ def settings_snapshot(cfg: dict) -> dict:
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
             "microphone": cfg["audio"].get("microphone", True), "voice": cfg["tts"]["engine"] != "none",
+            "volume": int(cfg["audio"].get("volume", 100)),
             "tts_engine": cfg["tts"]["engine"], "tts_previous": cfg["tts"].get("previous_engine", ""),
             "hotkeys": _hotkeys(), "media": cfg["media"]}
 
@@ -254,7 +255,8 @@ class Daemon:
         self.cfg = config.load()
         a = self.cfg["audio"]
         self.mic = audio.Microphone(a["input"])
-        self.player = audio.Player(a["output"])
+        self.player = audio.Player(a["output"], int(a.get("volume", 100)))
+        self._saves: dict[tuple[str, str], asyncio.TimerHandle] = {}  # sliders: write the config once, not per pixel
         self.recorder = audio.UtteranceRecorder(self.mic, a["silence_seconds"], a["no_speech_timeout_seconds"],
                                                 a["max_utterance_seconds"])
         self.stt = STT(self.cfg["stt"])
@@ -746,6 +748,7 @@ class Daemon:
                 self.mic.start()
         if a["output"] != old["audio"]["output"]:
             self.player.sink = audio.find_node(a["output"], "sinks") if a["output"] else None
+        self.player.volume = int(a.get("volume", 100))
         if new["media"]["volume"] != old["media"]["volume"]:
             asyncio.create_task(self.music.set_volume(int(new["media"]["volume"])))
         self.brain.cfg["user"] = new["user"]
@@ -1414,6 +1417,22 @@ class Daemon:
         events.emit("media_video", title=e["title"], where=where)
         return {"ok": True, "title": e["title"], "where": where, "url": e["url"], "done": done + ": " + e["title"]}
 
+    def _save_later(self, section: str, key: str, value) -> None:
+        """A slider sends a value with every pixel: apply it at once, write the file when the dragging stops."""
+        pending = self._saves.pop((section, key), None)
+        if pending:
+            pending.cancel()
+        self._saves[(section, key)] = asyncio.get_running_loop().call_later(
+            1.0, lambda: config.set_value(section, key, value))
+
+    def set_volume(self, value: int) -> int:
+        """JustDay's own loudness (voice and signals), 0–100. The system volume is not ours to move."""
+        v = max(0, min(100, int(value)))
+        self.player.volume = v
+        self.cfg["audio"]["volume"] = v
+        self._save_later("audio", "volume", v)
+        return v
+
     async def media_control(self, action: str, value=None) -> dict:
         """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | status"""
         m = self.music
@@ -1437,7 +1456,7 @@ class Daemon:
         elif action == "volume":
             v = int(value if value is not None else m.volume)
             await m.set_volume(v)
-            config.set_value("media", "volume", v)
+            self._save_later("media", "volume", v)
             self.cfg["media"]["volume"] = v
         elif action == "restart":
             await m.seek(0)
@@ -1608,6 +1627,9 @@ class Daemon:
                                              bool(req.get("playlist")), bool(req.get("shuffle")))
             elif cmd == "media_video":  # justday video: asks where (island / window / YouTube) unless told
                 resp = await self.play_video(req.get("query", ""), req.get("where", ""))
+            elif cmd == "volume":  # the island's slider: how loud JustDay itself is
+                resp = {"ok": True, "volume": self.set_volume(int(req.get("value", 100)))}
+                self.publish(settings=settings_snapshot(self.cfg))
             elif cmd == "media":  # player buttons and `justday player ACTION`
                 resp = await self.media_control(req.get("action", "status"), req.get("value"))
             elif cmd == "reminder_set":  # `justday timer 10m` and the island's own buttons

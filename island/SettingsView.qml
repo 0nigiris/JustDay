@@ -722,6 +722,11 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Громкость голоса")
+                    subtitle: JD.tr("Насколько громко говорит сам ассистент; системную громкость это не трогает")
+                    SSlider { key: "audio.volume"; from: 0; to: 100; step: 5; decimals: 0; unit: "%" }
+                }
+                Row {
                     title: JD.tr("Скорость речи")
                     subtitle: JD.tr("Насколько быстро ассистент говорит; 1,0 — как модель произносит сама")
                     Segmented {

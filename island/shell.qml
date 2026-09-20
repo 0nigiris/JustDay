@@ -11,7 +11,6 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
-import Quickshell.Services.Pipewire
 import QtMultimedia
 
 ShellRoot {
@@ -784,12 +783,14 @@ ShellRoot {
         property real value: 0          // 0…1
         property color tint: JD.text1
         property real dragValue: -1
+        property bool live: false       // report every step (volume), not only the release (seeking)
+        property int thickness: 5       // the volume track is thinner: it is not the progress of anything
         signal seek(real frac)
         implicitHeight: 16
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width
-            height: sbHover.hovered || sb.dragValue >= 0 ? 7 : 5
+            height: sbHover.hovered || sb.dragValue >= 0 ? sb.thickness + 2 : sb.thickness
             radius: height / 2
             color: Qt.rgba(1, 1, 1, 0.16)
             Behavior on height { NumberAnimation { duration: 120 } }
@@ -805,7 +806,7 @@ ShellRoot {
             anchors.fill: parent
             function at(x) { return Math.max(0, Math.min(1, x / width)) }
             onPressed: m => sb.dragValue = at(m.x)
-            onPositionChanged: m => { if (pressed) sb.dragValue = at(m.x) }
+            onPositionChanged: m => { if (pressed) { sb.dragValue = at(m.x); if (sb.live) sb.seek(sb.dragValue) } }
             onReleased: { sb.seek(sb.dragValue); sb.dragValue = -1 }
         }
     }
@@ -872,6 +873,7 @@ ShellRoot {
         readonly property color tint: JD.artTint(p.color)
         property real now: Date.now()
         property bool queueOpen: false
+        property int volumeWas: 0      // where the mute button came from
         Timer { interval: 250; repeat: true; running: pl.visible && !pl.p.paused; onTriggered: pl.now = Date.now() }
         readonly property real pos: { pl.now; return JD.playerPos(Date.now()) }
         readonly property var upcoming: (p.queue || []).filter(q => q.i >= (p.index || 0))
@@ -953,6 +955,34 @@ ShellRoot {
                     }
                 }
                 Item { Layout.fillWidth: true }
+            }
+            // how loud the music is — mpv's own volume, not the system's
+            RowLayout {
+                Layout.topMargin: 2
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                spacing: 10
+                Icon {
+                    name: (pl.p.volume || 0) === 0 ? "audio-volume-muted" : "audio-volume-high"
+                    implicitSize: 15; tint: JD.text3
+                    TapHandler { onTapped: { const was = pl.p.volume || 0
+                                             JD.media("volume", was > 0 ? 0 : (pl.volumeWas || 70))
+                                             pl.optimistic({ volume: was > 0 ? 0 : (pl.volumeWas || 70) }); pl.volumeWas = was } }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                }
+                SeekBar {
+                    Layout.fillWidth: true
+                    live: true
+                    thickness: 3
+                    tint: Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.75)
+                    value: (pl.p.volume || 0) / 100
+                    onSeek: frac => { const v = Math.round(frac * 100); JD.media("volume", v); pl.optimistic({ volume: v }) }
+                }
+                Label2 {
+                    text: Math.round(pl.p.volume || 0) + "%"
+                    color: JD.text3; font.pixelSize: 11; font.features: { "tnum": 1 }
+                    Layout.minimumWidth: 34; horizontalAlignment: Text.AlignRight
+                }
             }
             // queue · folder · stop
             RowLayout {
@@ -1850,6 +1880,7 @@ ShellRoot {
         id: ps
         property real value: 0
         property bool muted: false
+        property color tint: JD.accentBlue
         property string icon: "audio-volume-high"
         property string label: ""
         property real dragValue: -1
@@ -1864,7 +1895,7 @@ ShellRoot {
             width: Math.max(parent.height, parent.width * Math.min(1, ps.shown))
             height: parent.height
             radius: parent.radius
-            color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, psHover.hovered || ps.dragValue >= 0 ? 0.40 : 0.28)
+            color: Qt.rgba(ps.tint.r, ps.tint.g, ps.tint.b, psHover.hovered || ps.dragValue >= 0 ? 0.40 : 0.28)
             Behavior on width { enabled: ps.dragValue < 0; NumberAnimation { duration: 140 } }
         }
         MouseArea {
@@ -1903,9 +1934,9 @@ ShellRoot {
     component ExpandedView: View {
         id: ev
         property string pendingProvider: ""
+        property int voiceWas: 0   // the level the mute button came from, for the way back
+        property int musicWas: 0
         readonly property var player: Mpris.players.values.length ? Mpris.players.values.find(p => p.isPlaying) || Mpris.players.values[0] : null
-        readonly property var sink: Pipewire.defaultAudioSink
-        PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
         implicitWidth: 740
         implicitHeight: Math.min(col.implicitHeight + 40, 800)
         SystemClock { id: evClock; precision: SystemClock.Minutes }
@@ -2126,15 +2157,30 @@ ShellRoot {
                 }
             }
 
-            // ── system volume (PipeWire)
+            // ── how loud the assistant is. Not the system volume: that one belongs to Plasma, and moving it
+            //    from here would also turn down every other app on the machine.
             PillSlider {
-                visible: !!ev.sink && !!ev.sink.audio
                 Layout.fillWidth: true
-                value: ev.sink && ev.sink.audio ? ev.sink.audio.volume : 0
-                muted: ev.sink && ev.sink.audio ? ev.sink.audio.muted : false
-                label: JD.tr("Громкость")
-                onMoved: v => { if (ev.sink && ev.sink.audio) { ev.sink.audio.volume = v; if (v > 0) ev.sink.audio.muted = false } }
-                onMuteToggled: if (ev.sink && ev.sink.audio) ev.sink.audio.muted = !ev.sink.audio.muted
+                value: JD.volume / 100
+                muted: JD.volume === 0
+                icon: "audio-speakers"
+                label: JD.assistantName
+                onMoved: v => JD.setVolume(v * 100)
+                onMuteToggled: { const was = JD.volume; JD.setVolume(was > 0 ? 0 : (ev.voiceWas || 100)); ev.voiceWas = was }
+            }
+
+            // ── the music, while there is music: the same knob as in the player
+            PillSlider {
+                visible: JD.musicOn
+                Layout.fillWidth: true
+                value: (JD.player && JD.player.volume !== undefined ? JD.player.volume : 70) / 100
+                muted: !!JD.player && JD.player.volume === 0
+                icon: "audio-x-generic"
+                tint: JD.artTint(JD.player ? JD.player.color : "")
+                label: JD.tr("Музыка")
+                onMoved: v => JD.media("volume", Math.round(v * 100))
+                onMuteToggled: { const was = JD.player ? JD.player.volume : 0
+                                 JD.media("volume", was > 0 ? 0 : (ev.musicWas || 70)); ev.musicWas = was }
             }
 
             // ── one-tap actions

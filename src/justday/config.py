@@ -78,6 +78,9 @@ DEFAULTS: dict = {
         "microphone": True,  # false = keyboard only: no mic, no wake word, speech recognition never loads
         "input": "",
         "output": "",
+        # How loud JustDay itself is — its voice and its signals, 0–100% of the system volume.
+        # The system volume stays where the user left it; this is the assistant's own knob.
+        "volume": 100,
         "earcons": True,
         "max_utterance_seconds": 40,
         "silence_seconds": 1.0,
