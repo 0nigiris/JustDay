@@ -49,6 +49,8 @@ Singleton {
     function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
 
     property string activity: ""           // one line of what is happening (heard text, tool, draft)
+    // the status line is one line by definition: a pasted script would otherwise stretch the island
+    function flat(s) { return String(s || "").replace(/\s+/g, " ").trim().slice(0, 160) }
     property string activityIcon: ""
     property real busySince: Date.now()
     property string answer: ""
@@ -319,9 +321,9 @@ Singleton {
             if (m.state === "idle" && answerOpen) answerTimer.restart()
         }
         switch (m.kind) {
-        case "heard": activity = "«" + m.detail + "»"; activityIcon = "audio-input-microphone"; break
-        case "tool": activity = m.detail; activityIcon = m.icon || ""; break
-        case "draft": activity = m.detail; break
+        case "heard": activity = "«" + flat(m.detail) + "»"; activityIcon = "audio-input-microphone"; break
+        case "tool": activity = flat(m.detail); activityIcon = m.icon || ""; break
+        case "draft": activity = flat(m.detail); break
         case "say": answer = m.detail; answerOpen = true; answerTimer.stop(); break
         case "fast": flash(m.detail, m.icon, accentGreen); break
         case "approval": approvalText = m.detail; approvalReason = m.reason || ""; break

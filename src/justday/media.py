@@ -42,20 +42,27 @@ _PLAY = re.compile(
     r"(?:песню|песенку|трек|музыку|song|track|music)\s+(?:(?:от|группы|исполнителя|by)\s+)?(?P<q>.+)$", re.I)
 _VIDEO = re.compile(
     r"^(?:включи|поставь|покажи|запусти|открой|play|show|put on)\s+(?:мне\s+|me\s+)?"
-    r"(?:видео|видос\w*|ролик|клип|video|clip)\s+(?:(?:про|о|об|с|по|about|of|with)\s+)?(?P<q>.+)$", re.I)
+    r"(?:(?:рандомн\w+|случайн\w+|какое-нибудь|какой-нибудь|любое|random|any)\s+)?"
+    r"(?:видео|видос\w*|ролик|клип|video|clip)\s+"
+    r"(?:(?:про|о|об|с|по|от|у|about|of|with|from|by)\s+)?(?P<q>.+)$", re.I)
+# "рандомное видео от Марка Робера": the daemon picks one itself instead of the model scripting a choice
+_RANDOM = re.compile(r"\b(рандомн\w+|случайн\w+|какое-нибудь|какой-нибудь|любое|наугад|random|any)\b", re.I)
 # "моё видео", "которое я записал", "последнее" — a local file: that is the brain's job
 _LOCAL = re.compile(r"\b(мо[йеёиюя]\w*|котор\w+|последн\w+|вчерашн\w+|записал\w*|скачанн\w+|папк\w+|диск\w*|файл\w*|"
                     r"компьютер\w*|рабоч\w+ стол\w*|my|which|last|recorded|downloaded|folder|file)\b", re.I)
 
 
 def parse(text: str) -> tuple[str, str] | None:
-    """("music" | "video", query) for "включи песню …" / "включи видео про …", else None."""
+    """("music" | "video" | "video_random", query) for "включи песню …" / "включи видео про …", else None."""
     t = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
     for kind, rx in (("music", _PLAY), ("video", _VIDEO)):
         m = rx.match(t)
         if m:
-            q = m.group("q").strip(" ,.«»\"'")
+            q = _RANDOM.sub(" ", m.group("q")).strip(" ,.«»\"'")
+            q = re.sub(r"\s+", " ", q)
             if q and len(q) <= 120 and not _LOCAL.search(q):
+                if kind == "video" and _RANDOM.search(t):
+                    return "video_random", q
                 return kind, q
     return None
 
@@ -237,7 +244,7 @@ def _download(entry: dict, kind: str, progress: Callable[[float], None] | None =
         _prune_video_cache()
         fmt = ["-f", "bv*[height<=720][vcodec^=avc1]+ba[ext=m4a]/b[height<=720][ext=mp4]/bv*[height<=720]+ba/b",
                "--merge-output-format", "mp4", "-o", str(VIDEO_CACHE / "%(id)s.%(ext)s")]
-    cmd = ["yt-dlp", "--no-warnings", "--ignore-config", "--no-playlist", "--newline",
+    cmd = ["yt-dlp", "--no-warnings", "--ignore-config", "--no-playlist", "--newline", "-N", "8",  # 8 fragments at once
            "--write-thumbnail", "--convert-thumbnails", "jpg", "-o", f"thumbnail:{THUMBS}/%(id)s.%(ext)s", *fmt,
            "--progress-template", "download:JDPROG %(progress.downloaded_bytes)s %(progress.total_bytes,progress.total_bytes_estimate)s",
            "--print", "after_move:JDINFO %(.{id,title,channel,uploader,artist,track,duration,filepath,webpage_url})j",
@@ -353,7 +360,8 @@ def find(query: str, kind: str = "music", count: int = 1) -> list[dict]:
             if len(out) >= count:
                 break
         return out or ranked[:1]
-    return [e for e in search(query, 5) if not e["live"]][:1] or search(query, 1)
+    got = [e for e in search(query, max(5, count * 2)) if not e["live"]]
+    return (got or search(query, 1))[:max(1, count)]
 
 
 def search_playlists(query: str, n: int = 6) -> list[dict]:

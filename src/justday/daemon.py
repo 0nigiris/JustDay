@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import signal
 import subprocess
@@ -21,6 +22,7 @@ import numpy as np
 
 from . import audio, calendar_lane, config, events, fastpath, mail, media, namespot, reminders, voiceprint, workers
 from .i18n import lang, t
+from . import brain as brain_mod
 from .brain import Brain
 from .stt import STT
 from . import tts as tts_mod
@@ -32,6 +34,8 @@ log = logging.getLogger("justday.daemon")
 ACK = re.compile(r"^\W*(?:(?:готово|окей|ок|хорошо|done|ok)\W+)?(готово|сделано|сделал|есть|окей|ок|хорошо|выполнено|принято|done|"
                  r"(открыл|запустил|включил|закрыл|свернул|переключил|поставил|выключил|включаю|ставлю|запускаю|"
                  r"включено|играет|играю|вот|now playing|playing)[\w\s«»\"'.,:—–-]{0,70})\W*$", re.I)
+# «Выпало "…". Включаю.» — an announcement of a start is not an answer either, wherever the verb sits
+ACK_TAIL = re.compile(r"(включаю|ставлю|запускаю|показываю|ищу|сейчас будет|playing|now playing)\s*[.!…]*$", re.I)
 STOP_WORDS = re.compile(r"\b(стоп|хватит|отмена|отмени|отменяй|замолчи|заткнись|stop|cancel|never ?mind|shut up|be quiet)\b", re.I)
 YES = re.compile(r"\b(да|давай|разрешаю|разреши|подтверждаю|конечно|ок|окей|можно|делай|yes|yeah|sure|ok|okay|allow|go ahead|do it)\b", re.I)
 NO = re.compile(r"\b(нет|не надо|отмена|отклон\w*|запрещаю|стоп|no|nope|don'?t|deny|cancel)\b", re.I)
@@ -328,11 +332,11 @@ class Daemon:
         """Journal event → Dynamic Island message (full texts, icons, cards)."""
         if kind == "turn_done":
             self._preapproved_until = 0.0  # an approved draft covers only the task it was made for
-        if kind == "tool":
-            msg = {"kind": "tool", "detail": data.get("label") or data.get("desc", ""),
+        if kind == "tool":  # one line, always: a pasted script must not stretch the island
+            msg = {"kind": "tool", "detail": brain_mod.one_line(data.get("label") or data.get("desc", "")),
                    "icon": tool_icon(data.get("name", ""), data.get("input", ""))}
         elif kind == "fast":
-            msg = {"kind": "fast", "detail": data.get("desc", ""), "icon": fastpath.last_icon}
+            msg = {"kind": "fast", "detail": brain_mod.one_line(data.get("desc", "")), "icon": fastpath.last_icon}
         elif kind in ("heard", "say", "draft"):
             msg = {"kind": kind, "detail": data.get("text", "")}
         elif kind == "approval_request":
@@ -372,6 +376,9 @@ class Daemon:
     # ---------------- speech output ----------------
     async def _on_brain_text(self, text: str) -> None:
         if ACK.match(text.strip()) and len(text) < 60:
+            events.emit("ack_suppressed", text=text)
+            return
+        if ACK_TAIL.search(text.strip()) and len(text) < 140:
             events.emit("ack_suppressed", text=text)
             return
         # «включи…» is answered by the music itself. Whatever the model wants to add about the track
@@ -1109,7 +1116,8 @@ class Daemon:
         kind, query = req
 
         async def go():
-            r = await (self.play_music(query) if kind == "music" else self.play_video(query))
+            r = await (self.play_music(query) if kind == "music"
+                       else self.play_video(query, random=kind == "video_random"))
             if r.get("ok"):
                 self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {r.get('done', '')}. Не повторяй.]")
             elif r.get("error") != "cancelled":
@@ -1355,7 +1363,7 @@ class Daemon:
             return "island"
         return next((w for w, rx in self.WHERE_WORDS if rx.search(ans)), None)
 
-    async def play_video(self, query: str, where: str = "") -> dict:
+    async def play_video(self, query: str, where: str = "", random: bool = False) -> dict:
         loop = asyncio.get_running_loop()
         query = query.strip()
         path = Path(query).expanduser()
@@ -1364,10 +1372,12 @@ class Daemon:
                 e = {"id": "", "title": path.stem, "channel": "", "duration": 0, "url": str(path), "thumb_url": "", "file": str(path)}
             else:
                 self.publish(kind="tool", detail=t("Ищу видео: {q}", q=query), icon="youtube")
-                found = await loop.run_in_executor(None, media.find, query, "video")
+                # «рандомное видео от …»: the daemon picks one out of the first results itself, which is
+                # both instant and honest — no model writing a script to roll a die.
+                found = await loop.run_in_executor(None, media.find, query, "video", 10 if random else 1)
                 if not found:
                     return {"ok": False, "error": "nothing found"}
-                e = found[0]
+                e = secrets.choice(found) if random else found[0]
         except Exception as ex:  # noqa: BLE001
             return {"ok": False, "error": str(ex)}
         where = where or self.cfg["media"]["video_where"]

@@ -50,7 +50,7 @@ SILENCE = re.compile(
 def describe_tool(name: str, inp: dict) -> str:
     """One-line human description of a tool call (for logs, notifications, approval prompts)."""
     if name == "Bash":
-        return f"команда: {inp.get('command', '')}"
+        return f"команда: {inp.get('command', '')}"  # approvals need the command exactly as it will run
     if name in ("Edit", "Write", "Read", "NotebookEdit"):
         return f"{name} {inp.get('file_path', '')}"
     if name.startswith("mcp__"):
@@ -62,13 +62,35 @@ def describe_tool(name: str, inp: dict) -> str:
     return name
 
 
+# a whole script pasted into one Bash call: say what it is, not what it says
+BASH_KINDS = ((re.compile(r"^\s*(python3?|uv run|uvx)\b.*-c\b", re.I), "Считаю в Python"),
+              (re.compile(r"^\s*(python3?|uv run)\s+\S+\.py", re.I), "Запускаю скрипт"),
+              (re.compile(r"^\s*(curl|wget|http)\b", re.I), "Запрашиваю из сети"),
+              (re.compile(r"^\s*(yt-dlp|ffmpeg|ffprobe)\b", re.I), "Работаю с медиа"),
+              (re.compile(r"^\s*git\b", re.I), "Гит"),
+              (re.compile(r"^\s*(rg|grep|fd|find|plocate)\b", re.I), "Ищу в файлах"),
+              (re.compile(r"^\s*(ls|cat|head|tail|sed|awk)\b", re.I), "Смотрю файлы"))
+
+
+def one_line(text: str, limit: int = 90) -> str:
+    """Anything shown on the island is one line: newlines collapse, long tails are cut."""
+    flat = re.sub(r"\s+", " ", str(text or "")).strip()
+    return flat if len(flat) <= limit else flat[:limit - 1].rstrip() + "…"
+
+
 def humanize_tool(name: str, inp: dict) -> str:
     """What the user sees in the Dynamic Island while a tool runs (describe_tool stays exact for approvals)."""
     from urllib.parse import urlparse
 
     tool = name.rsplit("__", 1)[-1]
     if name == "Bash":
-        return inp.get("description") or inp.get("command", "")[:160]
+        command = str(inp.get("command", ""))
+        if inp.get("description"):
+            return one_line(inp["description"])
+        for rx, label in BASH_KINDS:  # a multi-line script is unreadable on one line: name it instead
+            if rx.search(command) and ("\n" in command or len(command) > 90):
+                return t(label)
+        return one_line(command)
     if tool == "look":
         return t("Смотрю на экран") + (f": {inp['window']}" if inp.get("window") else "")
     if tool == "act":

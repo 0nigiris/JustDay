@@ -37,7 +37,11 @@ System volume ("громче", "тише") is `wpctl`, not the player.
 `justday video "what to find or a link"` — finds the video and **asks the user where to play it** (the island shows three buttons: in the island, in a window, on YouTube; the user can also answer by voice). Wait for it; it returns `where`.
 If the user already said where («в окне», «на ютубе», «прямо тут», «на весь экран» = window): `where=island|window|browser`.
 Local video files: `justday video ~/Videos/clip.mp4 where=window`.
-In the island a video downloads first (≤720p; ~10–30 s for a clip, longer for long videos — say so for >20 min videos); window and YouTube start at once.
+In the island a video downloads first (≤720p, 8 fragments at a time; a few seconds for a clip, ~10 s for a 20-minute video); window and YouTube start at once.
 Pause / resume / close a video in the island: `justday player pause|resume|stop`.
 
 Choosing a video: tutorials and lectures → reputable channels, sane length; "клип" = the official music video.
+
+**"Рандомное видео от X" is handled by the daemon itself** — you will usually never see such a request. If one
+reaches you anyway, run `justday video "X"` once and let it pick; never write a script that lists a channel and
+rolls a die (that costs the user half a minute and shows a wall of code on the island).
