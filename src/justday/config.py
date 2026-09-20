@@ -20,6 +20,55 @@ STATE_FILE = STATE_DIR / "state.json"
 # The repository this package was installed from (editable install) — holds persona + plugin.
 REPO_DIR = Path(__file__).resolve().parents[2]
 
+SECRETS_FILE = CONFIG_DIR / "secrets.env"
+
+
+def secret(name: str) -> str:
+    """An API key from the environment, or from ~/.config/justday/secrets.env (KEY=value, mode 600).
+
+    Keys are never written to config.toml, never logged and never handed to the model."""
+    got = os.environ.get(name, "")
+    if got:
+        return got.strip()
+    try:
+        for line in SECRETS_FILE.read_text(encoding="utf-8").splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() == name:
+                return value.strip().strip("'\"")
+    except OSError:
+        pass
+    return _mcp_secret(name)
+
+
+def _mcp_secret(name: str) -> str:
+    """A key an MCP server in ~/.claude.json already holds — no reason to ask for the same key twice."""
+    import json as jsonlib
+
+    try:
+        servers = jsonlib.loads((HOME / ".claude.json").read_text(encoding="utf-8")).get("mcpServers") or {}
+    except (OSError, ValueError):
+        return ""
+    for server in servers.values():
+        got = ((server or {}).get("env") or {}).get(name)
+        if got:
+            return str(got).strip()
+    return ""
+
+
+def set_secret(name: str, value: str) -> None:
+    """Store a key in secrets.env with owner-only permissions (or drop it when value is empty)."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    lines = []
+    try:
+        lines = [ln for ln in SECRETS_FILE.read_text(encoding="utf-8").splitlines() if not ln.startswith(f"{name}=")]
+    except OSError:
+        pass
+    if value:
+        lines.append(f"{name}={value}")
+    SECRETS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    SECRETS_FILE.chmod(0o600)
+
+
 DEFAULTS: dict = {
     # assistant_name: how the assistant calls itself and what you call it (also a hint for speech recognition)
     "user": {"name": "", "address_as": "сэр", "assistant_name": "Джарвис", "assistant_aliases": ["JustDay"],
@@ -46,12 +95,18 @@ DEFAULTS: dict = {
         "initial_prompt": "Джарвис, JustDay, Claude Code, YouTube, Discord, Steam, Proton, GitHub, KDE, Helium, VS Code.",
     },
     "tts": {
-        "engine": "silero",  # qwen (neural, justday-voice service) | silero | espeak | none
+        "engine": "silero",  # qwen (neural, justday-voice service) | elevenlabs | silero | espeak | none
         "voice": "jarvis",  # neural voice id: built-in jarvis, friday, or one you designed/cloned
         "neural_quality": "fast",  # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
         "silero_model_url": "https://models.silero.ai/models/tts/ru/v5_5_ru.pt",
         "speaker": "eugene",
         "sample_rate": 48000,
+        "speed": 1.15,  # 1.0 = as the model speaks; 1.1–1.3 sounds like a person in a hurry
+        "latin": "auto",  # auto = spell English the Russian way only for voices that cannot read it (silero, espeak)
+        "numbers": True,  # say figures as words: «7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
+        # ElevenLabs (engine = "elevenlabs"): the key lives in ~/.config/justday/secrets.env, never here.
+        "eleven_voice": "JBFqnCBsd6RMkjVDRZzb",  # `justday voice eleven` lists the voices on your account
+        "eleven_model": "eleven_flash_v2_5",  # flash = fastest; eleven_multilingual_v2 = richer, slower
         "previous_engine": "",  # remembered when voice replies are switched off
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase

@@ -28,6 +28,14 @@ engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | sile
 voice = "jarvis"            # neural voice: jarvis, friday or one you designed/cloned (justday voice list)
 neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
+speed = 1.15                # how fast it talks (0.5–2.0); the pitch does not move
+numbers = true              # «в 7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
+latin = "auto"              # auto | keep (multilingual voices read English themselves) | translit (Silero, espeak)
+# ElevenLabs (engine = "elevenlabs"): the key goes to ~/.config/justday/secrets.env, never here.
+#   justday voice key        — paste the key on stdin
+#   justday voice eleven     — list the voices on the account
+# eleven_voice = "JBFqnCBsd6RMkjVDRZzb"
+# eleven_model = "eleven_flash_v2_5"   # or eleven_multilingual_v2 (richer, slower)
 
 [wakeword]
 enabled = false             # wake without a key — keeps the mic open, audio stays local

@@ -349,8 +349,17 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("args", nargs="*")
     sp.add_argument("--address", help="setup without prompts: address here, app password on stdin")
     sp = sub.add_parser("settings-data", help="JSON snapshot for the Settings window")
-    sp = sub.add_parser("voice", help="neural voices: list | design NAME DESCRIPTION | record SECONDS | clone NAME WAV TEXT | delete ID | preview TEXT")
-    sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview"])
+    sp = sub.add_parser("voice", help="voices: list | design NAME DESCRIPTION | record SECONDS | clone NAME WAV TEXT | "
+                                      "delete ID | preview TEXT | speed 1.2 | eleven [VOICE_ID] | key (reads stdin)")
+    sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "eleven", "key"])
+    sp.add_argument("args", nargs="*")
+    sp = sub.add_parser("timer", help="set a timer: `justday timer 10m чай` · `justday timer` lists what is set")
+    sp.add_argument("args", nargs="*")
+    sp = sub.add_parser("alarm", help="set an alarm: `justday alarm 7:30 подъём` [--daily] · `justday alarm` lists them")
+    sp.add_argument("args", nargs="*")
+    sp.add_argument("--daily", action="store_true", help="ring every day at that time")
+    sp = sub.add_parser("reminders", help="what is waiting: list | cancel [timer|alarm|ID]")
+    sp.add_argument("action", nargs="?", default="list", choices=["list", "cancel"])
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("hotkey", help="talk/cancel shortcuts: get | set --talk Meta+J --extra F19 --cancel Meta+Shift+J")
     sp.add_argument("action", choices=["get", "set"])
@@ -491,10 +500,31 @@ def main(argv: list[str] | None = None) -> None:
             _print(manage.voice_request({"cmd": "clone", "name": args[0], "audio": args[1], "text": " ".join(args[2:])}))
         elif a.action == "delete":
             _print(manage.voice_request({"cmd": "delete", "id": args[0]}))
+        elif a.action == "speed":  # how fast the assistant talks, 0.5–2.0
+            if args:
+                config.set_value("tts", "speed", max(0.5, min(2.0, float(args[0]))))
+                control("reload_settings", timeout=10)
+            _print({"speed": config.load()["tts"]["speed"]})
+        elif a.action == "key":  # the ElevenLabs key, read from stdin so it never lands in the shell history
+            key = sys.stdin.read().strip()
+            config.set_secret("ELEVENLABS_API_KEY", key)
+            _print({"ok": True, "stored_in": str(config.SECRETS_FILE), "cleared": not key})
+        elif a.action == "eleven":  # voices on the ElevenLabs account, or switch to one of them
+            from . import manage
+
+            if args:
+                config.set_value("tts", "eleven_voice", args[0])
+                config.set_value("tts", "engine", "elevenlabs")
+                control("reload_settings", timeout=10)
+                _print({"ok": True, "engine": "elevenlabs", "voice": args[0]})
+            else:
+                _print(manage.eleven_voices())
         elif a.action == "record":  # the daemon records from the configured mic and transcribes (Whisper is loaded there)
             _print(control("record_sample", timeout=120, seconds=float(args[0] if args else 12)))
         else:
             _print(control("say", timeout=120, text=" ".join(args) or "Здравствуйте. Так звучит мой голос."))
+    elif a.cmd in ("timer", "alarm", "reminders"):
+        _reminder_cmd(a)
     elif a.cmd == "settings-data":
         from . import manage
 
@@ -716,6 +746,33 @@ def _contacts_cmd(a) -> None:
         if unknown:
             sys.exit(f"unknown fields {sorted(unknown)}; allowed: {', '.join(contacts.FIELDS)}")
         _print(contacts.upsert(" ".join(name_parts), **fields))
+
+
+def _reminder_cmd(a) -> None:
+    """`justday timer 10m чай`, `justday alarm 7:30 подъём --daily`, `justday reminders cancel timer`."""
+    from . import reminders
+
+    args = list(a.args)
+    if a.cmd == "reminders" and getattr(a, "action", "list") == "cancel":
+        _print(control("reminder_cancel", timeout=10, which=" ".join(args)))
+        return
+    if a.cmd == "reminders" or not args:
+        _print(control("reminders", timeout=10))
+        return
+    spec, label = args[0], " ".join(args[1:])
+    if a.cmd == "timer":
+        seconds = reminders.parse_span(spec) or reminders.parse_span(spec + " минут")
+        if not seconds:
+            _print({"ok": False, "error": "how long? e.g. 10m, 90s, «1 час 30 минут»"})
+            return
+        _print(control("reminder_set", timeout=10, kind="timer", seconds=seconds, label=label))
+        return
+    at = reminders.parse_time("в " + spec) or reminders.parse_time(spec)
+    if not at:
+        _print({"ok": False, "error": "when? e.g. 7:30"})
+        return
+    _print(control("reminder_set", timeout=10, kind="alarm", at=at, label=label,
+                   repeat="daily" if getattr(a, "daily", False) else ""))
 
 
 def _voiceprint_cmd(a) -> None:

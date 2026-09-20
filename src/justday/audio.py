@@ -208,8 +208,82 @@ class Player:
         return self._proc is not None
 
 
+def timestretch(pcm: np.ndarray, speed: float, rate: int) -> np.ndarray:
+    """Speak faster (or slower) without moving the pitch — WSOLA: overlapping frames, aligned before they are added.
+
+    A voice model has one tempo of its own; this is what turns it into the tempo the user asked for."""
+    if speed <= 0 or abs(speed - 1.0) < 0.02 or pcm.size < rate // 10:
+        return pcm
+    x = pcm.astype(np.float32)
+    frame = max(256, int(rate * 0.048) // 2 * 2)   # ~48 ms: long enough for the pitch, short enough for speech
+    hop_out = frame // 2
+    hop_in = max(1, int(round(hop_out * speed)))
+    search = int(rate * 0.006)                     # ±6 ms to find where the next frame continues the last one
+    win = np.hanning(frame).astype(np.float32)
+    out = np.zeros(int(x.size / speed) + 2 * frame, np.float32)
+    norm = np.zeros_like(out)
+    tail = frame - hop_out
+    ref = None
+    pos_in = pos_out = 0
+    while pos_in + frame + search < x.size and pos_out + frame < out.size:
+        best = pos_in
+        if ref is not None and search:
+            lo = max(0, pos_in - search)
+            hi = min(x.size - frame, pos_in + search)
+            if hi > lo:
+                corr = np.correlate(x[lo:hi + tail], ref, mode="valid")
+                best = lo + int(np.argmax(corr))
+        seg = x[best:best + frame]
+        if seg.size < frame:
+            break
+        out[pos_out:pos_out + frame] += seg * win
+        norm[pos_out:pos_out + frame] += win
+        ref = x[best + hop_out:best + hop_out + tail]
+        pos_out += hop_out
+        pos_in += hop_in
+    end = pos_out + frame
+    np.divide(out[:end], np.maximum(norm[:end], 1e-3), out=out[:end])
+    return np.clip(out[:end], -32768, 32767).astype(np.int16)
+
+
+class Stretcher:
+    """timestretch over a stream: keeps the samples a chunk ends with, so chunks join without a click."""
+
+    def __init__(self, speed: float, rate: int) -> None:
+        self.speed, self.rate = speed, rate
+        self._rest = np.zeros(0, dtype=np.int16)
+
+    @property
+    def passthrough(self) -> bool:
+        return abs(self.speed - 1.0) < 0.02
+
+    def feed(self, pcm: np.ndarray) -> np.ndarray:
+        if self.passthrough:
+            return pcm
+        buf = np.concatenate([self._rest, pcm]) if self._rest.size else pcm
+        keep = int(self.rate * 0.06)               # one frame plus the search window
+        if buf.size <= keep * 2:
+            self._rest = buf
+            return np.zeros(0, dtype=np.int16)
+        self._rest = buf[-keep:]
+        return timestretch(buf[:-keep], self.speed, self.rate)
+
+    def drain(self) -> np.ndarray:
+        rest, self._rest = self._rest, np.zeros(0, dtype=np.int16)
+        return rest if self.passthrough else timestretch(rest, self.speed, self.rate)
+
+
 def earcon(kind: str, rate: int = 48000) -> np.ndarray:
-    """Short synthesized UI tones: 'listen' (rising), 'done' (falling), 'error' (low)."""
+    """Short synthesized UI tones: 'listen' (rising), 'done' (falling), 'error' (low), 'alarm' (a chime)."""
+    if kind == "alarm":  # a timer or an alarm going off: three bell-like notes, softly rung twice
+        out = []
+        for hz in (1174, 880, 1174, 880):
+            t = np.arange(int(rate * 0.22)) / rate
+            env = np.exp(-t * 7) * np.minimum(1, t * 400)
+            tone = 0.32 * (np.sin(2 * np.pi * hz * t) + 0.35 * np.sin(4 * np.pi * hz * t)) * env
+            out.append(tone)
+            out.append(np.zeros(int(rate * 0.06)))
+        return (np.concatenate(out) * 32767).astype(np.int16)
     notes = {"listen": [880, 1320], "done": [1320, 880], "error": [330, 220]}[kind]
     out = []
     for hz in notes:

@@ -25,6 +25,25 @@ Singleton {
         expanded = false
     }
     function dismissNotification() { notification = null; notifExpanded = false }
+    property var alarm: null          // the timer or alarm ringing right now
+    property var reminders: []        // timers, alarms and reminders still waiting, soonest first
+    readonly property var runningTimer: {   // the soonest countdown, for the collapsed island
+        for (const r of reminders)
+            if (r.kind === "timer" && r.at - tick < 3600) return r
+        return null
+    }
+    function reminderLeft(r) {         // «12:04» for an alarm, «4:31» counting down for a timer
+        if (!r) return ""
+        const secs = Math.max(0, Math.round(r.at - tick / 1))
+        if (r.kind !== "timer") return Qt.formatTime(new Date(r.at * 1000), "HH:mm")
+        const m = Math.floor(secs / 60), s = secs % 60
+        return m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") + ":" + String(s).padStart(2, "0")
+                       : m + ":" + String(s).padStart(2, "0")
+    }
+    property real tick: Date.now() / 1000          // one clock for every countdown on screen
+    Timer { running: jd.reminders.length > 0; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
+    function dismissAlarm(id) { send({ cmd: "alarm_dismiss", id: id || "" }) }
+
     property var nextEvent: null      // calendar event starting within 2 hours
     property var update: null      // {behind, changes} when GitHub has a newer version
     function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
@@ -120,6 +139,7 @@ Singleton {
     property bool islandHovered: false
 
     readonly property string mode: {
+        if (alarm) return "alarm"                      // a timer going off outranks everything: it is waiting on you
         if (composeOpen && !approvalText) return "compose"
         if (expanded && !approvalText && !settingsOpen) return "expanded"
         if (approvalText) return "approval"
@@ -143,7 +163,8 @@ Singleton {
     readonly property color ink: "#000000"
     readonly property color text1: "#f5f5f7"
     readonly property color text2: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.62)
-    readonly property color text3: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.34)
+    // 0.48 keeps captions at ~4.8:1 on the island's black; 0.34 measured 2.8:1, below the 4.5:1 floor
+    readonly property color text3: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.48)
     readonly property color fill1: Qt.rgba(1, 1, 1, 0.08)
     readonly property color fill2: Qt.rgba(1, 1, 1, 0.14)
     readonly property color accentBlue: "#0a84ff"
@@ -190,7 +211,7 @@ Singleton {
     // every file in island/icons, so a view can also name a lucide icon directly
     readonly property var localIcons: [
         "activity", "app-window", "audio-lines", "bell", "bell-ring", "book-open", "bot", "brain", "calendar-clock",
-        "check", "chevron-down", "circle-help", "code", "gamepad-2", "git-branch", "chevron-right", "chevron-up", "circle-alert", "circle-play", "cloud", "cloud-fog",
+        "check", "chevron-down", "circle-help", "timer", "code", "gamepad-2", "git-branch", "chevron-right", "chevron-up", "circle-alert", "circle-play", "cloud", "cloud-fog",
         "cloud-lightning", "cloud-rain", "cloud-snow", "cloud-sun", "copy", "cpu", "download", "external-link",
         "file-text", "folder-open", "globe", "headphones", "house", "image", "info", "keyboard", "key-round",
         "layout-grid", "list-music", "log-out", "mail", "maximize-2", "message-circle", "message-square-plus", "mic",
@@ -288,6 +309,7 @@ Singleton {
             if (!m.player) playerOpen = false
         }
         if (m.video !== undefined) { video = m.video; if (!m.video) videoBig = false }
+        if (m.reminders !== undefined) reminders = m.reminders
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
             dstate = m.state
@@ -305,7 +327,7 @@ Singleton {
         case "approval": approvalText = m.detail; approvalReason = m.reason || ""; break
         case "approval_result": approvalText = ""; break
         case "cancel":
-            approvalText = ""; answerOpen = false; card = null
+            approvalText = ""; answerOpen = false; card = null; alarm = null
             flash(tr("Отменено"), "dialog-cancel", accentRed)
             break
         case "error": flash(m.detail, "dialog-error", accentRed); break
@@ -318,9 +340,10 @@ Singleton {
             break
         case "compose": openCompose(m.text, m.context); break
         case "video_cmd": videoCommand(m.action); break
-        case "card_close": card = null; break
+        case "card_close": card = null; alarm = null; break
         case "card":
             if (!m.card) { card = null; break }
+            if (m.card.type === "alarm") { alarm = m.card; break }   // its own view, and no timeout: it rings until dismissed
             card = m.card
             // cards waiting for an answer stay until the daemon closes them (it gives up after 120 s)
             cardTimer.interval = ["message_draft", "question"].includes(m.card.type) ? 130000

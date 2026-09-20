@@ -711,12 +711,61 @@ Item {
             Group {
                 Row {
                     title: JD.tr("Движок голоса")
-                    subtitle: vp.engine === "qwen" ? JD.tr("Нейросетевой: Qwen3-TTS на вашей видеокарте") : vp.engine === "silero" ? JD.tr("Silero: быстрый, звучит роботизированно") : JD.tr("Без голоса, только остров")
+                    subtitle: vp.engine === "qwen" ? JD.tr("Нейросетевой: Qwen3-TTS на вашей видеокарте")
+                            : vp.engine === "elevenlabs" ? JD.tr("ElevenLabs: лучший голос, но текст ответов уходит на их серверы")
+                            : vp.engine === "silero" ? JD.tr("Silero: быстрый, звучит роботизированно") : JD.tr("Без голоса, только остров")
                     Segmented {
-                        options: [{ value: "qwen", label: JD.tr("Нейросетевой") }, { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
+                        options: [{ value: "qwen", label: JD.tr("Нейросетевой") }, { value: "elevenlabs", label: "ElevenLabs" },
+                                  { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
                         current: vp.engine
                         onPicked: v => { win.set("tts.engine", v); vp.engine = v }
                     }
+                }
+                Row {
+                    title: JD.tr("Скорость речи")
+                    subtitle: JD.tr("Насколько быстро ассистент говорит; 1,0 — как модель произносит сама")
+                    Segmented {
+                        options: [{ value: 1.0, label: "1,0" }, { value: 1.15, label: "1,15" }, { value: 1.3, label: "1,3" }, { value: 1.5, label: "1,5" }]
+                        current: win.get("tts.speed") || 1.0
+                        onPicked: v => win.set("tts.speed", v)
+                    }
+                }
+                Row {
+                    title: JD.tr("Числа словами")
+                    subtitle: JD.tr("«в 7:05» читается как «семь ноль пять», «3,5 ГБ» — как «три с половиной гигабайта»")
+                    Toggle { checked: win.get("tts.numbers") !== false; onToggled: v => win.set("tts.numbers", v) }
+                }
+                Row {
+                    title: JD.tr("Английские слова")
+                    subtitle: JD.tr("Авто: нейроголос читает их по-английски, Silero — кириллицей, иначе он их проглатывает")
+                    Segmented {
+                        options: [{ value: "auto", label: JD.tr("Авто") }, { value: "keep", label: JD.tr("Как есть") }, { value: "translit", label: JD.tr("По-русски") }]
+                        current: win.get("tts.latin") || "auto"
+                        onPicked: v => win.set("tts.latin", v)
+                    }
+                }
+                Row {
+                    visible: vp.engine === "elevenlabs"
+                    title: win.d.voices && win.d.voices.eleven_key ? JD.tr("Ключ ElevenLabs сохранён") : JD.tr("Нужен ключ ElevenLabs")
+                    subtitle: JD.tr("Хранится в ~/.config/justday/secrets.env, правами только для вас; в конфиг и в git не попадает")
+                    Btn {
+                        text: JD.tr("Ввести ключ")
+                        primary: !(win.d.voices && win.d.voices.eleven_key)
+                        onClicked: Quickshell.execDetached(["kitty", "--hold", "zsh", "-c",
+                            "echo 'Вставьте ключ ElevenLabs и нажмите Enter, затем Ctrl+D:'; justday voice key"])
+                    }
+                }
+                Row {
+                    visible: vp.engine === "elevenlabs"
+                    title: JD.tr("Голос ElevenLabs")
+                    subtitle: JD.tr("Идентификатор голоса с вашего аккаунта")
+                    Field { key: "tts.eleven_voice"; placeholderText: "JBFqnCBsd6RMkjVDRZzb" }
+                }
+                Row {
+                    visible: vp.engine === "elevenlabs"
+                    title: JD.tr("Какие голоса доступны")
+                    subtitle: JD.tr("Список с вашего аккаунта, с идентификаторами")
+                    Btn { text: JD.tr("Показать"); onClicked: Quickshell.execDetached(["kitty", "--hold", "justday", "voice", "eleven"]) }
                 }
                 Row {
                     visible: vp.engine === "qwen" && !vp.neuralInstalled

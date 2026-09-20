@@ -48,6 +48,26 @@ def voice_request(req: dict, timeout: float = 600) -> dict:
         return {"ok": False, "error": f"голосовой сервис недоступен ({e}); scripts/setup-voice.sh"}
 
 
+def eleven_voices() -> dict:
+    """Voices available on the ElevenLabs account behind the stored key (names and ids, nothing else)."""
+    import urllib.error
+    import urllib.request
+
+    key = config.secret("ELEVENLABS_API_KEY")
+    if not key:
+        return {"ok": False, "error": "no key yet: `justday voice key` (paste it on stdin)"}
+    req = urllib.request.Request("https://api.elevenlabs.io/v2/voices?page_size=100", headers={"xi-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode())
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return {"ok": False, "error": f"ElevenLabs: {e}"}
+    got = [{"id": v.get("voice_id", ""), "name": v.get("name", ""),
+            "labels": ", ".join(f"{k}: {x}" for k, x in (v.get("labels") or {}).items())}
+           for v in data.get("voices") or []]
+    return {"ok": True, "voices": got, "current": config.load()["tts"].get("eleven_voice", "")}
+
+
 def voices() -> dict:
     """Neural voices are read from disk (the service may be busy speaking); status comes from systemd."""
     installed = (config.DATA_DIR / "voice" / ".venv" / "bin" / "python").exists()
@@ -62,7 +82,7 @@ def voices() -> dict:
             items.append({"id": d.name, "name": meta.get("name", d.name), "description": meta.get("description", ""),
                           "kind": meta.get("kind", ""), "builtin": builtin})
     return {"neural_installed": installed, "neural_running": state == "active", "neural_available": installed and state == "active",
-            "neural": items, "silero": VOICES}
+            "neural": items, "silero": VOICES, "eleven_key": bool(config.secret("ELEVENLABS_API_KEY"))}
 
 
 def update_status(fetch: bool = True) -> dict:

@@ -107,7 +107,7 @@ ShellRoot {
             readonly property string mode: JD.mode
             readonly property Item content: ({
                 expanded: expandedView, settings: settingsHolder, compose: composeView, approval: approvalView, card: cardView, listening: listeningView,
-                notification: notificationView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
+                notification: notificationView, alarm: alarmView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
                 peek: peekView, hidden: peekView, music: musicView, player: playerView, video: videoView })[mode]
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music"].includes(mode) && !JD.detailOpen
 
@@ -136,7 +136,7 @@ ShellRoot {
             HoverHandler { onHoveredChanged: JD.islandHovered = hovered }
 
             TapHandler {
-                enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification"].includes(island.mode)
+                enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification", "alarm"].includes(island.mode)
                 onTapped: {
                     if (island.mode === "music") { JD.playerOpen = true; return }
                     if (island.mode === "answer") { JD.answerOpen = false; return }
@@ -173,6 +173,7 @@ ShellRoot {
                 ThinkingView { id: thinkingView; shown: island.mode === "thinking" || island.mode === "transcribing" }
                 FlashView { id: flashView; shown: island.mode === "flash" }
                 NotificationView { id: notificationView; shown: island.mode === "notification" }
+                AlarmView { id: alarmView; shown: island.mode === "alarm" }
                 AnswerView { id: answerView; shown: island.mode === "answer" }
                 ApprovalView { id: approvalView; shown: island.mode === "approval" }
                 CardView { id: cardView; shown: island.mode === "card" }
@@ -396,6 +397,18 @@ ShellRoot {
             Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM") }
             Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
             Label2 { visible: !!pv.event; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : JD.text2 }
+            // a running timer, the way the phone shows one: the number, not a logo
+            Rectangle { visible: !!JD.runningTimer; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
+            RowLayout {
+                visible: !!JD.runningTimer
+                spacing: 5
+                Icon { name: "timer"; implicitSize: 15; tint: JD.accentOrange }
+                Text {
+                    text: JD.reminderLeft(JD.runningTimer)
+                    color: JD.accentOrange; font.family: JD.fontFamily; font.pixelSize: 14
+                    font.weight: Font.DemiBold; font.features: { "tnum": 1 }
+                }
+            }
             Rectangle { visible: !!JD.weather && JD.island.show_weather !== false; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
             RowLayout {
                 visible: !!JD.weather && JD.island.show_weather !== false
@@ -615,6 +628,59 @@ ShellRoot {
                 text: JD.tr("Нажмите, чтобы открыть ") + (nv.n.app || JD.tr("приложение"))
                 color: JD.text3; font.pixelSize: 11
                 Layout.alignment: Qt.AlignHCenter
+            }
+        }
+    }
+
+    // A timer or an alarm going off. One thing to read (what and when), one thing to press (Выключить):
+    // Live Activities › Offering interactivity — "prefer limiting it to a single element".
+    component AlarmView: View {
+        id: av
+        readonly property var a: JD.alarm || ({})
+        readonly property bool isAlarm: av.a.kind === "alarm"
+        readonly property color tint: JD.accentOrange
+        implicitWidth: Math.min(620, Math.max(430, alarmRow.implicitWidth + 40))
+        implicitHeight: 96
+        RowLayout {
+            id: alarmRow
+            anchors { fill: parent; leftMargin: 18; rightMargin: 14; topMargin: 16; bottomMargin: 16 }
+            spacing: 14
+            Item {
+                implicitWidth: 52; implicitHeight: 52
+                Rectangle {   // a ring that breathes while it rings; the label says the same thing in words
+                    anchors.centerIn: parent
+                    width: 52; height: 52; radius: 26
+                    color: Qt.rgba(av.tint.r, av.tint.g, av.tint.b, 0.22)
+                    SequentialAnimation on scale {
+                        running: JD.animOn && island.mode === "alarm"
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 1.12; duration: 520; easing.type: Easing.OutCubic }
+                        NumberAnimation { to: 1.0; duration: 520; easing.type: Easing.InCubic }
+                    }
+                }
+                Icon { anchors.centerIn: parent; name: av.isAlarm ? "bell-ring" : "timer"; implicitSize: 24; tint: av.tint }
+            }
+            ColumnLayout {
+                spacing: 2
+                Layout.fillWidth: true
+                SectionLabel { text: (av.isAlarm ? JD.tr("БУДИЛЬНИК") : JD.tr("ТАЙМЕР")); color: av.tint }
+                Label1 {
+                    text: av.a.label || (av.isAlarm ? av.a.time || "" : JD.tr("Время вышло"))
+                    font.pixelSize: 20; font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                Label2 { visible: !!av.a.label && !!av.a.time; text: av.a.time || ""; font.pixelSize: 12 }
+            }
+            PillButton {
+                visible: av.isAlarm
+                label: JD.tr("+5 минут")
+                onClicked: { JD.send({ cmd: "reminder_set", kind: "alarm", seconds: 300, label: av.a.label || "" }); JD.dismissAlarm(av.a.id) }
+            }
+            PillButton {
+                label: JD.tr("Выключить")
+                tint: av.tint
+                labelColor: "black"
+                onClicked: JD.dismissAlarm(av.a.id)
             }
         }
     }
@@ -2079,11 +2145,51 @@ ShellRoot {
                 Chip { icon: "image-x-generic"; label: JD.tr("Нарисовать"); onClicked: JD.openCompose(JD.tr("Нарисуй ")) }
                 Chip { icon: "video-x-generic"; label: JD.tr("Видео"); onClicked: JD.openCompose(JD.tr("Включи видео ")) }
                 Chip { icon: "system-software-install"; label: JD.tr("Установить"); onClicked: JD.openCompose(JD.tr("Установи ")) }
+                Chip { icon: "timer"; label: JD.tr("Таймер"); onClicked: JD.openCompose(JD.tr("Поставь таймер на ")) }
                 Chip { icon: "document-new"; label: JD.tr("Новый разговор"); onClicked: { JD.send({ cmd: "new_session" }); JD.flash(JD.tr("Новый разговор"), "document-new", JD.accentGreen); JD.expanded = false } }
                 Chip { icon: "media-playback-stop"; label: JD.tr("Стоп"); visible: JD.dstate !== "idle" || JD.workers > 0; tint: Qt.rgba(JD.accentRed.r, JD.accentRed.g, JD.accentRed.b, 0.3)
                        onClicked: JD.send({ cmd: "stop" }) }
                 Chip { icon: "utilities-terminal"; label: JD.tr("Журнал"); onClicked: { JD.expanded = false; Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) } }
                 Chip { icon: "help-contents"; label: JD.tr("Руководство"); onClicked: JD.openManual() }
+            }
+
+            // ── timers and alarms: what is running, how long is left, and a way to stop it
+            ColumnLayout {
+                visible: JD.reminders.length > 0
+                Layout.fillWidth: true
+                spacing: 6
+                Repeater {
+                    model: JD.reminders.slice(0, 3)
+                    Rectangle {
+                        required property var modelData
+                        readonly property bool isTimer: modelData.kind === "timer"
+                        Layout.fillWidth: true
+                        implicitHeight: 44
+                        radius: 14
+                        color: remHover.hovered ? JD.fill2 : JD.fill1
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                            spacing: 10
+                            Icon { name: parent.parent.isTimer ? "timer" : "bell-ring"; implicitSize: 17; tint: JD.accentOrange }
+                            Label1 {
+                                text: modelData.label || (parent.parent.isTimer ? JD.tr("Таймер") : JD.tr("Будильник"))
+                                font.pixelSize: 13; Layout.fillWidth: true
+                            }
+                            Label2 {
+                                text: modelData.repeat === "daily" ? JD.tr("каждый день") : ""
+                                font.pixelSize: 11
+                            }
+                            Text {
+                                text: JD.reminderLeft(modelData)
+                                color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 15
+                                font.weight: Font.DemiBold; font.features: { "tnum": 1 }
+                            }
+                            IconButton { icon: "window-close"; size: 26
+                                         onClicked: JD.send({ cmd: "reminder_cancel", which: modelData.id }) }
+                        }
+                        HoverHandler { id: remHover }
+                    }
+                }
             }
 
             // ── next event
