@@ -21,12 +21,13 @@ from typing import ClassVar
 
 import numpy as np
 
-from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, jobs, mail, media, namespot, numerals, palette, reminders, voiceprint, workers
+from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, island, jobs, mail, media, namespot, notifications, numerals, palette, reminders, voiceprint, workers
 from . import brain as brain_mod
 from . import tts as tts_mod
+from . import weather as weather_mod
 from .aio import spawn
 from .brain import Brain
-from .i18n import lang, t
+from .i18n import t
 from .stt import STT
 from .tts import TTS, normalize, split_sentences
 
@@ -43,235 +44,7 @@ YES = re.compile(r"\b(да|давай|разрешаю|разреши|подтв
 NO = re.compile(r"\b(нет|не надо|отмена|отклон\w*|запрещаю|стоп|no|nope|don'?t|deny|cancel)\b", re.I)
 
 
-def tool_icon(name: str, inp: str) -> str:
-    """Freedesktop icon name for a tool call, shown next to it in the Dynamic Island."""
-    if name.startswith("mcp__claude-in-chrome"):
-        return "internet-web-browser"
-    if name.endswith("__look") or name.endswith("screenshot"):
-        return "view-preview"
-    if name.startswith("mcp__plugin_justday_kwin"):
-        return "input-mouse"
-    if name in ("WebSearch", "WebFetch"):
-        return "system-search"
-    if name in ("Read", "Edit", "Write", "Glob", "Grep"):
-        return "document-edit" if name in ("Edit", "Write") else "document-open"
-    if name in ("Agent", "Task"):
-        return "applications-development"
-    if name == "Skill":
-        return "games-hint"
-    if name == "Bash":
-        cmd = inp.lower()
-        for needle, icon in (("justday play", "media-playback-start"), ("justday video", "video-x-generic"),
-                             ("justday player", "media-playback-start"), ("youtube", "youtube"), ("yt-dlp", "youtube"),
-                             ("justday claude", "applications-development"), ("jii ", "system-software-install"),
-                             ("justday studio", "applications-graphics"), ("justday games", "applications-games"),
-                             ("steam", "steam"), ("justday apps", "application-x-executable"),
-                             ("justday windows", "preferences-system-windows"), ("xdg-open http", "internet-web-browser"),
-                             ("playerctl", "media-playback-start"), ("wpctl", "audio-volume-high"), ("git ", "git"),
-                             ("kitty", "utilities-terminal"), ("plocate", "system-search"), ("fd ", "system-search")):
-            if needle in cmd:
-                return icon
-        return "utilities-terminal"
-    return "system-run"
-
-
-def vocabulary(cfg: dict) -> str:
-    """Whisper hint: the words this user says that a generic model gets wrong. Kept short (prompt ≤ ~224 tokens)."""
-    from . import contacts
-
-    words = [cfg["user"]["assistant_name"], *cfg["user"].get("assistant_aliases", [])]
-    for c in contacts.load():
-        words += [c.get("name", ""), *c.get("aliases", [])]
-    words += [k for k in cfg["apps"]["aliases"]]
-    base = cfg["stt"].get("initial_prompt", "")
-    seen, extra = set(base.lower().replace(",", " ").split()), []
-    for w in words:
-        if w and w.lower() not in seen:
-            seen.add(w.lower())
-            extra.append(w)
-    return (base.rstrip(". ") + ", " + ", ".join(extra[:40]) + ".") if extra else base
-
-
-NOTIFY_RX = re.compile(r'string "(?P<app>.*?)"\n\s*uint32 \d+\n\s*string "(?P<icon>.*?)"\n\s*string "(?P<summary>.*?)"\n'
-                       r'\s*string "(?P<body>.*?)"\n\s*array \[', re.S)
-DESKTOP_RX = re.compile(r'string "desktop-entry"\n\s*variant\s+string "(.*?)"')
-
-
-def parse_notification(raw: str) -> dict | None:
-    """One `dbus-monitor` Notify call → {app, icon, summary, body}."""
-    m = NOTIFY_RX.search(raw)
-    if not m:
-        return None
-    d = DESKTOP_RX.search(raw)
-    unq = lambda s: s.replace('\\"', '"')  # noqa: E731
-    return {"app": unq(m["app"]), "icon": (d.group(1) if d else "") or m["icon"], "summary": unq(m["summary"]),
-            "desktop": d.group(1) if d else "", "body": re.sub(r"<[^>]+>", "", unq(m["body"]))[:4000]}
-
-
-# parts of a desktop id or an app name that match half the desktop: never search windows by these
-NOISE = {"desktop", "app", "client", "gui", "gtk", "qt", "org", "com", "io", "net", "www", "free", "linux", "flatpak"}
-
-
-def notification_terms(app: str, desktop_id: str) -> list[str]:
-    """Window-search terms for a notification, most telling first: `org.telegram.desktop` + `Telegram Desktop`
-    → org.telegram.desktop, telegram, telegram desktop. Plain `desktop` would match half the windows open."""
-    terms: list[str] = []
-    if desktop_id:
-        terms.append(desktop_id.lower())
-        parts = [p for p in desktop_id.lower().split(".") if p and p not in NOISE]
-        if parts:
-            terms.append(parts[-1])
-    if app:
-        terms.append(app.lower())
-        word = app.lower().split()[0] if app.split() else ""
-        if word and word not in NOISE:
-            terms.append(word)
-    out: list[str] = []
-    for term in terms:  # keep the order, drop repeats and terms too short to mean anything
-        if len(term) > 2 and term not in out:
-            out.append(term)
-    return out
-
-
-def open_notification_app(app: str, desktop_id: str) -> str:
-    """A tap on a notification on the island: bring its app forward (or start it). The exact chat opens only when
-    Plasma's own popup is clicked — the island only watches notifications, it cannot press their buttons."""
-    from . import desktop
-
-    terms = notification_terms(app, desktop_id)
-    for term in terms:
-        if desktop.windows("focus", term):
-            log.info("notification: focused a window matching %r", term)
-            return "focused"
-    # no window: Telegram and Discord hide in the tray, and starting them again does nothing.
-    # Activating their tray icon is exactly what a click on it does — the window comes back.
-    flat = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())  # noqa: E731
-    keys = [flat(t) for t in terms if flat(t)]
-    for item in desktop.tray_items():
-        hay = flat(item["id"]) + " " + flat(item["title"])
-        if any(k in hay for k in keys) and desktop.tray_activate(item):
-            log.info("notification: activated the tray icon of %s", item["id"] or item["service"])
-            return "tray"
-    # still nothing: start the app from its desktop entry
-    apps = desktop.list_apps()
-    hit = next((a for a in apps if desktop_id and a["id"] == desktop_id), None)
-    if not hit:  # a name like "Telegram Desktop" scores below an exact hit — take the best of the terms
-        best = None
-        for term in terms:
-            for a in desktop.find_apps(term, 1):
-                if a.get("score", 0) > (best or {}).get("score", 0):
-                    best = a
-        hit = best if best and best.get("score", 0) >= 0.6 else None
-    if hit:
-        desktop.launch_app_id(hit["id"])
-        log.info("notification: launched %s", hit["id"])
-        return "launched"
-    log.info("notification: no app for app=%r desktop=%r", app, desktop_id)
-    return "not found"
-
-
 SIDE_AFTER_S = 5.0   # a tool call this old means an injected request would sit and wait: use the side session
-
-
-def settings_snapshot(cfg: dict) -> dict:
-    b, m = cfg["brain"], cfg["mail"]
-    return {"provider": b.get("provider", "claude"), "model": b["model"], "assistant_name": cfg["user"]["assistant_name"],
-            "language": cfg["user"].get("language", "ru"),
-            "earcons": cfg["audio"]["earcons"], "notifications": cfg["ui"]["notifications"],
-            "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
-            "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
-            "microphone": cfg["audio"].get("microphone", True),
-            "voice": cfg["tts"]["engine"] != "none" and not cfg["tts"].get("muted"),
-            "mute_in_games": cfg["tts"].get("mute_in_games", True),
-            "volume": int(cfg["audio"].get("volume", 100)),
-            "tts_engine": cfg["tts"]["engine"], "tts_previous": cfg["tts"].get("previous_engine", ""),
-            "hotkeys": _hotkeys(), "media": cfg["media"]}
-
-
-def _hotkeys() -> dict:
-    from . import manage
-
-    try:
-        return manage.hotkeys()
-    except (OSError, subprocess.SubprocessError):
-        return {}
-
-
-WMO = {0: ("Ясно", "sun"), 1: ("Малооблачно", "cloud-sun"), 2: ("Переменная облачность", "cloud-sun"), 3: ("Пасмурно", "cloud"),
-       45: ("Туман", "cloud-fog"), 48: ("Туман", "cloud-fog"), 51: ("Морось", "cloud-rain"), 53: ("Морось", "cloud-rain"),
-       55: ("Морось", "cloud-rain"), 61: ("Дождь", "cloud-rain"), 63: ("Дождь", "cloud-rain"), 65: ("Ливень", "cloud-rain"),
-       71: ("Снег", "cloud-snow"), 73: ("Снег", "cloud-snow"), 75: ("Снегопад", "cloud-snow"), 80: ("Ливень", "cloud-rain"),
-       81: ("Ливень", "cloud-rain"), 82: ("Ливень", "cloud-rain"), 85: ("Снег", "cloud-snow"), 86: ("Снег", "cloud-snow"),
-       95: ("Гроза", "cloud-lightning"), 96: ("Гроза", "cloud-lightning"), 99: ("Гроза", "cloud-lightning")}
-
-
-def fetch_weather(city: str) -> dict | None:
-    """Current weather from Open-Meteo (free, no key). Only the city name / coordinates leave the computer."""
-    import urllib.parse
-    import urllib.request
-
-    state = events.load_state()
-    geo = state.get("weather_geo") or {}
-    if geo.get("query") != city:
-        url = "https://geocoding-api.open-meteo.com/v1/search?" + urllib.parse.urlencode({"name": city, "count": 1, "language": lang()})
-        with urllib.request.urlopen(url, timeout=10) as r:
-            found = (json.load(r).get("results") or [None])[0]
-        if not found:
-            return None
-        geo = {"query": city, "lat": found["latitude"], "lon": found["longitude"], "name": found.get("name", city)}
-        events.save_state(weather_geo=geo)
-    url = ("https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(
-        {"latitude": geo["lat"], "longitude": geo["lon"], "current": "temperature_2m,weather_code,is_day",
-         "daily": "temperature_2m_max,temperature_2m_min", "forecast_days": 1, "timezone": "auto"}))
-    with urllib.request.urlopen(url, timeout=10) as r:
-        data = json.load(r)
-    cur, daily = data["current"], data.get("daily", {})
-    text, icon = WMO.get(int(cur["weather_code"]), ("", "cloud"))
-    text = t(text)
-    if icon == "sun" and not cur.get("is_day", 1):
-        icon = "moon"
-    return {"city": geo["name"], "temp": round(cur["temperature_2m"]), "text": text, "icon": icon,
-            "max": round((daily.get("temperature_2m_max") or [cur["temperature_2m"]])[0]),
-            "min": round((daily.get("temperature_2m_min") or [cur["temperature_2m"]])[0])}
-
-
-# Text selected on screen is attached to a typed request; the list of recent requests shows what the
-# person actually asked, not the page they had open.
-ATTACHED = re.compile(r"\n\n\[Текст, выделенный пользователем.*", re.S)
-
-
-def recent_history(limit: int = 6) -> list[dict]:
-    """Last requests with their spoken answers, for the expanded island."""
-    try:
-        with config.EVENTS_FILE.open("rb") as f:
-            f.seek(0, 2)
-            f.seek(max(0, f.tell() - 200_000))
-            lines = f.read().decode("utf-8", "replace").splitlines()[1:]
-    except OSError:
-        return []
-    def said_soon_after(request_ts: str, say_ts: str) -> bool:
-        """A request that was interrupted has no answer: what is spoken an hour later (an alarm, new mail)
-        belongs to nobody, and must not be shown as its reply."""
-        try:
-            return abs(datetime.fromisoformat(say_ts) - datetime.fromisoformat(request_ts)).total_seconds() <= 300
-        except ValueError:
-            return True
-
-    out: list[dict] = []
-    for line in lines:
-        try:
-            e = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if e.get("kind") == "request" and e.get("source") != "event":
-            out.append({"ts": e.get("ts", "")[11:16], "q": ATTACHED.sub("", e.get("text", "")).strip(), "a": "",
-                        "at": e.get("ts", "")})
-        elif e.get("kind") == "fast" and e.get("text"):
-            out.append({"ts": e.get("ts", "")[11:16], "q": ATTACHED.sub("", e["text"]).strip(), "a": e.get("desc", ""),
-                        "at": e.get("ts", "")})
-        elif e.get("kind") == "say" and out and not out[-1]["a"] and said_soon_after(out[-1]["at"], e.get("ts", "")):
-            out[-1]["a"] = e.get("text", "")
-    return [{k: v for k, v in r.items() if k != "at"} for r in out[-limit:][::-1]]
 
 
 class Daemon:
@@ -327,7 +100,7 @@ class Daemon:
         self.update_info: dict | None = None
         self._weather_city = ""
         self.mail = mail.MailAssistant()
-        self.stt.vocabulary = vocabulary(self.cfg)
+        self.stt.vocabulary = island.vocabulary(self.cfg)
         # our own music player (background mpv) and the video playing inside the island, if any
         self.music = media.MusicPlayer(self._on_player, int(self.cfg["media"]["volume"]))
         self._player_state: dict | None = None
@@ -365,7 +138,7 @@ class Daemon:
             self._preapproved_until = 0.0  # an approved draft covers only the task it was made for
         if kind == "tool":  # one line, always: a pasted script must not stretch the island
             msg = {"kind": "tool", "detail": brain_mod.one_line(data.get("label") or data.get("desc", "")),
-                   "icon": tool_icon(data.get("name", ""), data.get("input", ""))}
+                   "icon": island.tool_icon(data.get("name", ""), data.get("input", ""))}
         elif kind == "fast":
             msg = {"kind": "fast", "detail": brain_mod.one_line(data.get("desc", "")), "icon": fastpath.last_icon}
         elif kind in ("heard", "say", "draft"):
@@ -421,7 +194,7 @@ class Daemon:
         city = self.cfg["island"]["city"]
         if self.weather is None and city:  # the island polls it every 15 min, but not before the first hello
             try:
-                self.weather = await loop.run_in_executor(None, fetch_weather, city)
+                self.weather = await loop.run_in_executor(None, weather_mod.fetch_weather, city)
             except Exception as e:
                 log.info("briefing without weather: %s", type(e).__name__)
         try:
@@ -911,14 +684,14 @@ class Daemon:
             self.brain.cfg["user"] = new["user"]
             spawn(self._reconnect_brain())
         self.brain.cfg["user"] = new["user"]
-        self.stt.vocabulary = vocabulary(new)
+        self.stt.vocabulary = island.vocabulary(new)
         restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
         if new["user"].get("language") != old["user"].get("language"):
             restart.append("language")
         names = lambda c: (c["user"]["assistant_name"], c["user"].get("assistant_aliases"))  # noqa: E731
         if self._names and names(new) != names(old):  # the name spotter was built with the old names
             restart.append("wakeword")
-        self.publish(settings=settings_snapshot(new))
+        self.publish(settings=island.settings_snapshot(new))
         events.emit("settings_reloaded", restart_needed=restart)
         return restart
 
@@ -1181,7 +954,7 @@ class Daemon:
     def _emit_notification(self, raw: str) -> None:
         if "member=Notify" not in raw or not self.cfg["island"].get("show_notifications", True):
             return
-        n = parse_notification(raw)
+        n = notifications.parse_notification(raw)
         if not n or n["app"] == "JustDay":  # our own approval / status notifications
             return
         self.publish(kind="notification", notification=n)
@@ -1215,13 +988,13 @@ class Daemon:
             if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
                 last_weather, self._weather_city = time.monotonic(), isl["city"]
                 try:
-                    self.weather = await asyncio.get_running_loop().run_in_executor(None, fetch_weather, isl["city"])
+                    self.weather = await asyncio.get_running_loop().run_in_executor(None, weather_mod.fetch_weather, isl["city"])
                 except Exception as e:
                     log.info("weather unavailable: %s", type(e).__name__)
                 self.publish(weather=self.weather)
             if time.monotonic() - last_ping > 5:  # heartbeat: lets the island notice a dead connection
                 last_ping = time.monotonic()
-                self.stt.vocabulary = vocabulary(self.cfg)  # contacts learned meanwhile
+                self.stt.vocabulary = island.vocabulary(self.cfg)  # contacts learned meanwhile
                 self.publish(ping=1, state=self.state)
             if m["address"] and m["announce"] and time.monotonic() - last_mail > m["poll_seconds"]:
                 last_mail = time.monotonic()
@@ -1644,7 +1417,7 @@ class Daemon:
             self._save_later("media", "volume", v)
             self.cfg["media"]["volume"] = v
             if not m.state():
-                self.publish(settings=settings_snapshot(self.cfg))
+                self.publish(settings=island.settings_snapshot(self.cfg))
             return {"ok": True, "done": t("громкость {n}%", n=v)}
         if self.island_video and action in ("pause", "resume", "toggle", "stop", "restart"):
             if action == "stop":
@@ -1737,8 +1510,8 @@ class Daemon:
             cmd = req.get("cmd")
             if cmd == "subscribe":
                 self._subs.add(writer)
-                hello = {"state": self.state, "workers": self._workers_active, "settings": settings_snapshot(self.cfg),
-                         "history": recent_history(), "weather": self.weather, "update": self.update_info,
+                hello = {"state": self.state, "workers": self._workers_active, "settings": island.settings_snapshot(self.cfg),
+                         "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
                          "player": self._player_state, "video": self.island_video,
                          "reminders": self._reminders_state(), "jobs": self.jobs.state()}
                 try:
@@ -1859,7 +1632,7 @@ class Daemon:
                 resp = await self.play_video(req.get("query", ""), req.get("where", ""))
             elif cmd == "volume":  # the island's slider: how loud JustDay itself is
                 resp = {"ok": True, "volume": self.set_volume(int(req.get("value", 100)))}
-                self.publish(settings=settings_snapshot(self.cfg))
+                self.publish(settings=island.settings_snapshot(self.cfg))
             elif cmd == "job_start":  # `justday job start "Обновление системы" -- jii update --json`
                 resp = await self.start_job(req.get("title", ""), req["command"], req.get("cwd", ""))
             elif cmd == "job_list":
@@ -1886,7 +1659,7 @@ class Daemon:
                 resp = {"ok": True}
             elif cmd == "notification_open":  # a tap on a notification: its app comes forward
                 resp = {"ok": True, "result": await asyncio.get_running_loop().run_in_executor(
-                    None, open_notification_app, req.get("app", ""), req.get("desktop", ""))}
+                    None, notifications.open_notification_app, req.get("app", ""), req.get("desktop", ""))}
             elif cmd == "video_state":  # the island reports its video (playing / position / closed)
                 if req.get("closed"):
                     self.island_video = None
