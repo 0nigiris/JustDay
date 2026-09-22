@@ -769,6 +769,13 @@ class Daemon:
         self.player.volume = int(a.get("volume", 100))
         if new["media"]["volume"] != old["media"]["volume"]:
             asyncio.create_task(self.music.set_volume(int(new["media"]["volume"])))
+        # a new character or name is a new system prompt: the conversation goes on under it once the brain is free
+        if (new["persona"] != old["persona"] or
+                {k: new["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")} !=
+                {k: old["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")}):
+            self.brain.cfg["persona"] = new["persona"]
+            self.brain.cfg["user"] = new["user"]
+            asyncio.create_task(self._reconnect_brain())
         self.brain.cfg["user"] = new["user"]
         self.stt.vocabulary = vocabulary(new)
         restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
@@ -1465,6 +1472,15 @@ class Daemon:
                 self.publish(video=self.island_video)
         events.emit("media_video", title=e["title"], where=where)
         return {"ok": True, "title": e["title"], "where": where, "url": e["url"], "done": done + ": " + e["title"]}
+
+    async def _reconnect_brain(self) -> None:
+        while self.brain.busy:
+            await asyncio.sleep(1)
+        try:
+            await self.brain.reconnect()
+            log.info("brain reconnected with the new character")
+        except Exception:
+            log.exception("brain reconnect failed")
 
     def _save_later(self, section: str, key: str, value) -> None:
         """A slider sends a value with every pixel: apply it at once, write the file when the dragging stops."""

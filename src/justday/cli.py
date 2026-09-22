@@ -355,6 +355,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "volume",
                                        "eleven", "key"])
     sp.add_argument("args", nargs="*")
+    sp = sub.add_parser("persona", help="the assistant's character: `justday persona` shows it; "
+                                        "`justday persona friend|jarvis|calm|custom [swearing=on|off] [live=on|off]`")
+    sp.add_argument("args", nargs="*")
     sp = sub.add_parser("timer", help="set a timer: `justday timer 10m чай` · `justday timer` lists what is set")
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("alarm", help="set an alarm: `justday alarm 7:30 подъём` [--daily] · `justday alarm` lists them")
@@ -599,6 +602,8 @@ def main(argv: list[str] | None = None) -> None:
         wizard()
     elif a.cmd == "config":
         _config_cmd(a)
+    elif a.cmd == "persona":
+        _persona_cmd(a.args)
     elif a.cmd == "contacts":
         _contacts_cmd(a)
     elif a.cmd == "compose-mail":
@@ -812,6 +817,38 @@ def _voiceprint_cmd(a) -> None:
         print("\nГотово: порог узнавания {threshold}, пауза конца фразы {silence_seconds} с, слово пробуждения дообучено: {wake}".format(
             threshold=r.get("threshold"), silence_seconds=r.get("silence_seconds"), wake="да" if r.get("wake_verifier") else "нет")
             if r.get("ok") else f"\nНе получилось: {r.get('error')}")
+
+
+def _persona_cmd(args: list[str]) -> None:
+    """Who the assistant is. A new character applies within seconds, the conversation goes on."""
+    from . import persona
+
+    on = lambda v: v.lower() in ("1", "on", "true", "yes", "да", "вкл")  # noqa: E731
+    changed = False
+    for arg in args:
+        if arg in persona.PRESETS:
+            config.set_value("persona", "character", arg)
+            # the preset brings its own manner of address, unless the person chose one by hand
+            u = config.load()["user"]
+            if (u.get("address_as") or "") in persona.DEFAULT_ADDRESS:
+                en = u.get("language") == "en"
+                config.set_value("user", "address_as", {"jarvis": "sir" if en else "сэр",
+                                                        "friend": "bro" if en else "брат"}.get(arg, ""))
+            changed = True
+        elif "=" in arg:
+            k, v = arg.split("=", 1)
+            key = {"swearing": "swearing", "мат": "swearing", "live": "live_speech", "live_speech": "live_speech"}.get(k)
+            if not key:
+                sys.exit(f"unknown option {k!r}: swearing=on|off, live=on|off")
+            config.set_value("persona", key, on(v))
+            changed = True
+        else:
+            sys.exit(f"unknown character {arg!r}: {', '.join(persona.PRESETS)}")
+    if changed:
+        control("reload_settings", timeout=5)
+    p = config.load()["persona"]
+    _print({"character": p["character"], "swearing": p["swearing"], "live_speech": p["live_speech"],
+            "address_as": config.load()["user"]["address_as"]})
 
 
 def _config_cmd(a) -> None:

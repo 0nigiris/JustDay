@@ -90,6 +90,9 @@ DEFAULTS: dict = {
         # two presses of the talk key within this time = cancel everything (0 = off)
         "double_tap_seconds": 0.35,
     },
+    # who the assistant is: jarvis (a butler), friend (casual, «ты»), calm (no act), custom (persona.custom);
+    # swearing and live_speech (pauses, «ну», slips) go with any of them
+    "persona": {"character": "jarvis", "swearing": False, "live_speech": False, "custom": ""},
     "stt": {
         "model": "large-v3-turbo",
         "device": "cuda",

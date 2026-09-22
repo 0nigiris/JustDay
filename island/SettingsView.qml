@@ -109,6 +109,7 @@ Item {
                 Repeater {
                     model: [
                         { id: "general", title: JD.tr("Общие"), icon: "settings", tint: "#8e8e93" },
+                        { id: "character", title: JD.tr("Характер"), icon: "user-round", tint: "#ff9f0a" },
                         { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
                         { id: "widgets", title: JD.tr("Виджеты"), icon: "cloud-sun", tint: "#32ade6" },
                         { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
@@ -209,7 +210,7 @@ Item {
                     y: 26
                     width: Math.min(700, scroller.width - 64)
                     active: !win.loading
-                    sourceComponent: ({ general: generalPage, appearance: appearancePage, widgets: widgetsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
+                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage, widgets: widgetsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
                                         people: peoplePage, memory: memoryPage, privacy: privacyPage, diagnostics: diagnosticsPage,
                                         about: aboutPage })[win.page]
                     onLoaded: { scroller.contentY = 0; pageIn.restart() }
@@ -609,13 +610,6 @@ Item {
                     }
                 }
             }
-            GroupTitle { text: JD.tr("ИМЯ") }
-            Group {
-                Row { title: JD.tr("Имя ассистента"); subtitle: JD.tr("Показывается на острове"); Field { key: "user.assistant_name" } }
-                Row { title: JD.tr("Другие имена"); subtitle: JD.tr("Через запятую, на все он откликается"); Field { key: "user.assistant_aliases" } }
-                Row { title: JD.tr("Как обращаться к вам"); Field { key: "user.address_as"; placeholderText: JD.tr("сэр") } }
-                Row { title: JD.tr("Ваше имя"); subtitle: JD.tr("Для подписи в письмах"); Field { key: "user.name"; placeholderText: JD.tr("Имя") } }
-            }
             GroupTitle { text: "LANGUAGE · ЯЗЫК" }
             Group {
                 Row {
@@ -646,6 +640,124 @@ Item {
                     title: JD.tr("Язык распознавания")
                     Choice { key: "stt.language"; options: [{ value: "ru", label: JD.tr("Русский") }, { value: "en", label: "English" }, { value: "", label: JD.tr("Автоопределение") }] }
                 }
+            }
+        }
+    }
+
+    Component {
+        id: characterPage
+        ColumnLayout {
+            id: cp
+            spacing: 6
+            readonly property string current: win.get("persona.character") || "jarvis"
+            readonly property var defaults: ["сэр", "брат", "sir", "bro", ""]
+            function pick(v) {
+                const en = win.get("user.language") === "en"
+                win.set("persona.character", v)
+                // the preset brings its own manner; what the person set by hand is left alone
+                const addr = win.get("user.address_as") || ""
+                if (cp.defaults.includes(addr))
+                    win.set("user.address_as", ({ jarvis: en ? "sir" : "сэр", friend: en ? "bro" : "брат" })[v] || "")
+                if (v === "friend") { win.set("persona.swearing", true); win.set("persona.live_speech", true) }
+                if (v === "jarvis" || v === "calm") { win.set("persona.swearing", false); win.set("persona.live_speech", false) }
+                win.notify(JD.tr("Характер сменится через пару секунд"))
+            }
+            PageTitle { title: JD.tr("Характер"); subtitle: JD.tr("Каким будет ассистент: как говорит, как к вам обращается, как его зовут") }
+            GroupTitle { text: JD.tr("ОБРАЗ") }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 10
+                Repeater {
+                    model: [
+                        { id: "jarvis", title: JD.tr("Дворецкий"), text: JD.tr("На «вы», вежливо, с сухим британским юмором — как Джарвис"), icon: "sparkles" },
+                        { id: "friend", title: JD.tr("Друг"), text: JD.tr("На «ты», по-свойски: подколет, поспорит, может и выругаться"), icon: "message-circle" },
+                        { id: "calm", title: JD.tr("Спокойный"), text: JD.tr("Без образа: тепло, нейтрально и по делу"), icon: "user-round" },
+                        { id: "custom", title: JD.tr("Свой"), text: JD.tr("Опишите характер своими словами"), icon: "wand-sparkles" }
+                    ]
+                    Rectangle {
+                        required property var modelData
+                        readonly property bool chosen: cp.current === modelData.id
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        implicitHeight: 76
+                        radius: 12
+                        color: chosen ? Qt.rgba(10 / 255, 132 / 255, 1, 0.16) : (presetHover.hovered ? "#262628" : win.card)
+                        border.width: chosen ? 2 : 0
+                        border.color: win.blue
+                        Behavior on color { ColorAnimation { duration: 140 } }
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
+                            spacing: 12
+                            Rectangle {
+                                implicitWidth: 36; implicitHeight: 36; radius: 18
+                                color: parent.parent.chosen ? win.blue : win.field
+                                Image { anchors.centerIn: parent; source: Quickshell.shellDir + "/icons/" + modelData.icon + ".svg"; sourceSize: Qt.size(36, 36); width: 18; height: 18 }
+                            }
+                            ColumnLayout {
+                                spacing: 2
+                                Layout.fillWidth: true
+                                Text { text: modelData.title; color: win.t1; font.family: win.font; font.pixelSize: 14; font.weight: Font.DemiBold }
+                                Text { text: modelData.text; color: win.t2; font.family: win.font; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            }
+                        }
+                        HoverHandler { id: presetHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: if (!parent.chosen) cp.pick(modelData.id) }
+                    }
+                }
+            }
+            Group {
+                visible: cp.current === "custom"
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: 128
+                    Rectangle {
+                        anchors { fill: parent; margins: 12 }
+                        radius: 7
+                        color: win.field
+                        TextArea {
+                            id: customText
+                            anchors.fill: parent
+                            wrapMode: TextArea.Wrap
+                            text: win.get("persona.custom") || ""
+                            color: win.t1
+                            placeholderText: JD.tr("Например: ты мой старый друг из универа, немного ворчливый, говоришь коротко, любишь чёрный юмор и называешь меня по имени")
+                            placeholderTextColor: win.t3
+                            font.family: win.font
+                            font.pixelSize: 13
+                            background: null
+                        }
+                    }
+                }
+                Row {
+                    title: ""
+                    Btn { text: JD.tr("Сохранить"); primary: true
+                          onClicked: { win.set("persona.custom", customText.text.trim()); win.notify(JD.tr("Сохранено — характер сменится через пару секунд")) } }
+                }
+            }
+            GroupTitle { text: JD.tr("КАК ГОВОРИТ") }
+            Group {
+                Row {
+                    title: JD.tr("Мат")
+                    subtitle: JD.tr("Может выругаться — к месту, как друг в живом разговоре")
+                    Toggle { checked: !!win.get("persona.swearing"); onToggled: v => win.set("persona.swearing", v) }
+                }
+                Row {
+                    title: JD.tr("Живая речь")
+                    subtitle: JD.tr("Паузы, «ну», «э-э», оговорки на ходу: «а, да, точно… как я мог забыть»")
+                    Toggle { checked: !!win.get("persona.live_speech"); onToggled: v => win.set("persona.live_speech", v) }
+                }
+            }
+            GroupTitle { text: JD.tr("ИМЯ") }
+            Group {
+                Row { title: JD.tr("Имя ассистента"); subtitle: JD.tr("Показывается на острове"); Field { key: "user.assistant_name" } }
+                Row { title: JD.tr("Другие имена"); subtitle: JD.tr("Через запятую, на все он откликается"); Field { key: "user.assistant_aliases" } }
+                Row { title: JD.tr("Как обращаться к вам"); subtitle: JD.tr("«сэр», «брат», ваше имя — или пусто"); Field { key: "user.address_as"; placeholderText: JD.tr("не обращаться") } }
+                Row { title: JD.tr("Ваше имя"); subtitle: JD.tr("Для подписи в письмах"); Field { key: "user.name"; placeholderText: JD.tr("Имя") } }
+            }
+            Note {
+                text: JD.tr("Меняется на ходу: разговор продолжается, но уже в новом характере. Правила при этом одни для всех: он так же делает, а не объясняет, отвечает коротко и спрашивает перед опасными действиями.")
             }
         }
     }

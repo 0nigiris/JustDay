@@ -9,6 +9,12 @@ assistant_name = "Джарвис"  # main name (shown in the island)
 assistant_aliases = ["JustDay"]  # other names it answers to
 language = "ru"             # ru | en — island, settings, spoken replies (set [stt] language too)
 
+[persona]
+character = "jarvis"        # jarvis (a butler, «вы») | friend («ты», jokes, pushes back) | calm (no act) | custom
+swearing = false            # may swear — in place, like friends talk
+live_speech = false         # pauses, «ну», «э-э», slips and corrections on the fly
+custom = ""                 # the character in your own words, for character = "custom"
+
 [audio]
 microphone = true           # false = keyboard only (Meta+K): no mic, no wake word, speech recognition never loads
 input = ""                  # substring of a PipeWire source name (pactl list short sources), "" = default

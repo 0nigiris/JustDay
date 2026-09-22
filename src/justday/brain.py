@@ -33,6 +33,7 @@ from claude_agent_sdk import (
 )
 
 from . import config, events, providers
+from . import persona as persona_mod
 from .i18n import t
 
 log = logging.getLogger("justday.brain")
@@ -159,6 +160,7 @@ class Brain:
             persona_file = config.REPO_DIR / "brain" / "PERSONA.md"
         persona = persona_file.read_text(encoding="utf-8")
         names = [u["assistant_name"], *u.get("assistant_aliases", [])]
+        persona = persona.replace("{character}", persona_mod.character(self.cfg))  # it has placeholders of its own
         persona = (persona.replace("{address_as}", u["address_as"] or "").replace("{assistant_name}", names[0])
                    .replace("{assistant_names}", (" и " if lang == "ru" else " and ").join(f"«{n}»" for n in names)))
         claude = providers.is_claude(self.cfg)
@@ -231,6 +233,12 @@ class Brain:
             except Exception:
                 log.exception("disconnect failed")
         self.client = None
+
+    async def reconnect(self) -> None:
+        """New instructions — another character, another name — for the same conversation."""
+        async with self._conn_lock:
+            await self._stop()
+            await self._connect(events.load_state().get("brain_session_id"))
 
     async def new_session(self) -> None:
         async with self._conn_lock:
