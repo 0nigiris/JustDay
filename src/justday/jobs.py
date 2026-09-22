@@ -40,7 +40,7 @@ class Jobs:
         log_path = DIR / f"{jid}.log"
         log = open(log_path, "wb")  # noqa: SIM115 — handed to the child, closed when it ends
         proc = await asyncio.create_subprocess_exec(
-            "bash", "-lc", command, cwd=cwd or os.path.expanduser("~"), stdin=asyncio.subprocess.DEVNULL,
+            "bash", "-c", command, cwd=cwd or os.path.expanduser("~"), stdin=asyncio.subprocess.DEVNULL,
             stdout=log, stderr=asyncio.subprocess.STDOUT, start_new_session=True)
         job = {"id": jid, "title": title.strip() or command[:60], "command": command, "cwd": cwd,
                "state": "running", "started": time.time(), "log": str(log_path), "pid": proc.pid}
