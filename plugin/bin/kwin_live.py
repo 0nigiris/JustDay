@@ -64,7 +64,8 @@ def _elements(app: str, x0: int, y0: int, w: int, h: int) -> list[dict]:
 def _annotate(data: bytes, els: list[dict]) -> tuple[bytes, str]:
     import io
 
-    from PIL import Image as PILImage, ImageDraw, ImageFont
+    from PIL import Image as PILImage
+    from PIL import ImageDraw, ImageFont
 
     img = PILImage.open(io.BytesIO(data)).convert("RGB")
     draw, font = ImageDraw.Draw(img), ImageFont.truetype(FONT, 12)

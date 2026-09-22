@@ -20,7 +20,7 @@ jobs:
       - name: Lint
         uses: astral-sh/ruff-action@v3
         with:
-          args: check src voice tests
+          args: check src voice tests plugin
 
       - name: Compile
         run: python -m compileall -q src voice tests plugin

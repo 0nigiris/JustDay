@@ -55,7 +55,7 @@ def move(dx: float, dy: float, duration: float = 0.0) -> None:
     for _ in range(steps):
         ax += fx
         ay += fy
-        ix, iy = int(round(ax)), int(round(ay))
+        ix, iy = round(ax), round(ay)
         ax -= ix
         ay -= iy
         if ix or iy:
