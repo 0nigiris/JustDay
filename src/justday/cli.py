@@ -296,6 +296,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("screenshot", help="capture the screen as a small JPEG and print its path")
     sp.add_argument("--all", action="store_true", help="all monitors instead of the active window")
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
+    sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
+    sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
     sp = sub.add_parser("recent", help="recently used files and Claude Code projects")
     sp.add_argument("--hours", type=float, default=48)
     sp = sub.add_parser("claude", help="Claude Code worker sessions")
@@ -494,6 +496,10 @@ def main(argv: list[str] | None = None) -> None:
         from . import desktop
 
         _print(desktop.recent(a.hours))
+    elif a.cmd == "habits":
+        from . import habits
+
+        _print(habits.summary(a.hour))
     elif a.cmd == "claude":
         _claude_cmd(a)
     elif a.cmd == "model":
