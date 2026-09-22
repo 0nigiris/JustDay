@@ -296,6 +296,10 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("screenshot", help="capture the screen as a small JPEG and print its path")
     sp.add_argument("--all", action="store_true", help="all monitors instead of the active window")
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
+    sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL")
+    sp.add_argument("action", choices=["list", "notify", "send"])
+    sp.add_argument("args", nargs="*")
+    sp.add_argument("--to", default="", help="device name, when more than one is paired")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
     sp = sub.add_parser("recent", help="recently used files and Claude Code projects")
@@ -496,6 +500,18 @@ def main(argv: list[str] | None = None) -> None:
         from . import desktop
 
         _print(desktop.recent(a.hours))
+    elif a.cmd == "phone":
+        from . import phone
+
+        try:
+            if a.action == "list":
+                _print(phone.devices())
+            else:
+                what = " ".join(a.args)
+                _print(phone.notify(what, a.to) if a.action == "notify" else phone.send(what, a.to))
+        except RuntimeError as e:  # the phone is off the network, or nothing is paired yet
+            _print({"ok": False, "error": str(e)})
+            sys.exit(1)
     elif a.cmd == "habits":
         from . import habits
 
