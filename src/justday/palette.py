@@ -29,7 +29,7 @@ FILE = config.STATE_DIR / "colors.json"
 MAX_BATCH = 20          # tracks in one question
 TIMEOUT = 420.0         # a batch that searches the web takes a couple of minutes
 MIN_CONFIDENCE = 0.6    # a colour the model is not sure of loses to the plain colour of the artwork
-RULES_V = 2             # the question changed: answers given to an older one are asked again
+RULES_V = 3             # the question changed: answers given to an older one are asked again
 
 # spoken colours, for `justday player color жёлтый`
 NAMES = {
@@ -52,9 +52,10 @@ RULES = ("Each track comes with the colour of its own artwork, or with «нет 
          "music's subject plainly owns a different colour that the artwork does not show: a character's "
          "leitmotif on a colourless sleeve, or a track sitting under a compilation cover that says nothing "
          "about it. Never trade a vivid artwork colour for a franchise's signature colour — a Blue Lock "
-         "track on an orange cover is orange. A colour you choose yourself is drawn on black, so keep it "
-         "vivid: HSL saturation at least 0.45, lightness between 0.45 and 0.7. Confidence is how sure you "
-         "are of the colour of this very track.")
+         "track on an orange cover is orange. A pale or muted artwork colour is kept exactly as it is — "
+         "do not brighten it into a colour it never had. Only a colour you choose yourself (for a "
+         "colourless sleeve) should be vivid: HSL saturation at least 0.45, lightness between 0.45 and "
+         "0.7. Confidence is how sure you are of the colour of this very track.")
 
 _NOISE = re.compile(r"\s*[\[(](?:official|lyric|audio|video|hd|hq|4k|mv|m/v|full|прем|clip)[^\])]*[\])]", re.I)
 _NUMBER = re.compile(r"^\s*\d{1,3}\s*[.\-–)]\s+")
@@ -127,6 +128,18 @@ def forget(title: str, artist: str = "") -> bool:
     return True
 
 
+COLOURLESS = 0.08   # below this chroma an artwork is black, white or grey: it has no colour to keep
+
+
+def chroma(hex_color: str) -> float:
+    """How much colour there is at all, 0…1 — unlike HSL saturation, not fooled by near-black."""
+    h = normalize(hex_color)
+    if not h:
+        return 0.0
+    rgb = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    return max(rgb) - min(rgb)
+
+
 def normalize(value: str) -> str:
     """«жёлтый», «ffd23f», «#FFD23F» → «#ffd23f». Anything unreadable → ""."""
     v = (value or "").strip().lower()
@@ -170,7 +183,8 @@ def resolve(tracks: list[dict], *, web: bool = True, model: str = "") -> dict[st
     lines = []
     for i, t in enumerate(tracks, 1):
         where = f", альбом: {t['source']}" if t.get("source") else ""
-        cover = normalize(t.get("cover", "")) or "нет цвета"
+        cover = normalize(t.get("cover", ""))
+        cover = cover if cover and chroma(cover) >= COLOURLESS else "нет цвета"
         lines.append(f"{i}. «{t['title']}» — {t.get('artist') or '?'} [обложка: {cover}{where}]")
     ask = ("Tracks:\n" + "\n".join(lines) + "\n\n" + RULES + "\n"
            + ("A track whose artwork has no colour and whose subject you cannot place is exactly what the web "

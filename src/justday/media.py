@@ -206,31 +206,46 @@ def _recall_tracks() -> dict:
 
 
 def thumb_color(path: str) -> str:
-    """The main colour of the cover (8×8 pixels): the island's bars take it on, like Apple Music.
+    """The main colour of the cover, as the island shows it: like Apple Music, the bars take it on.
 
-    The most vivid pixel wins; when a sleeve has no vivid pixel at all, its average colour is still an
-    answer — better a muted one than none, because the island has to paint something."""
+    Only the centred square counts — that is the part the island shows, and a YouTube thumbnail is a
+    16:9 frame with the square artwork between two black bars, which used to drag every colour towards
+    black. Within it the most vivid pixel wins; a sleeve with nothing vivid gives its average colour, so a
+    grey drawing stays grey instead of being turned into a colour it never had."""
     try:
-        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf", "scale=8:8:flags=area", "-f", "rawvideo",
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf",
+                              "crop='min(iw,ih)':'min(iw,ih)',scale=8:8:flags=area", "-f", "rawvideo",
                               "-pix_fmt", "rgb24", "-"], capture_output=True, timeout=10).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
-    best, best_s = None, -1.0
-    for i in range(0, len(raw) - 2, 3):
-        r, g, b = raw[i] / 255, raw[i + 1] / 255, raw[i + 2] / 255
-        mx, mn = max(r, g, b), min(r, g, b)
-        light = (mx + mn) / 2
-        sat = 0 if mx == mn else (mx - mn) / (1 - abs(2 * light - 1) + 1e-9)
-        s = sat * (1 - abs(light - 0.55) * 1.4)
-        if s > best_s:
-            best, best_s = (raw[i], raw[i + 1], raw[i + 2]), s
-    if best and best_s > 0.12:
-        return "#%02x%02x%02x" % best
-    px = [raw[i:i + 3] for i in range(0, len(raw) - 2, 3)]
+    px = [(raw[i], raw[i + 1], raw[i + 2]) for i in range(0, len(raw) - 2, 3)]
     if not px:
         return ""
-    avg = tuple(round(sum(p[c] for p in px) / len(px)) for c in range(3))
+    best, best_s = None, -1.0
+    for r, g, b in px:
+        mx, mn = max(r, g, b) / 255, min(r, g, b) / 255
+        # chroma, not HSL saturation: near black, saturation is noise (#030000 is «100 % red»)
+        s = (mx - mn) * (1 - abs((mx + mn) / 2 - 0.55) * 1.2)
+        if s > best_s:
+            best, best_s = (r, g, b), s
+    if best and best_s > 0.12:
+        return "#%02x%02x%02x" % best
+    lit = [c for c in px if max(c) > 16] or px   # black bars left inside the square are not the artwork
+    avg = tuple(round(sum(c[k] for c in lit) / len(lit)) for k in range(3))
     return "#%02x%02x%02x" % avg
+
+
+_covers: dict[str, str] = {}
+
+
+def cover_color(track: dict) -> str:
+    """The colour of a track's artwork, worked out once per picture for as long as the daemon runs."""
+    thumb = track.get("thumb") or ""
+    if not thumb or not os.path.exists(thumb):
+        return track.get("color", "")
+    if thumb not in _covers:
+        _covers[thumb] = thumb_color(thumb) or track.get("color", "")
+    return _covers[thumb]
 
 
 def music_dir() -> Path:
@@ -609,13 +624,13 @@ class MusicPlayer:
         queue = [{"i": i, "title": (self._tracks.get(f["filename"]) or track_for(f["filename"])).get("title", ""),
                   "artist": (self._tracks.get(f["filename"]) or {}).get("artist", ""),
                   "thumb": (self._tracks.get(f["filename"]) or {}).get("thumb", ""),
-                  "cover": (self._tracks.get(f["filename"]) or {}).get("color", "")}
+                  "cover": cover_color(self._tracks.get(f["filename"]) or {})}
                  for i, f in enumerate(playlist[max(0, start - 2):start + 40], max(0, start - 2))]
         return {"repeat": self.repeat, "shuffle": self.shuffle, "source": self.source, "queue": queue,"title": t.get("title") or (self.loading or {}).get("title", ""), "artist": t.get("artist", ""),
                 "thumb": t.get("thumb", ""), "file": cur, "url": t.get("url", ""),
                 # what the music is about, when that is known; otherwise the brightest pixel of the cover
-                "color": palette.color(t.get("title", ""), t.get("artist", "")) or t.get("color", ""),
-                "cover": t.get("color", ""),   # the artwork's own colour, which the question takes into account
+                "color": palette.color(t.get("title", ""), t.get("artist", "")) or cover_color(t),
+                "cover": cover_color(t),   # the artwork's own colour, which the question takes into account
                 "pos": round(float(p.get("time-pos") or 0), 1), "duration": round(float(p.get("duration") or t.get("duration") or 0), 1),
                 "paused": bool(p.get("pause")) or not cur, "index": pos if isinstance(pos, int) else -1, "count": len(playlist),
                 "next": (self._tracks.get(nxt) or track_for(nxt)).get("title", "") if nxt else "",

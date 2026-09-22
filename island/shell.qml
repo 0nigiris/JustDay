@@ -11,6 +11,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
+import Quickshell.Services.Pipewire
 import QtMultimedia
 
 ShellRoot {
@@ -693,7 +694,7 @@ ShellRoot {
         property real size: 26
         implicitWidth: size
         implicitHeight: size
-        radius: Math.round(size * 0.24)
+        radius: Math.min(Math.round(size * 0.24), 16)
         color: JD.fill2
         // no cover yet (a local file, a station): a record-sleeve gradient, not a grey file icon
         Rectangle {
@@ -895,9 +896,34 @@ ShellRoot {
             id: plCol
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
             spacing: 10
+            // the cover, large: a tap on the small one opens it, a tap on it puts it back
+            Item {
+                Layout.fillWidth: true
+                // plCol's width, not its own: a hidden item in a layout has none, and would never grow back
+                Layout.preferredHeight: JD.artOpen ? plCol.width : 0
+                visible: Layout.preferredHeight > 1
+                clip: true
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: JD.dur(340); easing.type: Easing.OutCubic } }
+                Art {
+                    width: plCol.width; height: plCol.width
+                    size: plCol.width
+                    tint: pl.tint; src: pl.p.thumb || ""
+                    opacity: JD.artOpen ? 1 : 0
+                    scale: JD.artOpen ? 1 : 0.92
+                    Behavior on opacity { NumberAnimation { duration: JD.dur(240) } }
+                    Behavior on scale { NumberAnimation { duration: JD.dur(340); easing.type: Easing.OutCubic } }
+                }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: JD.artOpen = false }
+            }
             RowLayout {
                 spacing: 14
-                Art { size: 84; tint: pl.tint; src: pl.p.thumb || "" }
+                Art {
+                    size: 84; tint: pl.tint; src: pl.p.thumb || ""
+                    visible: !JD.artOpen
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: JD.artOpen = true }
+                }
                 ColumnLayout {
                     spacing: 2
                     Layout.fillWidth: true
@@ -1877,50 +1903,73 @@ ShellRoot {
         TapHandler { id: chipTap; onTapped: chip.clicked() }
     }
 
-    // a wide pill slider (volume): drag or click anywhere on it; the icon mutes
-    component PillSlider: Rectangle {
-        id: ps
-        property real value: 0
-        property bool muted: false
-        property color tint: JD.accentBlue
+    // one row of the sound card: icon (a tap mutes) · name · a track to drag or click · the level
+    component VolumeRow: Item {
+        id: vr
+        property real value: 0          // 0…1
         property string icon: "audio-volume-high"
         property string label: ""
+        property color tint: JD.accentBlue
         property real dragValue: -1
         signal moved(real v)
         signal muteToggled()
-        readonly property real shown: dragValue >= 0 ? dragValue : (muted ? 0 : value)
-        implicitHeight: 40
-        radius: 20
-        color: JD.fill1
-        clip: true
-        Rectangle {
-            width: Math.max(parent.height, parent.width * Math.min(1, ps.shown))
-            height: parent.height
-            radius: parent.radius
-            color: Qt.rgba(ps.tint.r, ps.tint.g, ps.tint.b, psHover.hovered || ps.dragValue >= 0 ? 0.40 : 0.28)
-            Behavior on width { enabled: ps.dragValue < 0; NumberAnimation { duration: 140 } }
-        }
-        MouseArea {
+        readonly property real shown: dragValue >= 0 ? dragValue : Math.max(0, Math.min(1, value))
+        Layout.fillWidth: true
+        implicitHeight: 30
+        RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 44
-            cursorShape: Qt.PointingHandCursor
-            function at(x) { return Math.max(0, Math.min(1, (x + 44) / ps.width)) }
-            onPressed: m => ps.dragValue = at(m.x)
-            onPositionChanged: m => { if (pressed) { ps.dragValue = at(m.x); ps.moved(ps.dragValue) } }
-            onReleased: { ps.moved(ps.dragValue); ps.dragValue = -1 }
-        }
-        HoverHandler { id: psHover }
-        Rectangle {
-            x: 4; anchors.verticalCenter: parent.verticalCenter
-            width: 32; height: 32; radius: 16
-            color: muteArea.containsMouse ? JD.fill2 : "transparent"
-            Icon { anchors.centerIn: parent; name: ps.muted || ps.value === 0 ? "audio-volume-muted" : ps.icon; implicitSize: 17 }
-            MouseArea { id: muteArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ps.muteToggled() }
-        }
-        Label2 {
-            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-            text: (ps.label ? ps.label + "  " : "") + Math.round(ps.shown * 100) + "%"
-            color: JD.text1; font.pixelSize: 12; font.features: { "tnum": 1 }
+            spacing: 10
+            Rectangle {
+                implicitWidth: 30; implicitHeight: 30; radius: 15
+                color: vrMute.containsMouse ? JD.fill2 : "transparent"
+                Icon { anchors.centerIn: parent; name: vr.shown === 0 ? "audio-volume-muted" : vr.icon; implicitSize: 16; tint: vr.tint }
+                MouseArea { id: vrMute; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: vr.muteToggled() }
+            }
+            Label1 { text: vr.label; font.pixelSize: 13; font.weight: Font.Medium; Layout.preferredWidth: 86 }
+            Item {
+                id: vrTrack
+                Layout.fillWidth: true
+                implicitHeight: 30
+                readonly property bool active: vrHover.hovered || vr.dragValue >= 0
+                Rectangle {
+                    id: rail
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width
+                    height: vrTrack.active ? 8 : 6
+                    radius: height / 2
+                    color: JD.fill2
+                    Behavior on height { NumberAnimation { duration: 120 } }
+                    Rectangle {
+                        width: rail.width * vr.shown
+                        height: parent.height
+                        radius: parent.radius
+                        color: vr.tint
+                        Behavior on width { enabled: vr.dragValue < 0; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                    }
+                }
+                // the knob: where the level is, and something to take hold of
+                Rectangle {
+                    width: vrTrack.active ? 18 : 14; height: width; radius: width / 2
+                    x: Math.max(0, Math.min(vrTrack.width - width, vrTrack.width * vr.shown - width / 2))
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: "#f5f5f7"
+                    Behavior on width { NumberAnimation { duration: 120 } }
+                    Behavior on x { enabled: vr.dragValue < 0; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                }
+                HoverHandler { id: vrHover; cursorShape: Qt.PointingHandCursor }
+                MouseArea {
+                    anchors.fill: parent
+                    function at(x) { return Math.max(0, Math.min(1, x / width)) }
+                    onPressed: m => { vr.dragValue = at(m.x); vr.moved(vr.dragValue) }
+                    onPositionChanged: m => { if (pressed) { vr.dragValue = at(m.x); vr.moved(vr.dragValue) } }
+                    onReleased: { vr.moved(vr.dragValue); vr.dragValue = -1 }
+                }
+            }
+            Label2 {
+                text: Math.round(vr.shown * 100) + "%"
+                color: JD.text2; font.pixelSize: 12; font.features: { "tnum": 1 }
+                horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 38
+            }
         }
     }
 
@@ -1939,6 +1988,8 @@ ShellRoot {
         property int voiceWas: 0   // the level the mute button came from, for the way back
         property int musicWas: 0
         readonly property var player: Mpris.players.values.length ? Mpris.players.values.find(p => p.isPlaying) || Mpris.players.values[0] : null
+        readonly property var sink: Pipewire.defaultAudioSink
+        PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
         implicitWidth: 740
         implicitHeight: Math.min(col.implicitHeight + 40, 800)
         SystemClock { id: evClock; precision: SystemClock.Minutes }
@@ -2002,6 +2053,11 @@ ShellRoot {
                             Label2 { text: JD.weather ? JD.tr(JD.weather.text || "") : ""; font.pixelSize: 10; Layout.maximumWidth: 90 }
                         }
                     }
+                }
+                PillButton {
+                    visible: JD.dstate !== "idle" && JD.dstate !== "offline" || JD.workers > 0
+                    label: JD.tr("Стоп"); tint: JD.accentRed
+                    onClicked: JD.send({ cmd: "stop" })
                 }
                 IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
                 IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
@@ -2081,7 +2137,11 @@ ShellRoot {
                         spacing: 8
                         RowLayout {
                             spacing: 12
-                            Art { size: 62; tint: np.tint; src: np.own ? (np.p.thumb || "") : (ev.player ? ev.player.trackArtUrl || "" : "") }
+                            Art {
+                                size: 62; tint: np.tint; src: np.own ? (np.p.thumb || "") : (ev.player ? ev.player.trackArtUrl || "" : "")
+                                HoverHandler { enabled: np.own; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { enabled: np.own; onTapped: { JD.expanded = false; JD.playerOpen = true; JD.artOpen = true } }
+                            }
                             ColumnLayout {
                                 spacing: 1
                                 Layout.fillWidth: true
@@ -2160,46 +2220,39 @@ ShellRoot {
                 }
             }
 
-            // ── how loud the assistant is. Not the system volume: that one belongs to Plasma, and moving it
-            //    from here would also turn down every other app on the machine.
-            PillSlider {
+            // ── sound: the assistant, the music, the whole computer. Three knobs in one card, each one only
+            //    moves what it names — turning the assistant down leaves every other app where it was.
+            Rectangle {
                 Layout.fillWidth: true
-                value: JD.volume / 100
-                muted: JD.volume === 0
-                icon: "audio-speakers"
-                label: JD.assistantName
-                onMoved: v => JD.setVolume(v * 100)
-                onMuteToggled: { const was = JD.volume; JD.setVolume(was > 0 ? 0 : (ev.voiceWas || 100)); ev.voiceWas = was }
-            }
-
-            // ── the music, while there is music: the same knob as in the player
-            PillSlider {
-                visible: JD.musicOn
-                Layout.fillWidth: true
-                value: (JD.player && JD.player.volume !== undefined ? JD.player.volume : 70) / 100
-                muted: !!JD.player && JD.player.volume === 0
-                icon: "audio-x-generic"
-                tint: JD.artTint(JD.player ? JD.player.color : "")
-                label: JD.tr("Музыка")
-                onMoved: v => JD.media("volume", Math.round(v * 100))
-                onMuteToggled: { const was = JD.player ? JD.player.volume : 0
-                                 JD.media("volume", was > 0 ? 0 : (ev.musicWas || 70)); ev.musicWas = was }
-            }
-
-            // ── one-tap actions
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
-                Chip { icon: "view-preview"; label: JD.tr("Что на экране?"); onClicked: ev.ask(JD.tr("Посмотри на экран и коротко скажи, что там")) }
-                Chip { icon: "image-x-generic"; label: JD.tr("Нарисовать"); onClicked: JD.openCompose(JD.tr("Нарисуй ")) }
-                Chip { icon: "video-x-generic"; label: JD.tr("Видео"); onClicked: JD.openCompose(JD.tr("Включи видео ")) }
-                Chip { icon: "system-software-install"; label: JD.tr("Установить"); onClicked: JD.openCompose(JD.tr("Установи ")) }
-                Chip { icon: "timer"; label: JD.tr("Таймер"); onClicked: JD.openCompose(JD.tr("Поставь таймер на ")) }
-                Chip { icon: "document-new"; label: JD.tr("Новый разговор"); onClicked: { JD.send({ cmd: "new_session" }); JD.flash(JD.tr("Новый разговор"), "document-new", JD.accentGreen); JD.expanded = false } }
-                Chip { icon: "media-playback-stop"; label: JD.tr("Стоп"); visible: JD.dstate !== "idle" || JD.workers > 0; tint: Qt.rgba(JD.accentRed.r, JD.accentRed.g, JD.accentRed.b, 0.3)
-                       onClicked: JD.send({ cmd: "stop" }) }
-                Chip { icon: "utilities-terminal"; label: JD.tr("Журнал"); onClicked: { JD.expanded = false; Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) } }
-                Chip { icon: "help-contents"; label: JD.tr("Руководство"); onClicked: JD.openManual() }
+                implicitHeight: sndCol.implicitHeight + 24
+                radius: 20
+                color: JD.fill1
+                ColumnLayout {
+                    id: sndCol
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 16 }
+                    spacing: 6
+                    VolumeRow {
+                        icon: "sparkles"; label: JD.assistantName; tint: JD.accentBlue
+                        value: JD.volume / 100
+                        onMoved: v => JD.setVolume(v * 100)
+                        onMuteToggled: { const was = JD.volume; JD.setVolume(was > 0 ? 0 : (ev.voiceWas || 100)); ev.voiceWas = was }
+                    }
+                    VolumeRow {
+                        readonly property int level: JD.player && JD.player.volume !== undefined ? JD.player.volume : (JD.mediaCfg.volume !== undefined ? JD.mediaCfg.volume : 70)
+                        icon: "audio-x-generic"; label: JD.tr("Музыка")
+                        tint: JD.musicOn ? JD.artTint(JD.player.color) : JD.accentPink
+                        value: level / 100
+                        onMoved: v => JD.media("volume", Math.round(v * 100))
+                        onMuteToggled: { JD.media("volume", level > 0 ? 0 : (ev.musicWas || 70)); ev.musicWas = level }
+                    }
+                    VolumeRow {
+                        visible: !!ev.sink && !!ev.sink.audio
+                        icon: "monitor"; label: JD.tr("Система"); tint: "#f5f5f7"
+                        value: ev.sink && ev.sink.audio ? (ev.sink.audio.muted ? 0 : ev.sink.audio.volume) : 0
+                        onMoved: v => { if (ev.sink && ev.sink.audio) { ev.sink.audio.volume = v; if (v > 0) ev.sink.audio.muted = false } }
+                        onMuteToggled: if (ev.sink && ev.sink.audio) ev.sink.audio.muted = !ev.sink.audio.muted
+                    }
+                }
             }
 
             // ── timers and alarms: what is running, how long is left, and a way to stop it

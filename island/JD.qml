@@ -103,6 +103,8 @@ Singleton {
     property var player: null           // {title, artist, thumb, color, pos, duration, paused, index, count, next, volume, loading}
     property real playerAt: Date.now()  // when `pos` was reported: the island counts on by itself between updates
     property bool playerOpen: false     // the big player (a click on the music pill)
+    property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
+    onPlayerOpenChanged: if (!playerOpen) artOpen = false
     property var video: null            // {title, channel, thumb, file, progress} — a video playing inside the island
     property bool videoBig: false
     signal videoCommand(string action)  // pause / resume / toggle / restart from the daemon ("пауза" by voice)
@@ -124,10 +126,17 @@ Singleton {
         return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0")
     }
     // the cover's colour, made vivid enough for bars on black
+    // Only lightness is corrected (so the colour reads on black); a pale cover stays pale, a grey one stays
+    // grey. Measured by chroma, not HSL saturation: near black the latter is noise, and #030000 used to
+    // come out as pure red.
     function artTint(c) {
         if (!c) return accentPink
         const q = Qt.color(c)
-        return Qt.hsla(q.hslHue < 0 ? 0.95 : q.hslHue, Math.max(0.55, q.hslSaturation), Math.min(0.68, Math.max(0.52, q.hslLightness)), 1)
+        const chroma = Math.max(q.r, q.g, q.b) - Math.min(q.r, q.g, q.b)
+        if (chroma < 0.08) return Qt.hsla(0, 0, 0.74, 1)                        // colourless: a soft white
+        if (chroma < 0.3)                                                       // muted: keep it muted
+            return Qt.hsla(q.hslHue, Math.min(0.42, Math.max(0.2, q.hslSaturation)), Math.min(0.74, Math.max(0.62, q.hslLightness)), 1)
+        return Qt.hsla(q.hslHue, Math.max(0.55, q.hslSaturation), Math.min(0.68, Math.max(0.52, q.hslLightness)), 1)
     }
 
     property bool settingsOpen: false

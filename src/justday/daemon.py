@@ -1487,6 +1487,14 @@ class Daemon:
         m = self.music
         if action == "status":
             return {"ok": True, "music": m.state(), "island_video": self.island_video}
+        if action == "volume":  # works with nothing playing too: it is the level the next song starts at
+            v = max(0, min(130, int(value if value is not None else m.volume)))
+            await m.set_volume(v)
+            self._save_later("media", "volume", v)
+            self.cfg["media"]["volume"] = v
+            if not m.state():
+                self.publish(settings=settings_snapshot(self.cfg))
+            return {"ok": True, "done": t("громкость {n}%", n=v)}
         if self.island_video and action in ("pause", "resume", "toggle", "stop", "restart"):
             if action == "stop":
                 self.island_video = None
@@ -1502,11 +1510,6 @@ class Daemon:
             return {"ok": False, "error": "nothing is playing"}
         if action == "seek":
             await m.seek(float(value or 0))
-        elif action == "volume":
-            v = int(value if value is not None else m.volume)
-            await m.set_volume(v)
-            self._save_later("media", "volume", v)
-            self.cfg["media"]["volume"] = v
         elif action == "color":  # `justday player color жёлтый` — when the model got the theme wrong
             st = m.state() or {}
             if not st.get("title"):
