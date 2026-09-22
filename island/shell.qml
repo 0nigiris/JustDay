@@ -820,7 +820,7 @@ ShellRoot {
         Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
         readonly property bool loading: !!p.loading
         readonly property string label: loading ? JD.tr("Загружаю") + " «" + (p.loading.title || "") + "»" : (p.title || "")
-        implicitWidth: mrow.implicitWidth + 24
+        implicitWidth: mrow.implicitWidth + 26
         implicitHeight: 40
         RowLayout {
             id: mrow
@@ -831,14 +831,45 @@ ShellRoot {
                 Art { anchors.fill: parent; size: 26; tint: mv.tint; src: mv.loading ? "" : (mv.p.thumb || ""); visible: !mv.loading }
                 Ring { anchors.centerIn: parent; size: 20; visible: mv.loading; spinning: true; tint: JD.accentPink }
             }
-            Label1 { text: mv.label; TextSwap on text {} Layout.maximumWidth: 230 }
+            Label1 { text: mv.label; TextSwap on text {} Layout.maximumWidth: 200 }
             Label2 {
                 visible: mv.loading && (mv.p.loading.progress || 0) > 0
                 text: Math.round((mv.p.loading ? mv.p.loading.progress : 0) * 100) + "%"
                 font.features: { "tnum": 1 }
             }
             EqBars { visible: !mv.loading; tint: mv.tint; playing: !mv.p.paused }
+            // the music is not the only thing the island knows: the time, a running timer, what Claude is
+            // doing or what comes next, the weather — the same line the island shows without music
+            Rectangle { implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
+            Text {
+                text: Qt.formatTime(mvClock.date, "HH:mm")
+                color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 14; font.weight: Font.Bold; font.features: { "tnum": 1 }
+            }
+            RowLayout {
+                visible: !!JD.runningTimer
+                spacing: 4
+                Icon { name: "timer"; implicitSize: 14; tint: JD.accentOrange }
+                Text {
+                    text: JD.reminderLeft(JD.runningTimer)
+                    color: JD.accentOrange; font.family: JD.fontFamily; font.pixelSize: 13
+                    font.weight: Font.DemiBold; font.features: { "tnum": 1 }
+                }
+            }
+            Label2 {
+                readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
+                                                : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title : ""
+                visible: !!event
+                text: event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap
+                Layout.maximumWidth: 170; color: JD.workers > 0 ? JD.accentPurple : JD.text2
+            }
+            RowLayout {
+                visible: !!JD.weather && JD.island.show_weather !== false
+                spacing: 5
+                Image { source: JD.weather ? Quickshell.shellDir + "/icons/" + JD.weather.icon + ".svg" : ""; sourceSize: Qt.size(32, 32); Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+                Text { text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : ""; color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 13; font.weight: Font.DemiBold }
+            }
         }
+        SystemClock { id: mvClock; precision: SystemClock.Minutes }
     }
 
     // a round toggle for shuffle / repeat: lit in the cover's colour when on
