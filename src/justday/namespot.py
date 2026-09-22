@@ -74,9 +74,9 @@ class NameSpotter:
     def __init__(self, transcribe: Callable[[np.ndarray], tuple[str, list[tuple[str, float]], float]],
                  names: list[str], seq: Callable[[], int],
                  on_wake: Callable[[np.ndarray, bool, Callable[[], list[tuple[int, np.ndarray]]]], None]):
-        from openwakeword.vad import VAD
+        from .audio import voice_activity_model
 
-        self.vad = VAD()
+        self.vad = voice_activity_model()
         self.transcribe = transcribe
         self.variants = spellings(names)
         self.on_wake = on_wake

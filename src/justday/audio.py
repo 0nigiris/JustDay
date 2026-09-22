@@ -88,14 +88,29 @@ class Microphone:
                 self._subscribers.remove(cb)
 
 
+def voice_activity_model():
+    """Silero VAD from openwakeword. The pip package ships without its model files, so on a fresh install
+    silero_vad.onnx is not there and the daemon used to die at start: fetch it (and the wake-word feature
+    models, a few MB) the first time instead."""
+    import os
+
+    import openwakeword
+    from openwakeword.utils import download_models
+    from openwakeword.vad import VAD
+
+    models = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models")
+    if not os.path.exists(os.path.join(models, "silero_vad.onnx")):
+        log.info("first run: downloading the voice-activity model")
+        download_models(model_names=["hey_jarvis"])
+    return VAD()
+
+
 class UtteranceRecorder:
     """Record one utterance: wait for speech, stop after trailing silence (Silero VAD)."""
 
     def __init__(self, mic: Microphone, silence_s: float, no_speech_timeout_s: float, max_s: float):
-        from openwakeword.vad import VAD
-
         self.mic = mic
-        self.vad = VAD()
+        self.vad = voice_activity_model()
         self.silence_s = silence_s
         self.no_speech_timeout_s = no_speech_timeout_s
         self.max_s = max_s
