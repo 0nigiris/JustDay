@@ -8,6 +8,7 @@
   <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-3776ab?style=flat-square&logo=python&logoColor=white">
   <img alt="Речь обрабатывается локально" src="https://img.shields.io/badge/речь-локально-30d158?style=flat-square">
   <a href="https://github.com/0nigiris/JustDay/commits/main"><img alt="Последний коммит" src="https://img.shields.io/github/last-commit/0nigiris/JustDay?style=flat-square&color=ff9f0a"></a>
+  <a href="https://github.com/0nigiris/JustDay/actions/workflows/check.yml"><img alt="Проверка" src="https://img.shields.io/github/actions/workflow/status/0nigiris/JustDay/check.yml?style=flat-square&label=проверка"></a>
 </p>
 
 <p align="center">

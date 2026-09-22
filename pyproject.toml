@@ -1,6 +1,6 @@
 [project]
 name = "justday"
-version = "0.1.0"
+version = "0.2.0"
 description = "JustDay — voice front-end that turns Claude Code into a personal desktop agent for KDE Plasma"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
