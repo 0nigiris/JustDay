@@ -15,6 +15,7 @@ STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "jus
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 SOCKET_PATH = RUNTIME_DIR / "justday.sock"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
+MODELS_DIR = DATA_DIR / "models"  # wake word, voice activity, Silero TTS: downloaded once, kept across reinstalls
 EVENTS_FILE = STATE_DIR / "events.jsonl"
 STATE_FILE = STATE_DIR / "state.json"
 # The repository this package was installed from (editable install) — holds persona + plugin.

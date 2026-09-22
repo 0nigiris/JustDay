@@ -117,7 +117,7 @@ class TTS:
             import torch
 
             torch.set_num_threads(4)
-            path = config.DATA_DIR / "models" / self.cfg["silero_model_url"].rsplit("/", 1)[1]
+            path = config.MODELS_DIR / self.cfg["silero_model_url"].rsplit("/", 1)[1]
             if not path.exists():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 log.info("downloading %s", self.cfg["silero_model_url"])

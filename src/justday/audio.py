@@ -13,6 +13,8 @@ import time
 
 import numpy as np
 
+from . import config
+
 log = logging.getLogger("justday.audio")
 
 RATE = 16000
@@ -87,21 +89,29 @@ class Microphone:
                 self._subscribers.remove(cb)
 
 
-def voice_activity_model():
-    """Silero VAD from openwakeword. The pip package ships without its model files, so on a fresh install
-    silero_vad.onnx is not there and the daemon used to die at start: fetch it (and the wake-word feature
-    models, a few MB) the first time instead."""
-    import os
+def onnx_model(name: str) -> str:
+    """Path to an openwakeword model, fetched on first use.
 
-    import openwakeword
+    The pip package ships without its model files, and its own resources folder lives inside the
+    virtualenv — where a reinstall wipes it. They belong with the user's data instead:
+    ~/.local/share/justday/models, downloaded once and kept."""
     from openwakeword.utils import download_models
+
+    path = config.MODELS_DIR / name
+    if not path.exists():
+        config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        log.info("first run: downloading %s", name)
+        download_models(model_names=["hey_jarvis"], target_directory=str(config.MODELS_DIR))
+        for spare in config.MODELS_DIR.glob("*.tflite"):  # we always run the ONNX ones
+            spare.unlink()
+    return str(path)
+
+
+def voice_activity_model():
+    """Silero VAD: what tells the recorder that the phrase is over."""
     from openwakeword.vad import VAD
 
-    models = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models")
-    if not os.path.exists(os.path.join(models, "silero_vad.onnx")):
-        log.info("first run: downloading the voice-activity model")
-        download_models(model_names=["hey_jarvis"])
-    return VAD()
+    return VAD(model_path=onnx_model("silero_vad.onnx"))
 
 
 class UtteranceRecorder:

@@ -1107,20 +1107,19 @@ class Daemon:
         w = self.cfg["wakeword"]
         if not w["enabled"] or not self.mic_on():
             return
-        import openwakeword
         from openwakeword.model import Model
-        from openwakeword.utils import download_models
 
-        download_models(model_names=[w["model"]])
-        path = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models", f"{w['model']}_v0.1.onnx")
+        path = audio.onnx_model(f"{w['model']}_v0.1.onnx")
+        feature_models = {"melspec_model_path": audio.onnx_model("melspectrogram.onnx"),
+                          "embedding_model_path": audio.onnx_model("embedding_model.onnx")}
         prof = voiceprint.profile() or {}
         verifier = prof.get("wake_verifier") or ""
         if verifier and os.path.exists(verifier):  # trained on the user's own "Hey Jarvis"
-            self._wake = Model(wakeword_models=[path], inference_framework="onnx",
+            self._wake = Model(wakeword_models=[path], inference_framework="onnx", **feature_models,
                                custom_verifier_models={os.path.basename(path).rsplit(".onnx", 1)[0]: verifier},
                                custom_verifier_threshold=0.3)
         else:
-            self._wake = Model(wakeword_models=[path], inference_framework="onnx")
+            self._wake = Model(wakeword_models=[path], inference_framework="onnx", **feature_models)
         loop = asyncio.get_running_loop()
 
         def on_frame(frame: np.ndarray) -> None:
