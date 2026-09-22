@@ -584,7 +584,7 @@ Item {
         id: generalPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: JD.tr("Общие"); subtitle: JD.tr("Как зовут ассистента и как он обращается к вам") }
+            PageTitle { title: JD.tr("Общие"); subtitle: JD.tr("Как с ним говорить, язык и запуск") }
             GroupTitle { text: JD.tr("КАК ОБЩАТЬСЯ") }
             Group {
                 Row {

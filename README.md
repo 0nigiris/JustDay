@@ -20,7 +20,7 @@
   <a href="#модели">Модели</a> ·
   <a href="#приватность">Приватность</a> ·
   <a href="docs/MANUAL.md">Руководство</a> ·
-  <a href="#english">English</a>
+  <a href="README.en.md">English</a>
 </p>
 
 **JustDay** — ИИ-ассистент для Linux, который не просто отвечает, а **делает**: открывает программы и сайты, нажимает кнопки в окнах, ставит программы, пишет сообщения и письма, рисует картинки, монтирует видео, играет в игры и раздаёт задачи Claude Code. Говорите с ним голосом или пишите с клавиатуры — ответ появится в **Dynamic Island** сверху экрана.
@@ -135,6 +135,32 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 Числа, время и даты проговариваются словами, английские слова достаются тому движку, который умеет их читать, а скорость речи настраивается от 1,0 до 1,5. Голос локальный, при желании — ElevenLabs.
 
 </td>
+<td valign="top">
+
+**🎭 Свой характер**<br>
+Дворецкий на «вы», друг на «ты», спокойный помощник или описанный своими словами. Мат и «живая речь» с паузами и оговорками — отдельными переключателями. Меняется на ходу.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**⚡ Несколько дел сразу**<br>
+«Обнови систему», а следом «включи музыку» — музыка играет сразу. Долгое уходит в фон и видно на острове, а новая просьба не ждёт: её берёт вторая сессия.
+
+</td>
+<td valign="top">
+
+**🎨 Цвет по музыке**<br>
+Остров окрашивается в цвет обложки, а если обложка ничего не говорит — в цвет того, о чём трек: тема жёлтого персонажа будет жёлтой. Клик по обложке показывает её крупно.
+
+</td>
+<td valign="top">
+
+**🧘 Установка в одну строку**<br>
+Установщик показывает шаги, а не вывод команд, сам ставит недостающее и заканчивает одним действием: нажмите <kbd>Meta</kbd>+<kbd>J</kbd> и скажите «Привет».
+
+</td>
 </tr>
 </table>
 
@@ -157,7 +183,7 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 </tr>
 <tr>
 <td align="center"><img src="docs/assets/island-slash.png" alt="Быстрые команды"><br><sub><b>/</b> — быстрые команды: новый разговор, картинка, видео, микрофон…</sub></td>
-<td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — музыка, переключатели, громкость, быстрые действия, модель, уведомления и недавнее</sub></td>
+<td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — музыка, переключатели, три громкости (ассистент, музыка, система), модель, уведомления и недавнее</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/assets/island-notification.png" alt="Уведомление"><br><sub><b>Уведомления</b> — ⌄ раскрывает всё сообщение, ✕ убирает, клик открывает приложение — даже если оно свёрнуто в трей</sub></td>
@@ -165,7 +191,11 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 </tr>
 <tr>
 <td align="center"><img src="docs/assets/island-thinking.png" alt="Работает" width="70%"><br><img src="docs/assets/island-listening.png" alt="Слушает" width="45%"><br><sub>Что делает прямо сейчас — человеческими словами</sub></td>
-<td align="center"><img src="docs/assets/island-settings.png" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове: 13 разделов</sub></td>
+<td align="center"><img src="docs/assets/island-settings.png" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове: 14 разделов</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/island-cover.png" alt="Обложка крупно" width="80%"><br><sub><b>Обложка</b> — клик показывает её крупно; цвет острова берётся из обложки или из темы трека</sub></td>
+<td align="center"><img src="docs/assets/island-character.png" alt="Характер"><br><sub><b>Характер</b> — дворецкий, друг, спокойный или свой; мат и живая речь отдельно</sub></td>
 </tr>
 </table>
 
@@ -185,7 +215,8 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 
 «Джарвис, включи песню Believer» — через 3–5 секунд она играет, без лишних слов. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно альбом или плейлист целиком («включи альбом Meteora»), исполнителя («включи Linkin Park»), вперемешку или на повтор.
 
-- Пока играет музыка, сверху висит **живая пилюля**: обложка, название и эквалайзер в цвет обложки. Клик открывает плеер с перемоткой и очередью.
+- Пока играет музыка, сверху висит **живая пилюля**: обложка, название и эквалайзер, а рядом — время, погода и то, что идёт в фоне. Клик открывает плеер с перемоткой, громкостью и очередью; клик по обложке — её крупно.
+- **Цвет острова** — цвет обложки, а если обложка ничего не говорит (чёрная, серая), модель один раз подбирает цвет того, о чём трек: тема персонажа, палитра игры.
 - «пауза», «дальше», «назад», «перемешай», «на повтор», «выключи повтор», «выключи музыку» работают мгновенно, без ИИ. В плеере те же кнопки и очередь: клик по песне включает её. Пока Джарвис слушает или говорит, музыка становится тише.
 - Плеер — отдельная служба, поэтому музыка не прерывается, даже если перезапустить ассистента.
 
@@ -233,9 +264,9 @@ Qwen3-TTS на вашей видеокарте: «Джарвис», «Пятни
 | звук микрофона и распознавание речи, голос ассистента | текст ваших просьб и ответы — выбранной модели |
 | письма, календарь, мгновенные команды | выделенный текст — только если он прикреплён к просьбе (видно в поле) |
 | картинки, видео, музыка и 3D из студии | название города для погоды (Open-Meteo) |
-| пароли и ключи — в системной связке ключей, не в памяти ассистента | |
+| пароли и ключи — в системной связке ключей, не в памяти ассистента | названия треков — по одному разу, когда остров подбирает цвет по музыке (можно выключить) |
 
-Телеметрия Claude Code выключена. Опасные действия (удаление, `sudo`, форс-пуш…) ждут вашего подтверждения, а обычный запуск программ — нет. Подробнее — в [руководстве](docs/MANUAL.md).
+Телеметрия Claude Code выключена. Опасные действия (удаление, `sudo`, форс-пуш…) ждут вашего подтверждения — в том числе запущенные фоновой задачей, а обычный запуск программ — нет. Подробнее — в [руководстве](docs/MANUAL.md).
 
 ## Команды
 
@@ -245,7 +276,9 @@ justday compose                       # открыть поле ввода на 
 justday play "Imagine Dragons Believer"   # песня с YouTube в свой плеер (count=5 — несколько)
 justday video "черные дыры" where=island  # видео: island | window | browser (без where — спросит)
 justday play "Linkin Park Meteora" playlist=1 shuffle=1   # альбом вперемешку
-justday player repeat one             # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50
+justday player repeat one             # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50 | color жёлтый
+justday job start "Обновление системы" -- jii update --json   # долгое — в фон
+justday persona friend swearing=on live=on                   # характер: jarvis | friend | calm | custom
 justday studio image "a red fox, watercolor" size=wide
 justday studio vertical ~/Videos/clip.mp4
 justday setup                         # мастер настройки заново
@@ -273,31 +306,13 @@ justday logs -f                       # что он слышит и делает
 
 ## Участие
 
-Баги и идеи — в [Issues](https://github.com/0nigiris/JustDay/issues). Код, комментарии и история коммитов — на английском; интерфейс — на русском и английском (`island/i18n`, `src/justday/i18n.py`). Скриншоты для README снимаются в изолированной сессии KWin: `tests/ui/readme_shots.sh`.
+Баги и идеи — в [Issues](https://github.com/0nigiris/JustDay/issues). Код, комментарии и история коммитов — на английском; интерфейс — на русском и английском (`island/i18n`, `src/justday/i18n.py`). Скриншоты для README снимаются в изолированной сессии KWin с настройками по умолчанию, по-русски и по-английски: `SHOTS_LANG=ru|en tests/ui/readme_shots.sh`.
 
 ---
 
 <a id="english"></a>
 
-<p align="center"><img src="docs/assets/hero-en.png" alt="JustDay — your own JARVIS for Linux" width="100%"></p>
-
-## English
-
-**JustDay** is an AI assistant for Linux that **acts**, not just answers: it opens apps and sites, clicks buttons in windows, installs software, drafts messages and mail, generates pictures, edits videos, plays games and delegates coding to Claude Code. Talk to it or type — the answer shows up in a **Dynamic Island** at the top of the screen.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | bash
-```
-
-- **Voice or keyboard.** <kbd>Meta</kbd>+<kbd>J</kbd> to talk, <kbd>Meta</kbd>+<kbd>K</kbd> to type (the text you have selected on screen is attached), <kbd>Meta</kbd>+<kbd>Y</kbd>/<kbd>N</kbd> to answer the island. A **text-only mode** never opens the microphone — handy at school or in an office.
-- **Its own music & video player.** “Play Believer” — the song is found on YouTube, downloaded and played right in the island (cover, equaliser, queue, instant “pause”/“next”). Videos play in the island, in a window or on YouTube — it asks where.
-- **Local creative studio.** Pictures, photo edits, background removal, text/image-to-video, music with vocals, 3D models (GLB/STL), voice-over, subtitles and montage (cut, join, music, burned-in subtitles, 9:16, pause removal, GIF, slideshow) — on your own GPU through ComfyUI, free and offline.
-- **Any model, free ones included:** Claude subscription, Ollama's free cloud models, OpenRouter's free tier, DeepSeek, local Ollama or any Anthropic-compatible endpoint. Memory, skills and the address book are shared across models.
-- **Private by design:** speech recognition, the voice, mail, calendar and the studio run locally; Claude Code telemetry is off; secrets live in the system keyring. Messages are sent only after you confirm.
-- **Installs software** through [JII](https://github.com/0nigiris/JII), plays Minecraft through its own bridge mod, remembers people and habits, speaks English and Russian.
-- **Without an NVIDIA card** it still works: CPU speech recognition or text-only mode, the simple voice and a cloud model.
-
-Requirements: KDE Plasma 6 on Wayland, PipeWire; an NVIDIA GPU is optional (needed for the neural voice, local models and the studio). The full manual is in Russian ([docs/MANUAL.md](docs/MANUAL.md)); the code, comments and commit history are in English.
+**English:** the whole page, with English screenshots, is in **[README.en.md](README.en.md)**.
 
 ## Лицензия · License
 

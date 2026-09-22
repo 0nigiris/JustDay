@@ -443,8 +443,8 @@
  "<b>В поле ввода</b>: Enter — отправить, Shift+Enter — новая строка, ↑/↓ — прошлые просьбы, Tab — подсказка команды, Esc — закрыть. Начните с <tt>/</tt>, чтобы увидеть быстрые команды. Пустое поле убрать выделенный текст: Backspace.": "<b>In the text field</b>: Enter sends, Shift+Enter adds a line, ↑/↓ recall earlier requests, Tab completes a command, Esc closes. Start with <tt>/</tt> to see quick commands. Backspace in an empty field drops the selected text.",
  "<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».<br><br>": "<b>A double press</b> of the talk key cancels everything — the interval is set under Voice & sound.<br><br>",
  "ElevenLabs: лучший голос, но текст ответов уходит на их серверы": "ElevenLabs: the best voice, but the text of the replies goes to their servers",
- "«в 7:05» читается как «семь ноль пять», «3,5 ГБ» — как «три с половиной гигабайта»": "«7:05» is read as «seven oh five», «3.5 GB» as «three and a half gigabytes»",
- "«сэр», «брат», ваше имя — или пусто": "«sir», «bro», your name — or nothing",
+ "«в 7:05» читается как «семь ноль пять», «3,5 ГБ» — как «три с половиной гигабайта»": "“7:05” is read as “seven oh five”, “3.5 GB” as “three and a half gigabytes”",
+ "«сэр», «брат», ваше имя — или пусто": "“sir”, “bro”, your name — or nothing",
  "Авто": "Auto",
  "Авто: нейроголос читает их по-английски, Silero — кириллицей, иначе он их проглатывает": "Auto: the neural voice reads them in English, Silero in Cyrillic, otherwise it swallows them",
  "Английские слова": "English words",
@@ -502,7 +502,7 @@
  "Ответить…": "Reply…",
  "Ответы звучат и показываются на острове": "Replies are spoken and shown on the island",
  "Ответы только текстом на острове": "Replies only as text on the island",
- "Паузы, «ну», «э-э», оговорки на ходу: «а, да, точно… как я мог забыть»": "Pauses, «well», «uh», slips on the fly: «oh, right… how did I forget»",
+ "Паузы, «ну», «э-э», оговорки на ходу: «а, да, точно… как я мог забыть»": "Pauses, “well”, “uh”, slips on the fly: “oh, right… how did I forget”",
  "По обложке": "From the cover",
  "По теме": "From the subject",
  "По-русски": "In Russian",
@@ -549,5 +549,6 @@
  "в фоне": "in the background",
  "готово": "done",
  "остановлено": "stopped",
- "ошибка": "failed"
+ "ошибка": "failed",
+ "Как с ним говорить, язык и запуск": "How to talk to it, the language, and start-up"
 }
