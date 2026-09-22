@@ -39,7 +39,7 @@ def setup(raw: str) -> dict:
     for u in links:
         try:
             icalendar.Calendar.from_ical(_fetch(u))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {e}"[:200]}
     merged = list(dict.fromkeys([*urls(), *links]))  # a new link is added to the ones already connected
     providers.secret_set("calendar", " ".join(merged))

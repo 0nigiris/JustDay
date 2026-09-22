@@ -111,7 +111,7 @@ class NameSpotter:
             if not active:
                 return
         if self._clip is None:
-            self._pre = (self._pre + [frame])[-4:]
+            self._pre = ([*self._pre, frame])[-4:]
             if p > 0.5:
                 self._clip, self._silence = list(self._pre), 0.0
             return
@@ -151,7 +151,7 @@ class NameSpotter:
             clip, still_talking = self._jobs.get()
             try:
                 text, words, no_speech = self.transcribe(clip)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception("name spotting failed")
                 text, words, no_speech = "", [], 1.0
             hit, rest = split_name(text, self.variants) if text else (False, "")

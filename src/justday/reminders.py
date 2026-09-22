@@ -127,9 +127,7 @@ def parse_time(text: str) -> float | None:
     hour = int(m[1] if m[1] else m[3])
     minute = int(m[2] or 0)
     part = _DAYPART.search(text[m.end():m.end() + 12])
-    if part and part.group(1).lower() in ("вечера", "pm") and hour < 12:
-        hour += 12
-    elif part and part.group(1).lower() == "дня" and hour < 12:
+    if (part and part.group(1).lower() in ("вечера", "pm") and hour < 12) or (part and part.group(1).lower() == "дня" and hour < 12):
         hour += 12
     elif part and part.group(1).lower() == "ночи" and hour == 12:
         hour = 0

@@ -78,7 +78,7 @@ class Jobs:
         if not job:
             return ""
         try:
-            text = open(job["log"], encoding="utf-8", errors="replace").read()
+            text = open(job["log"], encoding="utf-8", errors="replace").read()  # noqa: SIM115 — read and dropped at once
         except OSError:
             return ""
         # progress bars rewrite one line with \r: only the last state of each line is worth reading

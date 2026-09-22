@@ -5,7 +5,8 @@ import json
 import re
 import shutil
 import subprocess
-from importlib.metadata import PackageNotFoundError, version as pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from . import config, providers
@@ -176,8 +177,8 @@ def local_models() -> list[str]:
 
 
 def memory_files() -> dict:
-    from .cli import memory_dir
     from .brain import BRAIN_DIR
+    from .cli import memory_dir
 
     mem = memory_dir()
     files = []
@@ -260,7 +261,7 @@ def doctor() -> list[dict]:
             continue
         try:
             results.append({"name": name, "ok": True, "detail": fn() or ""})
-        except Exception as e:  # noqa: BLE001 — every failure is a row in the report
+        except Exception as e:
             results.append({"name": name, "ok": False, "detail": str(e)})
     return results
 

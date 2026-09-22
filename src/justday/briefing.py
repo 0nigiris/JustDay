@@ -93,7 +93,7 @@ def compose(cfg: dict, weather: dict | None) -> str:
     for source in (lambda: _weather_line(weather), _calendar_line, lambda: _mail_line(cfg), _open_line):
         try:
             line = source()
-        except Exception as e:  # noqa: BLE001 — a briefing is never worth an error
+        except Exception as e:
             log.info("briefing: %s skipped (%s)", getattr(source, "__name__", "part"), type(e).__name__)
             continue
         if line:

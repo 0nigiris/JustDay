@@ -103,9 +103,10 @@ def tray_items() -> list[dict]:
             continue
         path = "/" + path
         try:
-            prop = lambda name: subprocess.run(  # noqa: E731
-                ["qdbus-qt6", service, path, "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierItem", name],
-                capture_output=True, text=True, timeout=5).stdout.strip()
+            def prop(name: str, service: str = service, path: str = path) -> str:
+                return subprocess.run(
+                    ["qdbus-qt6", service, path, "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierItem", name],
+                    capture_output=True, text=True, timeout=5).stdout.strip()
             out.append({"service": service, "path": path, "id": prop("Id"), "title": prop("Title")})
         except (OSError, subprocess.SubprocessError):
             continue
@@ -169,10 +170,9 @@ def list_games() -> list[dict]:
                 gid = g.get("app_name") or g.get("appName")
                 if gid:
                     games[f"heroic:{gid}"] = {"source": "heroic", "id": gid, "name": g.get("title") or gid}
-    for app in list_apps():  # hand-made shortcuts (~/Games/*/run.sh, AppImages, Minecraft …)
-        if "Game" in app["categories"].split(";") or "/Games/" in app["exec"]:
-            if not any(g["name"].lower() == app["name"].lower() for g in games.values()):
-                games[f"desktop:{app['id']}"] = {"source": "desktop", "id": app["id"], "name": app["name"]}
+    for app in list_apps():  # hand-made shortcuts (~/Games/*/run.sh, AppImages, launcher scripts …)
+        if ("Game" in app["categories"].split(";") or "/Games/" in app["exec"]) and not any(g["name"].lower() == app["name"].lower() for g in games.values()):
+            games[f"desktop:{app['id']}"] = {"source": "desktop", "id": app["id"], "name": app["name"]}
     return sorted(games.values(), key=lambda g: g["name"].lower())
 
 

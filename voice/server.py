@@ -169,7 +169,7 @@ def handle(conn: socket.socket) -> None:
                 resp = {"ok": True, "loaded": model is not None}
             else:
                 resp = {"ok": False, "error": f"unknown command {cmd}"}
-        except Exception as e:  # noqa: BLE001 — report to the client, keep serving
+        except Exception as e:
             log("request failed:", repr(e))
             resp = {"ok": False, "error": str(e)}
         try:

@@ -25,7 +25,8 @@ for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"
     env.pop(k, None)
 if os.environ.get("JUSTDAY_SHOTS_CONFIG_HOME"):  # README shots: Settings read a fresh config, not this machine's
     env["XDG_CONFIG_HOME"] = os.environ["JUSTDAY_SHOTS_CONFIG_HOME"]
-qs = subprocess.Popen(["qs", "-p", str(repo / "island")], env=env, stdout=open(work / "qs.log", "w"), stderr=subprocess.STDOUT)
+qs = subprocess.Popen(["qs", "-p", str(repo / "island")], env=env, stdout=open(work / "qs.log", "w"),  # noqa: SIM115 — the log lives as long as the process
+                      stderr=subprocess.STDOUT)
 ctl = work / "ctl"
 if not ctl.exists():
     os.mkfifo(ctl)

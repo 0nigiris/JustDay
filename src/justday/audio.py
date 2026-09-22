@@ -147,7 +147,7 @@ class UtteranceRecorder:
                     continue
                 p = float(self.vad.predict(frame, frame_size=640))
                 if not speech:
-                    pre_roll = (pre_roll + [frame])[-4:]  # keep ~320 ms before onset
+                    pre_roll = ([*pre_roll, frame])[-4:]  # keep ~320 ms before onset
                     if p > 0.5:
                         speech = True
                         frames.extend(pre_roll)
@@ -182,7 +182,7 @@ class Player:
                "--volume", f"{max(0, min(100, int(self.volume))) / 100:.3f}"]
         if self.sink:
             cmd += ["--target", self.sink]
-        return cmd + ["-"]
+        return [*cmd, "-"]
 
     async def play(self, pcm: np.ndarray, rate: int) -> None:
         cmd = self._cmd(rate)
@@ -236,7 +236,7 @@ def timestretch(pcm: np.ndarray, speed: float, rate: int) -> np.ndarray:
     x = pcm.astype(np.float32)
     frame = max(256, int(rate * 0.048) // 2 * 2)   # ~48 ms: long enough for the pitch, short enough for speech
     hop_out = frame // 2
-    hop_in = max(1, int(round(hop_out * speed)))
+    hop_in = max(1, round(hop_out * speed))
     search = int(rate * 0.006)                     # ±6 ms to find where the next frame continues the last one
     win = np.hanning(frame).astype(np.float32)
     out = np.zeros(int(x.size / speed) + 2 * frame, np.float32)

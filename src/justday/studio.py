@@ -405,7 +405,7 @@ def _check_locked(job: dict) -> dict:
         try:
             finish(job, src)
             job["state"] = "done"
-        except Exception as e:  # noqa: BLE001 — reported to the user as text
+        except Exception as e:
             job.update(state="failed", error=str(e)[:300])
         if settings()["free_after"]:
             free(url)
@@ -673,7 +673,7 @@ def speech(text: str, out: str | None = None, voice: str = "") -> dict:
 
 
 def _srt_time(t: float) -> str:
-    ms = int(round(t * 1000))
+    ms = round(t * 1000)
     return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
 
 

@@ -198,7 +198,7 @@ def train_wake_verifier(positives: list[Path], negatives: list[Path]) -> str:
         train_custom_verifier(positive_reference_clips=[str(p) for p in positives],
                               negative_reference_clips=[str(p) for p in negatives],
                               output_path=str(out), model_name=model, inference_framework="onnx")
-    except Exception:  # noqa: BLE001 — too few detections in the clips etc.: keep the plain model
+    except Exception:
         return ""
     return str(out) if out.exists() else ""
 

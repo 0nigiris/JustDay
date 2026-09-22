@@ -17,17 +17,17 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 
-from . import (audio, briefing, calendar_lane, config, desktop, events, fastpath, jobs, mail, media, namespot,
-               numerals, palette, reminders, voiceprint, workers)
-from .aio import spawn
-from .i18n import lang, t
+from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, jobs, mail, media, namespot, numerals, palette, reminders, voiceprint, workers
 from . import brain as brain_mod
-from .brain import Brain
-from .stt import STT
 from . import tts as tts_mod
+from .aio import spawn
+from .brain import Brain
+from .i18n import lang, t
+from .stt import STT
 from .tts import TTS, normalize, split_sentences
 
 log = logging.getLogger("justday.daemon")
@@ -62,8 +62,10 @@ def tool_icon(name: str, inp: str) -> str:
     if name == "Bash":
         cmd = inp.lower()
         for needle, icon in (("justday play", "media-playback-start"), ("justday video", "video-x-generic"),
-                             ("justday player", "media-playback-start"), ("youtube", "youtube"), ("yt-dlp", "youtube"), ("justday claude", "applications-development"),
-                             ("jii ", "system-software-install"), ("justday studio", "applications-graphics"), ("justday games", "applications-games"), ("steam", "steam"), ("justday apps", "application-x-executable"),
+                             ("justday player", "media-playback-start"), ("youtube", "youtube"), ("yt-dlp", "youtube"),
+                             ("justday claude", "applications-development"), ("jii ", "system-software-install"),
+                             ("justday studio", "applications-graphics"), ("justday games", "applications-games"),
+                             ("steam", "steam"), ("justday apps", "application-x-executable"),
                              ("justday windows", "preferences-system-windows"), ("xdg-open http", "internet-web-browser"),
                              ("playerctl", "media-playback-start"), ("wpctl", "audio-volume-high"), ("git ", "git"),
                              ("kitty", "utilities-terminal"), ("plocate", "system-search"), ("fd ", "system-search")):
@@ -397,7 +399,7 @@ class Daemon:
         if urgent:
             cmd += ["-u", "critical"]
         try:
-            out = subprocess.run(cmd + ["JustDay", body[:300]], capture_output=True, text=True, timeout=5).stdout
+            out = subprocess.run([*cmd, "JustDay", body[:300]], capture_output=True, text=True, timeout=5).stdout
             self._notify_id = int(out.strip() or 0)
         except Exception:
             pass
@@ -420,7 +422,7 @@ class Daemon:
         if self.weather is None and city:  # the island polls it every 15 min, but not before the first hello
             try:
                 self.weather = await loop.run_in_executor(None, fetch_weather, city)
-            except Exception as e:  # noqa: BLE001 — offline: the briefing simply has no weather in it
+            except Exception as e:
                 log.info("briefing without weather: %s", type(e).__name__)
         try:
             text = await loop.run_in_executor(None, briefing.compose, self.cfg, self.weather)
@@ -727,7 +729,7 @@ class Daemon:
         if calendar_lane.CAL_WORDS.search(text):
             try:
                 cal = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.handle, text)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.warning("calendar failed: %s", e)
                 cal = (t("Не получилось открыть календарь."), None)
             if cal and gen == self._cancel_gen:
@@ -736,9 +738,8 @@ class Daemon:
                     self.publish(kind="card", card=card)
                 await self.say(reply)
                 return
-        if self.cfg["mail"]["address"] and self.mail.wants(text):
-            if await self.handle_mail(text) or gen != self._cancel_gen:
-                return
+        if self.cfg["mail"]["address"] and self.mail.wants(text) and (await self.handle_mail(text) or gen != self._cancel_gen):
+            return
         if self.brain.busy:
             if self.brain.waiting_on_tool() >= SIDE_AFTER_S:
                 # the main session sits inside a long command (an upgrade, a build): an injected message would
@@ -770,7 +771,7 @@ class Daemon:
         spoken_before, gen = self._spoken, self._cancel_gen
         try:
             await self.side.ask(context + text, source=source)
-        except Exception as e:  # noqa: BLE001 — a failed side turn must not take the daemon down
+        except Exception as e:
             events.emit("turn_failed", error=repr(e), lane="side")
             if gen == self._cancel_gen:
                 await self.say(t("Не получилось связаться с мозгом. Подробности в логе."))
@@ -1202,13 +1203,13 @@ class Daemon:
                     st = await asyncio.get_running_loop().run_in_executor(None, manage.update_status)
                     self.update_info = st if st.get("ok") and st.get("behind") else None
                     self.publish(update=self.update_info)
-                except Exception as e:  # noqa: BLE001 — offline is fine
+                except Exception as e:
                     log.info("update check failed: %s", type(e).__name__)
             if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
                 self._last_cal = time.monotonic()
                 try:
                     nxt = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.upcoming, 2)
-                except Exception:  # noqa: BLE001 — offline
+                except Exception:
                     nxt = None
                 self.publish(next_event=nxt)
             isl = self.cfg["island"]
@@ -1216,7 +1217,7 @@ class Daemon:
                 last_weather, self._weather_city = time.monotonic(), isl["city"]
                 try:
                     self.weather = await asyncio.get_running_loop().run_in_executor(None, fetch_weather, isl["city"])
-                except Exception as e:  # noqa: BLE001 — offline is fine
+                except Exception as e:
                     log.info("weather unavailable: %s", type(e).__name__)
                 self.publish(weather=self.weather)
             if time.monotonic() - last_ping > 5:  # heartbeat: lets the island notice a dead connection
@@ -1370,7 +1371,7 @@ class Daemon:
             if not first:
                 first = await loop.run_in_executor(None, media.stream_track, entries[0])
                 spawn(self._cache_track(entries[0]))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.music.set_loading(None)
             log.warning("play failed: %s", e)
             return {"ok": False, "error": str(e)}
@@ -1415,7 +1416,7 @@ class Daemon:
             entry = self._cache_q.pop(0)
             try:
                 await loop.run_in_executor(None, media.download_audio, entry, None)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.info("background download of %s failed: %s", entry.get("title"), e)
 
     async def _queue_rest(self, entries: list[dict]) -> None:
@@ -1427,7 +1428,7 @@ class Daemon:
                 if not track:
                     track = await loop.run_in_executor(None, media.stream_track, e)
                     await self._cache_track(e)
-            except Exception as ex:  # noqa: BLE001
+            except Exception as ex:
                 log.info("skip %s: %s", e.get("title"), ex)
                 continue
             if not self.music.active:  # stopped meanwhile
@@ -1534,9 +1535,9 @@ class Daemon:
             self.publish(kind="video_cmd", action="pause")
         media.window_command("set_property", "pause", True)
 
-    WHERE_WORDS = [("browser", re.compile(r"ютуб|youtube|браузер|browser|сайт", re.I)),
-                   ("window", re.compile(r"окн|окош|отдельн|плеер|window|весь экран|fullscreen", re.I)),
-                   ("island", re.compile(r"остров|здесь|тут|сверху|island|here", re.I))]
+    WHERE_WORDS: ClassVar = [("browser", re.compile(r"ютуб|youtube|браузер|browser|сайт", re.I)),
+                             ("window", re.compile(r"окн|окош|отдельн|плеер|window|весь экран|fullscreen", re.I)),
+                             ("island", re.compile(r"остров|здесь|тут|сверху|island|here", re.I))]
 
     async def _ask_where(self, e: dict) -> str | None:
         opts = [{"label": t("В острове"), "description": t("прямо здесь, поверх окон"), "icon": "go-top"},
@@ -1572,7 +1573,7 @@ class Daemon:
                 if not found:
                     return {"ok": False, "error": "nothing found"}
                 e = secrets.choice(found) if random else found[0]
-        except Exception as ex:  # noqa: BLE001
+        except Exception as ex:
             return {"ok": False, "error": str(ex)}
         where = where or self.cfg["media"]["video_where"]
         if where not in media.WHERE:
@@ -1597,7 +1598,7 @@ class Daemon:
                         self.publish(video=self.island_video)
                 try:
                     got = await loop.run_in_executor(None, media.download_video, e, self._progress(progress, e["title"]))
-                except Exception as ex:  # noqa: BLE001
+                except Exception as ex:
                     self.island_video = None
                     self.publish(video=None)
                     return {"ok": False, "error": str(ex)}
@@ -1702,8 +1703,8 @@ class Daemon:
                                      "jump": t("переключил"), "repeat_off": t("повтор выключен"), "repeat_all": t("повтор всего"),
                                      "repeat_one": t("повтор песни"), "shuffle_on": t("вперемешку"), "shuffle_off": t("по порядку")}[action]}
 
-    MEDIA_KIND = {"image": "image", "edit": "image", "upscale": "image", "nobg": "image", "gif": "image",
-                  "music": "music", "speech": "speech", "3d": "3d", "subs": "text"}
+    MEDIA_KIND: ClassVar = {"image": "image", "edit": "image", "upscale": "image", "nobg": "image", "gif": "image",
+                            "music": "music", "speech": "speech", "3d": "3d", "subs": "text"}
 
     async def studio_done(self, job: dict, kind: str, what: str, quiet: bool) -> dict:
         from . import studio
@@ -1791,7 +1792,7 @@ class Daemon:
             elif cmd in ("approve", "deny"):
                 pending = self._approval is not None and not self._approval.done()
                 if pending:
-                    self._approval.set_result(cmd == "approve" and (self._ask_choices or ["allow"])[0] or "deny")
+                    self._approval.set_result((cmd == "approve" and (self._ask_choices or ["allow"])[0]) or "deny")
                 resp = {"ok": pending, "error": None if pending else "nothing awaits approval"}
             elif cmd == "new_session":
                 await self.brain.new_session()
@@ -1955,7 +1956,7 @@ class Daemon:
         self.mic.stop()
         try:
             await asyncio.wait_for(self.brain.stop(), 5)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("brain stop")
         events.emit("daemon_stopped")
         logging.shutdown()

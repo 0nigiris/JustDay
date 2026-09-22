@@ -16,8 +16,8 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from . import config, palette
 from .desktop import detached
@@ -229,10 +229,10 @@ def thumb_color(path: str) -> str:
         if s > best_s:
             best, best_s = (r, g, b), s
     if best and best_s > 0.12:
-        return "#%02x%02x%02x" % best
+        return "#{:02x}{:02x}{:02x}".format(*best)
     lit = [c for c in px if max(c) > 16] or px   # black bars left inside the square are not the artwork
     avg = tuple(round(sum(c[k] for c in lit) / len(lit)) for k in range(3))
-    return "#%02x%02x%02x" % avg
+    return "#{:02x}{:02x}{:02x}".format(*avg)
 
 
 _covers: dict[str, str] = {}
@@ -396,7 +396,7 @@ def find(query: str, kind: str = "music", count: int = 1) -> list[dict]:
         ranked = pick_song(search(query, max(8, count * 3)), query)
         out, seen = [], set()
         for e in ranked:
-            t, a = split_title(e["title"], e["channel"])
+            t, _a = split_title(e["title"], e["channel"])
             key = re.sub(r"\W+", "", t.lower())
             if key in seen or (count > 1 and (e["live"] or not 45 <= e["duration"] <= 900)):
                 continue
@@ -461,7 +461,7 @@ def open_window(target: str, start: float = 0, title: str = "", fullscreen: bool
         cmd.append(f"--force-media-title={title}")
     if fullscreen:
         cmd.append("--fs")
-    subprocess.Popen(detached(cmd + ["--", target]), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    subprocess.Popen(detached([*cmd, "--", target]), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 def window_command(*args) -> bool:
@@ -605,7 +605,7 @@ class MusicPlayer:
     async def command(self, *cmd):
         try:
             msg = await self._send(list(cmd))
-        except (RuntimeError, OSError, asyncio.TimeoutError):
+        except (TimeoutError, RuntimeError, OSError):
             return None
         return msg.get("data") if msg and msg.get("error") == "success" else None
 

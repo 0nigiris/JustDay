@@ -23,7 +23,9 @@ WIZ_EN = {
     "Claude по подписке Pro/Max — лучшее качество": "Claude with a Pro/Max subscription — best quality",
     "(вход выполнен)": "(signed in)", "Локальная модель на видеокарте — бесплатно и приватно": "Local model on your GPU — free and private",
     "(нужно ≥10 ГБ видеопамяти)": "(needs ≥10 GB VRAM)", "OpenRouter — есть бесплатные модели, нужен ключ": "OpenRouter — free models available, needs a key",
-    "DeepSeek — дёшево, нужен ключ": "DeepSeek — cheap, needs a key", "Бесплатно: большие модели в облаке Ollama — нужен только бесплатный аккаунт": "Free: large models in Ollama's cloud — only a free account needed",
+    "DeepSeek — дёшево, нужен ключ": "DeepSeek — cheap, needs a key",
+    "Бесплатно: большие модели в облаке Ollama — нужен только бесплатный аккаунт":
+        "Free: large models in Ollama's cloud — only a free account needed",
     "Ставлю Ollama (~1,4 ГБ)…": "Installing Ollama (~1.4 GB)…",
     "Откроется ollama.com: создайте бесплатный аккаунт и подтвердите подключение компьютера.": "ollama.com will open: create a free account and confirm connecting this computer.",
     "  Нажмите Enter, когда подтвердите… ": "  Press Enter once confirmed… ",
@@ -52,7 +54,8 @@ WIZ_EN = {
     "Написать текстом (выделенный текст прикрепится)": "Type a request (selected text is attached)",
     "Ответить на вопрос острова: Meta+Y — да, Meta+N — нет.": "Answer the island's question: Meta+Y — yes, Meta+N — no.",
     "Написать:   Meta+K — поле ввода; «/» — быстрые команды": "Type:       Meta+K — the text field; “/” — quick commands",
-    "Кнопка на мыши: игровые мыши Logitech можно перепрошить на F19 (см. руководство, раздел «Установка»).": "Mouse button: Logitech gaming mice can be remapped to F19 (see the manual, “Installation”).",
+    "Кнопка на мыши: игровые мыши Logitech можно перепрошить на F19 (см. руководство, раздел «Установка»).":
+        "Mouse button: Logitech gaming mice can be remapped to F19 (see the manual, “Installation”).",
     "Вторая клавиша «говорить» (например F19, пусто — нет)": "Second talk key (e.g. F19, empty — none)",
     "Сочетание «отменить всё»": "Shortcut to cancel everything", "сочетания зарегистрированы": "shortcuts registered",
     "не получилось: {e}": "failed: {e}",

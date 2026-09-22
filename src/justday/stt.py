@@ -22,7 +22,7 @@ def _preload_cuda_libs() -> None:
     except ImportError:
         return
     for mod in (nvidia.cublas, nvidia.cudnn):
-        for so in sorted(glob.glob(os.path.join(list(mod.__path__)[0], "lib", "*.so*"))):
+        for so in sorted(glob.glob(os.path.join(next(iter(mod.__path__)), "lib", "*.so*"))):
             try:
                 ctypes.CDLL(so, mode=ctypes.RTLD_GLOBAL)
             except OSError:

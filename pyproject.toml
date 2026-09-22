@@ -21,7 +21,6 @@ dependencies = [
 
 [project.scripts]
 justday = "justday.cli:main"
-jarvis = "justday.cli:main"  # old name, kept as an alias
 
 [tool.uv]
 # openwakeword pins tflite-runtime on Linux, which has no wheels for py3.12; we use its ONNX backend.
@@ -41,3 +40,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/justday"]
+
+[tool.ruff]
+# The code is written to a wide screen; comments and docstrings are Russian, so ambiguous-unicode is noise.
+line-length = 200
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003", "E741", "B905", "SIM105", "SIM108"]

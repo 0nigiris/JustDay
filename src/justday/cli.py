@@ -4,8 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -50,8 +50,9 @@ def _check(name: str, fn) -> bool:
 
 
 def t_mic(seconds: float = 3.0):
-    from . import audio
     import numpy as np
+
+    from . import audio
 
     cfg = config.load()
     src = audio.find_node(cfg["audio"]["input"]) if cfg["audio"]["input"] else None
@@ -70,9 +71,10 @@ def t_mic(seconds: float = 3.0):
 
 
 def t_tts(text: str = "Все системы в норме, сэр."):
+    import asyncio
+
     from . import audio
     from .tts import TTS, normalize
-    import asyncio
 
     tts = TTS(config.load()["tts"])
     pcm = tts.synth(normalize(text))
@@ -81,9 +83,10 @@ def t_tts(text: str = "Все системы в норме, сэр."):
 
 
 def t_stt():
+    import numpy as np
+
     from .stt import STT
     from .tts import TTS, normalize
-    import numpy as np
 
     cfg = config.load()
     tts = TTS(cfg["tts"])
@@ -240,8 +243,8 @@ TESTS = {"daemon": t_daemon, "mic": t_mic, "tts": t_tts, "stt": t_stt, "llm": t_
 
 
 def memory_dir():
-    from pathlib import Path
     import re
+    from pathlib import Path
 
     from .brain import BRAIN_DIR
 
@@ -999,7 +1002,7 @@ def _mail_cmd(a) -> None:
         config.set_value("mail", "address", a.address.strip())
         try:
             _print({"ok": True, "inbox": mail.count("in:inbox")})
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             _print({"ok": False, "error": str(e)})
         control("reload_settings", timeout=5)
         return

@@ -1,0 +1,43 @@
+name: check
+
+# The desktop half (KDE, PipeWire, a GPU) cannot be tested on a runner. What can: the code is valid
+# Python, it passes the linter, the shell scripts parse, and the defaults still load.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: check src voice tests
+
+      - name: Compile
+        run: python -m compileall -q src voice tests plugin
+
+      - name: Shell scripts parse
+        run: find . -name '*.sh' -not -path './.git/*' -print -exec bash -n {} +
+
+      - name: Defaults load
+        run: |
+          python - <<'PY'
+          import sys, tomllib
+          sys.path.insert(0, "src")
+          from justday import config, fastpath, briefing
+          example = tomllib.loads(open("config.example.toml", "rb").read().decode())
+          unknown = [k for k in example if k not in config.DEFAULTS]
+          assert not unknown, f"config.example.toml has sections nobody reads: {unknown}"
+          assert fastpath.voice_switch("молчи") is False and fastpath.voice_switch("включи музыку") is None
+          assert briefing.wanted("Джарвис, доброе утро") and not briefing.wanted("привет, открой дискорд")
+          print("defaults ok")
+          PY
