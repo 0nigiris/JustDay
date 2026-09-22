@@ -22,6 +22,7 @@ Several apps → one command: `jii install a b c --auto --json`.
 ## Remove, update, explain
 - Remove: `jii remove <name> --json` — uses the manager that installed it. The user is asked to confirm (it is a destructive action); say what will be removed in the request.
 - Update one: `jii update <name> --json`. Update everything: `jii update --json` (system upgrade + Flatpak + pipx/npm/brew, and JII itself); preview first with `--dry-run` and say in one sentence what it will touch — it is long and may need the password dialog.
+- Anything that takes minutes — `jii update --json`, a big install — runs as a background job so the assistant stays free: `justday job start "Обновление системы" -- jii update --json`, then end the turn with one sentence. The daemon reports when it ends (`justday job log ID` for the whole log).
 - Where did it come from / why that source: `jii how <name> --json`. Details, versions, trust: `jii info <name> --json`. Installed via JII: `jii list --json`; history: `jii history --json`.
 - Installed without JII (Steam games, AppImages, older installs) is still found by `justday apps find <name>`, `rpm -q`, `flatpak list`.
 

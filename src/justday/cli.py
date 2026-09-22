@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import re
 import shutil
 import socket
@@ -355,6 +356,10 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "volume",
                                        "eleven", "key"])
     sp.add_argument("args", nargs="*")
+    sp = sub.add_parser("job", help="long commands in the background, so the assistant stays free: "
+                                    "`justday job start \"Обновление системы\" -- jii update --json` · list · log ID · stop ID")
+    sp.add_argument("action", choices=["start", "list", "log", "stop"])
+    sp.add_argument("args", nargs=argparse.REMAINDER)
     sp = sub.add_parser("persona", help="the assistant's character: `justday persona` shows it; "
                                         "`justday persona friend|jarvis|calm|custom [swearing=on|off] [live=on|off]`")
     sp.add_argument("args", nargs="*")
@@ -604,6 +609,8 @@ def main(argv: list[str] | None = None) -> None:
         _config_cmd(a)
     elif a.cmd == "persona":
         _persona_cmd(a.args)
+    elif a.cmd == "job":
+        _job_cmd(a.action, a.args)
     elif a.cmd == "contacts":
         _contacts_cmd(a)
     elif a.cmd == "compose-mail":
@@ -817,6 +824,28 @@ def _voiceprint_cmd(a) -> None:
         print("\nГотово: порог узнавания {threshold}, пауза конца фразы {silence_seconds} с, слово пробуждения дообучено: {wake}".format(
             threshold=r.get("threshold"), silence_seconds=r.get("silence_seconds"), wake="да" if r.get("wake_verifier") else "нет")
             if r.get("ok") else f"\nНе получилось: {r.get('error')}")
+
+
+def _job_cmd(action: str, args: list[str]) -> None:
+    """A job runs in the daemon, not here: this returns at once and the daemon reports the end."""
+    if action == "start":
+        if "--" not in args or args.index("--") == len(args) - 1:
+            sys.exit('usage: justday job start "Title" -- command args…')
+        cut = args.index("--")
+        title, command = " ".join(args[:cut]), shlex.join(args[cut + 1:])
+        if len(args[cut + 1:]) == 1:   # one quoted string: a shell line as written («a && b | c»)
+            command = args[cut + 1]
+        r = control("job_start", timeout=150, title=title, command=command, cwd=os.getcwd())
+        if r.get("ok"):
+            r["note"] = "running in the background; the daemon reports when it ends — finish your turn now"
+        _print(r)
+    elif action == "list":
+        _print(control("job_list", timeout=5))
+    elif action == "log":
+        r = control("job_log", timeout=5, id=args[0] if args else "", lines=int(args[1]) if len(args) > 1 else 40)
+        print(r.get("log", ""))
+    else:
+        _print(control("job_stop", timeout=5, id=args[0] if args else ""))
 
 
 def _persona_cmd(args: list[str]) -> None:

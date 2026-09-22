@@ -381,6 +381,7 @@ ShellRoot {
     component PeekView: View {
         id: pv
         readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
+                                        : JD.runningJob ? JD.runningJob.title + " · " + JD.jobTime(JD.runningJob)
                                         : JD.dstate === "offline" ? JD.assistantName + JD.tr(" не запущен")
                                         : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title
                                         : JD.update ? JD.tr("Доступно обновление")
@@ -857,6 +858,7 @@ ShellRoot {
             }
             Label2 {
                 readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
+                                                : JD.runningJob ? JD.runningJob.title + " · " + JD.jobTime(JD.runningJob)
                                                 : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title : ""
                 visible: !!event
                 text: event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap
@@ -2286,6 +2288,49 @@ ShellRoot {
                         value: ev.sink && ev.sink.audio ? (ev.sink.audio.muted ? 0 : ev.sink.audio.volume) : 0
                         onMoved: v => { if (ev.sink && ev.sink.audio) { ev.sink.audio.volume = v; if (v > 0) ev.sink.audio.muted = false } }
                         onMuteToggled: if (ev.sink && ev.sink.audio) ev.sink.audio.muted = !ev.sink.audio.muted
+                    }
+                }
+            }
+
+            // ── background jobs: a system update, a build — running while the assistant is free for anything else
+            ColumnLayout {
+                visible: JD.jobs.length > 0
+                Layout.fillWidth: true
+                spacing: 6
+                Repeater {
+                    model: JD.jobs.slice(0, 3)
+                    Rectangle {
+                        required property var modelData
+                        readonly property bool running: modelData.state === "running"
+                        readonly property color tint: running ? JD.accentBlue : modelData.state === "done" ? JD.accentGreen : JD.accentRed
+                        Layout.fillWidth: true
+                        implicitHeight: 44
+                        radius: 14
+                        color: jobHover.hovered ? JD.fill2 : JD.fill1
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                            spacing: 10
+                            Item {
+                                implicitWidth: 18; implicitHeight: 18
+                                Ring { anchors.centerIn: parent; size: 16; visible: parent.parent.parent.running; spinning: true; tint: JD.accentBlue }
+                                Icon { anchors.centerIn: parent; visible: !parent.parent.parent.running; implicitSize: 16; tint: parent.parent.parent.tint
+                                       name: modelData.state === "done" ? "check" : "window-close" }
+                            }
+                            Label1 { text: modelData.title; font.pixelSize: 13; Layout.fillWidth: true }
+                            Label2 {
+                                text: parent.parent.running ? JD.tr("в фоне") : modelData.state === "done" ? JD.tr("готово")
+                                      : modelData.state === "stopped" ? JD.tr("остановлено") : JD.tr("ошибка")
+                                font.pixelSize: 11; color: parent.parent.running ? JD.text2 : parent.parent.tint
+                            }
+                            Text {
+                                text: JD.jobTime(modelData)
+                                color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 15
+                                font.weight: Font.DemiBold; font.features: { "tnum": 1 }
+                            }
+                            IconButton { visible: parent.parent.running; icon: "media-playback-stop"; size: 26
+                                         onClicked: JD.send({ cmd: "job_stop", id: modelData.id }) }
+                        }
+                        HoverHandler { id: jobHover }
                     }
                 }
             }

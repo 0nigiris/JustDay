@@ -131,8 +131,13 @@ class Brain:
         on_text: Callable[[str], Awaitable[None]],
         approver: Callable[[str, str, bool], Awaitable[bool]],
         asker: Callable[[list[dict]], Awaitable[dict | None]],
+        persist: bool = True,
     ):
         self.cfg = cfg
+        self.persist = persist          # False: a side session — never resumed, never remembered as «the» session
+        self.request = ""               # what the current turn is about, for a side session to be told
+        self.tool_label = ""            # the tool it is running now, in words
+        self._tool_since: float | None = None
         self.on_text = on_text
         self.approver = approver
         self.asker = asker
@@ -200,7 +205,7 @@ class Brain:
         state = events.load_state()
         resume = None
         within = self.cfg["brain"]["resume_within_hours"] * 3600
-        if state.get("brain_session_id") and time.time() - state.get("brain_last_active", 0) < within:
+        if self.persist and state.get("brain_session_id") and time.time() - state.get("brain_last_active", 0) < within:
             resume = state["brain_session_id"]
         try:
             await self._connect(resume)
@@ -251,6 +256,11 @@ class Brain:
     def busy(self) -> bool:
         return not self._turn_done.is_set()
 
+    def waiting_on_tool(self) -> float:
+        """How long the current tool call has been running, in seconds (0 when none is): a message injected
+        now would wait at least that long, since Claude reads it only between steps."""
+        return time.monotonic() - self._tool_since if self._tool_since and self.busy else 0.0
+
     def note(self, text: str) -> None:
         """Context to prepend to the next message (e.g. what the instant path already did)."""
         self._notes.append(text)
@@ -281,7 +291,8 @@ class Brain:
                 events.emit("brain_restart", reason="client not running")
                 await self.stop()
                 await self.start()
-            events.emit("request", source=source, text=text)
+            events.emit("request", source=source, text=text, **({} if self.persist else {"lane": "side"}))
+            self.request = text
             self._turn_done.clear()
             self._begin_turn()
             await self.client.query(self._with_notes(text))
@@ -350,9 +361,13 @@ class Brain:
                     elif self._pending:
                         events.emit("narration_suppressed", text=" ".join(self._pending)[:300])
                     self._pending = []
+                    self._tool_since = time.monotonic()
+                    self.tool_label = humanize_tool(block.name, block.input)
                     events.emit("tool", name=block.name, input=json.dumps(block.input, ensure_ascii=False)[:2000],
-                                desc=describe_tool(block.name, block.input), label=humanize_tool(block.name, block.input))
+                                desc=describe_tool(block.name, block.input), label=self.tool_label)
         elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
+            if any(isinstance(b, ToolResultBlock) for b in msg.content):
+                self._tool_since = None
             for block in msg.content:
                 if isinstance(block, ToolResultBlock) and block.is_error:
                     events.emit("tool_error", content=str(block.content)[:1000])
@@ -362,7 +377,9 @@ class Brain:
                 self._pending = []
                 await self._speak(self._last_text)
             self.session_id = msg.session_id
-            events.save_state(brain_session_id=msg.session_id, brain_last_active=time.time())
+            self._tool_since = None
+            if self.persist:
+                events.save_state(brain_session_id=msg.session_id, brain_last_active=time.time())
             events.emit("turn_done", session=msg.session_id, turns=msg.num_turns, ms=msg.duration_ms,
                         cost_usd=msg.total_cost_usd, error=msg.is_error, subtype=msg.subtype)
             self._turn_done.set()

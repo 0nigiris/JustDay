@@ -27,6 +27,9 @@ Singleton {
     function dismissNotification() { notification = null; notifExpanded = false }
     property var alarm: null          // the timer or alarm ringing right now
     property var reminders: []        // timers, alarms and reminders still waiting, soonest first
+    property var jobs: []             // background jobs: {id, title, state, started, ended, code}
+    readonly property var runningJob: jobs.find(j => j.state === "running") || null
+    function jobTime(j) { return j ? fmtTime(((j.ended || tick) - j.started)) : "" }
     readonly property var runningTimer: {   // the soonest countdown, for the collapsed island
         for (const r of reminders)
             if (r.kind === "timer" && r.at - tick < 3600) return r
@@ -41,7 +44,7 @@ Singleton {
                        : m + ":" + String(s).padStart(2, "0")
     }
     property real tick: Date.now() / 1000          // one clock for every countdown on screen
-    Timer { running: jd.reminders.length > 0; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
+    Timer { running: jd.reminders.length > 0 || !!jd.runningJob; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
     function dismissAlarm(id) { send({ cmd: "alarm_dismiss", id: id || "" }) }
 
     property var nextEvent: null      // calendar event starting within 2 hours
@@ -328,6 +331,7 @@ Singleton {
         }
         if (m.video !== undefined) { video = m.video; if (!m.video) videoBig = false }
         if (m.reminders !== undefined) reminders = m.reminders
+        if (m.jobs !== undefined) jobs = m.jobs || []
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
             dstate = m.state

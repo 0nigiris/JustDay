@@ -20,8 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
-from . import (audio, calendar_lane, config, events, fastpath, mail, media, namespot, palette, reminders,
-               voiceprint, workers)
+from . import (audio, calendar_lane, config, events, fastpath, jobs, mail, media, namespot, numerals, palette,
+               reminders, voiceprint, workers)
 from .i18n import lang, t
 from . import brain as brain_mod
 from .brain import Brain
@@ -167,6 +167,9 @@ def open_notification_app(app: str, desktop_id: str) -> str:
     return "not found"
 
 
+SIDE_AFTER_S = 5.0   # a tool call this old means an injected request would sit and wait: use the side session
+
+
 def settings_snapshot(cfg: dict) -> dict:
     b, m = cfg["brain"], cfg["mail"]
     return {"provider": b.get("provider", "claude"), "model": b["model"], "assistant_name": cfg["user"]["assistant_name"],
@@ -280,6 +283,9 @@ class Daemon:
         self.stt = STT(self.cfg["stt"])
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
+        self.side: Brain | None = None             # a second session, for what must not wait for the first one
+        self._side_close: asyncio.TimerHandle | None = None
+        self.jobs = jobs.Jobs(on_change=lambda: self.publish(jobs=self.jobs.state()), on_done=self._job_done)
         self._subs: set[asyncio.StreamWriter] = set()
         self._notify_proc: asyncio.subprocess.Process | None = None
         self._state = "idle"
@@ -680,9 +686,82 @@ class Daemon:
             if await self.handle_mail(text) or gen != self._cancel_gen:
                 return
         if self.brain.busy:
-            await self.brain.inject(text, source)  # keep the running task; Claude handles both
+            if self.brain.waiting_on_tool() >= SIDE_AFTER_S:
+                # the main session sits inside a long command (an upgrade, a build): an injected message would
+                # wait for it to end, so a second session takes this one now
+                asyncio.create_task(self.run_side_turn(text, source))
+            else:
+                await self.brain.inject(text, source)  # it reads it at its next step, in a second or two
             return
         asyncio.create_task(self.run_turn(text, source))
+
+    async def run_side_turn(self, text: str, source: str = "voice") -> None:
+        """The same assistant — persona, tools, memory — in a second session, told what the first is busy with.
+        It is started on demand and closed after five idle minutes."""
+        if self._side_close:
+            self._side_close.cancel()
+        if self.side is None:
+            self.side = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve,
+                              asker=self._answer_questions, persist=False)
+        if self.side.busy:
+            await self.side.inject(text, source)
+            return
+        busy_with = brain_mod.one_line(self.brain.request, 160) if self.brain.request else ""
+        context = (f"[Параллельно. Основная сессия сейчас занята просьбой «{busy_with}» и ждёт долгую команду"
+                   + (f" ({self.brain.tool_label})" if self.brain.tool_label else "") +
+                   ". Ты — вторая сессия того же ассистента: те же инструменты, память и характер. Выполни только "
+                   "эту новую просьбу; основную задачу не трогай и не повторяй. Если просьба о ней («как там "
+                   "обновление?») — ответь по тому, что видно (`justday job list`, процессы), ничего не перезапуская.]\n")
+        self.state = "thinking"
+        spoken_before, gen = self._spoken, self._cancel_gen
+        try:
+            await self.side.ask(context + text, source=source)
+        except Exception as e:  # noqa: BLE001 — a failed side turn must not take the daemon down
+            events.emit("turn_failed", error=repr(e), lane="side")
+            if gen == self._cancel_gen:
+                await self.say(t("Не получилось связаться с мозгом. Подробности в логе."))
+        if gen != self._cancel_gen:
+            return
+        await self.wait_speech_done()
+        self.state = "thinking" if self.brain.busy else "idle"
+        if self._spoken == spoken_before:
+            await self.earcon("done")
+        self._side_close = asyncio.get_running_loop().call_later(300, lambda: asyncio.create_task(self._close_side()))
+
+    async def _close_side(self) -> None:
+        side, self.side = self.side, None
+        if side and not side.busy:
+            await side.stop()
+        elif side:
+            self.side = side   # busy again after all: keep it
+
+    async def start_job(self, title: str, command: str, cwd: str = "") -> dict:
+        """Wrapping a command in a job must not be a way around the approval rules: the command inside gets
+        the same check a direct call would, and a risky one waits for the person's «да» first."""
+        from . import providers
+
+        if providers.risky("Bash", {"command": command}, Brain._ask_rules()):
+            desc = f"{t('Фоновая задача')} «{title}»: {command[:300]}"
+            events.emit("approval_request", tool="Bash", desc=desc, reason="background job")
+            ok = await self._approve(desc, "", True)
+            events.emit("approval_result", tool="Bash", allowed=ok)
+            if not ok:
+                return {"ok": False, "error": "the user declined this command; do not run it another way"}
+        job = await self.jobs.start(title, command, cwd)
+        return {"ok": True, "id": job["id"], "log": job["log"]}
+
+    def _job_done(self, job: dict) -> None:
+        """A background job ended: a sound now, and the brain reports it in its own words when it is free."""
+        asyncio.create_task(self.earcon("done" if job["state"] == "done" else "error"))
+        if job["state"] == "stopped":
+            return  # the person stopped it: nothing to report
+        took = numerals.duration(int(job["ended"] - job["started"]))
+        how = t("закончилась успешно") if job["state"] == "done" else t("закончилась с ошибкой (код {n})", n=job["code"])
+        self._event_queue.put_nowait(
+            f"[Событие JustDay] Фоновая задача «{job['title']}» {how} за {took}. Команда: `{job['command'][:300]}`.\n"
+            f"Последние строки журнала:\n{self.jobs.tail(job['id'])}\n"
+            f"Коротко, одной-двумя фразами, доложи пользователю итог; если ошибка — в чём она и что предлагаешь. "
+            f"Весь журнал: `justday job log {job['id']}`.")
 
     async def _record_fixed(self, seconds: float) -> np.ndarray:
         self.stop_speaking()
@@ -834,6 +913,8 @@ class Daemon:
         while not self._event_queue.empty():
             self._event_queue.get_nowait()
         await self.brain.interrupt()
+        if self.side:
+            await self.side.interrupt()
         self.state = "idle"
         self.publish(detail=t("Отменено"), kind="tool")
         await self.earcon("error")
@@ -853,7 +934,7 @@ class Daemon:
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
             return ""
         await self.wait_speech_done()
-        self.state = "idle"
+        self.state = "thinking" if self.side and self.side.busy else "idle"
         if self._spoken == spoken_before and source != "event":
             await self.earcon("done")  # silent success
         if source == "voice" and reply.rstrip().endswith("?") and self.cfg["audio"]["followup_seconds"] > 0:
@@ -1605,7 +1686,7 @@ class Daemon:
                 hello = {"state": self.state, "workers": self._workers_active, "settings": settings_snapshot(self.cfg),
                          "history": recent_history(), "weather": self.weather, "update": self.update_info,
                          "player": self._player_state, "video": self.island_video,
-                         "reminders": self._reminders_state()}
+                         "reminders": self._reminders_state(), "jobs": self.jobs.state()}
                 writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
                 await writer.drain()
                 await reader.read()  # hold the connection until the client goes away
@@ -1717,6 +1798,14 @@ class Daemon:
             elif cmd == "volume":  # the island's slider: how loud JustDay itself is
                 resp = {"ok": True, "volume": self.set_volume(int(req.get("value", 100)))}
                 self.publish(settings=settings_snapshot(self.cfg))
+            elif cmd == "job_start":  # `justday job start "Обновление системы" -- jii update --json`
+                resp = await self.start_job(req.get("title", ""), req["command"], req.get("cwd", ""))
+            elif cmd == "job_list":
+                resp = {"ok": True, "jobs": [dict(j, tail=self.jobs.tail(j["id"], 3)) for j in self.jobs.state()]}
+            elif cmd == "job_log":
+                resp = {"ok": True, "log": self.jobs.tail(req.get("id", ""), int(req.get("lines", 40)))}
+            elif cmd == "job_stop":
+                resp = {"ok": self.jobs.stop(req.get("id", ""))}
             elif cmd == "media":  # player buttons and `justday player ACTION`
                 resp = await self.media_control(req.get("action", "status"), req.get("value"))
             elif cmd == "reminder_set":  # `justday timer 10m` and the island's own buttons

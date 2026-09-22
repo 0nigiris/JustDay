@@ -545,5 +545,9 @@
  "прошлые": "earlier",
  "сигналы": "signals",
  "строка": "line",
- "тишина": "silence"
+ "тишина": "silence",
+ "в фоне": "in the background",
+ "готово": "done",
+ "остановлено": "stopped",
+ "ошибка": "failed"
 }
