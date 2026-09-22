@@ -600,13 +600,23 @@ Item {
                 }
                 Row {
                     title: JD.tr("Отвечать голосом")
-                    subtitle: win.get("tts.engine") === "none" ? JD.tr("Ответы только текстом на острове") : JD.tr("Ответы звучат и показываются на острове")
+                    subtitle: win.get("tts.muted") === true || win.get("tts.engine") === "none"
+                        ? JD.tr("Ответы только текстом на острове. Голосом: «говори»")
+                        : JD.tr("Ответы звучат и показываются на острове. Замолчать: «молчи»")
                     Toggle {
-                        checked: win.get("tts.engine") !== "none"
+                        checked: win.get("tts.muted") !== true && win.get("tts.engine") !== "none"
                         onToggled: v => {
-                            if (v) win.set("tts.engine", win.get("tts.previous_engine") || "silero")
-                            else { win.set("tts.previous_engine", win.get("tts.engine")); win.set("tts.engine", "none") }
+                            win.set("tts.muted", !v)
+                            if (v && win.get("tts.engine") === "none") win.set("tts.engine", win.get("tts.previous_engine") || "silero")
                         }
+                    }
+                }
+                Row {
+                    title: JD.tr("Молчать во время игры")
+                    subtitle: JD.tr("Пока запущена игра, ответы приходят текстом: видеокарта достаётся игре")
+                    Toggle {
+                        checked: win.get("tts.mute_in_games") !== false
+                        onToggled: v => win.set("tts.mute_in_games", v)
                     }
                 }
             }

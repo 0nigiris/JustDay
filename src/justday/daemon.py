@@ -20,8 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
-from . import (audio, calendar_lane, config, events, fastpath, jobs, mail, media, namespot, numerals, palette,
-               reminders, voiceprint, workers)
+from . import (audio, briefing, calendar_lane, config, desktop, events, fastpath, jobs, mail, media, namespot,
+               numerals, palette, reminders, voiceprint, workers)
 from .aio import spawn
 from .i18n import lang, t
 from . import brain as brain_mod
@@ -178,7 +178,9 @@ def settings_snapshot(cfg: dict) -> dict:
             "earcons": cfg["audio"]["earcons"], "notifications": cfg["ui"]["notifications"],
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
-            "microphone": cfg["audio"].get("microphone", True), "voice": cfg["tts"]["engine"] != "none",
+            "microphone": cfg["audio"].get("microphone", True),
+            "voice": cfg["tts"]["engine"] != "none" and not cfg["tts"].get("muted"),
+            "mute_in_games": cfg["tts"].get("mute_in_games", True),
             "volume": int(cfg["audio"].get("volume", 100)),
             "tts_engine": cfg["tts"]["engine"], "tts_previous": cfg["tts"].get("previous_engine", ""),
             "hotkeys": _hotkeys(), "media": cfg["media"]}
@@ -401,7 +403,53 @@ class Daemon:
             pass
 
     # ---------------- speech output ----------------
-    async def _on_brain_text(self, text: str) -> None:
+    def silent(self) -> str:
+        """Why the answer is only shown, not spoken: "off", "game", or "" when the voice is on."""
+        t = self.cfg["tts"]
+        if t["engine"] == "none" or t.get("muted"):
+            return "off"
+        if t.get("mute_in_games", True) and desktop.running_game():
+            return "game"
+        return ""
+
+    async def morning(self) -> bool:
+        """The first «привет» of the day: the day itself, said before the model is even woken."""
+        self.state = "thinking"
+        loop = asyncio.get_running_loop()
+        city = self.cfg["island"]["city"]
+        if self.weather is None and city:  # the island polls it every 15 min, but not before the first hello
+            try:
+                self.weather = await loop.run_in_executor(None, fetch_weather, city)
+            except Exception as e:  # noqa: BLE001 — offline: the briefing simply has no weather in it
+                log.info("briefing without weather: %s", type(e).__name__)
+        try:
+            text = await loop.run_in_executor(None, briefing.compose, self.cfg, self.weather)
+        except Exception:
+            log.exception("briefing failed")
+            self.state = "idle"
+            return False
+        events.emit("briefing", text=text)
+        self.brain.note(f"[Утренний брифинг уже сказан: «{text}» Не повторяй его.]")
+        await self.say(text)
+        self.state = "thinking" if self.brain.busy else "idle"
+        return True
+
+    async def set_voice(self, on: bool) -> None:
+        """«молчи» / «говори»: only the voice stops — the island still shows every answer."""
+        config.set_value("tts", "muted", not on)
+        self.cfg["tts"]["muted"] = not on
+        said = t("голос включён") if on else t("голос выключен")
+        events.emit("fast", text=said, desc=said)
+        self.publish(detail=said, kind="tool")
+        self.brain.note(f"[Уже выполнено: {said}. Не повторяй.]")
+        if on:
+            await self.say(said)
+        self.state = "thinking" if self.brain.busy else "idle"
+
+    async def _on_brain_text(self, text: str, force: bool = False) -> None:
+        if not force and (why := self.silent()):
+            events.emit("say_suppressed", text=text[:200], reason=why)
+            return
         if ACK.match(text.strip()) and len(text) < 60:
             events.emit("ack_suppressed", text=text)
             return
@@ -421,8 +469,8 @@ class Daemon:
                                            bool(self.tts.cfg.get("numbers", True)))):
             self._speech_q.put_nowait(s)
 
-    async def say(self, text: str) -> None:
-        await self._on_brain_text(text)
+    async def say(self, text: str, force: bool = False) -> None:
+        await self._on_brain_text(text, force)
 
     def stop_speaking(self) -> None:
         self._speech_gen += 1
@@ -655,6 +703,11 @@ class Daemon:
                 await self.music.pause()
                 return
             await self.cancel_all()
+            return
+        if briefing.wanted(text) and briefing.due() and await self.morning():
+            return
+        if (on := fastpath.voice_switch(text)) is not None:
+            await self.set_voice(on)
             return
         if await self.media_fast(text):
             return
@@ -1723,12 +1776,12 @@ class Daemon:
                     resp = {"ok": True, "result": reply}
             elif cmd == "say":
                 self.stop_speaking()
-                await self.say(req["text"])
+                await self.say(req["text"], force=True)  # `justday say` and voice previews are heard even when muted
                 await self.wait_speech_done()
                 resp = {"ok": True}
             elif cmd == "status":
                 resp = {"ok": True, "state": self.state, "brain_busy": self.brain.busy,
-                        "session": self.brain.session_id, "wakeword": bool(self._wake),
+                        "session": self.brain.session_id, "wakeword": bool(self._wake), "silent": self.silent(),
                         "mic_source": self.mic.source, "model": self.cfg["brain"]["model"]}
             elif cmd in ("approve", "deny"):
                 pending = self._approval is not None and not self._approval.done()

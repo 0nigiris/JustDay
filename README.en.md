@@ -91,7 +91,7 @@ Remembers people (“Ilya — the one in Poland, message him on Discord”), hab
 <td valign="top">
 
 **🎮 Plays**<br>
-Launches games from Steam and other launchers. In Minecraft — through its own bridge mod with Baritone: chop wood, craft tools.
+Launches games from Steam, Heroic and other launchers — by the name you call them.
 
 </td>
 <td valign="top">
@@ -105,7 +105,7 @@ Hands coding tasks to background Claude Code sessions, checks the result itself 
 <td valign="top">
 
 **🗣️ A live voice**<br>
-Qwen3-TTS on your GPU: “Jarvis”, “Friday”, a voice from a description or from a recording. It knows your voice and can ignore others.
+Qwen3-TTS on your GPU: “Jarvis”, a voice from a description or from a recording. It knows your voice and can ignore others.
 
 </td>
 <td valign="top">
@@ -122,6 +122,12 @@ Qwen3-TTS on your GPU: “Jarvis”, “Friday”, a voice from a description or
 </td>
 </tr>
 <tr>
+<td valign="top">
+
+**🌅 Morning briefing**<br>
+The first “hello” of the day gets the day back: the weather, your next meeting, new mail and whatever was left from yesterday — in one sentence, without asking the model.
+
+</td>
 <td valign="top">
 
 **⏱ Timers and alarms**<br>

@@ -102,7 +102,7 @@ DEFAULTS: dict = {
     },
     "tts": {
         "engine": "silero",  # qwen (neural, justday-voice service) | elevenlabs | silero | espeak | none
-        "voice": "jarvis",  # neural voice id: built-in jarvis, friday, or one you designed/cloned
+        "voice": "jarvis",  # neural voice id: the built-in jarvis, or one you designed/cloned
         "neural_quality": "fast",  # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
         "silero_model_url": "https://models.silero.ai/models/tts/ru/v5_5_ru.pt",
         "speaker": "eugene",
@@ -114,6 +114,8 @@ DEFAULTS: dict = {
         "eleven_voice": "JBFqnCBsd6RMkjVDRZzb",  # `justday voice eleven` lists the voices on your account
         "eleven_model": "eleven_flash_v2_5",  # flash = fastest; eleven_multilingual_v2 = richer, slower
         "previous_engine": "",  # remembered when voice replies are switched off
+        "muted": False,  # answers are shown on the island but not spoken («отключи голос»)
+        "mute_in_games": True,  # and it falls silent by itself while a game is running: the GPU is the game's
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase
     # wake_names: which names wake it (empty = the assistant name only)

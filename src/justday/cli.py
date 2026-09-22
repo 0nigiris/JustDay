@@ -317,10 +317,6 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", required=True, help="who, as the user calls them")
     sp.add_argument("--via", default="", help="Discord, Telegram, WhatsApp…")
     sp.add_argument("--text", required=True, help="the exact text that will be sent")
-    sp = sub.add_parser("mc", help="Minecraft bridge: state | find block=… | baritone command='mine 3 oak_log' | wait | "
-                                   "craft item=… count=N | place item=… | use x= y= z= | mine x= y= z= | select item=… | look | close | stop | ping")
-    sp.add_argument("command")
-    sp.add_argument("args", nargs="*", help="key=value")
     sp = sub.add_parser("studio", help="local creative studio: status | image | edit | upscale | nobg | video | animate | "
                                        "music | 3d | speech | subs | cut | join | audio | burn | vertical | nopause | "
                                        "speed | gif | slideshow | info | jobs | job ID | stop  (key=value options)")
@@ -352,9 +348,10 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--address", help="setup without prompts: address here, app password on stdin")
     sp = sub.add_parser("settings-data", help="JSON snapshot for the Settings window")
     sp = sub.add_parser("voice", help="voices: list | design NAME DESCRIPTION | record SECONDS | clone NAME WAV TEXT | "
-                                      "delete ID | preview TEXT | speed 1.2 | volume 80 | eleven [VOICE_ID] | key (reads stdin)")
+                                      "delete ID | preview TEXT | speed 1.2 | volume 80 | eleven [VOICE_ID] | "
+                                      "key (reads stdin) | mute | unmute | games [on|off]")
     sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "volume",
-                                       "eleven", "key"])
+                                       "eleven", "key", "mute", "unmute", "games"])
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("job", help="long commands in the background, so the assistant stays free: "
                                     "`justday job start \"Обновление системы\" -- jii update --json` · list · log ID · stop ID")
@@ -520,6 +517,17 @@ def main(argv: list[str] | None = None) -> None:
                 _print(control("volume", timeout=10, value=max(0, min(100, int(float(args[0]))))))
             else:
                 _print({"volume": config.load()["audio"].get("volume", 100)})
+        elif a.action in ("mute", "unmute"):  # answers stay on the island, they are just not spoken
+            config.set_value("tts", "muted", a.action == "mute")
+            control("reload_settings", timeout=10)
+            _print({"muted": a.action == "mute"})
+        elif a.action == "games":  # fall silent by itself while a game is running (the GPU is the game's)
+            if args:
+                config.set_value("tts", "mute_in_games", args[0] in ("on", "1", "true", "yes"))
+                control("reload_settings", timeout=10)
+            from . import desktop
+
+            _print({"mute_in_games": config.load()["tts"].get("mute_in_games", True), "game": desktop.running_game()})
         elif a.action == "key":  # the ElevenLabs key, read from stdin so it never lands in the shell history
             key = sys.stdin.read().strip()
             config.set_secret("ELEVENLABS_API_KEY", key)
@@ -617,8 +625,6 @@ def main(argv: list[str] | None = None) -> None:
         r = control("mail_compose", timeout=120, to=a.to, about=a.about, attach=[os.path.abspath(f) for f in a.attach])
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
         sys.exit(0 if r.get("ok") else 1)
-    elif a.cmd == "mc":
-        _mc_cmd(a)
     elif a.cmd == "studio":
         _studio_cmd(a)
     elif a.cmd in ("play", "video"):
@@ -963,34 +969,6 @@ def _model_cmd(a) -> None:
             print(f"внимание: {e}")
         print(f"мозг: {name} / {model}. Память, навыки и инструменты остаются те же.")
         _restart_hint()
-
-
-def _mc_cmd(a) -> None:
-    """One request to the JustDay Bridge mod inside Minecraft (Unix socket, owner-only)."""
-    import re
-
-    req: dict = {"cmd": a.command}
-    for kv in a.args:
-        k, _, v = kv.partition("=")
-        req[k] = int(v) if re.fullmatch(r"-?\d+", v) else float(v) if re.fullmatch(r"-?\d+\.\d*", v) else v
-    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "justday-minecraft.sock")
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(float(req.get("timeout", 60)) + 20)
-    try:
-        s.connect(path)
-    except OSError:
-        _print({"ok": False, "error": "Minecraft with the JustDay Bridge mod is not running (install: minecraft/install.sh)"})
-        sys.exit(1)
-    s.sendall((json.dumps(req, ensure_ascii=False) + "\n").encode())
-    buf = b""
-    while not buf.endswith(b"\n"):
-        chunk = s.recv(65536)
-        if not chunk:
-            break
-        buf += chunk
-    r = json.loads(buf or b'{"ok": false, "error": "no answer"}')
-    _print(r)
-    sys.exit(0 if r.get("ok") else 1)
 
 
 def _secret_cmd(a) -> None:

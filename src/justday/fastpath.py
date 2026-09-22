@@ -106,6 +106,20 @@ MEDIA = [
 ]
 
 
+# The assistant's own voice, not the system volume — the daemon owns that switch, so it handles these itself.
+VOICE_OFF = re.compile(r"^(выключи|отключи|убери) голос$|^(не говори|молчи|только текст\w*)$|"
+                       r"^(voice off|be quiet|stop talking|text only)$")
+VOICE_ON = re.compile(r"^(включи|верни) голос$|^говори$|^(voice on|speak up|talk to me)$")
+
+
+def voice_switch(text: str) -> bool | None:
+    """True for «говори», False for «молчи», None when the phrase is not about the voice at all."""
+    t = _clean(text)
+    if VOICE_OFF.match(t):
+        return False
+    return True if VOICE_ON.match(t) else None
+
+
 last_icon = ""  # freedesktop icon of the last handled command (shown by the Dynamic Island)
 
 

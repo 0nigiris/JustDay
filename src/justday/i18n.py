@@ -62,9 +62,17 @@ EN = {
     "сегодня": "today", "завтра": "tomorrow", "на этой неделе": "this week",
     "событие": "event", "события": "events", "событий": "events",
     "Без названия": "Untitled",
+    # morning briefing
+    "{city}: {temp}°, {text}, днём до {max}°.": "{city}: {temp}°, {text}, up to {max}° during the day.",
+    "В {time} — {title}.": "At {time} — {title}.", "Дальше сегодня ещё {n}.": "{n} more later today.",
+    "В календаре на сегодня пусто.": "Nothing in the calendar today.",
+    "Важных писем: {n}.": "Important mail: {n}.",
+    "Со вчера висит: {what}.": "Left from yesterday: {what}.",
+    "Со вчера висит {n}, первое — {what}.": "{n} left from yesterday, first — {what}.",
     # instant commands
     "пауза": "paused", "воспроизведение": "playing", "следующий трек": "next track", "предыдущий трек": "previous track",
     "громкость +10%": "volume +10%", "громкость −10%": "volume −10%", "звук выключен": "muted", "звук включён": "unmuted",
+    "голос выключен": "voice off — answers stay on the island", "голос включён": "voice on",
     "экран заблокирован": "screen locked", "громкость {n}%": "volume {n}%", "открыл {what}": "opened {what}",
     "запустил {what}": "launched {what}", "закрыл {what}": "closed {what}", "свернул {what}": "minimized {what}",
     "переключил на {what}": "switched to {what}",

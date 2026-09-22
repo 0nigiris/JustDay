@@ -176,6 +176,40 @@ def list_games() -> list[dict]:
     return sorted(games.values(), key=lambda g: g["name"].lower())
 
 
+_RUNTIME = re.compile(r"^(Proton|Steam.?Linux.?Runtime|Steamworks|SteamVR)", re.I)
+_WINE = {"wine", "wine64", "wine-preloader", "wine64-preloader", "gamescope"}
+_running_cache: tuple[float, str] = (0.0, "")
+
+
+def running_game() -> str:
+    """The name of the game being played right now, or "" — one pass over /proc, cached for a few seconds.
+
+    Steam starts every game through `reaper SteamLaunch AppId=…`; Heroic and Lutris go through wine.
+    Only the game's own process matches, never the launcher sitting in the tray."""
+    global _running_cache
+    if time.monotonic() - _running_cache[0] < 5:
+        return _running_cache[1]
+    name = ""
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            argv = proc.joinpath("cmdline").read_bytes().decode("utf-8", "replace").split("\0")
+        except OSError:
+            continue
+        exe = argv[0]
+        appid = next((a.removeprefix("SteamLaunch AppId=") for a in argv[1:3] if a.startswith("SteamLaunch AppId=")), "")
+        if appid:
+            name = next((g["name"] for g in list_games() if g["id"] == appid), f"Steam {appid}")
+            break
+        if (m := re.search(r"steamapps/common/([^/]+)/", exe)) and not _RUNTIME.match(m.group(1)):
+            name = m.group(1)
+        elif not name and os.path.basename(exe) in _WINE:
+            name = "Windows game"
+    _running_cache = (time.monotonic(), name)
+    return name
+
+
 def launch_game(query: str) -> dict:
     games = list_games()
     names = {g["name"].lower(): g for g in games}
