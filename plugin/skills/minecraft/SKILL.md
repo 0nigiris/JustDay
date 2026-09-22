@@ -5,7 +5,7 @@ description: Play Minecraft Java as the user's own character through the JustDay
 
 # Minecraft (JustDay Bridge + Baritone)
 
-The game must be running with the bridge mod (Fabric 1.21.10). `justday mc ping` → `{"in_world": true}`. Not installed → tell the user to run `~/JustDay/minecraft/install.sh` and restart Minecraft (don't do it mid-game yourself).
+The game must be running with the bridge mod (Fabric 1.21.10). `justday mc ping` → `{"in_world": true}`. Not installed → tell the user to run `~/.local/share/justday/app/minecraft/install.sh` and restart Minecraft (don't do it mid-game yourself).
 
 Everything is a text command — **no screenshots needed** for Minecraft; use `look` only if the bridge can't answer.
 Every command prints JSON; `ok:false` + `error` explains what went wrong. Long actions return a `state` with position, health and inventory.

@@ -15,7 +15,7 @@ _listeners: list = []
 
 
 def subscribe(fn) -> None:
-    """fn(kind, data) is called for every event in the emitting thread (the daemon uses it for the overlay)."""
+    """fn(kind, data) is called for every event in the emitting thread (the daemon forwards them to the island)."""
     _listeners.append(fn)
 
 

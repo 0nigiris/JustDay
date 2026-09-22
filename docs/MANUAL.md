@@ -142,7 +142,7 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 4. Ставит kwin-mcp через `uv tool`, версия закреплена: `plugin/bin/kwin_live.py` опирается на его внутренности.
 5. Создаёт Python-окружение (`uv sync`: faster-whisper, torch CPU для Silero, Agent SDK, openWakeWord) и команды `justday` и `jarvis` в `~/.local/bin`.
 6. Пишет `~/.config/justday/config.toml` (находит USB-микрофон) и профиль `~/.local/share/justday/brain/CLAUDE.md`.
-7. Включает сервисы `justday.service` (демон) и `justday-island.service` (Dynamic Island на Quickshell; без Quickshell — простой индикатор `justday-overlay.service`).
+7. Включает сервисы `justday.service` (демон) и `justday-island.service` (Dynamic Island на Quickshell; сам Quickshell установщик ставит: на Fedora — из COPR, на Arch — из репозитория).
 8. Регистрирует горячие клавиши KDE: Meta+J и F19 для разговора, Meta+Shift+J для отмены. При переустановке ваши сочетания не трогает.
 9. При первой установке запускает **мастер настройки** `justday setup` (8 шагов, Enter оставляет значение по умолчанию):
    1. язык: русский или English;
@@ -266,7 +266,7 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 
 Все изменения применяются сразу; если нужен перезапуск, появится кнопка.
 
-Вне острова клики проходят сквозь него. Открыть панель клавишей: назначьте в KDE команду `qs -p ~/JustDay/island ipc call island toggle`. Если Quickshell не установлен, работает простой GTK-индикатор (`src/justday/overlay.py`).
+Вне острова клики проходят сквозь него. Открыть панель клавишей: назначьте в KDE команду `qs -p ~/.local/share/justday/app/island ipc call island toggle`.
 
 ### Характер
 
@@ -342,7 +342,7 @@ sudo udevadm control --reload && sudo udevadm trigger --name-match=uinput
 #### Minecraft: мод-мост
 В Minecraft Java ассистент не смотрит на картинку, а получает точные данные от клиентского мода **JustDay Bridge** (`minecraft/`, Fabric 1.21.10). Мод знает координаты, блоки вокруг, инвентарь, мобов и прицел, умеет крафтить настоящими кликами в инвентаре и на верстаке, ставить и использовать блоки. Ходьбу и добычу выполняет [Baritone](https://github.com/cabaletta/baritone). Навык `plugin/skills/minecraft` содержит пошаговый план «каменные инструменты с нуля».
 ```bash
-~/JustDay/minecraft/install.sh          # собрать мод, скачать Baritone 1.16.0 (SHA-1 проверяется), положить в mods
+~/.local/share/justday/app/minecraft/install.sh          # собрать мод, скачать Baritone 1.16.0 (SHA-1 проверяется), положить в mods
 justday mc ping                          # Minecraft запущен и мир открыт?
 justday mc state                         # координаты, здоровье, инвентарь, мобы рядом
 justday mc find block='#log' radius=48   # ближайшие брёвна
@@ -667,7 +667,6 @@ systemctl --user restart justday && justday new-session   # применить
 | `plugin/bin/relmouse.py` | виртуальная относительная мышь (uinput) для камеры в играх |
 | `tests/ui/fake_daemon.py`, `tests/ui/island_session.py` | проверка острова без живого демона в виртуальном KWin ([раздел 11](#11-как-расширять)) |
 | `voice/server.py`, `voice/voices/*` | служба нейроголоса, встроенные голоса |
-| `src/justday/overlay.py` | запасной простой индикатор на GTK4 layer-shell |
 | `plugin/bin/kwin_live.py` | kwin-mcp, заранее подключённый к рабочему столу, плюс инструменты `look`/`act` с метками |
 | `brain/PERSONA.md` | характер и правила: молчать на действиях, скорость, приватность, безопасность |
 | `brain/settings.json` | разрешения, запреты, отключение телеметрии |
@@ -753,7 +752,7 @@ journalctl --user -u justday-ollama -f
 | Кликает мимо | попросите «посмотри на экран»; для Qt-приложений проверьте `[desktop] accessibility = true`; Electron-приложения (Discord, браузеры) меток не дают — там горячие клавиши |
 | Говорит лишнее | `brain/PERSONA.md`, затем `justday new-session` |
 | Голос роботизированный или молчит | Настройки → Голос и звук: движок «Нейросетевой»; `systemctl --user status justday-voice`; не хватает видеопамяти при запущенной игре — временно Silero |
-| Остров не виден | `systemctl --user status justday-island`; `journalctl --user -u justday-island`; нужен `quickshell` (иначе `justday-overlay` на GTK) и шрифт Inter |
+| Остров не виден | `systemctl --user status justday-island`; `journalctl --user -u justday-island`; нужны `quickshell` и шрифт Inter |
 | Не реагирует на мой голос / «Голос не узнан» | Настройки → Голос и звук → «Заново» (перезапись профиля в тихой комнате) или режим «Нет»; `justday voiceprint reset` |
 | Уведомлений нет на острове | Настройки → Виджеты → «Уведомления на острове»; нужен `dbus-monitor` (пакет `dbus-tools`) |
 | Календарь молчит | `justday calendar test`; ссылка должна быть «закрытым адресом iCal», а не публичным |
@@ -783,8 +782,8 @@ JustDay сам раз в 6 часов проверяет GitHub. Если выш
 justday update --check                             # есть ли что-то новое и что именно
 justday update                                     # git pull + install.sh (мастер повторно не запускается)
 claude update                                      # обновление Claude Code
-~/JustDay/uninstall.sh                             # удалить сервисы, горячие клавиши, окружение, kwin-mcp
-~/JustDay/uninstall.sh --purge                     # плюс конфиг, модели (и локальную), память, журнал, ключи
+~/.local/share/justday/app/uninstall.sh    # удалить сервисы, горячие клавиши, окружение, kwin-mcp
+~/.local/share/justday/app/uninstall.sh --purge                     # плюс конфиг, модели (и локальную), память, журнал, ключи
 ```
 
 Лицензия: GNU GPL v3 или новее. © 2026 0nigiris.

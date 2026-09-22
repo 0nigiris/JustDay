@@ -16,6 +16,7 @@ import uuid
 from collections.abc import Callable
 
 from . import config
+from .aio import spawn
 
 DIR = config.STATE_DIR / "jobs"
 
@@ -46,7 +47,7 @@ class Jobs:
                "state": "running", "started": time.time(), "log": str(log_path), "pid": proc.pid}
         self.items[jid] = job
         self._procs[jid] = proc
-        asyncio.create_task(self._watch(jid, proc, log))
+        spawn(self._watch(jid, proc, log))
         self.on_change()
         return job
 

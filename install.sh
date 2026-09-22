@@ -107,7 +107,6 @@ get_code() {
     if [[ -d "$APP_DIR/.git" ]]; then git -C "$APP_DIR" pull --ff-only; else git clone --depth 1 "$REPO_URL" "$APP_DIR"; fi
     note "$(t 'версия' 'version') $(git -C "$APP_DIR" rev-parse --short HEAD)"
   fi
-  "$APP_DIR/scripts/migrate-from-jarvis.sh" || true
 }
 step "$(t 'Программа' 'Program')" get_code
 
@@ -121,9 +120,8 @@ for pair in pw-record:pipewire-utils wl-copy:wl-clipboard playerctl:playerctl yt
 done
 # the island's typeface
 fc-list : family 2>/dev/null | grep -qx Inter || need+=(rsms-inter-fonts)
-# on-screen indicator fallback: GTK4 + gtk4-layer-shell through the system Python
-/usr/bin/python3 -c 'import gi, cairo; gi.require_version("Gtk4LayerShell", "1.0"); from gi.repository import Gtk4LayerShell' 2>/dev/null \
-  || need+=(gtk4-layer-shell python3-gobject python3-cairo)
+# the island itself (Fedora ships it in a COPR, Arch in its own repos)
+command -v qs >/dev/null || need+=(quickshell)
 # kwin-mcp builds dbus-python, pygobject and pycairo from source: compiler + headers + AT-SPI typelib
 command -v gcc >/dev/null || need+=(gcc)
 command -v pkg-config >/dev/null || need+=(pkgconf-pkg-config)
@@ -135,16 +133,16 @@ command -v dbus-monitor >/dev/null || need+=(dbus-tools)
 if ((${#need[@]})); then
   if command -v dnf >/dev/null; then PM=(sudo dnf install -y)
     need=("${need[@]/#ffmpeg/ffmpeg-free}")   # Fedora's own build; the full one needs RPM Fusion
+    [[ " ${need[*]} " == *" quickshell "* ]] && COPR=errornointernet/quickshell
   elif command -v apt-get >/dev/null; then PM=(sudo apt-get install -y)
     need=("${need[@]/spectacle/kde-spectacle}"); need=("${need[@]/qt6-qttools/qdbus-qt6}"); need=("${need[@]/pkgconf-pkg-config/pkg-config}"); need=("${need[@]/gcc/build-essential}"); need=("${need[@]/dbus-devel/libdbus-1-dev}")
     need=("${need[@]/glib2-devel/libglib2.0-dev}"); need=("${need[@]/cairo-gobject-devel/libcairo2-dev}"); need=("${need[@]/cairo-devel/libcairo2-dev}"); need=("${need[@]/dbus-tools/dbus-bin}")
     need=("${need[@]/gobject-introspection-devel/libgirepository-2.0-dev}"); need=("${need[@]/at-spi2-core-devel/libatspi2.0-dev}")
     need=("${need[@]/pipewire-utils/pipewire-bin}"); need=("${need[@]/gtk3/libgtk-3-bin}"); need=("${need[@]/libnotify/libnotify-bin}"); need=("${need[@]/ImageMagick/imagemagick}")
-    need=("${need[@]/libsecret/libsecret-tools}"); need=("${need[@]/gtk4-layer-shell/gir1.2-gtk4layershell-1.0}"); need=("${need[@]/python3-gobject/python3-gi}")
-    need=("${need[@]/rsms-inter-fonts/fonts-inter}")
+    need=("${need[@]/libsecret/libsecret-tools}"); need=("${need[@]/rsms-inter-fonts/fonts-inter}")
+    need=("${need[@]/quickshell/}")   # not packaged for Debian/Ubuntu yet: see the note at the end
   elif command -v pacman >/dev/null; then PM=(sudo pacman -S --needed --noconfirm)
     need=("${need[@]/pipewire-utils/pipewire}"); need=("${need[@]/fd-find/fd}"); need=("${need[@]/ImageMagick/imagemagick}"); need=("${need[@]/libnotify/libnotify}")
-    need=("${need[@]/python3-gobject/python-gobject}"); need=("${need[@]/python3-cairo/python-cairo}")
     need=("${need[@]/qt6-qttools/qt6-tools}"); need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
     need=("${need[@]/glib2-devel/glib2}"); need=("${need[@]/cairo-gobject-devel/cairo}"); need=("${need[@]/cairo-devel/cairo}"); need=("${need[@]/gobject-introspection-devel/gobject-introspection}")
     need=("${need[@]/at-spi2-core-devel/at-spi2-core}"); need=("${need[@]/dbus-tools/dbus}"); need=("${need[@]/rsms-inter-fonts/inter-font}")
@@ -162,7 +160,9 @@ if ((${#need[@]})); then
       sudo -v </dev/tty || { printf '\n  %s\n\n' "$(t 'Без пароля поставить пакеты не получится.' 'Cannot install the packages without the password.')"; exit 1; }
       printf '\e[1A\e[K\e[1A\e[K\e[1A\e[K'   # the list, the hint and sudo's own prompt: the step line replaces them
     fi
-    install_packages() { "${PM[@]}" "${need[@]}"; note "$(t 'поставлено' 'installed'): ${#need[@]}"; }
+    install_packages() {
+      [[ -n ${COPR:-} ]] && sudo dnf copr enable -y "$COPR"
+      "${PM[@]}" "${need[@]}"; note "$(t 'поставлено' 'installed'): ${#need[@]}"; }
     step "$(t 'Системные пакеты' 'System packages')" install_packages
   else
     row '!' "$Y" "$(t 'Системные пакеты' 'System packages')" "$(t 'некому спросить пароль' 'no terminal to ask for a password')"
@@ -203,7 +203,6 @@ python_env() {
   (cd "$APP_DIR" && uv sync --python 3.12)
   mkdir -p "$HOME/.local/bin"
   ln -sf "$APP_DIR/.venv/bin/justday" "$HOME/.local/bin/justday"
-  ln -sf "$APP_DIR/.venv/bin/justday" "$HOME/.local/bin/jarvis"   # the old name still works
   if ((SECONDS - s < 3)); then note "$(t 'уже на месте' 'up to date')"; else note "$(t 'за' 'in') $(clock $((SECONDS - s)))"; fi
 }
 step "$(t 'Распознавание и голос' 'Speech and voice')" python_env
@@ -246,22 +245,17 @@ services() {
   systemctl --user daemon-reload
   systemctl --user enable justday.service
   systemctl --user restart justday.service
-  # on-screen indicator: the Quickshell Dynamic Island when available, otherwise the simple GTK pill
   if command -v qs >/dev/null; then
     sed "s|@REPO@|$APP_DIR|; s|@QS@|$(command -v qs)|" "$APP_DIR/systemd/justday-island.service" > "$UNIT_DIR/justday-island.service"
-    systemctl --user disable --now justday-overlay.service 2>/dev/null || true
+    systemctl --user disable --now justday-overlay.service 2>/dev/null || true   # the old GTK pill, now gone
     rm -f "$UNIT_DIR/justday-overlay.service"
     systemctl --user daemon-reload
     systemctl --user enable justday-island.service
     systemctl --user restart justday-island.service
     note "$(t 'ассистент · остров' 'assistant · island')"
   else
-    sed "s|@REPO@|$APP_DIR|" "$APP_DIR/systemd/justday-overlay.service" > "$UNIT_DIR/justday-overlay.service"
-    systemctl --user daemon-reload
-    systemctl --user enable justday-overlay.service
-    systemctl --user restart justday-overlay.service
-    note "$(t 'ассистент · простой индикатор' 'assistant · simple indicator')"
-    warn "$(t 'Для Dynamic Island нужен Quickshell' 'The Dynamic Island needs Quickshell') — Fedora: sudo dnf copr enable errornointernet/quickshell && sudo dnf install quickshell · Arch: sudo pacman -S quickshell"
+    note "$(t 'ассистент · без острова' 'assistant · no island')"
+    warn "$(t 'Острову нужен Quickshell — поставьте его и запустите установку ещё раз' 'The island needs Quickshell — install it and run the installer again'): https://quickshell.org/docs/guide/install-setup/"
   fi
   if systemctl --user cat justday-voice.service >/dev/null 2>&1; then
     sed "s|@REPO@|$APP_DIR|" "$APP_DIR/systemd/justday-voice.service" > "$UNIT_DIR/justday-voice.service"

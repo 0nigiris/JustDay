@@ -22,6 +22,7 @@ import numpy as np
 
 from . import (audio, calendar_lane, config, events, fastpath, jobs, mail, media, namespot, numerals, palette,
                reminders, voiceprint, workers)
+from .aio import spawn
 from .i18n import lang, t
 from . import brain as brain_mod
 from .brain import Brain
@@ -341,7 +342,7 @@ class Daemon:
             self._state = value
             self.publish(state=value)
             if self.music.alive and self.cfg["media"]["duck"]:  # music steps back while we talk
-                asyncio.create_task(self.music.duck(value in ("listening", "speaking", "approval")))
+                spawn(self.music.duck(value in ("listening", "speaking", "approval")))
 
     def publish(self, **msg) -> None:
         """Push a status update to every `subscribe` client (the on-screen indicator). Loop thread only."""
@@ -542,7 +543,7 @@ class Daemon:
             if gap < 1.0:
                 if not self._holding:
                     self._holding = True
-                    asyncio.create_task(self._watch_release())
+                    spawn(self._watch_release())
                 return "holding"
             self._listen_cancel.set()  # second tap: finish the utterance now
             return "stop-listening"
@@ -573,7 +574,7 @@ class Daemon:
             return False
         if self._listen_task and not self._listen_task.done():
             return False
-        self._listen_task = asyncio.create_task(self._listen_once(followup, prefill))
+        self._listen_task = spawn(self._listen_once(followup, prefill))
         return True
 
     def _wake_by_name(self, prefill, take_tail) -> None:
@@ -689,11 +690,11 @@ class Daemon:
             if self.brain.waiting_on_tool() >= SIDE_AFTER_S:
                 # the main session sits inside a long command (an upgrade, a build): an injected message would
                 # wait for it to end, so a second session takes this one now
-                asyncio.create_task(self.run_side_turn(text, source))
+                spawn(self.run_side_turn(text, source))
             else:
                 await self.brain.inject(text, source)  # it reads it at its next step, in a second or two
             return
-        asyncio.create_task(self.run_turn(text, source))
+        spawn(self.run_turn(text, source))
 
     async def run_side_turn(self, text: str, source: str = "voice") -> None:
         """The same assistant — persona, tools, memory — in a second session, told what the first is busy with.
@@ -726,7 +727,7 @@ class Daemon:
         self.state = "thinking" if self.brain.busy else "idle"
         if self._spoken == spoken_before:
             await self.earcon("done")
-        self._side_close = asyncio.get_running_loop().call_later(300, lambda: asyncio.create_task(self._close_side()))
+        self._side_close = asyncio.get_running_loop().call_later(300, lambda: spawn(self._close_side()))
 
     async def _close_side(self) -> None:
         side, self.side = self.side, None
@@ -752,7 +753,7 @@ class Daemon:
 
     def _job_done(self, job: dict) -> None:
         """A background job ended: a sound now, and the brain reports it in its own words when it is free."""
-        asyncio.create_task(self.earcon("done" if job["state"] == "done" else "error"))
+        spawn(self.earcon("done" if job["state"] == "done" else "error"))
         if job["state"] == "stopped":
             return  # the person stopped it: nothing to report
         took = numerals.duration(int(job["ended"] - job["started"]))
@@ -847,14 +848,14 @@ class Daemon:
             self.player.sink = audio.find_node(a["output"], "sinks") if a["output"] else None
         self.player.volume = int(a.get("volume", 100))
         if new["media"]["volume"] != old["media"]["volume"]:
-            asyncio.create_task(self.music.set_volume(int(new["media"]["volume"])))
+            spawn(self.music.set_volume(int(new["media"]["volume"])))
         # a new character or name is a new system prompt: the conversation goes on under it once the brain is free
         if (new["persona"] != old["persona"] or
                 {k: new["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")} !=
                 {k: old["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")}):
             self.brain.cfg["persona"] = new["persona"]
             self.brain.cfg["user"] = new["user"]
-            asyncio.create_task(self._reconnect_brain())
+            spawn(self._reconnect_brain())
         self.brain.cfg["user"] = new["user"]
         self.stt.vocabulary = vocabulary(new)
         restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
@@ -967,8 +968,8 @@ class Daemon:
                 if choice in ("allow", "deny") and not fut.done():
                     fut.set_result(choice)
 
-            side.append(asyncio.create_task(from_notification()))
-        spoken = asyncio.create_task(self.wait_speech_done())
+            side.append(spawn(from_notification()))
+        spoken = spawn(self.wait_speech_done())
         deadline = loop.time() + 120
         try:
             await asyncio.wait({fut, spoken}, timeout=120, return_when=asyncio.FIRST_COMPLETED)
@@ -1202,7 +1203,7 @@ class Daemon:
                            "уточнение через `justday claude send`; если всё готово или нужен пользователь — кратко доложи голосом.")
                     self._event_queue.put_nowait(msg)
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
-                asyncio.create_task(self.run_turn(self._event_queue.get_nowait(), source="event"))
+                spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
 
     # ---------------- music and video ----------------
     def _on_player(self, state: dict | None) -> None:
@@ -1224,7 +1225,7 @@ class Daemon:
                  for q in state.get("queue", []) if q.get("i", 0) >= state.get("index", 0)]
         want = palette.unknown(here + ahead)
         if want:
-            self._colors = asyncio.create_task(self._resolve_colors(want))
+            self._colors = spawn(self._resolve_colors(want))
 
     async def _resolve_colors(self, want: list[dict]) -> None:
         web = bool(self.cfg["media"].get("color_web", True))
@@ -1262,7 +1263,7 @@ class Daemon:
                 self.publish(kind="error", detail=t("Не нашёл «{q}»", q=query))
                 await self.say(t("Не получилось включить: {e}", e=r.get("error", "")[:120]))
 
-        asyncio.create_task(go())
+        spawn(go())
         return True
 
     async def play_music(self, query: str, count: int = 1, mode: str = "replace", playlist: bool = False,
@@ -1315,7 +1316,7 @@ class Daemon:
             first = await loop.run_in_executor(None, media.cached_track, entries[0])
             if not first:
                 first = await loop.run_in_executor(None, media.stream_track, entries[0])
-                asyncio.create_task(self._cache_track(entries[0]))
+                spawn(self._cache_track(entries[0]))
         except Exception as e:  # noqa: BLE001
             self.music.set_loading(None)
             log.warning("play failed: %s", e)
@@ -1331,7 +1332,7 @@ class Daemon:
             self.music.shuffle = True
         self._pause_videos()
         if len(entries) > 1:
-            asyncio.create_task(self._queue_rest(entries[1:]))
+            spawn(self._queue_rest(entries[1:]))
         name = f"{first['artist']} — {first['title']}" if first.get("artist") else first["title"]
         events.emit("media_play", title=name, file=first["file"])
         return {"ok": True, "title": first["title"], "artist": first.get("artist", ""), "file": first["file"],
@@ -1352,7 +1353,7 @@ class Daemon:
         """Put a song in the download queue: it plays from the stream now and lives in the library afterwards."""
         self._cache_q.append(entry)
         if self._cache_task is None or self._cache_task.done():
-            self._cache_task = asyncio.create_task(self._cache_worker())
+            self._cache_task = spawn(self._cache_worker())
 
     async def _cache_worker(self) -> None:
         """One download at a time, so the library fills up without stealing bandwidth from what is playing."""
@@ -1431,7 +1432,7 @@ class Daemon:
         """One sleeping task for whichever reminder is due first."""
         if self._reminder_task and not self._reminder_task.done():
             self._reminder_task.cancel()
-        self._reminder_task = asyncio.create_task(self._reminder_loop())
+        self._reminder_task = spawn(self._reminder_loop())
 
     async def _reminder_loop(self) -> None:
         while True:
@@ -1471,7 +1472,7 @@ class Daemon:
         if rec_id and self._ringing != rec_id:
             return
         self._ringing = ""
-        asyncio.create_task(self.music.duck(False))
+        spawn(self.music.duck(False))
         self.publish(kind="card_close")
         self.publish(reminders=self._reminders_state())
 
@@ -1687,9 +1688,12 @@ class Daemon:
                          "history": recent_history(), "weather": self.weather, "update": self.update_info,
                          "player": self._player_state, "video": self.island_video,
                          "reminders": self._reminders_state(), "jobs": self.jobs.state()}
-                writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
-                await writer.drain()
-                await reader.read()  # hold the connection until the client goes away
+                try:
+                    writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
+                    await writer.drain()
+                    await reader.read()  # hold the connection until the client goes away
+                except ConnectionError:
+                    pass  # the island restarted while we greeted it
                 self._subs.discard(writer)
                 writer.close()
                 return
@@ -1744,7 +1748,7 @@ class Daemon:
                 if ctx.get("selection"):  # "explain this", "translate this" about the text selected on screen
                     text += ("\n\n[Текст, выделенный пользователем" + (f" в окне «{ctx['window']}»" if ctx.get("window") else "")
                              + f":]\n{ctx['selection'][:6000]}")
-                asyncio.create_task(self.handle_utterance(text, source="island"))
+                spawn(self.handle_utterance(text, source="island"))
                 resp = {"ok": True}
             elif cmd == "answer":  # a question card button: the option label
                 pending = self._approval is not None and not self._approval.done()
@@ -1764,7 +1768,7 @@ class Daemon:
                     card = self.mail.card(reply)
                     if card:
                         self.publish(kind="card", card=card)
-                    asyncio.create_task(self._speak_and_listen(reply, expects))
+                    spawn(self._speak_and_listen(reply, expects))
                     resp = {"ok": True, "result": "черновик показан пользователю и ждёт его подтверждения голосом или кнопкой"}
             elif cmd == "enroll_record":
                 resp = await self.enroll_record(req.get("kind", "phrase"), int(req.get("index", 0)), float(req.get("seconds", 4)))
@@ -1846,8 +1850,11 @@ class Daemon:
         except Exception as e:
             log.exception("control request failed")
             resp = {"ok": False, "error": repr(e)}
-        writer.write((json.dumps(resp, ensure_ascii=False) + "\n").encode())
-        await writer.drain()
+        try:
+            writer.write((json.dumps(resp, ensure_ascii=False) + "\n").encode())
+            await writer.drain()
+        except ConnectionError:
+            pass  # the asker gave up (timeout, Ctrl+C): nobody to answer
         writer.close()
 
     async def run(self) -> None:
@@ -1863,7 +1870,7 @@ class Daemon:
             config.SOCKET_PATH.unlink()
         server = await asyncio.start_unix_server(self._client, path=str(config.SOCKET_PATH))
         os.chmod(config.SOCKET_PATH, 0o600)
-        asyncio.create_task(self._speech_worker())
+        spawn(self._speech_worker())
         # Warm up models in the background so the first command is fast.
         if self.mic_on():  # keyboard-only setups never load speech recognition
             loop.run_in_executor(None, self.stt.load)
@@ -1873,9 +1880,9 @@ class Daemon:
             log.info("music player reattached")
         self._reschedule()  # alarms survive a restart
         self._setup_wakeword()
-        asyncio.create_task(self._housekeeping())
+        spawn(self._housekeeping())
         if shutil.which("dbus-monitor"):
-            asyncio.create_task(self._watch_notifications())
+            spawn(self._watch_notifications())
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         stop = asyncio.Event()
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -1903,4 +1910,11 @@ def main() -> None:
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s",
         handlers=[logging.StreamHandler(), logging.FileHandler(config.STATE_DIR / "justday.log")],
     )
+    try:
+        # numpy's OpenBLAS keeps a thread per core and wakes them all for every 80 ms of microphone audio:
+        # on a 20-thread CPU that alone kept the idle daemon at half a core. Our arrays are tiny: one thread.
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(1, user_api="blas")
+    except ImportError:
+        pass
     asyncio.run(Daemon().run())

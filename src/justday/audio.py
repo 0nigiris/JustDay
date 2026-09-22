@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import shutil
 import subprocess
 import threading
 import time
@@ -311,7 +310,3 @@ def earcon(kind: str, rate: int = 48000) -> np.ndarray:
         env = np.minimum(1, np.minimum(t, t[::-1]) * 60)
         out.append(0.25 * np.sin(2 * np.pi * hz * t) * env)
     return (np.concatenate(out) * 32767).astype(np.int16)
-
-
-def tools_present() -> dict[str, bool]:
-    return {t: shutil.which(t) is not None for t in ("pw-record", "pw-play", "pactl")}

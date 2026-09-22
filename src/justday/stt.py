@@ -5,9 +5,9 @@ import ctypes
 import glob
 import logging
 import os
-import time
-
 import re
+import threading
+import time
 
 import numpy as np
 
@@ -38,23 +38,42 @@ class STT:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self._model = None
+        self._lock = threading.Lock()  # the startup preload and the first phrase must not load it twice
 
     def load(self):
         if self._model is not None:
             return self._model
+        with self._lock:
+            if self._model is None:
+                self._model = self._load()
+        return self._model
+
+    def _load(self):
         from faster_whisper import WhisperModel
+        from faster_whisper.utils import download_model
 
         t = time.monotonic()
+        name = self.cfg["model"]
+        if not os.path.isdir(name):
+            try:  # once downloaded, no round trip to Hugging Face on every start (and it works offline)
+                name = download_model(name, local_files_only=True)
+            except Exception:
+                name = download_model(name)
+
+        def make(device: str, compute_type: str):
+            return WhisperModel(name, device=device, compute_type=compute_type)
+
+        model = None
         if self.cfg["device"] == "cuda":
             _preload_cuda_libs()
             try:
-                self._model = WhisperModel(self.cfg["model"], device="cuda", compute_type=self.cfg["compute_type"])
+                model = make("cuda", self.cfg["compute_type"])
             except Exception as e:  # no GPU / driver problem → CPU
                 log.warning("CUDA whisper failed (%s), falling back to CPU", e)
-        if self._model is None:
-            self._model = WhisperModel(self.cfg["model"], device="cpu", compute_type="int8")
+        if model is None:
+            model = make("cpu", "int8")
         log.info("whisper %s loaded in %.1fs", self.cfg["model"], time.monotonic() - t)
-        return self._model
+        return model
 
     vocabulary = ""  # set by the daemon: base prompt + names the user actually says (contacts, apps, assistant)
 
