@@ -412,7 +412,7 @@ class Daemon:
             return "game"
         return ""
 
-    async def morning(self) -> bool:
+    async def morning(self) -> str:
         """The first «привет» of the day: the day itself, said before the model is even woken."""
         self.state = "thinking"
         loop = asyncio.get_running_loop()
@@ -427,12 +427,12 @@ class Daemon:
         except Exception:
             log.exception("briefing failed")
             self.state = "idle"
-            return False
+            return ""
         events.emit("briefing", text=text)
         self.brain.note(f"[Утренний брифинг уже сказан: «{text}» Не повторяй его.]")
         await self.say(text)
         self.state = "thinking" if self.brain.busy else "idle"
-        return True
+        return text
 
     async def set_voice(self, on: bool) -> None:
         """«молчи» / «говори»: only the voice stops — the island still shows every answer."""
@@ -1762,6 +1762,11 @@ class Daemon:
             elif cmd == "ask" and self.brain.busy and not req.get("wait"):
                 await self.brain.inject(req["text"], source="cli")
                 resp = {"ok": True, "result": "(передано в текущую задачу)"}
+            elif cmd == "ask" and (on := fastpath.voice_switch(req["text"])) is not None:
+                await self.set_voice(on)  # typed or spoken, «молчи» means the same thing
+                resp = {"ok": True, "result": t("голос включён") if on else t("голос выключен")}
+            elif cmd == "ask" and briefing.wanted(req["text"]) and briefing.due() and (said := await self.morning()):
+                resp = {"ok": True, "result": said}
             elif cmd == "ask":
                 done = await asyncio.get_running_loop().run_in_executor(None, fastpath.try_handle, req["text"])
                 if done:
