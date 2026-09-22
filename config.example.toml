@@ -32,7 +32,7 @@ language = "ru"             # "" = auto-detect
 
 [tts]
 engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | silero | espeak | none (text-only replies)
-voice = "jarvis"            # neural voice: jarvis, friday or one you designed/cloned (justday voice list)
+voice = "jarvis"            # neural voice: jarvis, or one you designed/cloned (justday voice list)
 neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
 speed = 1.15                # how fast it talks (0.5–2.0); the pitch does not move

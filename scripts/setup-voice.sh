@@ -17,4 +17,4 @@ mkdir -p "$HOME/.config/systemd/user"
 sed "s|@REPO@|$REPO|" "$REPO/systemd/justday-voice.service" > "$HOME/.config/systemd/user/justday-voice.service"
 systemctl --user daemon-reload
 systemctl --user enable --now justday-voice.service
-echo "neural voice ready: justday config set tts.engine qwen   (voices: jarvis, friday)"
+echo "neural voice ready: justday config set tts.engine qwen   (voice: jarvis)"

@@ -24,7 +24,7 @@ Write generation prompts **in English**, concrete: subject, setting, light, styl
 | bring a photo to life | `justday studio animate PHOTO "what moves, camera motion"` | ~8 min |
 | music / beat / song | `justday studio music "TAGS" seconds=30 lyrics="…"` (no lyrics = instrumental) | ~1 min |
 | 3D model | `justday studio 3d "OBJECT description"` or `justday studio 3d PHOTO` → .glb + .stl | ~3 min |
-| voice-over in your voice | `justday studio speech "TEXT"` (voice=friday …) | seconds |
+| voice-over in your voice | `justday studio speech "TEXT"` (voice=jarvis …) | seconds |
 
 Options everywhere: `out=PATH` (file or folder/), `seed=N` (repeat a variant). Defaults save to ~/Pictures/JustDay, ~/Videos/JustDay, ~/Music/JustDay, ~/Documents/JustDay/3D.
 

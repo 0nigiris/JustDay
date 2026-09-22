@@ -36,7 +36,7 @@ WIZ_EN = {
     "Простой и быстрый (Silero, звучит роботизированно)": "Simple and fast (Silero, Russian only, sounds robotic)",
     "Для нейросетевого голоса нужна видеокарта NVIDIA с 8 ГБ — ставлю простой голос.": "The neural voice needs an 8 GB NVIDIA GPU — using the simple voice.",
     "Джарвис — спокойный баритон, манера дворецкого": "Jarvis — calm baritone, butler manner",
-    "Пятница — тёплый живой женский голос": "Friday — warm, lively female voice", "Микрофон": "Microphone",
+    "Микрофон": "Microphone",
     "Микрофоны не найдены — будет использован системный по умолчанию.": "No microphones found — the system default will be used.",
     "Системный по умолчанию": "System default", "Какой микрофон": "Which microphone", "Кнопка": "Button",
     "Сочетание, чтобы говорить": "Shortcut to talk",
@@ -199,9 +199,7 @@ def step_voice() -> None:
     if engine == "qwen":
         installed = manage.voices()["neural_available"] or sh([str(config.REPO_DIR / "scripts" / "setup-voice.sh")])
         if installed:
-            voice = choose(W("Голос"), [("jarvis", W("Джарвис — спокойный баритон, манера дворецкого")),
-                                        ("friday", W("Пятница — тёплый живой женский голос"))], 1)
-            config.set_value("tts", "voice", voice)
+            config.set_value("tts", "voice", "jarvis")  # свой голос делается потом: «Настройки → Голос и звук»
         else:
             engine = "silero"
     config.set_value("tts", "engine", engine)
