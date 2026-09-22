@@ -2051,19 +2051,23 @@ ShellRoot {
             RowLayout {
                 spacing: 14
                 Ring { size: 36 }
+                // the status takes whatever width is left and elides: a long request (plus «Стоп») used to
+                // push the whole menu past the island's right edge
                 ColumnLayout {
                     spacing: 1
-                    Label1 { text: JD.assistantName; font.pixelSize: 18; font.weight: Font.Bold }
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Label1 { text: JD.assistantName; font.pixelSize: 18; font.weight: Font.Bold; Layout.fillWidth: true }
                     Label2 {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
                             : ({ idle: JD.micOn ? JD.tr("Готов · скажите имя или ") + (JD.hotkeys.talk || "Meta+J") : JD.tr("Готов · ") + (JD.hotkeys.type || "Meta+K"),
                                  listening: JD.tr("Слушаю"), transcribing: JD.tr("Распознаю"), thinking: JD.activity || JD.tr("Работаю"),
                                  speaking: JD.tr("Говорит"), approval: JD.tr("Ждёт подтверждения"), offline: JD.tr("Демон не запущен") })[JD.dstate] || JD.dstate
                         color: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.text2
-                        Layout.maximumWidth: 330
                     }
                 }
-                Item { Layout.fillWidth: true }
                 ColumnLayout {
                     spacing: 0
                     Text { text: Qt.formatTime(evClock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 22; font.weight: Font.Bold; font.features: { "tnum": 1 }; Layout.alignment: Qt.AlignRight }
