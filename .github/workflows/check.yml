@@ -29,7 +29,9 @@ jobs:
         run: find . -name '*.sh' -not -path './.git/*' -print -exec bash -n {} +
 
       - name: Defaults load
+        # Only what the pure-Python parts import; the GPU and audio stacks never run on a runner.
         run: |
+          pip install -q numpy icalendar recurring-ical-events
           python - <<'PY'
           import sys, tomllib
           sys.path.insert(0, "src")
