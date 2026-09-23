@@ -663,10 +663,17 @@ systemctl --user restart justday && justday new-session   # применить
 | `src/justday/providers.py` | выбор модели (Claude, Ollama, OpenRouter, DeepSeek, свой адрес), ключи в связке ключей |
 | `src/justday/mail.py`, `localllm.py` | приватная почта: IMAP/SMTP, пересказ, черновики, разбор команд локальной моделью |
 | `src/justday/fastpath.py` | мгновенные команды без ИИ |
+| `src/justday/briefing.py` | утренний брифинг: погода, календарь, почта и просроченное — одной фразой |
+| `src/justday/offline.py` | работа без облака: локальная модель выбирает одно из четырёх действий |
+| `src/justday/session.py` | «я ушёл» / «я вернулся»: список открытых программ, закрытие и возврат |
+| `src/justday/habits.py` | «как обычно»: что вы просите в это время суток, по журналу событий |
+| `src/justday/phone.py` | телефон через KDE Connect: заметка, файл, список устройств |
+| `src/justday/island.py`, `notifications.py`, `weather.py` | данные для острова, уведомления с шины, погода |
 | `src/justday/audio.py`, `stt.py`, `tts.py` | микрофон, VAD, Whisper, Silero (+ транслитерация латиницы: Silero её пропускает) |
 | `src/justday/desktop.py` | поиск приложений и игр (.desktop, Steam, Heroic), недавние файлы, окна через скрипты KWin |
 | `src/justday/workers.py` | фоновые сессии Claude Code: запуск, продолжение, итог из транскрипта |
 | `src/justday/cli.py` | команда `justday`, doctor, тесты компонентов, скриншоты |
+| `phone/` | телефонная половина: контроллер, агенты, плата-сторож, приложение для Android |
 | `island/shell.qml`, `island/JD.qml` | Dynamic Island на Quickshell: состояния, карточки, меню, анимации |
 | `island/SettingsView.qml` | настройки внутри острова |
 | `src/justday/manage.py`, `wizard.py` | данные для настроек, мастер первой настройки |
