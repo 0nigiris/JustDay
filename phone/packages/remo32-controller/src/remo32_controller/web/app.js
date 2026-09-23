@@ -133,6 +133,8 @@ const state = {
   form: { open: false, editId: null },
   approvals: [],         // чего компьютер ждёт от нас прямо сейчас
   approvalsEnabled: false,
+  justday: null,         // ассистент на активном ПК: чем занят, что играет
+  justdayAnswer: "",     // последний ответ — он же и есть весь разговор на телефоне
   editor: null,          // состояние редактора кнопок текущего ПК
   buttonForm: null,      // черновик формы: null — форма закрыта
   rendering: false,
@@ -357,6 +359,7 @@ async function registerPasskey() {
 const ROUTES = {
   deck: { title: "Пульт", view: () => viewDeck() },
   pcs: { title: "Компьютеры", view: () => viewPcs() },
+  jarvis: { title: "JustDay", view: () => viewJarvis() },
   schedule: { title: "Расписание", view: () => viewSchedule() },
   more: { title: "Ещё", view: () => viewMore() },
   help: { title: "Справка", view: () => viewHelp(), parent: "more" },
@@ -393,6 +396,17 @@ function syncChrome() {
   document.body.dataset.route = current;
   store.set(KEY_ROUTE, current);
 }
+
+document.addEventListener("submit", (event) => {
+  if (event.target.id !== "jarvis-form") return;
+  event.preventDefault();
+  const field = el("jarvis-text");
+  const text = field.value.trim();
+  if (!text) return;
+  field.value = "";
+  field.blur();
+  jarvisAsk(text);
+});
 
 window.addEventListener("hashchange", async () => {
   // Уходя с расписания, форму закрываем: возвращаться к наполовину
@@ -1166,6 +1180,118 @@ async function loadEditor(force = false) {
 
 /* ======================================================== вкладка «Ещё» */
 
+
+/* ================================================== JustDay ============ */
+/* Ассистент живёт на самом ПК. Телефон — второй остров: та же просьба,
+   тот же плеер, те же «я ушёл» и «я вернулся». */
+
+const JARVIS_STATE = {
+  idle: "готов",
+  listening: "слушает",
+  transcribing: "разбирает сказанное",
+  thinking: "думает",
+  speaking: "отвечает",
+  approval: "ждёт вашего ответа",
+};
+
+const QUICK_ASKS = [
+  "Что у меня сегодня?",
+  "Поставь таймер на 10 минут",
+  "Включи мою музыку",
+  "Что сейчас играет?",
+];
+
+function viewJarvis() {
+  const pc = activePc();
+  if (!pc) return `<div class="empty">ПК не настроены</div>`;
+  if (pc.state !== "online") {
+    return `<div class="empty">${esc(pc.name)} не отвечает. Разбудить его можно на вкладке «ПК».</div>`;
+  }
+  const jd = state.justday;
+  if (jd && jd.available === false) {
+    return `<section class="card"><div class="card-head"><h2>JustDay не запущен</h2></div>
+      <div class="meta">На «${esc(pc.name)}» не видно ассистента. Он поднимается службой
+      <code>justday</code> — проверьте её на самом компьютере.</div></section>`;
+  }
+
+  const music = jd?.player || {};
+  const now = (music.queue || [])[music.index ?? 0] || music.now || null;
+  const playing = music.playing ?? false;
+  const answer = state.justdayAnswer;
+
+  return `
+  <section class="card jarvis-ask">
+    <div class="card-head">
+      <h2>Сказать JustDay</h2>
+      <span class="meta">${esc(JARVIS_STATE[jd?.state] || jd?.state || "…")}${jd?.silent === "game"
+        ? " · молчит, идёт игра" : jd?.silent === "off" ? " · голос выключен" : ""}</span>
+    </div>
+    <form id="jarvis-form" class="jarvis-form">
+      <input type="text" id="jarvis-text" placeholder="Например: включи музыку" autocomplete="off"
+        enterkeyhint="send">
+      <button class="btn primary" type="submit">→</button>
+    </form>
+    <div class="row wrap">
+      ${QUICK_ASKS.map((q) => `<button class="chip" data-jarvis-ask="${esc(q)}">${esc(q)}</button>`).join("")}
+    </div>
+    ${answer ? `<div class="jarvis-answer">${esc(answer)}</div>` : ""}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Плеер</h2>${music.source
+      ? `<span class="meta">${esc(music.source)}</span>` : ""}</div>
+    ${now
+      ? `<div class="jarvis-now">
+           <div class="jarvis-cover" style="background:${esc(now.cover || "#222")}"></div>
+           <div class="jarvis-track">
+             <b>${esc(now.title || "")}</b>
+             <span class="meta">${esc(now.artist || "")}</span>
+           </div>
+         </div>`
+      : `<div class="meta">Ничего не играет.</div>`}
+    <div class="row">
+      <button class="btn" data-jarvis-player="prev">⏮</button>
+      <button class="btn primary" data-jarvis-player="${playing ? "pause" : "resume"}">${playing ? "⏸" : "▶"}</button>
+      <button class="btn" data-jarvis-player="next">⏭</button>
+      <button class="btn" data-jarvis-ask="включи мою музыку">🎵 Моя музыка</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Рабочий стол</h2></div>
+    <div class="row">
+      <button class="btn" data-jarvis-session="close">🚪 Я ушёл</button>
+      <button class="btn" data-jarvis-session="restore">↩︎ Я вернулся</button>
+    </div>
+    <div class="meta">«Я ушёл» запомнит открытые программы и закроет их; «я вернулся» откроет
+      обратно. Ничего не убивается: что не закрылось — останется и будет названо.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Голос</h2></div>
+    <div class="row">
+      <button class="btn" data-jarvis-ask="молчи">🔇 Молчи</button>
+      <button class="btn" data-jarvis-ask="говори">🔊 Говори</button>
+      <button class="btn" id="jarvis-say">📣 Сказать в комнате</button>
+    </div>
+  </section>`;
+}
+
+async function jarvisAsk(text, { aloud = false } = {}) {
+  const pc = activePc();
+  if (!pc) return;
+  state.justdayAnswer = "…";
+  render(true);
+  try {
+    const got = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/ask`,
+      { method: "POST", body: JSON.stringify({ text, aloud }) });
+    state.justdayAnswer = got.result || got.said || (got.ok ? "сделано" : "не получилось");
+  } catch (error) {
+    state.justdayAnswer = `не получилось: ${error.message}`;
+  }
+  render(true);
+}
+
 function viewMore() {
   const passkeyReady = state.auth?.passkey_configured && window.PublicKeyCredential;
   const note = passkeyReady
@@ -1320,6 +1446,12 @@ async function render(force = false) {
       state.approvals = [];
     }
     if (current === "buttons") await loadEditor(force);
+    if (current === "jarvis") {
+      const jpc = activePc();
+      state.justday = jpc && jpc.state === "online"
+        ? await api(`/api/pcs/${encodeURIComponent(jpc.id)}/justday`).catch(() => ({ available: false }))
+        : null;
+    }
 
     // Лист, на котором стоит палец, при обновлении данных сбрасываться
     // не должен.
@@ -1424,6 +1556,49 @@ document.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   const d = button.dataset;
+
+  /* --- JustDay --- */
+  if (d.jarvisAsk) {
+    buzz(8);
+    return jarvisAsk(d.jarvisAsk);
+  }
+  if (d.jarvisPlayer) {
+    const pc = activePc();
+    if (!pc) return;
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/player`,
+        { method: "POST", body: JSON.stringify({ action: d.jarvisPlayer }) }),
+      () => render(true));
+  }
+  if (d.jarvisSession) {
+    const closing = d.jarvisSession === "close";
+    const open = state.justday?.session_apps || [];
+    const ok = await confirmSheet({
+      icon: closing ? "🚪" : "↩︎",
+      title: closing ? "Закрыть открытые программы?" : "Открыть то, что было закрыто?",
+      text: closing
+        ? "Список запомнится, и «я вернулся» откроет всё обратно. Программы закрываются как по крестику — несохранённое они спросят сами."
+        : "Откроется всё из последнего списка, кроме того, что уже запущено.",
+      yes: closing ? "Закрыть" : "Открыть",
+      danger: closing,
+    });
+    if (!ok) return;
+    const pc = activePc();
+    if (!pc) return;
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/session/${d.jarvisSession}`, { method: "POST" }),
+      (result) => {
+        const names = (closing ? result.closed : result.started) || [];
+        toast(names.length ? names.join(", ") : "ничего не изменилось", "ok");
+        render(true);
+      });
+  }
+  if (button.id === "jarvis-say") {
+    const text = el("jarvis-text")?.value.trim();
+    if (!text) return toast("Напишите, что сказать", "err");
+    el("jarvis-text").value = "";
+    return jarvisAsk(text, { aloud: true });
+  }
 
   /* --- кнопка пульта --- */
   if (d.keyAction) {
