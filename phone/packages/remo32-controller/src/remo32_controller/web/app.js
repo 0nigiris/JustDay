@@ -97,10 +97,12 @@ const KEY_ROUTE = "remo32.route";
 /* ============================================================== сеть ==== */
 
 async function api(path, options = {}) {
+  // raw — тело уходит как есть (запись голоса). Всё остальное — JSON.
+  const { raw = false, ...rest } = options;
   const response = await fetch(path, {
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    ...options,
+    headers: raw ? { "Content-Type": "application/octet-stream" } : { "Content-Type": "application/json" },
+    ...rest,
   });
 
   let body = null;
@@ -135,6 +137,7 @@ const state = {
   approvalsEnabled: false,
   justday: null,         // ассистент на активном ПК: чем занят, что играет
   justdayAnswer: "",     // последний ответ — он же и есть весь разговор на телефоне
+  justdayHeard: "",      // что он расслышал в надиктованном: без этого непонятно, чему он ответил
   editor: null,          // состояние редактора кнопок текущего ПК
   buttonForm: null,      // черновик формы: null — форма закрыта
   rendering: false,
@@ -374,11 +377,29 @@ function route() {
   return ROUTES[name] ? name : DEFAULT_ROUTE;
 }
 
+/* Телефон, положенный набок, — другой прибор: стримдек. Решает не настройка,
+   а сам поворот, потому что решение и так уже принято руками. Порог по высоте
+   отделяет повёрнутый телефон от планшета и ноутбука, где боком — норма. */
+const DECK_MEDIA = matchMedia("(orientation: landscape) and (max-height: 620px)");
+const deckMode = () => DECK_MEDIA.matches;
+
+/* Вкладку, на которой человек был, не теряем: она живёт в адресе, и когда
+   телефон вернут вертикально, экран окажется там же, где его оставили. */
+const screenNow = () => (deckMode() ? "deck" : route());
+
+DECK_MEDIA.addEventListener("change", async () => {
+  syncChrome();
+  await render(true);
+  el("view").scrollTop = 0;
+});
+
 function syncChrome() {
-  const current = route();
+  const current = screenNow();
   const pc = activePc();
+  document.body.dataset.mode = deckMode() ? "deck" : "app";
 
   el("page-title").textContent = ROUTES[current].title;
+  el("page-title-sm").textContent = ROUTES[current].title;
 
   // Переключатель компьютера нужен только там, где он на что-то влияет,
   // и только если компьютеров больше одного.
@@ -396,7 +417,9 @@ function syncChrome() {
     link.setAttribute("aria-current", on ? "page" : "false");
   }
   document.body.dataset.route = current;
-  store.set(KEY_ROUTE, current);
+  // Запоминаем именно вкладку из адреса: иначе телефон, убранный в карман
+  // боком, в следующий раз открылся бы на пульте вместо нужного экрана.
+  store.set(KEY_ROUTE, route());
 }
 
 document.addEventListener("submit", (event) => {
@@ -531,6 +554,8 @@ function viewDeck() {
   ];
 
   const dots = pages.map((_, i) => `<i class="${i === 0 ? "on" : ""}"></i>`).join("");
+  if (deckMode()) return deckStage(pc, pages, dots);
+
   const warn = offline
     ? `<div class="banner">${esc(pc.name)} — ${esc(STATE_LABEL[pc.state] || pc.state)}. Действия недоступны.</div>`
     : "";
@@ -538,6 +563,39 @@ function viewDeck() {
   return `${warn}
     <div class="pager" id="pager">${pages.join("")}</div>
     <div class="dots" id="dots">${dots}</div>`;
+}
+
+/* Стримдек: телефон лежит набок, и всё, кроме клавиш, уходит с экрана.
+   Слева остаётся рейка — единственное, что здесь читают глазами: какой
+   компьютер, что с ним сейчас, сколько страниц и как вернуться. */
+function deckStage(pc, pages, dots) {
+  const jd = state.justday || {};
+  const music = jd.player || {};
+  const now = (music.queue || [])[music.index ?? 0] || music.now || null;
+  const waiting = state.approvals.length;
+
+  const line = waiting
+    ? `<div class="deck-now">${icon("shield", "sm")} Компьютер ждёт ответа — поверните телефон</div>`
+    : pc.state !== "online"
+      ? `<div class="deck-now">${esc(STATE_LABEL[pc.state] || pc.state)}</div>`
+      : now && music.playing
+        ? `<div class="deck-now">${icon("music", "sm")} ${esc(now.title || "")}</div>`
+        : jd.state && jd.state !== "idle"
+          ? `<div class="deck-now">${esc(JARVIS_STATE[jd.state] || jd.state)}</div>`
+          : "";
+
+  return `<div class="deck">
+    <aside class="deck-side">
+      <div class="deck-brand">${icon("panel-top", "sm")} JustDay</div>
+      <div class="deck-pc"><span class="dot ${esc(pc.state)}"></span><span>${esc(pc.name)}</span></div>
+      <div class="deck-title" id="deck-title">${esc(pages.length ? "Избранное" : "Пульт")}</div>
+      ${line}
+      <div class="dots" id="dots">${dots}</div>
+      <button class="icon-btn" data-refresh="1" aria-label="Обновить">${icon("refresh-cw", "sm")} Обновить</button>
+      <div class="deck-hint">Поверните телефон — вернётся приложение</div>
+    </aside>
+    <div class="pager" id="pager">${pages.join("")}</div>
+  </div>`;
 }
 
 /* Заголовок страницы и точки ведём по фактической прокрутке, а не по
@@ -549,7 +607,13 @@ function bindPager() {
   const update = () => {
     const index = Math.round(pager.scrollLeft / pager.clientWidth);
     const page = pager.children[index];
-    if (page) el("page-title").textContent = page.dataset.title;
+    if (page) {
+      const title = page.dataset.title;
+      el("page-title").textContent = title;
+      el("page-title-sm").textContent = title;
+      const deckTitle = el("deck-title");
+      if (deckTitle) deckTitle.textContent = title;
+    }
     [...dots.children].forEach((dot, i) => dot.classList.toggle("on", i === index));
   };
   pager.addEventListener("scroll", update, { passive: true });
@@ -1230,6 +1294,224 @@ function icon(name, extra = "") {
   return `<i class="i ${extra}" style="--src:url(/static/icons/${name}.svg)" aria-hidden="true"></i>`;
 }
 
+/* ====================================================== надиктовка ======
+
+   Сказать в телефон то же, что сказал бы острову на компьютере. Запись
+   уходит на сам компьютер и распознаётся там — теми же ушами, что слушают
+   микрофон на столе. Ни один звук не уходит в сеть дальше домашней машины
+   и не остаётся в телефоне: файл живёт ровно до конца распознавания.
+
+   Микрофон браузер даёт только на защищённом соединении. Через Tailscale
+   адрес контроллера как раз https, поэтому в приложении это работает; если
+   пульт открыли по http, вместо кнопки будет честная подсказка, а не
+   ошибка после нажатия. */
+
+const dict = {
+  on: false,        // идёт запись
+  busy: false,      // запись ушла, ждём распознавания
+  rec: null,
+  chunks: [],
+  suffix: ".webm",
+  started: 0,
+  timer: null,
+  stream: null,
+  sound: null,      // AudioContext для полосок громкости
+};
+
+const DICT_LIMIT = 90;   // с: дольше — уже не просьба, а монолог, и распознавание будет долгим
+
+/* Что умеет записывать этот браузер. Chrome даёт opus в webm, Safari на
+   iPhone — только mp4; расширение важно, по нему ffmpeg на компьютере
+   выбирает разбор. */
+const DICT_TYPES = [
+  ["audio/webm;codecs=opus", ".webm"],
+  ["audio/webm", ".webm"],
+  ["audio/mp4", ".m4a"],
+  ["audio/ogg;codecs=opus", ".ogg"],
+];
+
+const micReady = () =>
+  Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+
+function dictType() {
+  for (const [type, suffix] of DICT_TYPES) {
+    if (MediaRecorder.isTypeSupported?.(type)) return { type, suffix };
+  }
+  return { type: "", suffix: ".webm" };
+}
+
+const dictClock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
+/* Кнопку микрофона ведём руками, а не перерисовкой экрана: под пальцем
+   меняются только таймер, полоски и сама кнопка. */
+function paintMic() {
+  const button = el("mic");
+  if (!button) return;
+  const seconds = dict.on ? Math.floor((Date.now() - dict.started) / 1000) : 0;
+  if (dict.on && seconds >= DICT_LIMIT) {
+    dictStop();
+    return;
+  }
+  button.classList.toggle("on", dict.on);
+  button.classList.toggle("busy", dict.busy);
+  button.innerHTML = icon(dict.busy ? "audio-lines" : dict.on ? "square" : "mic");
+  const wave = el("wave");
+  if (wave) wave.hidden = !dict.on;
+  const time = el("mic-time");
+  if (time) time.textContent = dict.on ? dictClock(seconds) : "";
+  const hint = el("mic-hint");
+  if (hint) {
+    hint.textContent = dict.busy
+      ? "Разбираю сказанное…"
+      : dict.on
+        ? "Говорите. Нажмите ещё раз — уйдёт на компьютер."
+        : "Нажмите и скажите — как острову на компьютере";
+  }
+}
+
+/* Полоски громкости — не украшение. Это единственное доказательство, что
+   микрофон действительно слышит: тишину от «не дали доступ» иначе не
+   отличить, пока не придёт ответ «не расслышал». */
+function dictMeter() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx || !dict.stream) return;
+  const sound = new Ctx();
+  const analyser = sound.createAnalyser();
+  analyser.fftSize = 256;
+  sound.createMediaStreamSource(dict.stream).connect(analyser);
+  dict.sound = sound;
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const step = Math.floor(data.length / 7) || 1;
+  const frame = () => {
+    if (!dict.on) return;
+    analyser.getByteFrequencyData(data);
+    const wave = el("wave");
+    if (wave) {
+      [...wave.children].forEach((bar, i) => {
+        let sum = 0;
+        for (let k = i * step; k < (i + 1) * step; k += 1) sum += data[k] || 0;
+        const loud = sum / step / 255;
+        bar.style.height = `${Math.max(14, Math.min(100, loud * 260))}%`;
+      });
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+function dictDrop() {
+  clearInterval(dict.timer);
+  dict.timer = null;
+  dict.on = false;
+  dict.stream?.getTracks().forEach((track) => track.stop());
+  dict.stream = null;
+  dict.sound?.close().catch(() => {});
+  dict.sound = null;
+}
+
+async function dictStart() {
+  if (dict.on || dict.busy) return;
+  const pc = activePc();
+  if (!pc || pc.state !== "online") return toast("Компьютер не на связи", "err");
+  try {
+    dict.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (error) {
+    // Отказ в доступе — не поломка: человек мог нажать «запретить».
+    toast(error.name === "NotAllowedError"
+      ? "Микрофон не разрешён. Разрешите доступ в настройках приложения."
+      : `Микрофон недоступен: ${error.message}`, "err");
+    return;
+  }
+
+  const { type, suffix } = dictType();
+  dict.suffix = suffix;
+  dict.chunks = [];
+  dict.rec = new MediaRecorder(dict.stream, type ? { mimeType: type } : undefined);
+  dict.rec.ondataavailable = (event) => {
+    if (event.data?.size) dict.chunks.push(event.data);
+  };
+  dict.rec.onstop = () => dictSend();
+  dict.rec.start();
+  dict.on = true;
+  dict.started = Date.now();
+  buzz(14);
+  dictMeter();
+  paintMic();
+  dict.timer = setInterval(paintMic, 250);
+}
+
+function dictStop() {
+  if (!dict.on) return;
+  buzz(8);
+  // Останавливаем запись; звук уйдёт в dictSend из события onstop —
+  // к тому моменту последний кусок уже в chunks.
+  try {
+    dict.rec.stop();
+  } catch {
+    dictDrop();
+    paintMic();
+  }
+}
+
+async function dictSend() {
+  const blob = new Blob(dict.chunks, { type: dict.rec?.mimeType || "audio/webm" });
+  dictDrop();
+  dict.chunks = [];
+
+  if (blob.size < 1500) {
+    paintMic();
+    toast("Слишком коротко — скажите ещё раз", "err");
+    return;
+  }
+
+  const pc = activePc();
+  if (!pc) return;
+  dict.busy = true;
+  state.justdayHeard = "";
+  state.justdayAnswer = "";
+  paintMic();
+  try {
+    const got = await api(
+      `/api/pcs/${encodeURIComponent(pc.id)}/justday/dictate?suffix=${encodeURIComponent(dict.suffix)}`,
+      { method: "POST", body: blob, raw: true },
+    );
+    state.justdayHeard = got.text || "";
+    state.justdayAnswer = got.ok === false
+      ? got.error || "не расслышал"
+      : got.result || "сделано";
+    buzz(got.ok === false ? 30 : [12, 40, 12]);
+  } catch (error) {
+    state.justdayAnswer = `не получилось: ${error.message}`;
+  }
+  dict.busy = false;
+  await render(true);
+}
+
+/* Уходя со страницы с включённой записью, микрофон надо отпустить: иначе
+   телефон продолжит показывать, что его слушают. */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && dict.on) dictStop();
+});
+
+function micBlock() {
+  if (!micReady()) {
+    return `<div class="mic-wrap">
+      <button class="mic" disabled aria-hidden="true">${icon("mic")}</button>
+      <div class="mic-hint">Наговаривать можно по https — через адрес Tailscale или из приложения.
+        По обычному http браузер микрофон не даёт.</div>
+    </div>`;
+  }
+  return `<div class="mic-wrap">
+    <button class="mic" id="mic" data-mic="1" aria-label="Наговорить JustDay">${icon("mic")}</button>
+    <div class="wave" id="wave" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="mic-time" id="mic-time"></div>
+    <div class="mic-hint" id="mic-hint">Нажмите и скажите — как острову на компьютере</div>
+  </div>`;
+}
+
 function viewJarvis() {
   const pc = activePc();
   if (!pc) return `<div class="empty">ПК не настроены</div>`;
@@ -1247,22 +1529,29 @@ function viewJarvis() {
   const now = (music.queue || [])[music.index ?? 0] || music.now || null;
   const playing = music.playing ?? false;
   const answer = state.justdayAnswer;
+  const heard = state.justdayHeard;
+
+  const working = jd?.state && jd.state !== "idle";
+  const quiet = jd?.silent === "game"
+    ? "молчит, идёт игра"
+    : jd?.silent === "off" ? "голос выключен" : "";
 
   return `
-  <section class="card jarvis-ask">
-    <div class="card-head">
-      <h2>Сказать JustDay</h2>
-      <span class="meta">${esc(JARVIS_STATE[jd?.state] || jd?.state || "…")}${jd?.silent === "game"
-        ? " · молчит, идёт игра" : jd?.silent === "off" ? " · голос выключен" : ""}</span>
+  <section class="hero">
+    <div class="hero-state">
+      <span class="dot ${working ? "connecting" : "online"}"></span>
+      ${esc(JARVIS_STATE[jd?.state] || jd?.state || "готов")}${quiet ? ` · ${esc(quiet)}` : ""}
     </div>
+    ${micBlock()}
     <form id="jarvis-form" class="jarvis-form">
-      <input type="text" id="jarvis-text" placeholder="Например: включи музыку" autocomplete="off"
+      <input type="text" id="jarvis-text" placeholder="Или напишите: включи музыку" autocomplete="off"
         enterkeyhint="send">
       <button class="btn primary" type="submit" aria-label="Отправить">${icon("chevron-right")}</button>
     </form>
     <div class="chips">
       ${QUICK_ASKS.map((q) => `<button class="chip" data-jarvis-ask="${esc(q)}">${esc(q)}</button>`).join("")}
     </div>
+    ${heard ? `<div class="jarvis-answer heard">${esc(heard)}</div>` : ""}
     ${answer ? `<div class="jarvis-answer">${esc(answer)}</div>` : ""}
   </section>
 
@@ -1305,7 +1594,7 @@ function viewJarvis() {
     <div class="row">
       <button class="btn" data-jarvis-ask="молчи">${icon("volume-x")} Молчи</button>
       <button class="btn" data-jarvis-ask="говори">${icon("volume-2")} Говори</button>
-      <button class="btn" id="jarvis-say">${icon("mic")} Сказать в комнате</button>
+      <button class="btn" id="jarvis-say">${icon("audio-lines")} Сказать в комнате</button>
     </div>
   </section>`;
 }
@@ -1313,6 +1602,7 @@ function viewJarvis() {
 async function jarvisAsk(text, { aloud = false } = {}) {
   const pc = activePc();
   if (!pc) return;
+  state.justdayHeard = "";
   state.justdayAnswer = "…";
   render(true);
   try {
@@ -1453,9 +1743,12 @@ async function render(force = false) {
   // Живые обновления приходят каждые несколько секунд. Перерисовка открытой
   // формы стёрла бы введённый текст прямо под пальцем.
   if (state.form.open && !force) return;
+  // Идёт запись голоса: перерисовка убрала бы полоски громкости и таймер
+  // из-под пальца, а человек решил бы, что кнопка не сработала.
+  if (dict.on || dict.busy) return;
   state.rendering = true;
 
-  const current = route();
+  const current = screenNow();
   try {
     const [pcs, esp32, schedules] = await Promise.all([
       api("/api/pcs"),
@@ -1492,7 +1785,9 @@ async function render(force = false) {
     const offset = pager ? pager.scrollLeft : 0;
 
     syncChrome();
-    el("view").innerHTML = approvalBlock() + ROUTES[current].view();
+    // В стримдеке запрос на подтверждение не показываем карточкой: там нет
+    // места для текста, и о нём сообщает строка в рейке.
+    el("view").innerHTML = (deckMode() ? "" : approvalBlock()) + ROUTES[current].view();
 
     if (current === "deck") {
       const fresh = el("pager");
@@ -1591,6 +1886,12 @@ document.addEventListener("click", async (event) => {
   const d = button.dataset;
 
   /* --- JustDay --- */
+  if (d.mic) {
+    return dict.on ? dictStop() : dictStart();
+  }
+  if (d.refresh) {
+    return run(button, () => render(true));
+  }
   if (d.jarvisAsk) {
     buzz(8);
     return jarvisAsk(d.jarvisAsk);
@@ -1993,6 +2294,13 @@ async function start() {
   syncChrome();
   await render(true);
   connectEvents();
+
+  // Крупный заголовок уезжает при прокрутке, как в системных приложениях:
+  // на маленьком экране место под содержимое дороже, чем название экрана.
+  const view = el("view");
+  view.addEventListener("scroll", () => {
+    document.body.classList.toggle("scrolled", view.scrollTop > 14);
+  }, { passive: true });
   // Подстраховка, если события не дойдут: редкий фоновый опрос.
   setInterval(() => {
     if (!document.hidden) render();

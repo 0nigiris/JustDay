@@ -37,13 +37,19 @@
 
 <!-- Приложение -->
 <div id="main" hidden>
+  <!-- Верх экрана как в iOS: полоса с действиями, под ней крупный заголовок.
+       При прокрутке крупный уезжает, а его место в полосе занимает маленький —
+       поэтому заголовок здесь дважды, и оба ведёт один и тот же код. -->
   <header class="top" id="top">
+    <div class="bar-row">
+      <button class="icon-btn" id="btn-pc" title="Сменить компьютер" hidden></button>
+      <div class="title-sm" id="page-title-sm" aria-hidden="true">Пульт</div>
+      <button class="icon-btn" id="btn-refresh" title="Обновить" aria-label="Обновить"><i class="i" style="--src:url(/static/icons/refresh-cw.svg)" aria-hidden="true"></i></button>
+    </div>
     <div class="top-text">
       <h1 id="page-title">Пульт</h1>
       <div class="sub" id="conn-status">подключение…</div>
     </div>
-    <button class="icon-btn" id="btn-pc" title="Сменить компьютер" hidden></button>
-    <button class="icon-btn" id="btn-refresh" title="Обновить" aria-label="Обновить"><i class="i" style="--src:url(/static/icons/refresh-cw.svg)" aria-hidden="true"></i></button>
   </header>
 
   <main id="view"><div class="empty">Загрузка…</div></main>

@@ -1,35 +1,46 @@
-/* JustDay — интерфейс рассчитан прежде всего на телефон.
-   Никаких сборщиков и фреймворков: один файл стилей, один файл скрипта.
+/* JustDay — телефон.
 
-   Взято у Apple, и намеренно: тёмная системная палитра, сгруппированные
-   списки, крупный заголовок, размытая подложка у панелей, пружинистая
-   кривая перехода. Причина не в моде — это язык, который на телефоне уже
-   знают наизусть. Пульт, которым пользуются одной рукой в темноте, не
-   должен требовать чтения.
+   Замысел. Это не «приложение со списком кнопок», а продолжение острова,
+   который живёт наверху экрана компьютера. Поэтому здесь ровно один
+   характерный элемент: тёмная пилюля-остров. Она встречает на входе, она же
+   держит голос на вкладке JustDay, её форму повторяют клавиши пульта. Всё
+   остальное намеренно тихое — чёрный холст, сгруппированные карточки,
+   системный шрифт, один синий акцент.
 
-   Главный экран одинаков в обоих положениях телефона, меняется только
-   число кнопок в ряду: две разные компоновки пришлось бы держать в
-   голове, а так модель одна. */
+   Два положения телефона — два разных прибора:
+
+     портрет   — приложение: крупный заголовок, карточки, плавающая
+                 панель вкладок из матового стекла;
+     ландшафт  — стримдек: панели и заголовки исчезают, экран целиком
+                 отдан сетке клавиш, слева остаётся узкая рейка с именем
+                 компьютера и точками страниц.
+
+   Переключение — по самому повороту, без кнопок и настроек: телефон,
+   положенный набок на стол, и телефон в руке — разные задачи.
+
+   Ни сборщиков, ни фреймворков: один файл стилей, один файл скрипта. */
 
 :root {
   color-scheme: dark light;
 
-  /* Системная палитра iOS, тёмный вариант. Чистый чёрный — не экономия
-     на выразительности: на OLED он гасит пиксель полностью, и карточки
-     кажутся лежащими на стекле, а не нарисованными. */
+  /* Тёмная палитра iOS. Чистый чёрный выбран не ради экономии: на OLED он
+     гасит пиксель полностью, и карточка выглядит лежащей на стекле. */
   --bg: #000000;
-  --surface: #1c1c1e;
-  --surface-2: #2c2c2e;
-  --surface-3: #3a3a3c;
-  --border: rgba(84, 84, 88, 0.6);
+  --surface: rgba(28, 28, 30, 0.92);
+  --surface-2: rgba(44, 44, 46, 0.94);
+  --surface-3: rgba(58, 58, 60, 0.96);
+  --hair: rgba(255, 255, 255, 0.08);      /* волосяная линия по краю карточки */
+  --border: rgba(84, 84, 88, 0.55);
   --border-strong: rgba(84, 84, 88, 0.9);
+  --shine: rgba(255, 255, 255, 0.06);     /* блик по верхней кромке */
 
   --text: #ffffff;
   --text-dim: rgba(235, 235, 245, 0.6);
   --text-faint: rgba(235, 235, 245, 0.3);
 
   --accent: #0a84ff;
-  --accent-soft: rgba(10, 132, 255, 0.16);
+  --accent-soft: rgba(10, 132, 255, 0.18);
+  --accent-glow: rgba(10, 132, 255, 0.35);
 
   --online: #30d158;
   --offline: #8e8e93;
@@ -37,32 +48,35 @@
   --error: #ff453a;
   --unknown: #bf5af2;
   --danger: #ff453a;
-  --danger-soft: rgba(255, 69, 58, 0.16);
+  --danger-soft: rgba(255, 69, 58, 0.18);
+  --voice: #ff375f;                        /* запись голоса — единственный красный, кроме опасного */
 
-  /* Плавающий слой: верхняя панель, вкладки, шторка. Полупрозрачный — под ним
-     проезжает содержимое, и это единственное место, где размытие уместно. */
-  --bar: rgba(0, 0, 0, 0.72);
-  --bar-solid: rgba(28, 28, 30, 0.92);  /* тот же слой там, где под ним не должно просвечивать */
+  /* Плавающий слой: панель вверху, вкладки внизу, шторка, подсказки.
+     Единственное место, где уместно размытие: под ним проезжает содержимое. */
+  --bar: rgba(18, 18, 20, 0.62);
+  --bar-solid: rgba(28, 28, 30, 0.92);
+  --blur: saturate(180%) blur(28px);
 
-  --radius: 12px;
-  --radius-lg: 18px;
+  --radius: 14px;
+  --radius-lg: 22px;
+  --radius-key: 20px;
   --gap: 16px;
-  --tap: 44px;          /* минимальная площадь нажатия для пальца */
-  --tabbar: 56px;
+  --tap: 44px;              /* минимальная площадь нажатия для пальца */
+  --tabbar: 62px;
 
-  /* Кривая, по которой в iOS выезжают панели: быстро стартует, мягко
-     останавливается. Линейная анимация той же длительности выглядит
-     дешевле при том же времени. */
+  /* Кривая, по которой в iOS выезжают панели: резкий старт, мягкая
+     остановка. Линейная той же длительности выглядит дешевле. */
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 * { box-sizing: border-box; }
+* { -webkit-tap-highlight-color: transparent; }
 
-/* Атрибут hidden скрывает элемент только правилом браузера `display: none`,
-   а у него нулевая специфичность: любое наше `#main { display: flex }`
-   его перебивает. Поэтому весь интерфейс показывался разом — экран входа
-   поверх пульта, а окно подтверждения поверх всего и без возможности его
-   закрыть. Одно правило лечит все такие места сразу, включая будущие. */
+/* Атрибут hidden скрывает элемент правилом браузера с нулевой
+   специфичностью: любое наше `#main { display: flex }` его перебивает.
+   Так интерфейс однажды сломался целиком — вход поверх пульта. Одно
+   правило лечит все такие места, включая будущие. */
 [hidden] { display: none !important; }
 
 html, body {
@@ -71,55 +85,81 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  /* Сначала системный шрифт Apple, затем Android, затем то, что найдётся
-     в Linux. Список кончается явным sans-serif: на части систем `system-ui`
-     разрешается в моноширинный, и весь интерфейс уезжает в пишущую машинку. */
+  /* Системный шрифт Apple, затем Android, затем то, что найдётся в Linux.
+     Список кончается явным sans-serif: на части систем `system-ui`
+     разрешается в моноширинный, и весь интерфейс уезжает в машинопись. */
   font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto,
         "Segoe UI", "Noto Sans", Cantarell, Ubuntu, "DejaVu Sans",
         "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.01em;
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: contain;
 }
 
-body { letter-spacing: -0.01em; }
-
-/* Убираем синюю вспышку при касании: ниже у каждого элемента своё,
-   более спокойное состояние нажатия. */
-* { -webkit-tap-highlight-color: transparent; }
+/* Свет острова. Единственное украшение во всём интерфейсе: мягкое пятно
+   у верхней кромки, цвет которого зависит от открытой вкладки. Его почти
+   не видно — но чёрный перестаёт быть плоским. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20vh 0 auto;
+  height: 46vh;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(60% 60% at 50% 0%, var(--halo, rgba(10, 132, 255, 0.16)), transparent 70%);
+  transition: background 0.6s var(--ease);
+}
+body[data-route="deck"] { --halo: rgba(10, 132, 255, 0.14); }
+body[data-route="jarvis"] { --halo: rgba(191, 90, 242, 0.16); }
+body[data-route="pcs"] { --halo: rgba(48, 209, 88, 0.12); }
+body[data-route="schedule"] { --halo: rgba(255, 159, 10, 0.12); }
+body[data-route="more"], body[data-route="help"], body[data-route="buttons"] { --halo: rgba(142, 142, 147, 0.14); }
 
 /* ============================================================== вход ==== */
 
 .login {
+  position: relative;
+  z-index: 1;
   min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--gap);
+  padding: 28px calc(22px + env(safe-area-inset-left)) calc(28px + env(safe-area-inset-bottom));
 }
-.login-box { width: 100%; max-width: 340px; text-align: center; }
-.login-mark {
-  font-size: 56px;
-  line-height: 1;
-  margin-bottom: 18px;
-  filter: drop-shadow(0 8px 24px rgba(10, 132, 255, 0.25));
+
+.login-box {
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  animation: rise 0.5s var(--ease) both;
 }
+
+img.login-mark {
+  width: 148px;
+  height: 60px;
+  display: block;
+  margin: 0 auto 22px;
+  filter: drop-shadow(0 12px 32px rgba(10, 132, 255, 0.25));
+}
+
 .login h1 {
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.03em;
   margin: 0 0 6px;
 }
-.login p { color: var(--text-dim); font-size: 15px; margin: 0 0 32px; }
+
+.login p { color: var(--text-dim); font-size: 15px; margin: 0 0 30px; }
 .login form { display: grid; gap: 12px; }
 
 .divider {
-  margin: 20px 0;
-  color: var(--text-faint);
-  font-size: 13px;
   display: flex;
   align-items: center;
   gap: 12px;
+  color: var(--text-faint);
+  font-size: 13px;
+  margin: 18px 0;
 }
 .divider::before, .divider::after {
   content: "";
@@ -128,9 +168,13 @@ body { letter-spacing: -0.01em; }
   background: var(--border);
 }
 
+.error { color: var(--error); font-size: 14px; min-height: 20px; margin-top: 14px; }
+
+/* =========================================================== поля ======= */
+
 input, select, textarea {
   width: 100%;
-  min-height: 50px;
+  height: 48px;
   padding: 0 16px;
   font: inherit;
   color: var(--text);
@@ -138,190 +182,271 @@ input, select, textarea {
   border: 1px solid transparent;
   border-radius: var(--radius);
   outline: none;
-  transition: border-color .15s ease, background .15s ease;
+  transition: border-color 0.18s, background 0.18s;
+  appearance: none;
 }
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
   background: var(--surface-2);
 }
-textarea { padding: 13px 16px; min-height: 80px; resize: vertical; line-height: 1.4; }
+textarea { padding: 13px 16px; min-height: 84px; height: auto; resize: vertical; line-height: 1.4; }
 select {
-  appearance: none;
-  /* Своя стрелка: системная в тёмной теме на Android остаётся чёрной. */
+  padding-right: 40px;
   background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
                     linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
-  background-position: right 20px center, right 14px center;
-  background-size: 6px 6px, 6px 6px;
+  background-position: calc(100% - 20px) 21px, calc(100% - 15px) 21px;
+  background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
-  padding-right: 40px;
 }
 
-.error { color: var(--error); font-size: 14px; min-height: 20px; margin-top: 14px; }
-
-/* ============================================================ каркас ==== */
+/* ====================================================== каркас ========== */
 
 #main {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
 }
 
+/* Верх экрана. Устроен как в iOS: сначала тонкая полоса с действиями,
+   под ней крупный заголовок, который при прокрутке уезжает и превращается
+   в маленький — прямо в полосе. */
 header.top {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 10px) var(--gap) 10px;
+  padding: calc(env(safe-area-inset-top) + 8px) 20px 8px;
   background: var(--bar);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.3s var(--ease);
 }
-.top-text { flex: 1; min-width: 0; }
-.top h1 {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  margin: 0;
-  line-height: 1.1;
-}
-.top .sub {
-  color: var(--text-dim);
-  font-size: 13px;
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+body.scrolled header.top { border-bottom-color: var(--hair); }
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
 }
 
+/* Маленький заголовок жив только когда уехал большой — и наоборот. */
+.title-sm {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+body.scrolled .title-sm { opacity: 1; transform: none; }
+
+.top-text {
+  overflow: hidden;
+  transition: max-height 0.3s var(--ease), opacity 0.22s var(--ease);
+  max-height: 72px;
+}
+.top h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin: 4px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top .sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.scrolled .top-text {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* Круглая кнопка в полосе. Стекло, а не заливка: под ней проезжает
+   содержимое, и плотный круг выглядел бы наклейкой. */
 .icon-btn {
-  min-width: 38px;
-  min-height: 38px;
+  flex: none;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  font-size: 17px;
-  color: var(--accent);
-  background: var(--surface);
-  border: none;
-  border-radius: 19px;
+  gap: 7px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--hair);
+  border-radius: 17px;
   cursor: pointer;
-  transition: transform .12s var(--ease), background .12s ease;
+  transition: transform 0.16s var(--spring), background 0.16s;
 }
-.icon-btn:active { transform: scale(0.92); background: var(--surface-2); }
+.icon-btn:active { transform: scale(0.9); background: var(--surface-3); }
+.icon-btn .i { width: 17px; height: 17px; }
 
 main#view {
+  position: relative;
   flex: 1;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
-  padding: var(--gap) var(--gap) calc(var(--tabbar) + env(safe-area-inset-bottom) + 24px);
   -webkit-overflow-scrolling: touch;
+  padding: 10px 20px calc(var(--tabbar) + 34px + env(safe-area-inset-bottom));
 }
 
-/* ========================================================== таб-бар ===== */
-
+/* Панель вкладок — плавающая пилюля матового стекла, а не полоса во всю
+   ширину: так она читается как отдельный слой над содержимым, и палец
+   по-прежнему достаёт её, не перекрывая последнюю карточку. */
 .tabbar {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 20;
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 30;
+  height: var(--tabbar);
   display: flex;
-  height: calc(var(--tabbar) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px;
   background: var(--bar);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-top: 1px solid var(--border);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--hair);
+  border-radius: 31px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 var(--shine);
 }
+
 .tab {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  color: var(--text-faint);
   text-decoration: none;
-  font-size: 10px;
-  letter-spacing: 0;
-  transition: color .15s ease;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  letter-spacing: -0.005em;
+  border-radius: 25px;
+  transition: color 0.2s, background 0.2s;
 }
-.tab .ico { font-size: 22px; line-height: 1; }
+.tab .ico {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 24px;
+  border-radius: 12px;
+  transition: background 0.24s var(--ease), transform 0.24s var(--spring);
+}
+.tab .ico .i { width: 21px; height: 21px; }
+.tab span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tab.on, .tab.active { color: var(--accent); }
-.tab:active { opacity: 0.6; }
+.tab.on .ico, .tab.active .ico { background: var(--accent-soft); transform: translateY(-1px); }
+.tab:active { opacity: 0.55; }
 
-/* ========================================================== карточки ==== */
+/* ========================================================= карточки ===== */
 
 .card {
+  position: relative;
   background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-lg);
-  padding: var(--gap);
+  padding: 16px;
   margin-bottom: 14px;
+  box-shadow: inset 0 1px 0 var(--shine);
 }
+
 .card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .card-head h2, .card-head h3 {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.card-head .meta { flex: none; }
 
+.meta { color: var(--text-dim); font-size: 13.5px; line-height: 1.4; }
+.meta code, .hint code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border-radius: 5px;
+}
+
+/* Заголовок группы — как в системных настройках: вне карточки, тихий. */
 .group-title {
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-dim);
+  letter-spacing: -0.005em;
   margin: 22px 4px 8px;
 }
-.group-title:first-child { margin-top: 4px; }
+.group-title:first-child { margin-top: 6px; }
 
 .empty {
-  text-align: center;
   color: var(--text-dim);
-  padding: 48px 20px;
+  text-align: center;
   font-size: 15px;
+  line-height: 1.5;
+  padding: 44px 24px;
 }
-.empty .big { font-size: 44px; display: block; margin-bottom: 14px; opacity: 0.5; }
+.empty .big { font-size: 40px; display: block; margin-bottom: 14px; opacity: 0.4; }
 
 .banner {
-  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.35;
   padding: 12px 14px;
   margin-bottom: 14px;
-  font-size: 14px;
-  line-height: 1.4;
   background: var(--accent-soft);
-  color: var(--text);
+  border-radius: var(--radius);
 }
 .banner.warn { background: rgba(255, 159, 10, 0.16); }
 .banner.err { background: var(--danger-soft); }
 
-/* ===================================================== состояние ПК ===== */
-
+/* Точка состояния. Светящаяся у живого — единственный способ увидеть
+   состояние краем глаза, не читая подпись. */
 .dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
   flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: var(--offline);
 }
-.dot.online { background: var(--online); box-shadow: 0 0 0 4px rgba(48, 209, 88, 0.18); }
+.dot.online { background: var(--online); box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.18); }
 .dot.offline { background: var(--offline); }
 .dot.connecting { background: var(--connecting); animation: pulse 1.4s ease-in-out infinite; }
 .dot.error { background: var(--error); }
@@ -331,256 +456,579 @@ main#view {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+}
 
 .state-label { font-size: 13px; color: var(--text-dim); }
 
-/* ======================================================== метрики ======= */
+/* ========================================================= показатели === */
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 .metric {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: var(--radius);
   padding: 12px 13px;
 }
 .metric .label {
   font-size: 12px;
   color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  margin-bottom: 4px;
 }
 .metric .value {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  margin-top: 3px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
-.metric .meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.metric .value small { font-size: 12px; font-weight: 400; color: var(--text-dim); margin-left: 4px; }
+.metric .meta { font-size: 12px; margin-top: 3px; }
 
 .bar {
   height: 4px;
-  background: var(--surface-3);
-  border-radius: 2px;
   margin-top: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
   overflow: hidden;
 }
-/* Полоса краснеет по мере нагрузки: цифру на бегу читать некогда,
-   а цвет виден боковым зрением. */
-.bar i.hot { background: var(--connecting); }
-.bar i.crit { background: var(--error); }
 .bar i {
   display: block;
   height: 100%;
-  width: 100%;
-  transform-origin: left center;
-  transform: scaleX(0);
   background: var(--accent);
   border-radius: 2px;
-  transition: transform .5s var(--ease);
+  transform-origin: left;
+  transition: transform 0.5s var(--ease), background 0.3s;
 }
+.bar i.hot { background: var(--connecting); }
+.bar i.crit { background: var(--error); }
 
-/* ============================================== сгруппированный список ==
-   Строка списка iOS: разделитель не доходит до левого края, потому что
-   слева стоит иконка — так глаз читает столбец текста, а не сетку. */
-
+/* Пары «название — значение»: системный сгруппированный список. */
 .kv {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: var(--radius);
   overflow: hidden;
 }
 .kv > div {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   padding: 11px 13px;
-  font-size: 15px;
+  font-size: 14.5px;
 }
-.kv > div + div { border-top: 1px solid var(--border); }
+.kv > div + div { border-top: 1px solid var(--hair); }
 .kv .label { color: var(--text-dim); }
 .kv .value { font-variant-numeric: tabular-nums; text-align: right; }
 
-/* ========================================================== кнопки ====== */
+/* =========================================================== кнопки ===== */
 
 .btn {
-  min-height: 50px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: var(--tap);
   padding: 0 18px;
   font: inherit;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: 16px;
+  font-weight: 500;
   color: var(--text);
   background: var(--surface-2);
-  border: none;
+  border: 1px solid var(--hair);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: transform .12s var(--ease), opacity .12s ease, background .12s ease;
+  white-space: nowrap;
+  transition: transform 0.16s var(--spring), background 0.16s, opacity 0.16s;
 }
-.btn { white-space: nowrap; }
-.btn:active { transform: scale(0.97); }
-.btn.primary { background: var(--accent); color: #fff; }
-.btn.danger { background: var(--danger-soft); color: var(--danger); }
-.btn.plain { background: transparent; color: var(--accent); }
+.btn:active { transform: scale(0.97); background: var(--surface-3); }
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.28);
+}
+.btn.danger { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
+.btn.plain { background: transparent; border-color: transparent; color: var(--accent); }
 .btn[disabled] { opacity: 0.35; pointer-events: none; }
 .btn.busy { opacity: 0.6; pointer-events: none; }
 
 .row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.row .btn { flex: 1; min-width: 120px; }
+.row .btn { flex: 1; min-width: 124px; }
 
 /* ============================================================ пульт ===== */
 
+/* Страницы листаются пальцем и «залипают»: между страницами пульт не
+   останавливается, иначе кнопки оказываются разрезанными пополам. */
 .pager {
   display: flex;
   overflow-x: auto;
-  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
-  margin: 0 calc(var(--gap) * -1);
-  padding: 0 var(--gap);
-  gap: var(--gap);
+  margin: 0 -20px;
+  padding: 0 4px;
 }
 .pager::-webkit-scrollbar { display: none; }
 .page {
   flex: 0 0 100%;
   scroll-snap-align: center;
-  min-width: 0;
+  padding: 0 16px;
 }
 
 .dots {
   display: flex;
   justify-content: center;
   gap: 7px;
-  margin-top: 18px;
+  padding: 16px 0 2px;
 }
 .dots i {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--surface-3);
-  transition: background .2s ease, transform .2s var(--ease);
+  background: var(--text-faint);
+  transition: background 0.25s, transform 0.25s var(--spring);
 }
-.dots i.on { background: var(--accent); transform: scale(1.15); }
+.dots i.on { background: var(--accent); transform: scale(1.35); }
 
-/* Плитки пульта. Скругление крупное — так их читаешь как значки
-   приложений, а не как ячейки таблицы. Квадрат вместо строки списка:
-   попасть пальцем в квадрат на ходу проще, чем в узкую полосу. */
 .keys {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(94px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
   gap: 12px;
 }
+
+/* Клавиша — та же пилюля-остров, только квадратная: тёмное стекло,
+   блик по верхней кромке, значок в своём круге. Подпись под значком,
+   а не вместо него: в темноте и боком читается форма, не текст. */
 .key {
+  position: relative;
+  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  aspect-ratio: 1;
+  gap: 9px;
   padding: 10px 8px;
-  border: none;
-  border-radius: 20px;
-  background: var(--surface);
-  color: var(--text);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.25;
-  text-align: center;
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025));
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-key);
   cursor: pointer;
-  transition: transform .12s var(--ease), background .12s ease;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 var(--shine);
+  transition: transform 0.16s var(--spring), background 0.18s, box-shadow 0.18s;
 }
-.key:active { transform: scale(0.94); background: var(--surface-2); }
+.key:active {
+  transform: scale(0.93);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+}
 .key[disabled] { opacity: 0.3; pointer-events: none; }
 .key.busy { opacity: 0.5; pointer-events: none; }
-.key .key-ico { font-size: 30px; line-height: 1; }
-.key .key-ico .i { width: 28px; height: 28px; }
+
+.key .key-ico {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  transition: background 0.18s;
+}
+.key .key-ico .i { width: 23px; height: 23px; }
 .key .key-cap {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text-dim);
+  text-align: center;
+  max-width: 100%;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  color: var(--text-dim);
 }
-/* Избранное подсвечено, а не переставлено: кнопка должна оставаться
-   там, где палец привык её находить. */
-/* Избранное — метка, а не включённое состояние: синяя заливка кричала о том,
-   что кнопка сейчас работает, хотя она просто вынесена на первую страницу. */
-.key.fav { position: relative; }
-.key.fav::after {
-  content: "";
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
+
+/* Избранное: не звёздочка поверх кнопки, а подсветка самой клавиши —
+   пульт должен читаться как набор физических кнопок, а не как список. */
+.key.fav {
+  background: linear-gradient(180deg, rgba(10, 132, 255, 0.22), rgba(10, 132, 255, 0.08));
+  border-color: rgba(10, 132, 255, 0.35);
 }
+.key.fav .key-ico { background: rgba(10, 132, 255, 0.3); }
 .key.fav .key-cap { color: var(--text); }
-.key.danger .key-ico { color: var(--danger); }
+.key.danger .key-ico { background: var(--danger-soft); color: var(--danger); }
 .key.danger .key-cap { color: var(--danger); }
 
-/* ======================================================== расписание ==== */
+/* ======================================================= стримдек ======= */
+
+/* Телефон повернули набок. Ничего не настраивается и не выбирается:
+   пропадают заголовок, вкладки и отступы, и весь экран становится сеткой
+   клавиш. Рейка слева — то, что нужно видеть, не отвлекаясь: какой
+   компьютер, что с ним, сколько страниц. */
+
+body[data-mode="deck"] { overflow: hidden; }
+body[data-mode="deck"] header.top,
+body[data-mode="deck"] .tabbar { display: none; }
+body[data-mode="deck"] main#view {
+  padding: 0;
+  overflow: hidden;
+}
+body[data-mode="deck"] #main { height: 100dvh; }
+
+.deck {
+  display: flex;
+  height: 100dvh;
+  gap: 10px;
+  padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+           max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+}
+
+.deck-side {
+  flex: none;
+  width: 124px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 10px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--shine);
+}
+.deck-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.deck-brand .i { width: 16px; height: 16px; color: var(--accent); }
+.deck-pc {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  min-width: 0;
+}
+.deck-pc span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 2px;
+}
+.deck-now {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.deck-side .dots { margin-top: auto; padding: 8px 0 0; }
+.deck-side .row { margin-top: 8px; }
+.deck-side .icon-btn { width: 100%; }
+.deck-hint { font-size: 11px; color: var(--text-faint); line-height: 1.25; }
+
+body[data-mode="deck"] .pager { flex: 1; margin: 0; padding: 0; min-width: 0; }
+body[data-mode="deck"] .page { padding: 0 3px; height: 100%; }
+body[data-mode="deck"] .keys {
+  height: 100%;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 10px;
+}
+/* На вытянутых экранах (18:9 и уже) в ряд влезает пятая клавиша. */
+@media (orientation: landscape) and (min-aspect-ratio: 19/9) {
+  body[data-mode="deck"] .keys { grid-template-columns: repeat(5, 1fr); }
+}
+body[data-mode="deck"] .key { aspect-ratio: auto; gap: 8px; border-radius: var(--radius-key); }
+body[data-mode="deck"] .key .key-ico { width: 46px; height: 46px; }
+body[data-mode="deck"] .key .key-ico .i { width: 26px; height: 26px; }
+body[data-mode="deck"] .key .key-cap { font-size: 13px; }
+body[data-mode="deck"] .empty { padding: 20px 14px; font-size: 14px; }
+body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8px 10px; }
+
+/* ====================================================== JustDay ========= */
+
+/* Остров. Здесь он главный герой экрана: пилюля с состоянием ассистента,
+   под ней — большая кнопка «говорить». Всё остальное на вкладке тише. */
+.hero {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--hair);
+  border-radius: 28px;
+  padding: 18px 16px 16px;
+  margin-bottom: 14px;
+  box-shadow: inset 0 1px 0 var(--shine);
+  overflow: hidden;
+}
+
+.hero-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--hair);
+  border-radius: 15px;
+}
+
+/* Кнопка голоса. Круглая и большая не ради вида: её ищут наощупь,
+   по дороге, не глядя на экран. */
+.mic-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 0 10px;
+}
+.mic {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #fff;
+  background: radial-gradient(120% 120% at 30% 20%, #3aa0ff, var(--accent));
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 12px 34px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.18s var(--spring), background 0.25s, box-shadow 0.25s;
+}
+.mic .i { width: 38px; height: 38px; }
+.mic:active { transform: scale(0.94); }
+.mic[disabled] { opacity: 0.4; pointer-events: none; box-shadow: none; }
+
+/* Запись. Красный и живое кольцо: состояние должно быть видно с метра. */
+.mic.on {
+  background: radial-gradient(120% 120% at 30% 20%, #ff6482, var(--voice));
+  box-shadow: 0 12px 34px rgba(255, 55, 95, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.mic.on::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  border: 2px solid var(--voice);
+  animation: ring 1.6s ease-out infinite;
+}
+@keyframes ring {
+  0% { transform: scale(0.94); opacity: 0.8; }
+  100% { transform: scale(1.22); opacity: 0; }
+}
+.mic.busy { pointer-events: none; }
+.mic.busy .i { animation: pulse 1s ease-in-out infinite; }
+
+.mic-time {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--voice);
+  min-height: 20px;
+}
+.mic-hint {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.35;
+  max-width: 260px;
+}
+
+/* Полоски громкости: не украшение — единственное доказательство, что
+   микрофон действительно слышит, а не записывает тишину. */
+.wave {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  height: 22px;
+}
+.wave i {
+  width: 4px;
+  height: 20%;
+  background: var(--voice);
+  border-radius: 2px;
+  transform-origin: bottom;
+  transition: height 0.08s linear;
+}
+
+.jarvis-form { display: flex; gap: 10px; }
+.jarvis-form input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  border-radius: 23px;
+  padding: 0 18px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.jarvis-form .btn {
+  flex: none;
+  width: 46px;
+  min-height: 46px;
+  padding: 0;
+  border-radius: 23px;
+}
+
+/* Быстрые просьбы: лента, которая уезжает за край — так видно, что её
+   можно листать, и она не крадёт высоту у кнопки голоса. */
+.chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 12px -16px 0;
+  padding: 0 16px 2px;
+}
+.chips::-webkit-scrollbar { display: none; }
+@supports (mask-image: linear-gradient(90deg, #000, transparent)) {
+  .chips {
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent 100%);
+  }
+}
+.chip {
+  flex: none;
+  height: 34px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--hair);
+  border-radius: 17px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.16s var(--spring), background 0.16s;
+}
+.chip:active { transform: scale(0.96); background: rgba(255, 255, 255, 0.16); }
+
+/* Ответ — облако сообщения: разговор, а не поле вывода. Надиктованное
+   прижато вправо, ответ — влево, как в любой переписке. */
+.jarvis-answer {
+  width: fit-content;
+  max-width: 94%;
+  margin-top: 14px;
+  padding: 13px 15px;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  background: var(--accent-soft);
+  border: 1px solid rgba(10, 132, 255, 0.22);
+  border-radius: 18px 18px 18px 6px;
+  animation: rise 0.35s var(--ease) both;
+}
+.jarvis-answer.heard {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--hair);
+  border-radius: 18px 18px 6px 18px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.jarvis-now { display: flex; align-items: center; gap: 14px; }
+.jarvis-cover {
+  flex: none;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.jarvis-track { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.jarvis-track b, .jarvis-track .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  padding: 16px 0 4px;
+}
+.transport button {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.16s var(--spring), opacity 0.16s;
+}
+.transport button:active { transform: scale(0.88); opacity: 0.7; }
+.transport .big {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--hair);
+}
+.transport .big .i { width: 28px; height: 28px; }
+
+/* ======================================================= расписание ==== */
 
 .sched { margin-bottom: 12px; }
 .sched-head { display: flex; align-items: center; gap: 12px; }
 .sched-main { flex: 1; min-width: 0; }
 .sched-name {
-  font-weight: 600;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sched-time {
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  margin-top: 2px;
 }
 .sched-form { display: grid; gap: 12px; margin-bottom: 16px; }
 
 .days { display: flex; gap: 6px; }
 .day {
   flex: 1;
-  min-width: 0;
   height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: var(--text-dim);
+  font: inherit;
   font-size: 13px;
-  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
   cursor: pointer;
-  user-select: none;
-  transition: background .12s ease, color .12s ease, transform .12s var(--ease);
+  transition: transform 0.14s var(--spring), background 0.16s, color 0.16s;
 }
 .day:active { transform: scale(0.94); }
-.day.on { background: var(--accent); color: #fff; }
+.day.on { background: var(--accent); border-color: transparent; color: #fff; }
 
-/* =========================================== переключатель как в iOS ====
-   Настоящий переключатель, а не флажок: у флажка нет состояния «идёт
-   переключение», а здесь между нажатием и ответом машины проходит сеть. */
-
+/* Переключатель — системный: положение читается силуэтом, не цветом. */
 .switch {
+  flex: none;
   position: relative;
   width: 51px;
   height: 31px;
-  flex: none;
-  border-radius: 16px;
+  padding: 0;
   background: var(--surface-3);
   border: none;
-  padding: 0;
+  border-radius: 16px;
   cursor: pointer;
-  transition: background .25s var(--ease);
+  transition: background 0.24s var(--ease);
 }
 .switch::after {
   content: "";
@@ -589,81 +1037,77 @@ main#view {
   left: 2px;
   width: 27px;
   height: 27px;
-  border-radius: 50%;
   background: #fff;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
-  transition: transform .25s var(--ease);
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  transition: transform 0.24s var(--ease);
 }
 .switch.on { background: var(--online); }
 .switch.on::after { transform: translateX(20px); }
 .switch[disabled] { opacity: 0.4; pointer-events: none; }
 
-/* ============================================================ формы ===== */
+/* ============================================================ формы ==== */
 
 .field { display: grid; gap: 8px; }
 .field > label {
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-dim);
-  padding-left: 4px;
 }
-/* Подсказка под полем объясняет, что именно сюда писать. Слишком бледная
-   подсказка не читается на солнце, а её здесь как раз и читают. */
-.field .hint {
-  font-size: 13px;
-  color: var(--text-dim);
-  padding-left: 4px;
-  line-height: 1.4;
-}
-.field .hint code {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 12px;
-  background: var(--surface-3);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
+.field .hint { font-size: 13px; color: var(--text-faint); line-height: 1.4; }
 .field.bad input, .field.bad select, .field.bad textarea { border-color: var(--error); }
 
 .form-error {
-  color: var(--error);
   font-size: 14px;
-  line-height: 1.4;
+  color: var(--error);
   padding: 10px 13px;
   background: var(--danger-soft);
   border-radius: var(--radius);
 }
 
-/* Строка списка с нажатием — «Изменить», «Удалить», выбор ПК. */
-.list { background: var(--surface); border-radius: var(--radius-lg); overflow: hidden; }
+/* ============================================================ списки === */
+
+.list {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
 .list-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   width: 100%;
-  padding: 13px var(--gap);
+  padding: 13px 15px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
   background: none;
   border: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
   cursor: pointer;
-  transition: background .12s ease;
+  transition: background 0.14s;
 }
-.list-row + .list-row { border-top: 1px solid var(--border); }
+.list-row + .list-row { border-top: 1px solid var(--hair); }
 .list-row:active { background: var(--surface-2); }
-.list-row .ico { font-size: 22px; flex: none; width: 28px; text-align: center; }
+.list-row .ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 18px;
+}
+.list-row .ico .i { width: 18px; height: 18px; }
 .list-row .body { flex: 1; min-width: 0; }
 .list-row .title {
-  display: block;
   font-size: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .list-row .sub {
-  display: block;
   font-size: 13px;
   color: var(--text-dim);
   margin-top: 2px;
@@ -671,36 +1115,36 @@ main#view {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.list-row .chev { color: var(--text-faint); font-size: 17px; flex: none; }
+.list-row .chev { flex: none; color: var(--text-faint); font-size: 17px; }
 .list-row.danger .title { color: var(--danger); }
+.list-row.danger .ico { background: var(--danger-soft); color: var(--danger); }
 
 .tag {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 7px;
-  border-radius: 6px;
-  background: var(--surface-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
   color: var(--text-dim);
-  flex: none;
+  padding: 3px 9px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
 }
 
-/* Карточка запроса на подтверждение. Заметная, но не кричащая: она
-   появляется на любой вкладке и должна бросаться в глаза сразу, потому
-   что человек в этот момент стоит у компьютера и ждёт. */
-.card.approval {
-  background: var(--accent-soft);
-  animation: toast-in .3s var(--ease);
-}
-.card.approval .kv { background: rgba(0, 0, 0, 0.25); }
+.card.approval { border-color: rgba(255, 159, 10, 0.45); }
+.card.approval .kv { background: rgba(0, 0, 0, 0.3); }
 
-/* ===================================================== подтверждение ==== */
+/* ============================================= подтверждение ============ */
 
+/* Своё окно, а не confirm(): системное появляется у верхней кромки, не даёт
+   назвать кнопки своими словами и не показывает, что именно случится. */
 #sheet {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 100;
   display: flex;
   align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
 }
 .sheet-back {
   position: absolute;
@@ -708,373 +1152,244 @@ main#view {
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
-  animation: fade .2s ease;
+  animation: fade 0.25s var(--ease) both;
 }
 .sheet-card {
   position: relative;
   width: 100%;
-  max-width: 460px;
-  margin: 0 auto;
-  max-height: 88dvh;
-  overflow-y: auto;
-  background: var(--surface);
-  border-radius: 16px 16px 0 0;
-  padding: 10px var(--gap) calc(var(--gap) + env(safe-area-inset-bottom));
+  max-width: 420px;
+  margin-bottom: env(safe-area-inset-bottom);
+  padding: 24px 20px 20px;
   text-align: center;
-  animation: sheet-up .34s var(--ease);
+  background: var(--bar-solid);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--hair);
+  border-radius: 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 var(--shine);
+  animation: sheet-up 0.34s var(--ease) both;
 }
-/* Ручка сверху: показывает, что панель выехала снизу и туда же уйдёт. */
+/* Ручка сверху: показывает, что лист можно смахнуть вниз. */
 .sheet-card::before {
   content: "";
-  display: block;
+  position: absolute;
+  top: 8px;
+  left: 50%;
   width: 36px;
   height: 5px;
-  margin: 0 auto 14px;
+  margin-left: -18px;
+  background: var(--text-faint);
   border-radius: 3px;
-  background: var(--surface-3);
 }
-.sheet-icon { font-size: 44px; line-height: 1; margin-bottom: 12px; }
+.sheet-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 30px;
+  line-height: 1;
+}
+.sheet-icon .i { width: 28px; height: 28px; }
 .sheet-title {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
-.sheet-text { color: var(--text-dim); font-size: 15px; line-height: 1.4; }
+.sheet-text { color: var(--text-dim); font-size: 15px; line-height: 1.45; }
 .sheet-buttons { display: flex; gap: 10px; margin-top: 22px; }
 .sheet-buttons .btn { flex: 1; }
-/* Форма внутри панели выравнивается по левому краю: читать подписи полей
-   по центру невозможно. */
 .sheet-form { text-align: left; display: grid; gap: 22px; margin-top: 4px; }
 
 @keyframes sheet-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from { transform: translateY(24px) scale(0.97); opacity: 0; }
 }
 @keyframes fade {
   from { opacity: 0; }
-  to { opacity: 1; }
 }
 
-/* ======================================================== уведомления === */
+/* ======================================================= уведомления === */
 
 #toasts {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 12px);
-  z-index: 60;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--tabbar) + 24px + env(safe-area-inset-bottom));
+  z-index: 90;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   pointer-events: none;
-  padding: 0 var(--gap);
 }
+body[data-mode="deck"] #toasts { bottom: calc(16px + env(safe-area-inset-bottom)); }
+
 .toast {
-  max-width: 460px;
-  width: 100%;
-  padding: 13px 16px;
-  border-radius: 14px;
-  font-size: 15px;
+  max-width: 100%;
+  padding: 11px 16px;
+  font-size: 14.5px;
   line-height: 1.35;
+  text-align: center;
   color: var(--text);
   background: var(--bar-solid);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--hair);
+  border-radius: 18px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  animation: toast-in .34s var(--ease);
+  animation: toast-in 0.3s var(--spring) both;
 }
-.toast.ok { background: rgba(48, 209, 88, 0.24); }
-.toast.err { background: rgba(255, 69, 58, 0.28); }
-.toast .rid {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
+.toast.ok { border-color: rgba(48, 209, 88, 0.4); }
+.toast.err { border-color: rgba(255, 69, 58, 0.45); }
+.toast .rid { display: block; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.97); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(16px) scale(0.94); opacity: 0; }
 }
 
-/* ========================================================== терминал ====
+/* ========================================================== терминал === */
 
-   Отдельная страница, а не вкладка: терминалу нужен весь экран, и
-   системная кнопка «назад» должна уводить из него целиком.
-
-   Ряд клавиш внизу — не украшение. На экранной клавиатуре телефона нет ни
-   Ctrl-C, ни стрелок, а без них в терминале нельзя ни прервать команду,
-   ни повторить предыдущую. */
-
-.term-page {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-}
+.term-page { display: flex; flex-direction: column; height: 100dvh; }
 .term-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: calc(env(safe-area-inset-top) + 8px) var(--gap) 8px;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
   background: var(--bar);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid var(--border);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-bottom: 1px solid var(--hair);
 }
-.term-head .title {
-  flex: 1;
-  min-width: 0;
-  font-size: 15px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.term-wrap {
-  flex: 1;
-  min-height: 0;
-  padding: 8px;
-  background: var(--bg);
-}
+.term-head .title { flex: 1; font-size: 16px; font-weight: 600; }
+.term-wrap { flex: 1; min-height: 0; padding: 8px; }
 .term-wrap #term { height: 100%; }
-
 .term-keys {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 8px var(--gap) calc(8px + env(safe-area-inset-bottom));
-  background: var(--bar-solid);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-top: 1px solid var(--border);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bar);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-top: 1px solid var(--hair);
 }
 .term-keys::-webkit-scrollbar { display: none; }
 .term-keys button {
   flex: none;
   min-width: 46px;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
-  border: none;
-  border-radius: 9px;
-  background: var(--surface-3);
-  color: var(--text);
   font: inherit;
   font-size: 14px;
-  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
   cursor: pointer;
-  transition: transform .1s var(--ease), background .1s ease;
+  transition: transform 0.14s var(--spring), background 0.16s;
 }
 .term-keys button:active { transform: scale(0.92); background: var(--accent); }
 
-/* ============================================================ справка === */
+/* =========================================================== справка === */
 
 .help { line-height: 1.5; }
 .help h3 {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   margin: 22px 0 8px;
-  letter-spacing: -0.01em;
 }
 .help h3:first-child { margin-top: 0; }
 .help p, .help li { color: var(--text-dim); font-size: 15px; }
 .help ul { padding-left: 20px; margin: 8px 0; }
 .help li { margin-bottom: 6px; }
 .help code {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
-  background: var(--surface-2);
   padding: 2px 6px;
-  border-radius: 5px;
-  color: var(--text);
+  background: var(--surface-2);
+  border-radius: 6px;
 }
 
-/* ==================================================== крупный экран ===== */
+/* ============================================================ значки === */
 
-@media (min-width: 700px) {
-  main#view {
-    max-width: 720px;
-    margin: 0 auto;
-    width: 100%;
+/* Значки — те же файлы, что на острове компьютера (lucide). Маска, а не
+   <img>: значок берёт цвет текста рядом с собой, поэтому один файл годится
+   и на синей кнопке, и на красной, и в выключенном состоянии. */
+.i {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  vertical-align: -0.2em;
+  background: currentColor;
+  mask: var(--src) no-repeat center / contain;
+  -webkit-mask: var(--src) no-repeat center / contain;
+}
+.i.lg { width: 26px; height: 26px; }
+.i.sm { width: 16px; height: 16px; }
+
+/* ======================================================= планшет ======= */
+
+@media (min-width: 700px) and (orientation: portrait) {
+  main#view { max-width: 720px; margin: 0 auto; width: 100%; }
+  .tabbar { max-width: 560px; margin: 0 auto; }
+  .metrics { grid-template-columns: repeat(4, 1fr); }
+  .keys { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+}
+
+/* ===================================================== доступность ===== */
+
+/* «Уменьшить прозрачность»: панели становятся плотными, текст на них
+   перестаёт спорить с тем, что проезжает снизу. */
+@media (prefers-reduced-transparency: reduce) {
+  .top, .tabbar, .sheet-card, .toast, .term-head, .term-keys {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--bar-solid);
   }
-  header.top { padding-left: max(var(--gap), calc((100vw - 720px) / 2)); }
-  header.top { padding-right: max(var(--gap), calc((100vw - 720px) / 2)); }
+  body::before { display: none; }
 }
 
-/* Кому анимации мешают — тому их не будет. Это не украшение, которое
-   можно навязать: у части людей движение вызывает тошноту. */
+/* «Уменьшить движение»: остаётся только то, что сообщает состояние —
+   пульсация точки и кольцо записи, иначе запись выглядела бы как покой. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  }
+  .dot.connecting, .mic.on::after {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
-/* ============================================== значки ================== */
-/* Тот же набор, что у острова на компьютере: lucide, одна толщина линии.
-   Маска вместо <img> — чтобы значок брал цвет текста рядом с собой и на
-   синей кнопке, и на красной, и в выключенном состоянии. */
-
-.i {
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  background: currentColor;
-  -webkit-mask: var(--src) center / contain no-repeat;
-  mask: var(--src) center / contain no-repeat;
-}
-
-.i.lg { width: 26px; height: 26px; }
-img.login-mark { width: 140px; height: 56px; display: block; margin: 0 auto 18px; }
-.sheet-icon .i { width: 30px; height: 30px; }
-.i.sm { width: 18px; height: 18px; }
-
-/* ============================================ JustDay ================== */
-/* Телефон — второй остров: просьба, ответ, плеер и «я ушёл».
-   Свой токен здесь один — цвет обложки приходит от самой музыки. */
-
-.jarvis-form { display: flex; gap: 10px; }
-.jarvis-form input { height: 46px; border-radius: 23px; padding: 0 18px; }
-.jarvis-form input { flex: 1; min-width: 0; }
-.jarvis-form .btn {
-  flex: 0 0 auto;
-  width: 46px;
-  min-width: 46px;
-  min-height: 46px;
-  padding: 0;
-  border-radius: 50%;
-}
-
-/* Готовые фразы: лента, которая едет вбок. Столбиком они выглядели
-   как меню из четырёх пунктов, хотя это подсказки. */
-.chips {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-  /* Лента доезжает до края экрана, а не обрывается по краю карточки. */
-  margin-inline: calc(var(--gap) * -1);
-  padding-inline: var(--gap);
-}
-
-.chips::-webkit-scrollbar { display: none; }
-
-@supports (mask-image: linear-gradient(90deg, #000, transparent)) {
-  .chips {
-    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-  }
-}
-
-.chip {
-  scroll-snap-align: start;
-  white-space: nowrap;
-  min-height: 36px;
-  padding: 0 14px;
-  font: inherit;
-  font-size: 15px;
-  color: var(--text);
-  background: var(--surface-2);
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: transform .12s var(--ease), background .12s ease;
-}
-.chip:active { transform: scale(0.97); background: var(--surface-3); }
-
-.jarvis-answer {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  line-height: 1.4;
-  white-space: pre-wrap;
-}
-
-.jarvis-now { display: flex; align-items: center; gap: 14px; }
-.jarvis-cover {
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
-  flex: 0 0 auto;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-}
-
-/* Перемотка — три круга по центру, а не четыре прямоугольника в сетку. */
-.transport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 26px;
-  margin-top: 18px;
-}
-
-.transport button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--tap);
-  height: var(--tap);
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  transition: transform .12s var(--ease), background .12s ease;
-}
-
-.transport button:active { transform: scale(0.9); }
-
-.transport .big {
-  width: 64px;
-  height: 64px;
-  background: var(--text);
-  color: var(--bg);
-}
-
-.transport .big .i { width: 28px; height: 28px; }
-.jarvis-track { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.jarvis-track b, .jarvis-track .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ================================= доступность ========================= */
-
-/* «Уменьшить прозрачность»: панели становятся плотными, текст на них
-   перестаёт спорить с тем, что проезжает снизу. */
-@media (prefers-reduced-transparency: reduce) {
-  .top, .tabbar, .term-top, .term-bar, .sheet-card, .toast {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    background: var(--surface);
-  }
-}
-
-/* Клавиатура: пульт открывают и с ноутбука, и там курсора может не быть. */
+/* Клавиатура: пульт открывают и с ноутбука, где курсора может не быть. */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ====================================== светлая тема =================== */
-/* Телефон переключает её сам — утром на кухне и ночью в кровати это разные
-   экраны. Цвета те же системные, только дневные; всё остальное — те же
-   токены, поэтому ни одна карточка не знает, какая сейчас тема. */
+/* ===================================================== светлая тема ==== */
+/* Телефон переключает её сам: утром на кухне и ночью в кровати — разные
+   экраны. Цвета те же системные, только дневные; ни одна карточка не знает,
+   какая сейчас тема. */
 
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f2f2f7;
-    --surface: #ffffff;
-    --surface-2: #ececeF;
-    --surface-3: #dcdce1;
+    --surface: rgba(255, 255, 255, 0.92);
+    --surface-2: rgba(242, 242, 247, 0.96);
+    --surface-3: rgba(229, 229, 234, 0.98);
+    --hair: rgba(60, 60, 67, 0.12);
     --border: rgba(60, 60, 67, 0.29);
     --border-strong: rgba(60, 60, 67, 0.4);
+    --shine: rgba(255, 255, 255, 0.7);
 
     --text: #000000;
     --text-dim: rgba(60, 60, 67, 0.6);
@@ -1082,6 +1397,7 @@ img.login-mark { width: 140px; height: 56px; display: block; margin: 0 auto 18px
 
     --accent: #007aff;
     --accent-soft: rgba(0, 122, 255, 0.12);
+    --accent-glow: rgba(0, 122, 255, 0.25);
 
     --online: #34c759;
     --offline: #8e8e93;
@@ -1090,13 +1406,29 @@ img.login-mark { width: 140px; height: 56px; display: block; margin: 0 auto 18px
     --unknown: #af52de;
     --danger: #ff3b30;
     --danger-soft: rgba(255, 59, 48, 0.12);
-    --bar: rgba(249, 249, 249, 0.82);
-    --bar-solid: rgba(249, 249, 249, 0.96);
+    --voice: #ff2d55;
+
+    --bar: rgba(249, 249, 249, 0.72);
+    --bar-solid: rgba(252, 252, 254, 0.96);
   }
 
-  /* Белое на белом: у карточек на светлом фоне нужен край, иначе они
-     сливаются с экраном — в тёмной теме это делала сама разница яркостей. */
-  .card, .key, .sheet-card {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  /* На светлом фоне карточку держит не разница яркостей, а тень с краем. */
+  .card, .key, .hero, .list, .sheet-card, .deck-side {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), inset 0 0 0 0.5px rgba(0, 0, 0, 0.04);
   }
+  .key {
+    background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.86));
+  }
+  .key:active { background: var(--surface-2); }
+  .key .key-ico { background: rgba(0, 0, 0, 0.05); }
+  .key.fav {
+    background: linear-gradient(180deg, rgba(0, 122, 255, 0.14), rgba(0, 122, 255, 0.06));
+    border-color: rgba(0, 122, 255, 0.28);
+  }
+  .key.fav .key-ico { background: rgba(0, 122, 255, 0.18); }
+  .hero { background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.82)); }
+  .hero-state, .jarvis-form input { background: rgba(120, 120, 128, 0.08); }
+  .metric, .kv, .chip, .list-row .ico, .tag { background: rgba(120, 120, 128, 0.08); }
+  .bar { background: rgba(120, 120, 128, 0.16); }
+  .switch { background: rgba(120, 120, 128, 0.2); }
 }

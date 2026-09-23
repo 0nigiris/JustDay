@@ -11,38 +11,47 @@
   вложенности. Открывать в браузере шириной телефона либо снимать
   headless-браузером, чтобы видеть изменения стилей глазами, а не по коду:
 
-      cp tools/preview.html packages/remo32-controller/src/remo32_controller/web/preview.html
+      cp tools/preview.html tools/preview.js packages/remo32-controller/src/remo32_controller/web/
       helium --headless --screenshot=/tmp/preview.png --window-size=402,1400 \
-             http://127.0.0.1:8080/static/preview.html
+             http://127.0.0.1:8080/static/preview.html?screen=jarvis
 
   Стенд ходит за стилями и значками на работающий контроллер: маски значков
   с file:// браузер не грузит, а так видно ровно то же, что увидит телефон.
+
+  ?screen=jarvis|deck|pcs — один экран; ?screen=stage — стримдек (снимать
+  в ландшафтном размере окна, например 880x412).
 -->
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/preview.js"></script>
 </head>
-<body>
+<body data-route="jarvis">
 
 <div id="main">
   <header class="top" id="top">
+    <div class="bar-row">
+      <button class="icon-btn" id="btn-pc"><span class="dot online"></span>Основной ПК</button>
+      <div class="title-sm" id="page-title-sm">JustDay</div>
+      <button class="icon-btn" id="btn-refresh"><i class="i" style="--src:url(/static/icons/refresh-cw.svg)"></i></button>
+    </div>
     <div class="top-text">
       <h1 id="page-title">JustDay</h1>
-      <div class="sub" id="conn-status">на связи · Основной ПК</div>
+      <div class="sub" id="conn-status">живое обновление · Основной ПК</div>
     </div>
-    <button class="icon-btn" id="btn-pc"><span class="dot online"></span>Основной ПК</button>
-    <button class="icon-btn" id="btn-refresh">↻</button>
   </header>
 
   <main id="view">
 
-    <section class="card jarvis-ask" data-screen="jarvis">
-      <div class="card-head">
-        <h2>Сказать JustDay</h2>
-        <span class="meta">готов</span>
+    <section class="hero" data-screen="jarvis">
+      <div class="hero-state"><span class="dot online"></span>готов</div>
+      <div class="mic-wrap">
+        <button class="mic"><i class="i" style="--src:url(/static/icons/mic.svg)"></i></button>
+        <div class="wave" hidden><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="mic-time"></div>
+        <div class="mic-hint">Нажмите и скажите — как острову на компьютере</div>
       </div>
       <form class="jarvis-form" onsubmit="return false">
-        <input type="text" placeholder="Например: включи музыку">
-        <button class="btn primary" type="submit"><i class="i " style="--src:url(/static/icons/chevron-right.svg)"></i></button>
+        <input type="text" placeholder="Или напишите: включи музыку">
+        <button class="btn primary" type="submit"><i class="i" style="--src:url(/static/icons/chevron-right.svg)"></i></button>
       </form>
       <div class="chips">
         <button class="chip">Что у меня сегодня?</button>
@@ -50,8 +59,8 @@
         <button class="chip">Включи мою музыку</button>
         <button class="chip">Что сейчас играет?</button>
       </div>
-      <div class="jarvis-answer">Доброе утро, брат. Аликанте: +24°, малооблачно, днём до 31°.
-В 10:00 — созвон с командой. Важных писем: 3.</div>
+      <div class="jarvis-answer heard">Добавь в планы забрать посылку, когда приду домой — напомни.</div>
+      <div class="jarvis-answer">Записал. Напомню, когда компьютер увидит, что ты дома.</div>
     </section>
 
     <section class="card" data-screen="jarvis">
@@ -65,34 +74,43 @@
       </div>
       <div class="transport">
         <button><i class="i lg" style="--src:url(/static/icons/skip-back.svg)"></i></button>
-        <button class="big"><i class="i " style="--src:url(/static/icons/pause.svg)"></i></button>
+        <button class="big"><i class="i" style="--src:url(/static/icons/pause.svg)"></i></button>
         <button><i class="i lg" style="--src:url(/static/icons/skip-forward.svg)"></i></button>
       </div>
       <div class="row">
-        <button class="btn"><i class="i " style="--src:url(/static/icons/list-music.svg)"></i> Моя музыка</button>
-        <button class="btn"><i class="i " style="--src:url(/static/icons/shuffle.svg)"></i> Вперемешку</button>
+        <button class="btn"><i class="i" style="--src:url(/static/icons/list-music.svg)"></i> Моя музыка</button>
+        <button class="btn"><i class="i" style="--src:url(/static/icons/shuffle.svg)"></i> Вперемешку</button>
       </div>
     </section>
 
     <section class="card" data-screen="jarvis">
       <div class="card-head"><h2>Рабочий стол</h2></div>
       <div class="row">
-        <button class="btn"><i class="i " style="--src:url(/static/icons/log-out.svg)"></i> Я ушёл</button>
-        <button class="btn"><i class="i " style="--src:url(/static/icons/rotate-ccw.svg)"></i> Я вернулся</button>
+        <button class="btn"><i class="i" style="--src:url(/static/icons/log-out.svg)"></i> Я ушёл</button>
+        <button class="btn"><i class="i" style="--src:url(/static/icons/rotate-ccw.svg)"></i> Я вернулся</button>
       </div>
       <div class="meta">«Я ушёл» запомнит открытые программы и закроет их; «я вернулся» откроет
         обратно. Ничего не убивается: что не закрылось — останется и будет названо.</div>
     </section>
 
-    <section class="page" data-title="Пульт" data-screen="deck">
-      <div class="keys">
-        <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/gamepad-2.svg)"></i></span><span class="key-cap">Steam</span></button>
-        <button class="key fav"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/headphones.svg)"></i></span><span class="key-cap">Discord</span></button>
-        <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/sun.svg)"></i></span><span class="key-cap">Свет</span></button>
-        <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/terminal.svg)"></i></span><span class="key-cap">Терминал</span></button>
-        <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/key-round.svg)"></i></span><span class="key-cap">Заблокировать</span></button>
-        <button class="key danger"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/power.svg)"></i></span><span class="key-cap">Выключить</span></button>
-    </section>
+    <div data-screen="deck">
+      <div class="pager">
+        <section class="page" data-title="Избранное">
+          <div class="keys">
+            <button class="key fav"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/list-music.svg)"></i></span><span class="key-cap">Моя музыка</span></button>
+            <button class="key fav"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/pause.svg)"></i></span><span class="key-cap">Пауза</span></button>
+            <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/gamepad-2.svg)"></i></span><span class="key-cap">Steam</span></button>
+            <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/headphones.svg)"></i></span><span class="key-cap">Discord</span></button>
+            <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/terminal.svg)"></i></span><span class="key-cap">Терминал</span></button>
+            <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/log-out.svg)"></i></span><span class="key-cap">Я ушёл</span></button>
+            <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/key-round.svg)"></i></span><span class="key-cap">Заблокировать</span></button>
+            <button class="key danger"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/power.svg)"></i></span><span class="key-cap">Выключить</span></button>
+            <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/volume-x.svg)"></i></span><span class="key-cap">Молчи</span></button>
+          </div>
+        </section>
+      </div>
+      <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+    </div>
 
     <section class="card" data-screen="pcs">
       <div class="card-head"><h2>Основной ПК</h2><span class="meta">на связи</span></div>
@@ -118,17 +136,50 @@
           <div class="bar"><i class="crit" style="transform:scaleX(0.93)"></i></div>
         </div>
       </div>
+      <div class="row">
+        <button class="btn"><i class="i" style="--src:url(/static/icons/terminal.svg)"></i> Терминал</button>
+        <button class="btn danger"><i class="i" style="--src:url(/static/icons/power.svg)"></i> Выключить</button>
+      </div>
     </section>
 
   </main>
 
   <nav class="tabbar">
-    <a class="tab" href="#"><span class="ico"><i class="i " style="--src:url(/static/icons/layout-grid.svg)"></i></span><span>Пульт</span></a>
-    <a class="tab on" href="#" aria-current="page"><span class="ico"><i class="i " style="--src:url(/static/icons/panel-top.svg)"></i></span><span>JustDay</span></a>
-    <a class="tab" href="#"><span class="ico"><i class="i " style="--src:url(/static/icons/monitor.svg)"></i></span><span>ПК</span></a>
-    <a class="tab" href="#"><span class="ico"><i class="i " style="--src:url(/static/icons/timer.svg)"></i></span><span>Расписание</span></a>
-    <a class="tab" href="#"><span class="ico"><i class="i " style="--src:url(/static/icons/settings.svg)"></i></span><span>Ещё</span></a>
+    <a class="tab" href="#"><span class="ico"><i class="i" style="--src:url(/static/icons/layout-grid.svg)"></i></span><span>Пульт</span></a>
+    <a class="tab on" href="#" aria-current="page"><span class="ico"><i class="i" style="--src:url(/static/icons/panel-top.svg)"></i></span><span>JustDay</span></a>
+    <a class="tab" href="#"><span class="ico"><i class="i" style="--src:url(/static/icons/monitor.svg)"></i></span><span>ПК</span></a>
+    <a class="tab" href="#"><span class="ico"><i class="i" style="--src:url(/static/icons/timer.svg)"></i></span><span>Расписание</span></a>
+    <a class="tab" href="#"><span class="ico"><i class="i" style="--src:url(/static/icons/settings.svg)"></i></span><span>Ещё</span></a>
   </nav>
+</div>
+
+<!-- Стримдек: то же, что рисует deckStage() при повороте телефона. -->
+<div id="stage" data-screen="stage" hidden>
+  <div class="deck">
+    <aside class="deck-side">
+      <div class="deck-brand"><i class="i sm" style="--src:url(/static/icons/panel-top.svg)"></i> JustDay</div>
+      <div class="deck-pc"><span class="dot online"></span><span>Основной ПК</span></div>
+      <div class="deck-title">Избранное</div>
+      <div class="deck-now"><i class="i sm" style="--src:url(/static/icons/music.svg)"></i> THE WORLD REVOLVING</div>
+      <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+      <button class="icon-btn"><i class="i sm" style="--src:url(/static/icons/refresh-cw.svg)"></i> Обновить</button>
+      <div class="deck-hint">Поверните телефон — вернётся приложение</div>
+    </aside>
+    <div class="pager">
+      <section class="page" data-title="Избранное">
+        <div class="keys">
+          <button class="key fav"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/list-music.svg)"></i></span><span class="key-cap">Моя музыка</span></button>
+          <button class="key fav"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/pause.svg)"></i></span><span class="key-cap">Пауза</span></button>
+          <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/skip-forward.svg)"></i></span><span class="key-cap">Следующий</span></button>
+          <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/gamepad-2.svg)"></i></span><span class="key-cap">Steam</span></button>
+          <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/headphones.svg)"></i></span><span class="key-cap">Discord</span></button>
+          <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/terminal.svg)"></i></span><span class="key-cap">Терминал</span></button>
+          <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/log-out.svg)"></i></span><span class="key-cap">Я ушёл</span></button>
+          <button class="key danger"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/power.svg)"></i></span><span class="key-cap">Выключить</span></button>
+        </div>
+      </section>
+    </div>
+  </div>
 </div>
 
 </body>
