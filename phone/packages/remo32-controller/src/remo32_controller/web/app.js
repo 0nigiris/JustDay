@@ -448,6 +448,22 @@ const POWER = {
   "power:wake": { name: "Включить", icon: "lucide:zap", dangerous: false },
 };
 
+/* Кнопки ассистента на пульте: то, за чем чаще всего лезут в отдельную вкладку.
+   Появляются только там, где JustDay действительно запущен. */
+const JARVIS_KEYS = [
+  { id: "jarvis:music", name: "Моя музыка", icon: "lucide:list-music", ask: "включи мою музыку" },
+  { id: "jarvis:pause", name: "Пауза", icon: "lucide:pause", ask: "пауза" },
+  { id: "jarvis:next", name: "Следующий", icon: "lucide:skip-forward", ask: "следующий трек" },
+  { id: "jarvis:away", name: "Я ушёл", icon: "lucide:log-out", session: "close" },
+  { id: "jarvis:back", name: "Я вернулся", icon: "lucide:rotate-ccw", session: "restore" },
+  { id: "jarvis:quiet", name: "Молчи", icon: "lucide:volume-x", ask: "молчи" },
+];
+
+function jarvisKeysFor(pc) {
+  if (!pc || pc.state !== "online" || state.justday?.available === false) return [];
+  return JARVIS_KEYS.map((key) => ({ ...key, available: true, group: "JustDay" }));
+}
+
 function powerFor(pc) {
   const ids =
     pc.state === "online"
@@ -484,7 +500,7 @@ function viewDeck() {
       Добавьте секцию <code>[[pcs]]</code> в конфигурацию контроллера.</div>`;
   }
 
-  const all = [...(pc.actions || []), ...powerFor(pc)];
+  const all = [...(pc.actions || []), ...powerFor(pc), ...jarvisKeysFor(pc)];
   const byId = new Map(all.map((a) => [a.id, a]));
 
   // Порядок избранного — тот, в котором его добавляли: пользователь сам
@@ -495,6 +511,8 @@ function viewDeck() {
     .filter(Boolean);
 
   const groups = new Map();
+  const jarvis = jarvisKeysFor(pc);
+  if (jarvis.length) groups.set("JustDay", jarvis);
   for (const action of pc.actions || []) {
     const key = action.group || "Действия";
     if (!groups.has(key)) groups.set(key, []);
@@ -1461,7 +1479,7 @@ async function render(force = false) {
       state.approvals = [];
     }
     if (current === "buttons") await loadEditor(force);
-    if (current === "jarvis") {
+    if (current === "jarvis" || current === "deck") {
       const jpc = activePc();
       state.justday = jpc && jpc.state === "online"
         ? await api(`/api/pcs/${encodeURIComponent(jpc.id)}/justday`).catch(() => ({ available: false }))
@@ -1624,6 +1642,18 @@ document.addEventListener("click", async (event) => {
     const pcId = d.keyPc;
     const id = d.keyAction;
 
+    if (id.startsWith("jarvis:")) {
+      const key = JARVIS_KEYS.find((k) => k.id === id);
+      if (!key) return;
+      buzz(8);
+      if (key.ask) return jarvisAsk(key.ask);
+      return run(button,
+        () => api(`/api/pcs/${encodeURIComponent(pcId)}/justday/session/${key.session}`, { method: "POST" }),
+        (result) => {
+          const names = (key.session === "close" ? result.closed : result.started) || [];
+          toast(names.length ? names.join(", ") : "ничего не изменилось", "ok");
+        });
+    }
     if (id === "power:wake") {
       return run(button, () => api(`/api/pcs/${encodeURIComponent(pcId)}/wake`, { method: "POST" }),
         (result) => {
