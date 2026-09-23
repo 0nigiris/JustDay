@@ -1,8 +1,10 @@
 package ru.onigiri.remo32;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -11,6 +13,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -46,10 +50,15 @@ public class MainActivity extends Activity {
     private static final String PREFS = "remo32";
     private static final String KEY_URL = "url";
 
+    private static final int ASK_MIC = 1;
+
     private WebView web;
     private FrameLayout root;
     private View errorView;
     private boolean updateChecked;
+
+    /** Просьба страницы о микрофоне, отложенная до ответа системы. */
+    private PermissionRequest micRequest;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -80,6 +89,39 @@ public class MainActivity extends Activity {
 
         web.setBackgroundColor(Color.parseColor("#000000"));
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
+        // Микрофон странице сам по себе не достаётся: сначала разрешение у
+        // системы, и только потом — у WebView. Спрашиваем ровно в тот момент,
+        // когда человек нажал кнопку голоса, а не при запуске приложения.
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                boolean wantsMic = false;
+                for (String resource : request.getResources()) {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                        wantsMic = true;
+                    }
+                }
+                if (!wantsMic) {
+                    // Камеру и всё остальное страница не просит — и не получит.
+                    request.deny();
+                    return;
+                }
+                if (Build.VERSION.SDK_INT < 23
+                        || checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                           == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(new String[] {PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                    return;
+                }
+                micRequest = request;
+                requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, ASK_MIC);
+            }
+
+            @Override
+            public void onPermissionRequestCanceled(PermissionRequest request) {
+                micRequest = null;
+            }
+        });
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -122,6 +164,24 @@ public class MainActivity extends Activity {
         }
 
         web.loadUrl(url());
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        if (code != ASK_MIC) {
+            super.onRequestPermissionsResult(code, permissions, results);
+            return;
+        }
+        PermissionRequest request = micRequest;
+        micRequest = null;
+        if (request == null) return;
+        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+            request.grant(new String[] {PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+        } else {
+            // Отказ — тоже ответ: страница покажет свою подсказку, а не
+            // останется ждать разрешения, которого не будет.
+            request.deny();
+        }
     }
 
     private String url() {

@@ -6,6 +6,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Надиктовка: голос записывается здесь и уходит на домашний компьютер,
+         где его распознаёт сам JustDay. Никуда больше запись не уходит и в
+         телефоне не остаётся. Разрешение спрашивается не при запуске, а при
+         первом нажатии на микрофон — там понятно, зачем оно. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <!-- Обновление без магазина: приложение скачивает новую сборку с того же
          контроллера и открывает системный установщик. Установку всё равно
          подтверждает человек — тихо поставить APK без системных прав нельзя,
