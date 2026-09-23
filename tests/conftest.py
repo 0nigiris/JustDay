@@ -152,6 +152,7 @@ def controller_settings(tmp_path: Path, password_hash: str) -> Iterator[Controll
                 agent_url="http://127.0.0.1:59901",
                 mac_address="5c:f9:dd:11:22:33",
                 terminal_enabled=False,
+                hosts_controller=True,
             ),
             PcConfig(
                 id="nomac",

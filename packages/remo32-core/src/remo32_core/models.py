@@ -386,6 +386,13 @@ class PcSummary(BaseModel):
     mac_address: str | None = None
     wake_supported: bool = False
     terminal_supported: bool = False
+    hosts_controller: bool = Field(
+        False,
+        description=(
+            "На этом ПК живёт сам контроллер. Выключить его — значит выключить и управление "
+            "с телефона: интерфейс предупреждает об этом отдельно."
+        ),
+    )
     stats: SystemStats | None = Field(None, description="Последний снимок; None если ПК не отвечал")
     stats_age_seconds: float | None = Field(
         None, description="Возраст снимка. Больше stale_after — интерфейс покажет данные тусклыми."

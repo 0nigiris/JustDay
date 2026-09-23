@@ -188,6 +188,13 @@ class PcConfig(BaseModel):
     )
     terminal_workdir: str | None = None
 
+    hosts_controller: bool = Field(
+        False,
+        description=(
+            "Контроллер работает на этом ПК. Он же — домашний сервер: выключение оставит "
+            "телефон без управления, поэтому интерфейс переспросит отдельно."
+        ),
+    )
     guarded_by_esp32: bool = Field(
         False,
         description=(

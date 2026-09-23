@@ -186,6 +186,37 @@ function confirmSheet({ title, text = "", yes = "Да", icon = "⚠️", danger 
   });
 }
 
+/* Выключение сервера — отдельный разговор: на нём живёт само управление. */
+async function confirmPower(pc, what) {
+  const name = pc?.name || "компьютер";
+  if (what !== "shutdown") {
+    return confirmSheet({
+      icon: "🔄",
+      title: `Перезагрузить ${name}?`,
+      text: "Компьютер вернётся сам через минуту-полторы.",
+      yes: "Перезагрузить",
+    });
+  }
+  if (pc?.hosts_controller) {
+    const first = await confirmSheet({
+      icon: "🖥",
+      title: `${name} — ваш сервер`,
+      text: "На нём живёт само управление: после выключения телефон не сможет ни разбудить его, "
+        + "ни что-нибудь запустить. Поднимать придётся кнопкой на корпусе или платой-сторожем.",
+      yes: "Всё равно выключить",
+    });
+    if (!first) return false;
+  }
+  return confirmSheet({
+    icon: "⏻",
+    title: `Выключить ${name}?`,
+    text: pc?.hosts_controller
+      ? "Последняя проверка. Может, хватит заблокировать экран или закрыть лишние программы?"
+      : "Плата-сторож получит указание не будить его: выключение считается плановым.",
+    yes: "Выключить",
+  });
+}
+
 document.addEventListener("click", (event) => {
   const answer = event.target.closest("[data-sheet]")?.dataset.sheet;
   if (!answer) return;
@@ -1414,14 +1445,7 @@ document.addEventListener("click", async (event) => {
     if (id.startsWith("power:")) {
       const what = id.slice(6);
       const pc = state.pcs.find((p) => p.id === pcId);
-      const ok = await confirmSheet({
-        icon: what === "shutdown" ? "⏻" : "🔄",
-        title: what === "shutdown" ? `Выключить ${pc?.name || "компьютер"}?` : `Перезагрузить ${pc?.name || "компьютер"}?`,
-        text: what === "shutdown"
-          ? "Плата-сторож получит указание не будить его: выключение считается плановым."
-          : "Компьютер вернётся сам через минуту-полторы.",
-        yes: what === "shutdown" ? "Выключить" : "Перезагрузить",
-      });
+      const ok = await confirmPower(pc, what);
       if (!ok) return;
       return run(button, () => api(`/api/pcs/${encodeURIComponent(pcId)}/${what}`, { method: "POST" }),
         (result) => {
@@ -1567,14 +1591,7 @@ document.addEventListener("click", async (event) => {
   }
   if (d.power) {
     const pc = state.pcs.find((p) => p.id === d.pc);
-    const ok = await confirmSheet({
-      icon: d.power === "shutdown" ? "⏻" : "🔄",
-      title: d.power === "shutdown" ? `Выключить ${pc?.name || "компьютер"}?` : `Перезагрузить ${pc?.name || "компьютер"}?`,
-      text: d.power === "shutdown"
-        ? "Плата-сторож получит указание не будить его: выключение считается плановым."
-        : "Компьютер вернётся сам через минуту-полторы.",
-      yes: d.power === "shutdown" ? "Выключить" : "Перезагрузить",
-    });
+    const ok = await confirmPower(pc, d.power);
     if (!ok) return;
     return run(button, () => api(`/api/pcs/${encodeURIComponent(d.pc)}/${d.power}`, { method: "POST" }),
       (result) => {

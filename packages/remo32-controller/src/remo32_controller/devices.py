@@ -151,6 +151,7 @@ class DeviceRegistry:
             mac_address=pc.config.mac_address,
             wake_supported=pc.config.mac_address is not None,
             terminal_supported=pc.config.terminal_enabled and pc.agent_terminal_enabled,
+            hosts_controller=pc.config.hosts_controller,
             stats=pc.stats,
             stats_age_seconds=age,
             stale=stale,

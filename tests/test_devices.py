@@ -293,3 +293,10 @@ async def test_shutdown_survives_unreachable_board(
         assert result.success
     finally:
         await esp32.stop()
+
+
+async def test_summary_marks_the_pc_that_hosts_the_controller(registry: DeviceRegistry) -> None:
+    """Интерфейс переспрашивает про выключение сервера — значит, должен знать, где сервер."""
+    by_id = {s.id: s for s in registry.summaries()}
+    assert by_id["testpc"].hosts_controller is True
+    assert by_id["nomac"].hosts_controller is False
