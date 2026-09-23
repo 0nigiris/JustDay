@@ -52,9 +52,18 @@ _LOCAL = re.compile(r"\b(мо[йеёиюя]\w*|котор\w+|последн\w+|�
                     r"компьютер\w*|рабоч\w+ стол\w*|my|which|last|recorded|downloaded|folder|file)\b", re.I)
 
 
+# «включи мою музыку» — what is already on disk: the one request that works with no network at all
+_LIBRARY = re.compile(r"^(?:включи|поставь|вруби|запусти|сыграй|play|put on)\s+"
+                      r"(?:мне\s+|me\s+)?(?:мою|моё|мои|свою|нашу|любимую|любимое|my|our|some)?\s*"
+                      r"(?:музыку|песни|плейлист|фонотеку|что-нибудь|что нибудь|"
+                      r"music|songs|playlist|something|anything)$", re.I)
+
+
 def parse(text: str) -> tuple[str, str] | None:
-    """("music" | "video" | "video_random", query) for "включи песню …" / "включи видео про …", else None."""
+    """("music" | "video" | "video_random" | "library", query) for "включи песню …", else None."""
     t = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
+    if _LIBRARY.match(t) and library():
+        return "library", ""
     for kind, rx in (("music", _PLAY), ("video", _VIDEO)):
         m = rx.match(t)
         if m:
@@ -372,6 +381,52 @@ def _prune_video_cache() -> None:
         total += p.stat().st_size
         if total > VIDEO_CACHE_BYTES:
             p.unlink(missing_ok=True)
+
+
+_TR = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+               ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u",
+                "f", "h", "ts", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"]))
+
+
+def library(kind: str = "music") -> list[dict]:
+    """Everything already downloaded — the half of the player that never needs the network.
+
+    Newest first by the last time it played, so «включи что-нибудь» starts from what is actually listened to."""
+    out = [rec for key, rec in _load_index().items()
+           if key.startswith(f"{kind}:") and Path(rec.get("file", "")).exists()]
+    return sorted(out, key=lambda r: -r.get("played", 0))
+
+
+def find_local(query: str, kind: str = "music", limit: int = 5) -> list[dict]:
+    """Downloaded tracks matching a spoken name, best first, each with a `score`.
+
+    Whisper writes English titles the Russian way («блэк ин блэк»), so the query is also compared
+    in transliteration — that is what makes the offline library usable by voice at all."""
+    import difflib
+
+    clean = lambda s: re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", s.lower().replace("ё", "е"))).strip()  # noqa: E731
+    q = clean(query)
+    variants = {q, "".join(_TR.get(c, c) for c in q)}
+
+    def close(needle: str, hay: str) -> float:
+        """How well the name sits inside the title — a title carries a chapter number and a channel too."""
+        if not needle or not hay:
+            return 0.0
+        if needle in hay:
+            return 0.95
+        best = difflib.SequenceMatcher(None, needle, hay).ratio()
+        step = max(1, len(needle) // 3)
+        for i in range(0, max(1, len(hay) - len(needle) + 1), step):  # the name may be anywhere in the title
+            best = max(best, difflib.SequenceMatcher(None, needle, hay[i:i + len(needle)]).ratio())
+        return best
+
+    scored = []
+    for rec in library(kind):
+        title, artist = clean(rec.get("title", "")), clean(rec.get("artist", ""))
+        best = max(close(v, h) for v in variants if v for h in (title, f"{artist} {title}".strip()))
+        scored.append((best, rec))
+    scored.sort(key=lambda x: -x[0])
+    return [{**rec, "score": round(s, 2)} for s, rec in scored[:limit] if s > 0.45]
 
 
 def local_track(path: str) -> dict:

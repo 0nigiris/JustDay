@@ -1081,7 +1081,8 @@ class Daemon:
         kind, query = req
 
         async def go():
-            r = await (self.play_music(query) if kind == "music"
+            r = await (self.play_library(shuffle=True) if kind == "library"
+                       else self.play_music(query) if kind == "music"
                        else self.play_video(query, random=kind == "video_random"))
             if r.get("ok"):
                 self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {r.get('done', '')}. Не повторяй.]")
@@ -1091,6 +1092,29 @@ class Daemon:
 
         spawn(go())
         return True
+
+    async def play_library(self, query: str = "", shuffle: bool = False, count: int = 1) -> dict:
+        """Play what is already downloaded. No network, no tokens, no waiting — the file is on disk."""
+        tracks = media.find_local(query, limit=max(1, count)) if query else media.library()
+        if not tracks:
+            return {"ok": False, "error": "nothing is downloaded yet"}
+        if shuffle:
+            import random
+
+            tracks = random.sample(tracks, len(tracks))
+        await self.music.ensure()
+        self._music_started = time.monotonic()
+        await self.music.load(tracks, "replace")
+        self.music.source = "" if query else t("моя фонотека")
+        self.music.remember()
+        await self.music.set_repeat("off")
+        self.music.shuffle = shuffle
+        self._pause_videos()
+        first = tracks[0]
+        name = f"{first['artist']} — {first['title']}" if first.get("artist") else first["title"]
+        events.emit("media_play", title=name, file=first.get("file", ""), source="library")
+        return {"ok": True, "title": first["title"], "artist": first.get("artist", ""), "file": first.get("file", ""),
+                "queued": len(tracks) - 1, "done": t("играет {what}", what=name)}
 
     async def play_music(self, query: str, count: int = 1, mode: str = "replace", playlist: bool = False,
                          shuffle: bool = False) -> dict:
@@ -1122,6 +1146,11 @@ class Daemon:
                 self._pause_videos()
                 return {"ok": True, "title": tracks[0]["title"], "queued": len(tracks) - 1,
                         "done": t("играет {what}", what=tracks[0]["title"])}
+            # already in the library: starts from disk in a moment, and works with no network at all
+            if not playlist and count == 1 and mode == "replace" and not media.is_url(query):
+                near = media.find_local(query, limit=1)
+                if near and near[0]["score"] >= 0.82:
+                    return await self.play_library(query, count=1)
             self.music.set_loading({"title": query, "progress": 0})
             source = ""
             if playlist or (media.is_url(query) and "list=" in query):  # an album / playlist / "best of"
