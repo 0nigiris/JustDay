@@ -612,6 +612,14 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Спрашивать перед выключением")
+                    subtitle: JD.tr("Этот компьютер — ещё и сервер: телефон им управляет и будит его. KDE покажет причину в окне выхода")
+                    Toggle {
+                        checked: win.d.guard && win.d.guard.on === true
+                        onToggled: v => win.run(["guard", v ? "on" : "off"], () => win.reload())
+                    }
+                }
+                Row {
                     title: JD.tr("Молчать во время игры")
                     subtitle: JD.tr("Пока запущена игра, ответы приходят текстом: видеокарта достаётся игре")
                     Toggle {

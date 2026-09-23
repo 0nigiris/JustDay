@@ -280,7 +280,8 @@ def overview() -> dict:
     return {"config": cfg, "voices": voices(), "devices": audio_devices(), "hotkeys": hotkeys(), "models": models(),
             "local_models": local_models(), "mail_password": bool(providers.secret_get("mail")),
             "calendar": len(__import__("justday.calendar_lane", fromlist=["urls"]).urls()),
-            "memory": memory_files(), "autostart": autostart(), "services": services(), "about": about()}
+            "memory": memory_files(), "autostart": autostart(), "services": services(), "about": about(),
+            "guard": guard()}
 
 
 GUARD_UNIT = "justday-guard.service"
