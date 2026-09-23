@@ -21,7 +21,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, island, jobs, mail, media, namespot, notifications, numerals, palette, reminders, voiceprint, workers
+from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, island, jobs, mail, media, namespot, notifications, numerals, offline, palette, reminders, voiceprint, workers
 from . import brain as brain_mod
 from . import tts as tts_mod
 from . import weather as weather_mod
@@ -90,6 +90,8 @@ class Daemon:
         self._holding = False
         self._voice_warned = False
         self._music_started = 0.0   # music that just started speaks for itself: the reply after it stays silent
+        self._offline_note = 0.0    # when the user was last told that the cloud is out
+        self._cloud_down_until = 0.0  # the brain just failed: five minutes of going local without the wait
         self._cache_q: list[dict] = []      # songs playing from the stream, waiting to be downloaded
         self._cache_task: asyncio.Task | None = None
         self._reminder_task: asyncio.Task | None = None
@@ -759,14 +761,17 @@ class Daemon:
         self.state = "thinking"
         spoken_before = self._spoken
         gen = self._cancel_gen
+        if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again
+            return await self.offline_turn(text)
         try:
             reply = await self.brain.ask(text, source=source)
+            self._cloud_down_until = 0.0
         except Exception as e:
             if gen != self._cancel_gen:
                 return ""
             events.emit("turn_failed", error=repr(e))
-            await self.say(t("Не получилось связаться с мозгом. Подробности в логе."))
-            reply = ""
+            self._cloud_down_until = time.monotonic() + 300
+            reply = await self.offline_turn(text)
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
             return ""
         await self.wait_speech_done()
@@ -776,6 +781,39 @@ class Daemon:
         if source == "voice" and reply.rstrip().endswith("?") and self.cfg["audio"]["followup_seconds"] > 0:
             self.listen(followup=True)
         return reply
+
+    async def offline_turn(self, text: str) -> str:
+        """The cloud is out — no tokens, no network. Do here what never needed it, and say so honestly.
+
+        A local model turns the phrase into one of four things (a program, the downloaded music, the
+        volume, a short answer); with no model at all, two regexes still cover «включи музыку» and
+        «открой …». The point is that the button keeps doing something."""
+        loop = asyncio.get_running_loop()
+        got = await loop.run_in_executor(None, offline.decide, text)
+        action, query = got["action"], got["query"]
+        if action == "music":
+            r = await self.play_library(query, shuffle=not query)
+            said = r.get("done") or t("Из скачанного пока ничего нет.")
+        elif action == "app":
+            hits = await loop.run_in_executor(None, desktop.find_apps, query, 1)
+            if hits:
+                desktop.launch_app_id(hits[0]["id"])
+                said = t("запустил {what}", what=hits[0]["name"])
+            else:
+                said = t("Не нашёл «{q}»", q=query)
+        elif action == "volume":
+            step = {"+": "10%+", "-": "10%-"}.get(query) or f"{max(0, min(100, int(query or 50)))}%"
+            await loop.run_in_executor(None, lambda: subprocess.run(
+                ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", step], capture_output=True, timeout=5))
+            said = t("готово")
+        else:
+            said = got["answer"] or t("Облако сейчас недоступно.")
+        if time.monotonic() - self._offline_note > 600:  # say it once, not before every sentence
+            self._offline_note = time.monotonic()
+            said = t("Облако не отвечает, работаю сам. ") + said
+        events.emit("offline", text=text, action=action, said=said[:300])
+        await self.say(said)
+        return said
 
     # ---------------- approvals and questions ----------------
     async def _ask(self, speech: str, choices: list[str] | None = None, free_text: bool = False,
