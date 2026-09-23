@@ -69,7 +69,7 @@ EN = {
     "Важных писем: {n}.": "Important mail: {n}.",
     "Со вчера висит: {what}.": "Left from yesterday: {what}.",
     "Со вчера висит {n}, первое — {what}.": "{n} left from yesterday, first — {what}.",
-    "сделано": "done",
+    "сделано": "done", "Не расслышал.": "Didn't catch that.",
     # leaving and coming back
     "Нечего возвращать — я ничего не закрывал.": "Nothing to bring back — I closed nothing.",
     "Вернул: {what}.": "Back: {what}.", "Всё уже открыто.": "Everything is already open.",

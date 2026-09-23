@@ -661,6 +661,38 @@ class Daemon:
             text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
         return {"ok": True, "text": text, "level": round(level, 3), "seconds": round(len(clip) / audio.RATE, 1)}
 
+    def transcribe_file(self, path: str) -> str:
+        """Звук, записанный где-то ещё (телефон), — теми же ушами, что и микрофон на столе.
+
+        Распознавание всё равно происходит здесь: с телефона приходит файл, а не текст,
+        и дальше он идёт той же дорогой, что и сказанное вслух у компьютера."""
+        if not path or not os.path.exists(path):
+            raise FileNotFoundError(path)
+        raw = subprocess.run(
+            ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", path,
+             "-ac", "1", "-ar", str(audio.RATE), "-f", "s16le", "-"],
+            capture_output=True, timeout=120).stdout
+        if not raw:
+            return ""
+        return self.stt.transcribe(np.frombuffer(raw, dtype=np.int16))
+
+    async def dictate(self, path: str) -> dict:
+        """Надиктованное с телефона: распознать здесь и выполнить, как сказанное вслух."""
+        loop = asyncio.get_running_loop()
+        self.state = "transcribing"
+        try:
+            text = await loop.run_in_executor(None, self.transcribe_file, path)
+        finally:
+            self.state = "thinking" if self.brain.busy else "idle"
+        if not text:
+            events.emit("dictate_empty")
+            return {"ok": False, "error": t("Не расслышал.")}
+        events.emit("heard", text=text, source="phone")
+        self.publish(kind="heard", detail=text)
+        local = await self.handle_local(text, "phone")
+        reply = local if local is not None else await self.run_turn(text, source="phone")
+        return {"ok": True, "text": text, "result": reply or t("сделано")}
+
     async def record_sample(self, seconds: float) -> dict:
         import wave
 
@@ -1741,6 +1773,8 @@ class Daemon:
                 resp = {"ok": True, "log": self.jobs.tail(req.get("id", ""), int(req.get("lines", 40)))}
             elif cmd == "job_stop":
                 resp = {"ok": self.jobs.stop(req.get("id", ""))}
+            elif cmd == "dictate":  # звук с телефона: распознаём здесь и выполняем как обычную просьбу
+                resp = await self.dictate(req.get("path", ""))
             elif cmd == "session":  # «я ушёл» from the island, the phone or the command line
                 from . import session as session_mod
 
