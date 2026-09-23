@@ -15,5 +15,6 @@ Rectangle {
     Behavior on color { ColorAnimation { duration: 120 } }
     Text { font.family: JD.fontFamily; id: lbl; anchors.centerIn: parent; text: pb.label; color: pb.labelColor; font.pixelSize: 13; font.weight: Font.DemiBold }
     HoverHandler { id: pbHover; cursorShape: Qt.PointingHandCursor }
-    TapHandler { id: pbTap; onTapped: pb.clicked() }
+    // Нажатие достаётся только кнопке: см. IconButton.qml.
+    TapHandler { id: pbTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: pb.clicked() }
 }

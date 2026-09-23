@@ -738,7 +738,7 @@ ShellRoot {
             Text { anchors.centerIn: parent; text: mb.badge; color: "black"; font.family: JD.fontFamily; font.pixelSize: 9; font.weight: Font.Bold }
         }
         HoverHandler { id: mbHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { id: mbTap; onTapped: mb.clicked() }
+        TapHandler { id: mbTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: mb.clicked() }
     }
 
     // the big player: cover, title, progress, shuffle · prev · play · next · repeat, the queue
