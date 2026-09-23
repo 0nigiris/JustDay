@@ -19,6 +19,7 @@
   с file:// браузер не грузит, а так видно ровно то же, что увидит телефон.
 -->
 <link rel="stylesheet" href="/static/style.css">
+<script src="/static/preview.js"></script>
 </head>
 <body>
 
@@ -34,7 +35,7 @@
 
   <main id="view">
 
-    <section class="card jarvis-ask">
+    <section class="card jarvis-ask" data-screen="jarvis">
       <div class="card-head">
         <h2>Сказать JustDay</h2>
         <span class="meta">готов</span>
@@ -53,7 +54,7 @@
 В 10:00 — созвон с командой. Важных писем: 3.</div>
     </section>
 
-    <section class="card">
+    <section class="card" data-screen="jarvis">
       <div class="card-head"><h2>Плеер</h2><span class="meta">моя фонотека</span></div>
       <div class="jarvis-now">
         <div class="jarvis-cover" style="background:#5b4a7d"></div>
@@ -73,7 +74,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" data-screen="jarvis">
       <div class="card-head"><h2>Рабочий стол</h2></div>
       <div class="row">
         <button class="btn"><i class="i " style="--src:url(/static/icons/log-out.svg)"></i> Я ушёл</button>
@@ -83,7 +84,7 @@
         обратно. Ничего не убивается: что не закрылось — останется и будет названо.</div>
     </section>
 
-    <section class="page" data-title="Пульт">
+    <section class="page" data-title="Пульт" data-screen="deck">
       <div class="keys">
         <button class="key"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/gamepad-2.svg)"></i></span><span class="key-cap">Steam</span></button>
         <button class="key fav"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/headphones.svg)"></i></span><span class="key-cap">Discord</span></button>
@@ -93,7 +94,7 @@
         <button class="key danger"><span class="key-ico"><i class="i lg" style="--src:url(/static/icons/power.svg)"></i></span><span class="key-cap">Выключить</span></button>
     </section>
 
-    <section class="card">
+    <section class="card" data-screen="pcs">
       <div class="card-head"><h2>Основной ПК</h2><span class="meta">на связи</span></div>
       <div class="metrics">
         <div class="metric">

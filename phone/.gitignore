@@ -54,3 +54,4 @@ android/url.txt
 # Стенд оформления: копия tools/preview.html, положенная рядом со стилями,
 # чтобы браузер отдал её с тех же адресов, что и телефону.
 packages/remo32-controller/src/remo32_controller/web/preview.html
+packages/remo32-controller/src/remo32_controller/web/preview.js

@@ -19,12 +19,12 @@
 владелец, частная сеть.
 
 <p align="center">
-  <img src="docs/screenshots/pcs.png" alt="Вкладка «Компьютеры»" width="250">
-  <img src="docs/screenshots/buttons.png" alt="Свои кнопки" width="250">
+  <img src="docs/screenshots/justday.png" alt="Вкладка JustDay" width="250">
   <img src="docs/screenshots/deck.png" alt="Пульт" width="250">
+  <img src="docs/screenshots/pcs.png" alt="Состояние компьютера" width="250">
 </p>
 
-<p align="center"><sub>Снято на стенде с вымышленными машинами.</sub></p>
+<p align="center"><sub>Снято на стенде с вымышленными машинами (<code>tools/preview.html</code>).</sub></p>
 
 ---
 
