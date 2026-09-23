@@ -175,7 +175,7 @@ final class Updater {
         if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
             new AlertDialog.Builder(activity)
                     .setTitle("Нужно разрешение")
-                    .setMessage("Android просит разрешить установку приложений из Remo32. "
+                    .setMessage("Android просит разрешить установку приложений из JustDay. "
                             + "Сейчас откроются настройки — включите переключатель и вернитесь назад.")
                     .setPositiveButton("Открыть настройки", (d, w) -> {
                         Intent intent = new Intent(

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#0E1116</color>
-    <color name="accent">#4C8DFF</color>
+    <!-- Чёрный, как остров на экране компьютера и как сам интерфейс. -->
+    <color name="bg">#000000</color>
+    <color name="accent">#0A84FF</color>
 </resources>

@@ -23,7 +23,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * Оболочка вокруг веб-интерфейса Remo32.
+ * Оболочка вокруг веб-интерфейса JustDay.
  *
  * Приложение намеренно тонкое: вся логика живёт в контроллере на домашнем ПК,
  * и дублировать её здесь означало бы иметь две расходящиеся версии. Задача
@@ -57,7 +57,7 @@ public class MainActivity extends Activity {
         super.onCreate(saved);
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0E1116"));
+        root.setBackgroundColor(Color.parseColor("#000000"));
         setContentView(root);
 
         web = new WebView(this);
@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
         // шрифта ломало бы сетку пульта.
         s.setTextZoom(100);
 
-        web.setBackgroundColor(Color.parseColor("#0E1116"));
+        web.setBackgroundColor(Color.parseColor("#000000"));
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         web.setWebViewClient(new WebViewClient() {
@@ -140,12 +140,12 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setBackgroundColor(Color.parseColor("#0E1116"));
+        box.setBackgroundColor(Color.parseColor("#000000"));
         int pad = (int) (24 * getResources().getDisplayMetrics().density);
         box.setPadding(pad, pad, pad, pad);
 
         TextView title = new TextView(this);
-        title.setText("Не удалось открыть Remo32");
+        title.setText("Не удалось открыть JustDay");
         title.setTextColor(Color.parseColor("#E6E9EF"));
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
