@@ -1367,7 +1367,7 @@ ShellRoot {
 
             // the assistant's question: one button per option (options with icons sit side by side as tiles)
             readonly property bool tiles: cv.c.type === "question" && (cv.c.options || []).length > 0 && (cv.c.options || []).length <= 4
-                                          && (cv.c.options || []).every(o => !!o.icon)
+                                          && (cv.c.options || []).every(o => !!o.icon || !!o.thumb)
             Label1 {
                 visible: cardCol.tiles && !!cv.c.question
                 text: cv.c.question || ""
@@ -1399,7 +1399,24 @@ ShellRoot {
                             id: tileCol
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
                             spacing: 4
-                            Icon { name: modelData.icon; implicitSize: 26; Layout.alignment: Qt.AlignHCenter }
+                            // Вариант с картинкой — выбор песни: узнать обложку быстрее,
+                            // чем прочитать название, особенно когда названия похожи.
+                            Rectangle {
+                                visible: !!modelData.thumb
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: width * 9 / 16
+                                radius: 10
+                                clip: true
+                                color: JD.fill2
+                                Image {
+                                    anchors.fill: parent
+                                    source: modelData.thumb || ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    cache: true
+                                }
+                            }
+                            Icon { visible: !modelData.thumb; name: modelData.icon; implicitSize: 26; Layout.alignment: Qt.AlignHCenter }
                             Label1 { text: modelData.label; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
                             Label2 { text: modelData.description || ""; font.pixelSize: 11; color: JD.text3; horizontalAlignment: Text.AlignHCenter
                                      wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }

@@ -1228,6 +1228,66 @@ class Daemon:
         return {"ok": True, "title": first["title"], "artist": first.get("artist", ""), "file": first.get("file", ""),
                 "queued": len(tracks) - 1, "done": t("играет {what}", what=name)}
 
+    # A query is "sure" when the words asked for are actually in the title of the first hit and nothing
+    # else looks just as likely. "Flower Man" is sure — there is one. "No name" is not.
+    SURE_GAP = 0.22          # how much better the first hit must be than the second
+    SURE_HIT = 0.72          # how much of the query the first title must actually contain
+
+    @staticmethod
+    def _title_hit(entry: dict, query: str) -> float:
+        """How much of what was asked for is in this title (0…1)."""
+        words = [w for w in re.split(r"[^\w]+", query.lower().replace("ё", "е")) if len(w) > 1]
+        if not words:
+            return 0.0
+        hay = f"{entry.get('title', '')} {entry.get('channel', '')}".lower().replace("ё", "е")
+        return sum(1 for w in words if w in hay) / len(words)
+
+    async def _ask_which_song(self, entries: list[dict], query: str) -> dict | None:
+        """Several songs match — show them and ask.
+
+        Спрашиваем не всегда: когда попадание очевидное («Flower Man» — он один),
+        вопрос только мешает. Ответ — нажатием на обложку или голосом; молчание
+        через две минуты означает «первый», то есть прежнее поведение.
+        """
+        best = self._title_hit(entries[0], query)
+        second = self._title_hit(entries[1], query) if len(entries) > 1 else 0.0
+        if best >= self.SURE_HIT and best - second >= self.SURE_GAP:
+            return entries[0]
+        if self.silent():
+            # Голос выключен или идёт игра: вопрос вслух задавать некому, а
+            # карточка поверх игры — худшее, что можно сделать. Берём лучшее.
+            return entries[0]
+
+        shown = entries[:3]
+        opts = []
+        for e in shown:
+            dur = f"{e['duration'] // 60}:{e['duration'] % 60:02d}" if e.get("duration") else ""
+            opts.append({"label": e["title"][:42], "icon": "media-playback-start",
+                         "description": " · ".join(x for x in (e.get("channel", ""), dur) if x),
+                         "thumb": e.get("thumb_url", "")})
+        self.publish(kind="card", card={"type": "question", "header": t("Какую включить?"),
+                                        "question": t("Нашёл несколько — «{what}»", what=query),
+                                        "options": opts})
+        try:
+            ans = await self._ask(t("Нашёл несколько. Какую включить?"),
+                                  choices=[o["label"] for o in opts], free_text=True)
+        finally:
+            self.publish(kind="card_close")
+        if ans == "deny":
+            return None
+        if ans in (None, "allow"):
+            return shown[0]
+        for e, o in zip(shown, opts, strict=True):
+            if ans == o["label"]:
+                return e
+        # Ответили своими словами: «вторую», «последнюю», «ту, что с клипом».
+        norm = ans.lower().replace("ё", "е")
+        for i, word in enumerate((("перв", "1"), ("втор", "2"), ("трет", "3"))):
+            if i < len(shown) and any(w in norm for w in word):
+                return shown[i]
+        best_by_words = max(shown, key=lambda e: self._title_hit(e, ans))
+        return best_by_words if self._title_hit(best_by_words, ans) > 0 else shown[0]
+
     async def play_music(self, query: str, count: int = 1, mode: str = "replace", playlist: bool = False,
                          shuffle: bool = False) -> dict:
         """Find the song on YouTube, download its audio, play it. `count` > 1: the rest follow in the background."""
@@ -1273,6 +1333,14 @@ class Daemon:
                     source = query
             if not entries:
                 raise RuntimeError("nothing found")
+            # Одну песню и по названию — уточняем, если название подходит сразу
+            # нескольким. Списки, «включи пять песен» и ссылки не трогаем.
+            if count == 1 and not playlist and not shuffle and not media.is_url(query) and len(entries) > 1:
+                self.music.set_loading(None)
+                chosen = await self._ask_which_song(entries, query)
+                if chosen is None:
+                    return {"ok": True, "done": t("хорошо, не включаю")}
+                entries = [chosen]
             if shuffle:
                 import random
                 random.shuffle(entries)
