@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +101,25 @@ async def say(text: str) -> dict[str, Any]:
 
 async def player(action: str, value: Any = None) -> dict[str, Any]:
     return await call("media", action=action, value=value)
+
+
+async def dictate(audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
+    """Надиктованное с телефона. Звук ложится во временный файл и распознаётся ассистентом —
+    той же моделью, что слушает микрофон на столе. Файл удаляется сразу после ответа:
+    записи голоса не накапливаются нигде.
+
+    Распознавание может занять несколько секунд, поэтому ждём столько же, сколько и просьбу."""
+    # mkstemp, а не NamedTemporaryFile: файл должен пережить запись и дожить до конца
+    # распознавания, а закрыть его нужно раньше — читает его другой процесс. Права 0600
+    # ставит сам mkstemp, так что чужой пользователь запись не прочтёт.
+    fd, path = tempfile.mkstemp(prefix="justday-dictate-", suffix=suffix)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(audio)
+        return await call("dictate", path=path, timeout=ASK_TIMEOUT)
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
 
 
 async def session(action: str) -> dict[str, Any]:

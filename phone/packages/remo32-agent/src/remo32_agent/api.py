@@ -11,7 +11,7 @@ import contextlib
 import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from remo32_agent import __version__, justday
@@ -162,9 +162,7 @@ def build_router(ctx: AgentContext) -> APIRouter:
         state = ActionEditorState(
             enabled=editor.enabled,
             max_actions=editor.max_actions,
-            actions=[
-                a.model_dump(mode="json", exclude_none=True) for a in ctx.registry.managed()
-            ],
+            actions=[a.model_dump(mode="json", exclude_none=True) for a in ctx.registry.managed()],
             kinds=list(ActionKind),
         )
         return ApiResponse[ActionEditorState].success(state, request_id)
@@ -198,15 +196,12 @@ def build_router(ctx: AgentContext) -> APIRouter:
         existing = {a.id for a in ctx.registry.managed()}
         if action_id not in existing and len(existing) >= editor.max_actions:
             raise ActionInvalidError(
-                f"уже заведено {len(existing)} кнопок — это предел "
-                f"(actions_editor.max_actions)"
+                f"уже заведено {len(existing)} кнопок — это предел (actions_editor.max_actions)"
             )
 
         ctx.registry.upsert(action)
         log.info("кнопка сохранена", action_id=action_id, kind=str(action.kind))
-        return ApiResponse[ActionDescriptor].success(
-            ctx.registry.describe(action_id), request_id
-        )
+        return ApiResponse[ActionDescriptor].success(ctx.registry.describe(action_id), request_id)
 
     @router.delete(
         "/api/action-editor/{action_id}",
@@ -378,6 +373,25 @@ def build_router(ctx: AgentContext) -> APIRouter:
         return ApiResponse[dict[str, Any]].success(
             await justday.player(command.action, command.value), request_id
         )
+
+    @router.post(
+        "/api/justday/dictate",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_dictate(
+        request: Request,
+        request_id: RequestId,
+        suffix: str = Query(".webm", max_length=8, pattern=r"^\.[a-z0-9]{2,6}$"),
+    ) -> ApiResponse[dict[str, Any]]:
+        """Звук с телефона. Распознаёт ассистент на этой машине — наружу запись не уходит."""
+        audio = await request.body()
+        if not audio:
+            raise ActionInvalidError("пустая запись")
+        if len(audio) > 8 * 1024 * 1024:  # минута речи весит около 700 КБ
+            raise ActionInvalidError("запись слишком длинная")
+        return ApiResponse[dict[str, Any]].success(await justday.dictate(audio, suffix), request_id)
 
     @router.post(
         "/api/justday/session/{action}",

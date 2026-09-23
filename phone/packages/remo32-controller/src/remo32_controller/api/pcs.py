@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from remo32_controller.auth.dependencies import Session
 from remo32_controller.devices import DeviceRegistry
+from remo32_core.errors import ActionInvalidError
 from remo32_core.http import RequestId
 from remo32_core.log import get_logger
 from remo32_core.models import (
@@ -148,6 +149,31 @@ async def justday_player(
     return ApiResponse[dict[str, Any]].success(
         await _registry(request).get(pc_id).client.justday_player(payload.action, payload.value),
         request_id,
+    )
+
+
+# Голос, надиктованный в браузере: файл идёт сквозь контроллер к агенту без разбора и
+# без записи на диск — распознаёт его сам ассистент на компьютере.
+DICTATE_LIMIT = 8 * 1024 * 1024
+
+
+@router.post("/{pc_id}/justday/dictate", response_model=ApiResponse[dict[str, Any]])
+async def justday_dictate(
+    pc_id: str,
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+    suffix: str = Query(".webm", max_length=8, pattern=r"^\.[a-z0-9]{2,6}$"),
+) -> ApiResponse[dict[str, Any]]:
+    """Надиктованное с телефона: запись уезжает на ПК, ответ приходит как на обычную просьбу."""
+    audio = await request.body()
+    if not audio:
+        raise ActionInvalidError("пустая запись")
+    if len(audio) > DICTATE_LIMIT:
+        raise ActionInvalidError("запись слишком длинная")
+    log.info("надиктовка", pc_id=pc_id, bytes=len(audio))
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_dictate(audio, suffix), request_id
     )
 
 

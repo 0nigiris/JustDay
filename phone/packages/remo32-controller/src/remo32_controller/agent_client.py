@@ -87,6 +87,8 @@ class AgentClient:
         *,
         timeout: float | None = None,
         json: Any | None = None,
+        content: bytes | None = None,
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         url = f"{self._base_url}{path}"
         try:
@@ -96,6 +98,8 @@ class AgentClient:
                 headers=self._headers(),
                 timeout=timeout or self._timeout,
                 json=json,
+                content=content,
+                params=params,
             )
         except httpx.TimeoutException as exc:
             raise DeviceTimeoutError(
@@ -184,9 +188,7 @@ class AgentClient:
         return ApprovalList.model_validate(await self._request("GET", "/api/approvals"))
 
     async def allow_session(self) -> ApprovalInfo:
-        return ApprovalInfo.model_validate(
-            await self._request("POST", "/api/approvals/session")
-        )
+        return ApprovalInfo.model_validate(await self._request("POST", "/api/approvals/session"))
 
     async def decide_approval(self, approval_id: str, approved: bool) -> ApprovalInfo:
         return ApprovalInfo.model_validate(
@@ -217,6 +219,17 @@ class AgentClient:
     async def justday_player(self, action: str, value: Any = None) -> dict[str, Any]:
         got: dict[str, Any] = await self._request(
             "POST", "/api/justday/player", json={"action": action, "value": value}, timeout=20.0
+        )
+        return got
+
+    async def justday_dictate(self, audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
+        """Запись голоса уходит на компьютер как есть: контроллер её не хранит и не читает."""
+        got: dict[str, Any] = await self._request(
+            "POST",
+            "/api/justday/dictate",
+            content=audio,
+            params={"suffix": suffix},
+            timeout=190.0,
         )
         return got
 
