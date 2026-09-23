@@ -1,4 +1,4 @@
-# Remo32 — руководство
+# JustDay на телефоне — руководство
 
 Управление домашними компьютерами с телефона: посмотреть загрузку, выключить,
 разбудить, запустить что-нибудь по расписанию. Плата ESP32 работает сторожем и
@@ -84,7 +84,7 @@ enabled = true
 Положите скрипт туда, где его найдёт PAM:
 
 ```bash
-sudo install -m 0755 ~/Remo32/deploy/scripts/remo32-pam.py /usr/local/bin/remo32-pam
+sudo install -m 0755 ~/JustDay/phone/deploy/scripts/remo32-pam.py /usr/local/bin/remo32-pam
 ```
 
 **sudo** — первой строкой в `/etc/pam.d/sudo`:
@@ -300,7 +300,7 @@ REMO32_URL="http://адрес:8080/" ./android/build.sh
 ## 3. Где что лежит
 
 ```
-~/Remo32/                        репозиторий
+~/JustDay/phone/                 телефонная половина
 ~/.config/remo32/agent.toml      настройки агента
 ~/.config/remo32/agent.env       секреты агента          (права 0600)
 ~/.config/remo32/controller.toml настройки контроллера
@@ -332,7 +332,7 @@ journalctl --user -u remo32-controller -f      # живой журнал
 изменения зависимостей окружение обновляется вручную:
 
 ```bash
-cd ~/Remo32 && uv sync
+cd ~/JustDay/phone && uv sync
 systemctl --user restart remo32-agent remo32-controller
 ```
 

@@ -1,4 +1,4 @@
-# Remo32 — что дальше
+# JustDay на телефоне — что дальше
 
 Срез на 2026-09-07. Ежедневное пользование — в [MANUAL.md](MANUAL.md),
 устройство системы — в [ARCHITECTURE.md](ARCHITECTURE.md).

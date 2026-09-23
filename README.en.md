@@ -125,6 +125,12 @@ Qwen3-TTS on your GPU: “Jarvis”, a voice from a description or from a record
 <tr>
 <td valign="top">
 
+**📱 And from the phone**<br>
+The same request, the same player, the same “I'm leaving” — from your phone, through the [phone half](phone/README.md): wake a machine that is off, watch its load, open a terminal.
+
+</td>
+<td valign="top">
+
 **🌅 Morning briefing**<br>
 The first “hello” of the day gets the day back: the weather, your next meeting, new mail and whatever was left from yesterday — in one sentence, without asking the model.
 

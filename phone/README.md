@@ -1,8 +1,11 @@
-# Remo32
+# JustDay на телефоне
 
-[![Проверки](https://github.com/onigiri/remo32/actions/workflows/ci.yml/badge.svg)](https://github.com/onigiri/remo32/actions/workflows/ci.yml)
-[![Лицензия: GPL v3](https://img.shields.io/badge/лицензия-GPL--3.0-blue.svg)](LICENSE)
+[![Проверки](https://img.shields.io/github/actions/workflow/status/0nigiris/JustDay/phone.yml?style=flat-square&label=проверки)](https://github.com/0nigiris/JustDay/actions/workflows/phone.yml)
+[![Лицензия: GPL v3](https://img.shields.io/badge/лицензия-GPL--3.0-blue.svg)](../LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
+
+Телефонная половина [JustDay](../README.md): тот же ассистент, тот же плеер и то же
+«я ушёл» — только с телефона, плюс всё, чего на компьютере нет.
 
 **Управление домашними компьютерами с телефона.** Посмотреть загрузку,
 разбудить выключенный, погасить свет, запустить игру, открыть терминал —
@@ -45,6 +48,7 @@ git clone https://github.com/onigiri/remo32.git && cd remo32
 
 | Возможность | Состояние |
 |---|---|
+| Вкладка JustDay: просьба текстом, плеер, «я ушёл» / «я вернулся» | готово, на телефоне ещё не проверено |
 | REST API контроллера: 23 операции + WebSocket терминала, OpenAPI | готово |
 | Мобильный веб-интерфейс с живым обновлением | готово |
 | Вход по паролю (argon2id) и по passkey (WebAuthn) | готово |
@@ -117,8 +121,8 @@ uv --version && python3 --version && tmux -V && tailscale version
 ### 1. Зависимости
 
 ```bash
-git clone <репозиторий> ~/Remo32
-cd ~/Remo32
+git clone https://github.com/0nigiris/JustDay ~/JustDay
+cd ~/JustDay/phone
 uv sync
 ```
 
@@ -389,7 +393,7 @@ tailscale status
 устройства, расшаренные в вашу сеть другими людьми. Они видят ваши
 сервисы. Убрать: https://login.tailscale.com/admin/machines
 
-Именно поэтому Remo32 требует вход даже внутри Tailscale.
+Именно поэтому JustDay требует вход даже внутри Tailscale.
 
 ---
 
