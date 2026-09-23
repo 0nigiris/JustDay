@@ -1375,7 +1375,7 @@ class Daemon:
         await self.earcon("done")
         await self.say(said)
         self.brain.note(f"[Уже выполнено мгновенно: «{text}» → {said}. Не повторяй.]")
-        events.emit("reminder_set", kind=rec["kind"], at=rec["at"], label=rec["label"])
+        events.emit("reminder_set", what=rec["kind"], at=rec["at"], label=rec["label"])
         return True
 
     def _reminders_state(self) -> list[dict]:
