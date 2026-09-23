@@ -19,11 +19,11 @@
 <!-- Экран входа -->
 <div class="login" id="login" hidden>
   <div class="login-box">
-    <div class="login-mark">◑</div>
+    <img class="login-mark" src="/static/mark.svg?v=__ASSET_VERSION__" alt="" width="140" height="56">
     <h1>JustDay</h1>
     <p>Ваш компьютер под рукой</p>
 
-    <button class="btn primary" id="passkey-btn" hidden>🔑 Войти по passkey</button>
+    <button class="btn primary" id="passkey-btn" hidden><i class="i" style="--src:url(/static/icons/key-round.svg)" aria-hidden="true"></i> Войти по passkey</button>
     <div class="divider" id="login-divider" hidden>или</div>
 
     <form id="password-form">
@@ -43,18 +43,18 @@
       <div class="sub" id="conn-status">подключение…</div>
     </div>
     <button class="icon-btn" id="btn-pc" title="Сменить компьютер" hidden></button>
-    <button class="icon-btn" id="btn-refresh" title="Обновить">↻</button>
+    <button class="icon-btn" id="btn-refresh" title="Обновить" aria-label="Обновить"><i class="i" style="--src:url(/static/icons/refresh-cw.svg)" aria-hidden="true"></i></button>
   </header>
 
   <main id="view"><div class="empty">Загрузка…</div></main>
 
   <!-- Ссылки, а не кнопки: так работает системная кнопка «назад». -->
   <nav class="tabbar" id="tabbar">
-    <a class="tab" href="#/deck" data-tab="deck"><span class="ico">🎛</span><span>Пульт</span></a>
-    <a class="tab" href="#/jarvis" data-tab="jarvis"><span class="ico">◑</span><span>JustDay</span></a>
-    <a class="tab" href="#/pcs" data-tab="pcs"><span class="ico">🖥</span><span>ПК</span></a>
-    <a class="tab" href="#/schedule" data-tab="schedule"><span class="ico">⏰</span><span>Расписание</span></a>
-    <a class="tab" href="#/more" data-tab="more"><span class="ico">⋯</span><span>Ещё</span></a>
+    <a class="tab" href="#/deck" data-tab="deck"><span class="ico"><i class="i" style="--src:url(/static/icons/layout-grid.svg)" aria-hidden="true"></i></span><span>Пульт</span></a>
+    <a class="tab" href="#/jarvis" data-tab="jarvis"><span class="ico"><i class="i" style="--src:url(/static/icons/panel-top.svg)" aria-hidden="true"></i></span><span>JustDay</span></a>
+    <a class="tab" href="#/pcs" data-tab="pcs"><span class="ico"><i class="i" style="--src:url(/static/icons/monitor.svg)" aria-hidden="true"></i></span><span>ПК</span></a>
+    <a class="tab" href="#/schedule" data-tab="schedule"><span class="ico"><i class="i" style="--src:url(/static/icons/timer.svg)" aria-hidden="true"></i></span><span>Расписание</span></a>
+    <a class="tab" href="#/more" data-tab="more"><span class="ico"><i class="i" style="--src:url(/static/icons/settings.svg)" aria-hidden="true"></i></span><span>Ещё</span></a>
   </nav>
 </div>
 
@@ -64,7 +64,7 @@
 <div id="sheet" hidden>
   <div class="sheet-back" data-sheet="no"></div>
   <div class="sheet-card">
-    <div class="sheet-icon" id="sheet-icon">⚠️</div>
+    <div class="sheet-icon" id="sheet-icon"></div>
     <div class="sheet-title" id="sheet-title"></div>
     <div class="sheet-text" id="sheet-text"></div>
     <div class="sheet-buttons">

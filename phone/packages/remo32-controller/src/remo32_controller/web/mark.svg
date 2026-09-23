@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 56" role="img" aria-label="JustDay">
+  <!-- Остров: тот же знак, что на иконке приложения и наверху экрана компьютера.
+       Здесь он цветной, поэтому это картинка, а не маска. -->
+  <rect x="1" y="1" width="138" height="54" rx="27" fill="#0B0B0D" stroke="#2C2C2E" stroke-width="2"/>
+  <circle cx="30" cy="28" r="11" fill="#0A84FF"/>
+  <rect x="54" y="21" width="56" height="6" rx="3" fill="#EBEBF5" opacity="0.85"/>
+  <rect x="54" y="33" width="34" height="6" rx="3" fill="#EBEBF5" opacity="0.45"/>
+</svg>

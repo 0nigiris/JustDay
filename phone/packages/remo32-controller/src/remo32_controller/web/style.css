@@ -931,6 +931,8 @@ main#view {
 }
 
 .i.lg { width: 26px; height: 26px; }
+img.login-mark { width: 140px; height: 56px; display: block; margin: 0 auto 18px; }
+.sheet-icon .i { width: 30px; height: 30px; }
 .i.sm { width: 18px; height: 18px; }
 
 /* ============================================ JustDay ================== */

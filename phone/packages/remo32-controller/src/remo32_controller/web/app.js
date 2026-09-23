@@ -174,8 +174,10 @@ function toast(message, kind = "", requestId = null) {
 
 let sheetResolve = null;
 
-function confirmSheet({ title, text = "", yes = "Да", icon = "⚠️", danger = true }) {
-  el("sheet-icon").textContent = icon;
+function confirmSheet({ title, text = "", yes = "Да", icon: mark = "lucide:circle-alert", danger = true }) {
+  const iconBox = el("sheet-icon");
+  if (mark.startsWith("lucide:")) iconBox.innerHTML = icon(mark.slice(7), "lg");
+  else iconBox.textContent = mark;
   el("sheet-title").textContent = title;
   el("sheet-text").textContent = text;
   const yesButton = el("sheet-yes");
@@ -193,7 +195,7 @@ async function confirmPower(pc, what) {
   const name = pc?.name || "компьютер";
   if (what !== "shutdown") {
     return confirmSheet({
-      icon: "🔄",
+      icon: "lucide:refresh-cw",
       title: `Перезагрузить ${name}?`,
       text: "Компьютер вернётся сам через минуту-полторы.",
       yes: "Перезагрузить",
@@ -201,7 +203,7 @@ async function confirmPower(pc, what) {
   }
   if (pc?.hosts_controller) {
     const first = await confirmSheet({
-      icon: "🖥",
+      icon: "lucide:monitor",
       title: `${name} — ваш сервер`,
       text: "На нём живёт само управление: после выключения телефон не сможет ни разбудить его, "
         + "ни что-нибудь запустить. Поднимать придётся кнопкой на корпусе или платой-сторожем.",
@@ -210,7 +212,7 @@ async function confirmPower(pc, what) {
     if (!first) return false;
   }
   return confirmSheet({
-    icon: "⏻",
+    icon: "lucide:power",
     title: `Выключить ${name}?`,
     text: pc?.hosts_controller
       ? "Последняя проверка. Может, хватит заблокировать экран или закрыть лишние программы?"
@@ -441,9 +443,9 @@ function toggleFavorite(pcId, actionId) {
    как у обычных действий. */
 
 const POWER = {
-  "power:shutdown": { name: "Выключить", icon: "⏻", dangerous: true },
-  "power:restart": { name: "Перезагрузка", icon: "🔄", dangerous: true },
-  "power:wake": { name: "Включить", icon: "⏻", dangerous: false },
+  "power:shutdown": { name: "Выключить", icon: "lucide:power", dangerous: true },
+  "power:restart": { name: "Перезагрузка", icon: "lucide:refresh-cw", dangerous: true },
+  "power:wake": { name: "Включить", icon: "lucide:zap", dangerous: false },
 };
 
 function powerFor(pc) {
@@ -462,7 +464,8 @@ function deckButton(pc, action) {
     data-key-pc="${esc(pc.id)}" data-key-action="${esc(action.id)}"
     ${off ? "disabled" : ""}
     title="${esc(action.description || action.name)}">
-    <span class="key-ico">${esc(action.icon || "•")}</span>
+    <span class="key-ico">${action.icon?.startsWith("lucide:")
+      ? icon(action.icon.slice(7), "lg") : esc(action.icon || "•")}</span>
     <span class="key-cap">${esc(action.name)}</span>
   </button>`;
 }
@@ -602,11 +605,11 @@ function pcCard(pc) {
     if (pc.terminal_supported) {
       buttons.push(`<button class="btn" data-terminal="${esc(pc.id)}">⌨️ Терминал</button>`);
     }
-    buttons.push(`<button class="btn danger" data-power="restart" data-pc="${esc(pc.id)}">🔄 Перезагрузка</button>`);
-    buttons.push(`<button class="btn danger" data-power="shutdown" data-pc="${esc(pc.id)}">⏻ Выключить</button>`);
+    buttons.push(`<button class="btn danger" data-power="restart" data-pc="${esc(pc.id)}">${icon("refresh-cw")} Перезагрузка</button>`);
+    buttons.push(`<button class="btn danger" data-power="shutdown" data-pc="${esc(pc.id)}">${icon("power")} Выключить</button>`);
     body += `<div class="row">${buttons.join("")}</div>`;
   } else if (pc.wake_supported) {
-    body = `<div class="row"><button class="btn primary" data-wake="${esc(pc.id)}">⏻ Включить</button></div>`;
+    body = `<div class="row"><button class="btn primary" data-wake="${esc(pc.id)}">${icon("zap")} Включить</button></div>`;
   } else {
     body = `<div class="meta">MAC-адрес не задан — разбудить нечем</div>`;
   }
@@ -688,7 +691,7 @@ function esp32Card(status) {
       if (g.config) {
         const off = g.config.enabled === false;
         details += `<div class="row"><button class="btn ${off ? "primary" : "danger"}"
-          data-guard="${off ? "on" : "off"}">${off ? "👁 Включить слежку" : "🚫 Выключить слежку"}</button></div>`;
+          data-guard="${off ? "on" : "off"}">${off ? `${icon("shield")} Включить слежку` : `${icon("x")} Выключить слежку`}</button></div>`;
       }
     }
     // Кнопка. Главное здесь — «изменений уровня»: если после нажатия оно
@@ -791,13 +794,13 @@ function scheduleRow(entry) {
         <div class="meta">${esc(daysLabel(entry.days))} · ${esc(pcName)} · ${esc(actionLabel(entry.pc_id, entry.action_id))}</div>
       </div>
       <button class="icon-btn" data-sched-toggle="${esc(entry.id)}"
-        title="${entry.enabled ? "Выключить правило" : "Включить правило"}">${entry.enabled ? "⏸" : "▶"}</button>
+        title="${entry.enabled ? "Выключить правило" : "Включить правило"}">${entry.enabled ? icon("pause", "sm") : icon("play", "sm")}</button>
     </div>
     ${status}
     <div class="row">
-      <button class="btn" data-sched-run="${esc(entry.id)}">▶ Выполнить</button>
+      <button class="btn" data-sched-run="${esc(entry.id)}">${icon("play")} Выполнить</button>
       <button class="btn" data-sched-edit="${esc(entry.id)}">✎ Изменить</button>
-      <button class="btn danger" data-sched-del="${esc(entry.id)}">🗑 Удалить</button>
+      <button class="btn danger" data-sched-del="${esc(entry.id)}">${icon("trash")} Удалить</button>
     </div>
   </div>`;
 }
@@ -1324,7 +1327,7 @@ function viewMore() {
   <section class="card">
     <div class="card-head"><h2>Вход</h2></div>
     <div class="row">
-      <button class="btn" id="more-passkey" ${passkeyReady ? "" : "disabled"}>🔑 Зарегистрировать passkey</button>
+      <button class="btn" id="more-passkey" ${passkeyReady ? "" : "disabled"}>${icon("key-round")} Зарегистрировать passkey</button>
     </div>
     <div class="meta">${esc(note)}</div>
   </section>
@@ -1332,7 +1335,7 @@ function viewMore() {
   <section class="card">
     <div class="card-head"><h2>Вход в компьютер</h2></div>
     <div class="row"><button class="btn" id="more-session"
-      ${state.approvalsEnabled ? "" : "disabled"}>🔓 Разрешить следующий вход</button></div>
+      ${state.approvalsEnabled ? "" : "disabled"}>${icon("key-round")} Разрешить следующий вход</button></div>
     <div class="meta">${state.approvalsEnabled
       ? "Нажмите перед тем, как идти к компьютеру: следующий вход пройдёт без пароля. Разрешение сгорает через пару минут и после первого использования."
       : "Выключено. Включается в конфигурации агента: approvals.enabled — и настройкой PAM, см. справку."}</div>
@@ -1340,30 +1343,30 @@ function viewMore() {
 
   <section class="card">
     <div class="card-head"><h2>Приложение на телефон</h2></div>
-    <div class="row"><button class="btn" id="more-apk">📲 Скачать APK</button></div>
+    <div class="row"><button class="btn" id="more-apk">${icon("download")} Скачать APK</button></div>
     <div class="meta" id="apk-note">Значок на рабочем столе вместо вкладки браузера.
       Дальше приложение обновляется само: при запуске спрашивает эту же машину.</div>
   </section>
 
   <section class="card">
     <div class="card-head"><h2>Свои кнопки</h2></div>
-    <div class="row"><button class="btn" data-go="buttons">🎛 Настроить кнопки пульта</button></div>
+    <div class="row"><button class="btn" data-go="buttons">${icon("layout-grid")} Настроить кнопки пульта</button></div>
     <div class="meta">Добавить свою кнопку: запуск приложения, службы или команды в tmux.</div>
   </section>
 
   <section class="card">
     <div class="card-head"><h2>Справка и служебное</h2></div>
     <div class="row">
-      <button class="btn" data-go="help">📖 Как этим пользоваться</button>
-      <button class="btn" id="more-docs">🛠 Документация API</button>
+      <button class="btn" data-go="help">${icon("book-open")} Как этим пользоваться</button>
+      <button class="btn" id="more-docs">${icon("code")} Документация API</button>
     </div>
   </section>
 
   <section class="card">
     <div class="card-head"><h2>Сеанс</h2></div>
     <div class="row">
-      <button class="btn" id="more-logout">🚪 Выйти</button>
-      <button class="btn danger" id="more-logout-all">🧹 Выйти на всех устройствах</button>
+      <button class="btn" id="more-logout">${icon("log-out")} Выйти</button>
+      <button class="btn danger" id="more-logout-all">${icon("users")} Выйти на всех устройствах</button>
     </div>
     <div class="meta">Второе — если телефон потерялся: завершит сессии везде,
       включая это устройство. Войти заново придётся всюду.</div>
@@ -1373,7 +1376,7 @@ function viewMore() {
 function viewHelp() {
   return `
   <section class="card">
-    <div class="card-head"><h2>🎛 Пульт</h2></div>
+    <div class="card-head"><h2>Пульт</h2></div>
     <div class="help">
       <p>Главный экран. Крупные кнопки, которые листаются пальцем влево-вправо:
       сначала <b>Избранное</b>, потом по странице на каждую группу действий,
@@ -1388,7 +1391,7 @@ function viewHelp() {
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>🖥 Компьютеры</h2></div>
+    <div class="card-head"><h2>Компьютеры</h2></div>
     <div class="help">
       <p>Загрузка процессора, памяти, видеокарты и диска, а также кнопки
       питания и терминал.</p>
@@ -1586,7 +1589,7 @@ document.addEventListener("click", async (event) => {
     const closing = d.jarvisSession === "close";
     const open = state.justday?.session_apps || [];
     const ok = await confirmSheet({
-      icon: closing ? "🚪" : "↩︎",
+      icon: closing ? "lucide:log-out" : "lucide:rotate-ccw",
       title: closing ? "Закрыть открытые программы?" : "Открыть то, что было закрыто?",
       text: closing
         ? "Список запомнится, и «я вернулся» откроет всё обратно. Программы закрываются как по крестику — несохранённое они спросят сами."
@@ -1669,7 +1672,7 @@ document.addEventListener("click", async (event) => {
 
   if (button.id === "more-logout-all") {
     const ok = await confirmSheet({
-      icon: "🧹",
+      icon: "lucide:users",
       title: "Выйти на всех устройствах?",
       text: "Все сессии будут завершены, включая эту. Придётся войти заново везде.",
       yes: "Выйти везде",
@@ -1745,7 +1748,7 @@ document.addEventListener("click", async (event) => {
     const pc = editorPc();
     const draft = state.buttonForm;
     const ok = await confirmSheet({
-      icon: "🗑",
+      icon: "lucide:trash",
       title: `Удалить «${draft.name}»?`,
       text: "Кнопка исчезнет с пульта. Сама программа на компьютере останется.",
       yes: "Удалить",
@@ -1860,7 +1863,7 @@ document.addEventListener("click", async (event) => {
   if (d.schedDel) {
     const entry = state.schedules.find((s) => s.id === d.schedDel);
     const ok = await confirmSheet({
-      icon: "🗑", title: "Удалить правило?", text: entry?.name || "", yes: "Удалить",
+      icon: "lucide:trash", title: "Удалить правило?", text: entry?.name || "", yes: "Удалить",
     });
     if (!ok) return;
     return run(button,
