@@ -211,6 +211,38 @@ class Daemon:
         self.state = "thinking" if self.brain.busy else "idle"
         return text
 
+    async def session_switch(self, what: str) -> str:
+        """«Я ушёл» — remember the open applications and ask them to close; «я вернулся» — open them again.
+
+        Closing is asked about first: the list is what the user will get back, and a window that has
+        unsaved work in it is better mentioned before it is told to close."""
+        from . import session
+
+        loop = asyncio.get_running_loop()
+        if what == "restore":
+            r = await loop.run_in_executor(None, session.restore)
+            if not r.get("ok"):
+                said = t("Нечего возвращать — я ничего не закрывал.")
+            else:
+                said = (t("Вернул: {what}.", what=", ".join(r["started"])) if r["started"]
+                        else t("Всё уже открыто."))
+            await self.say(said)
+            return said
+        apps = await loop.run_in_executor(None, session.save)
+        names = [a["name"] for a in apps["apps"]]
+        if not names:
+            said = t("Нечего закрывать.")
+            await self.say(said)
+            return said
+        if not await self._approve(t("Закрыть: {what}", what=", ".join(names)), t("Верну по «я вернулся»")):
+            return t("Отменено")
+        r = await loop.run_in_executor(None, session.close, None)
+        said = t("Закрыл: {what}. Скажите «я вернулся» — открою заново.", what=", ".join(r["closed"]) or "—")
+        if r["still_open"]:
+            said += " " + t("Не закрылись: {what}.", what=", ".join(r["still_open"]))
+        await self.say(said)
+        return said
+
     async def set_voice(self, on: bool) -> None:
         """«молчи» / «говори»: only the voice stops — the island still shows every answer."""
         config.set_value("tts", "muted", not on)
@@ -480,6 +512,8 @@ class Daemon:
         if (on := fastpath.voice_switch(text)) is not None:
             await self.set_voice(on)
             return t("голос включён") if on else t("голос выключен")
+        if (what := fastpath.session_switch(text)) is not None:
+            return await self.session_switch(what)
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         gen = self._cancel_gen

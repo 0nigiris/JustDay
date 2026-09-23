@@ -296,6 +296,9 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("screenshot", help="capture the screen as a small JPEG and print its path")
     sp.add_argument("--all", action="store_true", help="all monitors instead of the active window")
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
+    sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
+    sp.add_argument("action", choices=["save", "close", "restore", "list"])
+    sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
     sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL")
     sp.add_argument("action", choices=["list", "notify", "send"])
     sp.add_argument("args", nargs="*")
@@ -500,6 +503,15 @@ def main(argv: list[str] | None = None) -> None:
         from . import desktop
 
         _print(desktop.recent(a.hours))
+    elif a.cmd == "session":
+        from . import session
+
+        if a.action == "list":
+            _print(session.saved() or {"apps": []})
+        elif a.action == "save":
+            _print(session.save())
+        else:
+            _print(session.close(a.keep) if a.action == "close" else session.restore())
     elif a.cmd == "phone":
         from . import phone
 

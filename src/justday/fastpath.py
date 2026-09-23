@@ -112,6 +112,23 @@ VOICE_OFF = re.compile(r"^(выключи|отключи|убери) голос$
 VOICE_ON = re.compile(r"^(включи|верни) голос$|^говори$|^(voice on|speak up|talk to me)$")
 
 
+# «Я ушёл» — close the day's windows and remember them; «я вернулся» — open them again.
+AWAY = re.compile(r"^(я (ушел|ухожу|убежал|пошел)|"
+                  r"закрой (все|всё|лишн\w+|ненужн\w+)( лишн\w+| ненужн\w+)?( программы| приложения| окна)?|"
+                  r"i('?m| am) (leaving|off|away)|close (everything|all apps))$")
+BACK = re.compile(r"^(я (вернулся|вернулась|тут|на месте|дома)|"
+                  r"верни (все|всё)?( как было| приложения| окна| программы)|открой что было|"
+                  r"i('?m| am) back|restore (everything|my apps|windows))$")
+
+
+def session_switch(text: str) -> str | None:
+    """"close" for «я ушёл», "restore" for «я вернулся», None when the phrase is about something else."""
+    t = _clean(text)
+    if AWAY.match(t):
+        return "close"
+    return "restore" if BACK.match(t) else None
+
+
 def voice_switch(text: str) -> bool | None:
     """True for «говори», False for «молчи», None when the phrase is not about the voice at all."""
     t = _clean(text)

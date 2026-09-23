@@ -70,6 +70,13 @@ EN = {
     "Со вчера висит: {what}.": "Left from yesterday: {what}.",
     "Со вчера висит {n}, первое — {what}.": "{n} left from yesterday, first — {what}.",
     "сделано": "done",
+    # leaving and coming back
+    "Нечего возвращать — я ничего не закрывал.": "Nothing to bring back — I closed nothing.",
+    "Вернул: {what}.": "Back: {what}.", "Всё уже открыто.": "Everything is already open.",
+    "Нечего закрывать.": "Nothing to close.", "Закрыть: {what}": "Close: {what}",
+    "Верну по «я вернулся»": "Brought back by “I'm back”",
+    "Закрыл: {what}. Скажите «я вернулся» — открою заново.": "Closed: {what}. Say “I'm back” and I'll open them again.",
+    "Не закрылись: {what}.": "Would not close: {what}.",
     # instant commands
     "пауза": "paused", "воспроизведение": "playing", "следующий трек": "next track", "предыдущий трек": "previous track",
     "громкость +10%": "volume +10%", "громкость −10%": "volume −10%", "звук выключен": "muted", "звук включён": "unmuted",
