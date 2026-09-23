@@ -195,6 +195,37 @@ class AgentClient:
             )
         )
 
+    # --- JustDay ---------------------------------------------------------
+    # Ответ ассистента отдаётся как есть: контроллер ничего в нём не решает.
+
+    async def justday_status(self) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request("GET", "/api/justday", timeout=10.0)
+        return got
+
+    async def justday_ask(self, text: str, *, silent: bool = False) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST", "/api/justday/ask", json={"text": text, "silent": silent}, timeout=190.0
+        )
+        return got
+
+    async def justday_say(self, text: str) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST", "/api/justday/say", json={"text": text}, timeout=70.0
+        )
+        return got
+
+    async def justday_player(self, action: str, value: Any = None) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST", "/api/justday/player", json={"action": action, "value": value}, timeout=20.0
+        )
+        return got
+
+    async def justday_session(self, action: str) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST", f"/api/justday/session/{action}", timeout=70.0
+        )
+        return got
+
     async def shutdown(self) -> ActionResult:
         return ActionResult.model_validate(
             await self._request("POST", "/api/power/shutdown", timeout=15.0)

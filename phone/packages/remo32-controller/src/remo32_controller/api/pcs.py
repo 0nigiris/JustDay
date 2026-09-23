@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from remo32_controller.auth.dependencies import Session
 from remo32_controller.devices import DeviceRegistry
@@ -98,6 +98,67 @@ async def list_actions(
 ) -> ApiResponse[list[ActionDescriptor]]:
     return ApiResponse[list[ActionDescriptor]].success(
         await _registry(request).actions(pc_id), request_id
+    )
+
+
+# --- JustDay ---------------------------------------------------------------
+# Ассистент живёт на самом ПК; контроллер только передаёт просьбу и возвращает ответ.
+
+
+class JustDayAsk(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    silent: bool = False
+    aloud: bool = Field(False, description="Не просьба, а текст, который надо произнести")
+
+
+class JustDayPlayer(BaseModel):
+    action: str = Field(min_length=1, max_length=32)
+    value: int | str | None = None
+
+
+@router.get("/{pc_id}/justday", response_model=ApiResponse[dict[str, Any]])
+async def justday_status(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    """Чем занят ассистент на этом ПК, что играет, что стоит в таймерах."""
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_status(), request_id
+    )
+
+
+@router.post("/{pc_id}/justday/ask", response_model=ApiResponse[dict[str, Any]])
+async def justday_ask(
+    pc_id: str, payload: JustDayAsk, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    """Просьба ассистенту — та же, что голосом. `aloud` — просто произнести текст."""
+    client = _registry(request).get(pc_id).client
+    log.info("просьба ассистенту", pc_id=pc_id, aloud=payload.aloud)
+    got = (
+        await client.justday_say(payload.text)
+        if payload.aloud
+        else await client.justday_ask(payload.text, silent=payload.silent)
+    )
+    return ApiResponse[dict[str, Any]].success(got, request_id)
+
+
+@router.post("/{pc_id}/justday/player", response_model=ApiResponse[dict[str, Any]])
+async def justday_player(
+    pc_id: str, payload: JustDayPlayer, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_player(payload.action, payload.value),
+        request_id,
+    )
+
+
+@router.post("/{pc_id}/justday/session/{action}", response_model=ApiResponse[dict[str, Any]])
+async def justday_session(
+    pc_id: str, action: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    """«Я ушёл» (close) и «я вернулся» (restore)."""
+    log.info("сессия рабочего стола", pc_id=pc_id, action=action)
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_session(action), request_id
     )
 
 

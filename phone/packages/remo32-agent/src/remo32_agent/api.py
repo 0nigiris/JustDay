@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from remo32_agent import __version__
+from remo32_agent import __version__, justday
 from remo32_agent.actions.models import ActionConfig
 from remo32_agent.context import AgentContext
 from remo32_agent.stats.collector import collect_stats
@@ -65,6 +65,18 @@ class PingResponse(BaseModel):
     pong: bool = True
     service: str = "remo32-agent"
     version: str = __version__
+
+
+class JustDayCommand(BaseModel):
+    """Просьба ассистенту — ровно то же, что человек сказал бы голосом."""
+
+    text: str = Field(min_length=1, max_length=2000)
+    silent: bool = Field(False, description="Не произносить ответ вслух: только текстом")
+
+
+class JustDayPlayer(BaseModel):
+    action: str = Field(min_length=1, max_length=32)
+    value: int | str | None = None
 
 
 class TerminalInfo(BaseModel):
@@ -310,6 +322,74 @@ def build_router(ctx: AgentContext) -> APIRouter:
     )
     async def lock(request_id: RequestId) -> ApiResponse[ActionResult]:
         return ApiResponse[ActionResult].success(await ctx.power.lock(), request_id)
+
+    # --- JustDay -------------------------------------------------------
+    # Агент ничего не решает сам: он передаёт просьбу ассистенту на этой же машине
+    # и возвращает его ответ как есть.
+
+    @router.get(
+        "/api/justday",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_status(request_id: RequestId) -> ApiResponse[dict[str, Any]]:
+        """Чем занят ассистент, что играет, какие таймеры стоят."""
+        if not justday.available():
+            return ApiResponse[dict[str, Any]].success({"available": False}, request_id)
+        return ApiResponse[dict[str, Any]].success(await justday.status(), request_id)
+
+    @router.post(
+        "/api/justday/ask",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_ask(
+        command: JustDayCommand, request_id: RequestId
+    ) -> ApiResponse[dict[str, Any]]:
+        """Просьба текстом — та же, что голосом с кнопки."""
+        return ApiResponse[dict[str, Any]].success(
+            await justday.ask(command.text, silent=command.silent), request_id
+        )
+
+    @router.post(
+        "/api/justday/say",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_say(
+        command: JustDayCommand, request_id: RequestId
+    ) -> ApiResponse[dict[str, Any]]:
+        """Произнести текст на компьютере — позвать кого-то в комнате."""
+        return ApiResponse[dict[str, Any]].success(await justday.say(command.text), request_id)
+
+    @router.post(
+        "/api/justday/player",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_player(
+        command: JustDayPlayer, request_id: RequestId
+    ) -> ApiResponse[dict[str, Any]]:
+        """Кнопки плеера: pause, resume, next, prev, volume и остальные."""
+        return ApiResponse[dict[str, Any]].success(
+            await justday.player(command.action, command.value), request_id
+        )
+
+    @router.post(
+        "/api/justday/session/{action}",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_session(action: str, request_id: RequestId) -> ApiResponse[dict[str, Any]]:
+        """«Я ушёл» (close) и «я вернулся» (restore); list и save — посмотреть и запомнить."""
+        if action not in ("list", "save", "close", "restore"):
+            raise ActionInvalidError(f"неизвестное действие сессии: {action}")
+        return ApiResponse[dict[str, Any]].success(await justday.session(action), request_id)
 
     @router.get(
         "/api/terminal",
