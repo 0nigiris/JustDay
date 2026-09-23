@@ -12,7 +12,7 @@
    голове, а так модель одна. */
 
 :root {
-  color-scheme: dark;
+  color-scheme: dark light;
 
   /* Системная палитра iOS, тёмный вариант. Чистый чёрный — не экономия
      на выразительности: на OLED он гасит пиксель полностью, и карточки
@@ -38,6 +38,11 @@
   --unknown: #bf5af2;
   --danger: #ff453a;
   --danger-soft: rgba(255, 69, 58, 0.16);
+
+  /* Плавающий слой: верхняя панель, вкладки, шторка. Полупрозрачный — под ним
+     проезжает содержимое, и это единственное место, где размытие уместно. */
+  --bar: rgba(0, 0, 0, 0.72);
+  --bar-solid: rgba(28, 28, 30, 0.92);  /* тот же слой там, где под ним не должно просвечивать */
 
   --radius: 12px;
   --radius-lg: 18px;
@@ -170,7 +175,7 @@ header.top {
   align-items: flex-end;
   gap: 8px;
   padding: calc(env(safe-area-inset-top) + 10px) var(--gap) 10px;
-  background: rgba(0, 0, 0, 0.72);
+  background: var(--bar);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--border);
@@ -229,7 +234,7 @@ main#view {
   display: flex;
   height: calc(var(--tabbar) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(0, 0, 0, 0.78);
+  background: var(--bar);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 1px solid var(--border);
@@ -248,7 +253,7 @@ main#view {
   transition: color .15s ease;
 }
 .tab .ico { font-size: 22px; line-height: 1; }
-.tab.active { color: var(--accent); }
+.tab.on, .tab.active { color: var(--accent); }
 .tab:active { opacity: 0.6; }
 
 /* ========================================================== карточки ==== */
@@ -266,7 +271,7 @@ main#view {
   margin-bottom: 14px;
 }
 .card-head h2, .card-head h3 {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
@@ -418,6 +423,7 @@ main#view {
   cursor: pointer;
   transition: transform .12s var(--ease), opacity .12s ease, background .12s ease;
 }
+.btn { white-space: nowrap; }
 .btn:active { transform: scale(0.97); }
 .btn.primary { background: var(--accent); color: #fff; }
 .btn.danger { background: var(--danger-soft); color: var(--danger); }
@@ -494,6 +500,7 @@ main#view {
 .key[disabled] { opacity: 0.3; pointer-events: none; }
 .key.busy { opacity: 0.5; pointer-events: none; }
 .key .key-ico { font-size: 30px; line-height: 1; }
+.key .key-ico .i { width: 28px; height: 28px; }
 .key .key-cap {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -503,7 +510,19 @@ main#view {
 }
 /* Избранное подсвечено, а не переставлено: кнопка должна оставаться
    там, где палец привык её находить. */
-.key.fav { background: var(--accent-soft); }
+/* Избранное — метка, а не включённое состояние: синяя заливка кричала о том,
+   что кнопка сейчас работает, хотя она просто вынесена на первую страницу. */
+.key.fav { position: relative; }
+.key.fav::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .key.fav .key-cap { color: var(--text); }
 .key.danger .key-ico { color: var(--danger); }
 .key.danger .key-cap { color: var(--danger); }
@@ -760,7 +779,7 @@ main#view {
   font-size: 15px;
   line-height: 1.35;
   color: var(--text);
-  background: rgba(44, 44, 46, 0.92);
+  background: var(--bar-solid);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -800,7 +819,7 @@ main#view {
   align-items: center;
   gap: 10px;
   padding: calc(env(safe-area-inset-top) + 8px) var(--gap) 8px;
-  background: rgba(0, 0, 0, 0.78);
+  background: var(--bar);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--border);
@@ -828,7 +847,7 @@ main#view {
   overflow-x: auto;
   scrollbar-width: none;
   padding: 8px var(--gap) calc(8px + env(safe-area-inset-bottom));
-  background: rgba(28, 28, 30, 0.92);
+  background: var(--bar-solid);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-top: 1px solid var(--border);
@@ -896,16 +915,66 @@ main#view {
   }
 }
 
+/* ============================================== значки ================== */
+/* Тот же набор, что у острова на компьютере: lucide, одна толщина линии.
+   Маска вместо <img> — чтобы значок брал цвет текста рядом с собой и на
+   синей кнопке, и на красной, и в выключенном состоянии. */
+
+.i {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  background: currentColor;
+  -webkit-mask: var(--src) center / contain no-repeat;
+  mask: var(--src) center / contain no-repeat;
+}
+
+.i.lg { width: 26px; height: 26px; }
+.i.sm { width: 18px; height: 18px; }
+
 /* ============================================ JustDay ================== */
 /* Телефон — второй остров: просьба, ответ, плеер и «я ушёл».
    Свой токен здесь один — цвет обложки приходит от самой музыки. */
 
-.jarvis-form { display: flex; gap: 10px; margin-bottom: 12px; }
+.jarvis-form { display: flex; gap: 10px; }
+.jarvis-form input { height: 46px; border-radius: 23px; padding: 0 18px; }
 .jarvis-form input { flex: 1; min-width: 0; }
-.jarvis-form .btn { flex: 0 0 auto; min-width: var(--tap); padding: 0 16px; }
+.jarvis-form .btn {
+  flex: 0 0 auto;
+  width: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  padding: 0;
+  border-radius: 50%;
+}
 
-/* Готовые фразы: подсказка, а не панель кнопок, поэтому они тише кнопок. */
+/* Готовые фразы: лента, которая едет вбок. Столбиком они выглядели
+   как меню из четырёх пунктов, хотя это подсказки. */
+.chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  /* Лента доезжает до края экрана, а не обрывается по краю карточки. */
+  margin-inline: calc(var(--gap) * -1);
+  padding-inline: var(--gap);
+}
+
+.chips::-webkit-scrollbar { display: none; }
+
+@supports (mask-image: linear-gradient(90deg, #000, transparent)) {
+  .chips {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+}
+
 .chip {
+  scroll-snap-align: start;
+  white-space: nowrap;
   min-height: 36px;
   padding: 0 14px;
   font: inherit;
@@ -928,8 +997,48 @@ main#view {
   white-space: pre-wrap;
 }
 
-.jarvis-now { display: flex; align-items: center; gap: 12px; }
-.jarvis-cover { width: 56px; height: 56px; border-radius: var(--radius); flex: 0 0 auto; }
+.jarvis-now { display: flex; align-items: center; gap: 14px; }
+.jarvis-cover {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  flex: 0 0 auto;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+/* Перемотка — три круга по центру, а не четыре прямоугольника в сетку. */
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  margin-top: 18px;
+}
+
+.transport button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: transform .12s var(--ease), background .12s ease;
+}
+
+.transport button:active { transform: scale(0.9); }
+
+.transport .big {
+  width: 64px;
+  height: 64px;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.transport .big .i { width: 28px; height: 28px; }
 .jarvis-track { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .jarvis-track b, .jarvis-track .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -949,4 +1058,43 @@ main#view {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ====================================== светлая тема =================== */
+/* Телефон переключает её сам — утром на кухне и ночью в кровати это разные
+   экраны. Цвета те же системные, только дневные; всё остальное — те же
+   токены, поэтому ни одна карточка не знает, какая сейчас тема. */
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f2f2f7;
+    --surface: #ffffff;
+    --surface-2: #ececeF;
+    --surface-3: #dcdce1;
+    --border: rgba(60, 60, 67, 0.29);
+    --border-strong: rgba(60, 60, 67, 0.4);
+
+    --text: #000000;
+    --text-dim: rgba(60, 60, 67, 0.6);
+    --text-faint: rgba(60, 60, 67, 0.32);
+
+    --accent: #007aff;
+    --accent-soft: rgba(0, 122, 255, 0.12);
+
+    --online: #34c759;
+    --offline: #8e8e93;
+    --connecting: #ff9500;
+    --error: #ff3b30;
+    --unknown: #af52de;
+    --danger: #ff3b30;
+    --danger-soft: rgba(255, 59, 48, 0.12);
+    --bar: rgba(249, 249, 249, 0.82);
+    --bar-solid: rgba(249, 249, 249, 0.96);
+  }
+
+  /* Белое на белом: у карточек на светлом фоне нужен край, иначе они
+     сливаются с экраном — в тёмной теме это делала сама разница яркостей. */
+  .card, .key, .sheet-card {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  }
 }

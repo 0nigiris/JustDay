@@ -1201,6 +1201,14 @@ const QUICK_ASKS = [
   "Что сейчас играет?",
 ];
 
+
+/* Значок из набора острова (lucide). Маска, а не <img>: значок берёт цвет
+   текста рядом с собой, поэтому один файл годится и на синей кнопке, и на
+   красной, и в выключенном состоянии. */
+function icon(name, extra = "") {
+  return `<i class="i ${extra}" style="--src:url(/static/icons/${name}.svg)" aria-hidden="true"></i>`;
+}
+
 function viewJarvis() {
   const pc = activePc();
   if (!pc) return `<div class="empty">ПК не настроены</div>`;
@@ -1229,9 +1237,9 @@ function viewJarvis() {
     <form id="jarvis-form" class="jarvis-form">
       <input type="text" id="jarvis-text" placeholder="Например: включи музыку" autocomplete="off"
         enterkeyhint="send">
-      <button class="btn primary" type="submit">→</button>
+      <button class="btn primary" type="submit" aria-label="Отправить">${icon("chevron-right")}</button>
     </form>
-    <div class="row wrap">
+    <div class="chips">
       ${QUICK_ASKS.map((q) => `<button class="chip" data-jarvis-ask="${esc(q)}">${esc(q)}</button>`).join("")}
     </div>
     ${answer ? `<div class="jarvis-answer">${esc(answer)}</div>` : ""}
@@ -1249,19 +1257,23 @@ function viewJarvis() {
            </div>
          </div>`
       : `<div class="meta">Ничего не играет.</div>`}
+    <div class="transport">
+      <button data-jarvis-player="prev" aria-label="Предыдущий">${icon("skip-back", "lg")}</button>
+      <button class="big" data-jarvis-player="${playing ? "pause" : "resume"}"
+        aria-label="${playing ? "Пауза" : "Играть"}">${icon(playing ? "pause" : "play")}</button>
+      <button data-jarvis-player="next" aria-label="Следующий">${icon("skip-forward", "lg")}</button>
+    </div>
     <div class="row">
-      <button class="btn" data-jarvis-player="prev">⏮</button>
-      <button class="btn primary" data-jarvis-player="${playing ? "pause" : "resume"}">${playing ? "⏸" : "▶"}</button>
-      <button class="btn" data-jarvis-player="next">⏭</button>
-      <button class="btn" data-jarvis-ask="включи мою музыку">🎵 Моя музыка</button>
+      <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
+      <button class="btn" data-jarvis-ask="перемешай">${icon("shuffle")} Вперемешку</button>
     </div>
   </section>
 
   <section class="card">
     <div class="card-head"><h2>Рабочий стол</h2></div>
     <div class="row">
-      <button class="btn" data-jarvis-session="close">🚪 Я ушёл</button>
-      <button class="btn" data-jarvis-session="restore">↩︎ Я вернулся</button>
+      <button class="btn" data-jarvis-session="close">${icon("log-out")} Я ушёл</button>
+      <button class="btn" data-jarvis-session="restore">${icon("rotate-ccw")} Я вернулся</button>
     </div>
     <div class="meta">«Я ушёл» запомнит открытые программы и закроет их; «я вернулся» откроет
       обратно. Ничего не убивается: что не закрылось — останется и будет названо.</div>
@@ -1270,9 +1282,9 @@ function viewJarvis() {
   <section class="card">
     <div class="card-head"><h2>Голос</h2></div>
     <div class="row">
-      <button class="btn" data-jarvis-ask="молчи">🔇 Молчи</button>
-      <button class="btn" data-jarvis-ask="говори">🔊 Говори</button>
-      <button class="btn" id="jarvis-say">📣 Сказать в комнате</button>
+      <button class="btn" data-jarvis-ask="молчи">${icon("volume-x")} Молчи</button>
+      <button class="btn" data-jarvis-ask="говори">${icon("volume-2")} Говори</button>
+      <button class="btn" id="jarvis-say">${icon("mic")} Сказать в комнате</button>
     </div>
   </section>`;
 }
