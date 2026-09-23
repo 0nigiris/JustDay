@@ -93,6 +93,16 @@ class ActionRegistry:
                 f"действие не найдено: {action_id}", action_id=action_id
             ) from None
 
+    def tmux_sessions(self) -> set[str]:
+        """Имена tmux-сессий, которые создают кнопки.
+
+        Веб-терминалу они нужны, чтобы подключиться именно к той сессии,
+        которую человек только что запустил кнопкой «Claude Code», а не к
+        пустой новой: раньше кнопка и терминал открывали разные сессии, и
+        обе выглядели неработающими.
+        """
+        return {a.session for a in self._actions.values() if isinstance(a, TmuxAction)}
+
     def descriptors(self) -> list[ActionDescriptor]:
         """Список действий для интерфейса, отсортированный по группе и имени."""
         editable = {a.id for a in self.managed()}
@@ -221,6 +231,7 @@ class ActionExecutor:
             env=env or None,
             timeout=action.timeout_seconds,
             detach=action.detach,
+            capture=action.captures_output(),
         )
         return _result_from_command(action_id, started, result)
 

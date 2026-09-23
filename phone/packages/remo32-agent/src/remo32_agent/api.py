@@ -12,9 +12,10 @@ import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from remo32_agent import __version__, justday
+from remo32_agent import __version__, justday, screen
 from remo32_agent.actions.models import ActionConfig
 from remo32_agent.context import AgentContext
 from remo32_agent.stats.collector import collect_stats
@@ -404,6 +405,36 @@ def build_router(ctx: AgentContext) -> APIRouter:
         if action not in ("list", "save", "close", "restore"):
             raise ActionInvalidError(f"неизвестное действие сессии: {action}")
         return ApiResponse[dict[str, Any]].success(await justday.session(action), request_id)
+
+    @router.get(
+        "/api/screen",
+        tags=["рабочий стол"],
+        dependencies=[auth],
+        response_class=Response,
+        responses={200: {"content": {"image/png": {}}, "description": "Снимок экрана"}},
+    )
+    async def screen_shot() -> Response:
+        """Что сейчас на экране. Картинка уходит в ответ и на диске не остаётся.
+
+        Снимок делается в окружении графического сеанса: служба живёт вне его,
+        и без DISPLAY/WAYLAND_DISPLAY ни одна утилита ничего не увидит.
+        """
+        png = await screen.capture(ctx.adapter.graphical_session_env())
+        # no-store, а не просто no-cache: содержимое экрана — не то, чему
+        # стоит лежать в кэше браузера.
+        return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+    @router.get(
+        "/api/justday/art",
+        tags=["JustDay"],
+        dependencies=[auth],
+        response_class=Response,
+        responses={200: {"content": {"image/jpeg": {}}, "description": "Обложка играющего трека"}},
+    )
+    async def justday_art() -> Response:
+        """Обложка того, что играет. Путь к файлу берём у ассистента, а не у телефона."""
+        data, kind = await justday.artwork()
+        return Response(data, media_type=kind, headers={"Cache-Control": "no-store"})
 
     @router.get(
         "/api/terminal",

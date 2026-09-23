@@ -177,20 +177,68 @@ function toast(message, kind = "", requestId = null) {
 
 let sheetResolve = null;
 
-function confirmSheet({ title, text = "", yes = "Да", icon: mark = "lucide:circle-alert", danger = true }) {
+/* Одна шторка на три случая: спросить, предложить список или показать
+   картинку. Возвращает то, что нажали: "yes", "no" или имя пункта. */
+function openSheet({
+  icon: mark = "",
+  title = "",
+  text = "",
+  media = "",
+  menu = null,
+  yes = "Да",
+  cancel = "Отмена",
+  danger = true,
+} = {}) {
   const iconBox = el("sheet-icon");
+  iconBox.hidden = !mark;
   if (mark.startsWith("lucide:")) iconBox.innerHTML = icon(mark.slice(7), "lg");
   else iconBox.textContent = mark;
+  iconBox.className = `sheet-icon ${danger && yes ? "" : "calm"}`;
+
   el("sheet-title").textContent = title;
-  el("sheet-text").textContent = text;
+  const textBox = el("sheet-text");
+  textBox.textContent = text;
+  textBox.hidden = !text;
+
+  const mediaBox = el("sheet-media");
+  mediaBox.hidden = !media;
+  // Картинку вставляем заново каждый раз: снимок экрана не должен браться
+  // из кэша браузера, иначе на нём будет прошлое состояние компьютера.
+  mediaBox.innerHTML = media ? `<img src="${esc(media)}" alt="">` : "";
+
+  const menuBox = el("sheet-menu");
+  menuBox.hidden = !menu;
+  menuBox.innerHTML = (menu || [])
+    .map((item) => `<button class="list-row ${item.danger ? "danger" : ""}" data-sheet="${esc(item.id)}">
+      <span class="ico">${item.icon ? icon(item.icon) : ""}</span>
+      <span class="body"><span class="title">${esc(item.name)}</span>${item.sub
+        ? `<span class="sub">${esc(item.sub)}</span>` : ""}</span>
+    </button>`)
+    .join("");
+
   const yesButton = el("sheet-yes");
-  yesButton.textContent = yes;
+  yesButton.hidden = !yes;
+  yesButton.textContent = yes || "";
   yesButton.className = `btn ${danger ? "danger" : "primary"}`;
+  const noButton = el("sheet-no");
+  noButton.textContent = cancel;
+
   el("sheet").hidden = false;
   buzz(10);
   return new Promise((resolve) => {
     sheetResolve = resolve;
   });
+}
+
+async function confirmSheet({ title, text = "", yes = "Да", icon: mark = "lucide:circle-alert", danger = true }) {
+  return (await openSheet({ title, text, yes, icon: mark, danger })) === "yes";
+}
+
+/* Список действий для одной кнопки пульта. Возвращает имя выбранного
+   пункта или null, если шторку закрыли. */
+async function menuSheet({ title, text = "", icon: mark = "", items }) {
+  const picked = await openSheet({ title, text, icon: mark, menu: items, yes: "", cancel: "Закрыть", danger: false });
+  return picked === "no" ? null : picked;
 }
 
 /* Выключение сервера — отдельный разговор: на нём живёт само управление. */
@@ -228,7 +276,8 @@ document.addEventListener("click", (event) => {
   const answer = event.target.closest("[data-sheet]")?.dataset.sheet;
   if (!answer) return;
   el("sheet").hidden = true;
-  sheetResolve?.(answer === "yes");
+  el("sheet-media").innerHTML = "";   // снимок экрана не держим в памяти дольше показа
+  sheetResolve?.(answer);
   sheetResolve = null;
 });
 
@@ -449,6 +498,25 @@ const favKey = (pcId, actionId) => `${pcId}::${actionId}`;
 const favorites = () => store.json(KEY_FAV, []);
 const isFavorite = (pcId, actionId) => favorites().includes(favKey(pcId, actionId));
 
+/* Переставить кнопку в избранном. Порядок там — решение человека, а не
+   алфавит, поэтому двигаем ровно на одну позицию и ровно туда, куда просят. */
+function moveFavorite(pcId, actionId, delta) {
+  const key = favKey(pcId, actionId);
+  const list = favorites();
+  const from = list.indexOf(key);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= list.length) return false;
+  list.splice(to, 0, ...list.splice(from, 1));
+  store.setJson(KEY_FAV, list);
+  buzz(10);
+  return true;
+}
+
+function favoriteAt(pcId, actionId) {
+  const list = favorites().filter((key) => key.startsWith(`${pcId}::`));
+  return { index: list.indexOf(favKey(pcId, actionId)), total: list.length };
+}
+
 function toggleFavorite(pcId, actionId) {
   const key = favKey(pcId, actionId);
   const list = favorites();
@@ -473,19 +541,64 @@ const POWER = {
 };
 
 /* Кнопки ассистента на пульте: то, за чем чаще всего лезут в отдельную вкладку.
-   Появляются только там, где JustDay действительно запущен. */
+   Появляются только там, где JustDay действительно запущен.
+
+   Всё парами и без дыр: если есть «следующий» — есть и «предыдущий», если
+   есть «молчи» — есть и «говори». Однобокий пульт заставляет доставать
+   телефон из кармана и искать вторую половину действия руками.
+
+   Управление звуком здесь — звук ассистента и его музыки, а не системный
+   микшер. Системную громкость на этом компьютере не крутят вовсе, а вот
+   сделать музыку тише, не прерывая её, хочется постоянно.
+
+   Плеер намеренно «умный»: те же кнопки управляют тем, что сейчас играет.
+   Ассистент сам решает, кому адресовать паузу — видео в острове, окну с
+   видео или музыке, — поэтому телефону не нужно знать, что именно идёт. */
 const JARVIS_KEYS = [
   { id: "jarvis:music", name: "Моя музыка", icon: "lucide:list-music", ask: "включи мою музыку" },
-  { id: "jarvis:pause", name: "Пауза", icon: "lucide:pause", ask: "пауза" },
-  { id: "jarvis:next", name: "Следующий", icon: "lucide:skip-forward", ask: "следующий трек" },
+  { id: "jarvis:prev", name: "Предыдущий", icon: "lucide:skip-back", player: "prev" },
+  { id: "jarvis:play", name: "Пауза", icon: "lucide:pause", player: "toggle" },
+  { id: "jarvis:next", name: "Следующий", icon: "lucide:skip-forward", player: "next" },
+  { id: "jarvis:shuffle", name: "Вперемешку", icon: "lucide:shuffle", player: "shuffle" },
+  { id: "jarvis:repeat", name: "Повтор", icon: "lucide:repeat", player: "repeat" },
+  { id: "jarvis:softer", name: "Тише", icon: "lucide:volume-1", volume: -10 },
+  { id: "jarvis:louder", name: "Громче", icon: "lucide:volume-2", volume: +10 },
+  { id: "jarvis:quiet", name: "Молчи", icon: "lucide:volume-x", ask: "молчи" },
+  { id: "jarvis:speak", name: "Говори", icon: "lucide:audio-lines", ask: "говори" },
+  { id: "jarvis:today", name: "Что сегодня", icon: "lucide:sun", ask: "что у меня сегодня?" },
+  { id: "jarvis:timer", name: "Таймер 10 мин", icon: "lucide:timer", ask: "поставь таймер на 10 минут" },
   { id: "jarvis:away", name: "Я ушёл", icon: "lucide:log-out", session: "close" },
   { id: "jarvis:back", name: "Я вернулся", icon: "lucide:rotate-ccw", session: "restore" },
-  { id: "jarvis:quiet", name: "Молчи", icon: "lucide:volume-x", ask: "молчи" },
 ];
+
+/* Кнопки самого компьютера, которым не нужен ассистент: они есть всегда,
+   пока машина на связи. */
+const PC_KEYS = [
+  { id: "pc:screen", name: "Экран", icon: "lucide:camera", group: "Компьютер",
+    description: "Снимок экрана — посмотреть, что там сейчас" },
+  { id: "pc:lock", name: "Заблокировать", icon: "lucide:lock", group: "Компьютер" },
+  { id: "pc:terminal", name: "Терминал", icon: "lucide:terminal", group: "Компьютер",
+    description: "Веб-терминал: та же сессия, что и на компьютере" },
+];
+
+/* Кнопка плеера показывает то, что сделает нажатие, а не то, что сейчас
+   происходит: играет музыка — на кнопке пауза. */
+function jarvisKey(key, playing) {
+  if (key.id !== "jarvis:play") return key;
+  return playing
+    ? { ...key, name: "Пауза", icon: "lucide:pause" }
+    : { ...key, name: "Играть", icon: "lucide:play" };
+}
 
 function jarvisKeysFor(pc) {
   if (!pc || pc.state !== "online" || state.justday?.available === false) return [];
-  return JARVIS_KEYS.map((key) => ({ ...key, available: true, group: "JustDay" }));
+  const playing = nowPlaying(state.justday)?.playing ?? false;
+  return JARVIS_KEYS.map((key) => ({ ...jarvisKey(key, playing), available: true, group: "JustDay" }));
+}
+
+function pcKeysFor(pc) {
+  if (!pc || pc.state !== "online") return [];
+  return PC_KEYS.map((key) => ({ ...key, available: true }));
 }
 
 function powerFor(pc) {
@@ -524,7 +637,7 @@ function viewDeck() {
       Добавьте секцию <code>[[pcs]]</code> в конфигурацию контроллера.</div>`;
   }
 
-  const all = [...(pc.actions || []), ...powerFor(pc), ...jarvisKeysFor(pc)];
+  const all = [...(pc.actions || []), ...powerFor(pc), ...jarvisKeysFor(pc), ...pcKeysFor(pc)];
   const byId = new Map(all.map((a) => [a.id, a]));
 
   // Порядок избранного — тот, в котором его добавляли: пользователь сам
@@ -542,6 +655,8 @@ function viewDeck() {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(action);
   }
+  const computer = pcKeysFor(pc);
+  if (computer.length) groups.set("Компьютер", computer);
   const power = powerFor(pc);
   if (power.length) groups.set("Питание", power);
 
@@ -571,15 +686,14 @@ function viewDeck() {
    компьютер, что с ним сейчас, сколько страниц и как вернуться. */
 function deckStage(pc, pages, dots) {
   const jd = state.justday || {};
-  const music = jd.player || {};
-  const now = (music.queue || [])[music.index ?? 0] || music.now || null;
+  const now = nowPlaying(jd);
   const waiting = state.approvals.length;
 
   const line = waiting
     ? `<div class="deck-now">${icon("shield", "sm")} Компьютер ждёт ответа — поверните телефон</div>`
     : pc.state !== "online"
       ? `<div class="deck-now">${esc(STATE_LABEL[pc.state] || pc.state)}</div>`
-      : now && music.playing
+      : now?.playing
         ? `<div class="deck-now">${icon("music", "sm")} ${esc(now.title || "")}</div>`
         : jd.state && jd.state !== "idle"
           ? `<div class="deck-now">${esc(JARVIS_STATE[jd.state] || jd.state)}</div>`
@@ -1271,6 +1385,33 @@ async function loadEditor(force = false) {
 /* Ассистент живёт на самом ПК. Телефон — второй остров: та же просьба,
    тот же плеер, те же «я ушёл» и «я вернулся». */
 
+/* Что именно играет прямо сейчас.
+
+   Состояние приходит от самого ассистента и называет вещи по-своему:
+   `paused` (а не `playing`), `title`/`artist` прямо в корне, `queue` — это
+   очередь ДАЛЬШЕ, а не список, из которого надо выбирать нынешний трек по
+   номеру. Раньше телефон читал его наугад: кнопка всегда показывала «играть»
+   и всегда слала `resume`, поэтому пауза с телефона не работала вовсе. */
+function nowPlaying(jd) {
+  const m = jd?.player || {};
+  if (!m.title && !m.file && !m.url) return null;
+  return {
+    title: m.title || "",
+    artist: m.artist || "",
+    cover: m.cover || m.color || "",
+    source: m.source || "",
+    playing: !m.paused,
+    position: m.pos || 0,
+    duration: m.duration || 0,
+    volume: m.volume ?? null,
+    shuffle: Boolean(m.shuffle),
+    repeat: m.repeat || "off",
+    next: m.next || "",
+    index: m.index ?? null,
+    count: m.count ?? null,
+  };
+}
+
 const JARVIS_STATE = {
   idle: "готов",
   listening: "слушает",
@@ -1333,6 +1474,45 @@ const DICT_TYPES = [
 
 const micReady = () =>
   Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+
+/* В каком приложении мы открыты. Оболочка на телефоне дописывает себя в
+   User-Agent: без этого «микрофон не дали» и «сборка старая, отдавать
+   микрофон некому» выглядят одинаково, а чинятся по-разному. */
+function shell() {
+  const app = / JustDayApp\/(\S+)/.exec(navigator.userAgent);
+  if (app) return { app: true, version: app[1] };
+  // Android WebView без нашей метки — значит, сборка старше микрофона.
+  return { app: false, webview: /; wv\)/.test(navigator.userAgent), version: "" };
+}
+
+/* Почему микрофон не работает — по делу, а не «что-то пошло не так».
+   Ответ показываем целиком: половина причин лечится не в приложении. */
+async function micReport() {
+  const where = shell();
+  let granted = "неизвестно";
+  try {
+    const status = await navigator.permissions?.query({ name: "microphone" });
+    granted = { granted: "разрешён", denied: "запрещён", prompt: "спросит при нажатии" }[status?.state]
+      || status?.state || "неизвестно";
+  } catch { /* Safari и часть Android этот запрос не поддерживают */ }
+
+  let devices = "не спрашивали";
+  try {
+    const list = await navigator.mediaDevices?.enumerateDevices();
+    devices = `${(list || []).filter((d) => d.kind === "audioinput").length} шт.`;
+  } catch (error) {
+    devices = `ошибка: ${error.name}`;
+  }
+
+  return [
+    `Открыто: ${where.app ? `приложение ${where.version}` : where.webview
+      ? "приложение старой сборки" : "браузер"}`,
+    `Защищённое соединение: ${window.isSecureContext ? "да" : "нет — микрофон браузер не даст"}`,
+    `MediaRecorder: ${window.MediaRecorder ? "есть" : "нет"}`,
+    `Разрешение: ${granted}`,
+    `Микрофонов видно: ${devices}`,
+  ].join("\n");
+}
 
 function dictType() {
   for (const [type, suffix] of DICT_TYPES) {
@@ -1420,10 +1600,32 @@ async function dictStart() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch (error) {
-    // Отказ в доступе — не поломка: человек мог нажать «запретить».
-    toast(error.name === "NotAllowedError"
-      ? "Микрофон не разрешён. Разрешите доступ в настройках приложения."
-      : `Микрофон недоступен: ${error.message}`, "err");
+    // Отказ в доступе — не поломка: человек мог нажать «запретить». Но у
+    // той же ошибки бывает совсем другая причина: старая сборка оболочки,
+    // которая просто не умеет отдавать микрофон странице. Поэтому вместо
+    // одного текста на все случаи показываем разбор.
+    const where = shell();
+    if (error.name === "NotAllowedError" && where.webview && !where.app) {
+      await openSheet({
+        icon: "lucide:mic-off",
+        title: "Нужна свежая сборка приложения",
+        text: "Микрофон странице отдаёт сама оболочка, и эта сборка так ещё не умеет. "
+          + "Закройте приложение и откройте снова — оно предложит обновление; "
+          + "либо откройте JustDay в браузере по тому же адресу.",
+        yes: "",
+        cancel: "Понятно",
+        danger: false,
+      });
+      return;
+    }
+    await openSheet({
+      icon: "lucide:mic-off",
+      title: error.name === "NotAllowedError" ? "Микрофон не разрешён" : "Микрофон недоступен",
+      text: `${error.message || error.name}\n\n${await micReport()}`,
+      yes: "",
+      cancel: "Закрыть",
+      danger: false,
+    });
     return;
   }
 
@@ -1513,6 +1715,70 @@ function micBlock() {
   </div>`;
 }
 
+const clock = (seconds) => {
+  const whole = Math.max(0, Math.round(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+};
+
+/* Плеер. Кнопки те же, что на пульте, и работают они так же «умно»: пауза
+   останавливает то, что играет, — видео в острове, окно с видео или музыку.
+
+   Обложка приходит картинкой с самого компьютера: файл лежит там, и путь к
+   нему телефону не показывают — он просто просит «дай обложку». */
+function playerCard(pc, now) {
+  if (!now) {
+    return `<section class="card">
+      <div class="card-head"><h2>Плеер</h2></div>
+      <div class="meta">Ничего не играет.</div>
+      <div class="row">
+        <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
+        <button class="btn" data-jarvis-ask="включи что-нибудь">${icon("sparkles")} На твой вкус</button>
+      </div>
+    </section>`;
+  }
+
+  const done = now.duration ? Math.min(1, now.position / now.duration) : 0;
+  const art = `/api/pcs/${encodeURIComponent(pc.id)}/justday/art?v=${encodeURIComponent(now.title)}`;
+  return `<section class="card">
+    <div class="card-head"><h2>Плеер</h2>${now.source
+      ? `<span class="meta">${esc(now.source)}</span>` : ""}</div>
+    <div class="jarvis-now">
+      <div class="jarvis-cover" style="background:${esc(now.cover || "#222")}">
+        <img src="${esc(art)}" alt="" loading="lazy">
+      </div>
+      <div class="jarvis-track">
+        <b>${esc(now.title)}</b>
+        <span class="meta">${esc(now.artist)}</span>
+        ${now.count ? `<span class="meta">${now.index + 1} из ${now.count}${now.next
+          ? ` · дальше: ${esc(now.next)}` : ""}</span>` : ""}
+      </div>
+    </div>
+    ${now.duration ? `<div class="progress">
+      <div class="bar"><i style="transform:scaleX(${done.toFixed(3)})"></i></div>
+      <div class="times"><span>${clock(now.position)}</span><span>${clock(now.duration)}</span></div>
+    </div>` : ""}
+    <div class="transport">
+      <button data-jarvis-player="prev" aria-label="Предыдущий">${icon("skip-back", "lg")}</button>
+      <button class="big" data-jarvis-player="toggle"
+        aria-label="${now.playing ? "Пауза" : "Играть"}">${icon(now.playing ? "pause" : "play")}</button>
+      <button data-jarvis-player="next" aria-label="Следующий">${icon("skip-forward", "lg")}</button>
+    </div>
+    <div class="transport small">
+      <button data-jarvis-player="shuffle" class="${now.shuffle ? "on" : ""}"
+        aria-label="Вперемешку">${icon("shuffle")}</button>
+      <button data-jarvis-volume="-10" aria-label="Тише">${icon("volume-1")}</button>
+      <span class="meta vol">${now.volume ?? ""}${now.volume == null ? "" : " %"}</span>
+      <button data-jarvis-volume="10" aria-label="Громче">${icon("volume-2")}</button>
+      <button data-jarvis-player="repeat" class="${now.repeat !== "off" ? "on" : ""}"
+        aria-label="Повтор">${icon(now.repeat === "one" ? "repeat-1" : "repeat")}</button>
+    </div>
+    <div class="row">
+      <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
+      <button class="btn" data-jarvis-player="stop">${icon("circle-stop")} Остановить</button>
+    </div>
+  </section>`;
+}
+
 function viewJarvis() {
   const pc = activePc();
   if (!pc) return `<div class="empty">ПК не настроены</div>`;
@@ -1526,9 +1792,8 @@ function viewJarvis() {
       <code>justday</code> — проверьте её на самом компьютере.</div></section>`;
   }
 
-  const music = jd?.player || {};
-  const now = (music.queue || [])[music.index ?? 0] || music.now || null;
-  const playing = music.playing ?? false;
+  const now = nowPlaying(jd);
+  const playing = now?.playing ?? false;
   const answer = state.justdayAnswer;
   const heard = state.justdayHeard;
 
@@ -1556,29 +1821,7 @@ function viewJarvis() {
     ${answer ? `<div class="jarvis-answer">${esc(answer)}</div>` : ""}
   </section>
 
-  <section class="card">
-    <div class="card-head"><h2>Плеер</h2>${music.source
-      ? `<span class="meta">${esc(music.source)}</span>` : ""}</div>
-    ${now
-      ? `<div class="jarvis-now">
-           <div class="jarvis-cover" style="background:${esc(now.cover || "#222")}"></div>
-           <div class="jarvis-track">
-             <b>${esc(now.title || "")}</b>
-             <span class="meta">${esc(now.artist || "")}</span>
-           </div>
-         </div>`
-      : `<div class="meta">Ничего не играет.</div>`}
-    <div class="transport">
-      <button data-jarvis-player="prev" aria-label="Предыдущий">${icon("skip-back", "lg")}</button>
-      <button class="big" data-jarvis-player="${playing ? "pause" : "resume"}"
-        aria-label="${playing ? "Пауза" : "Играть"}">${icon(playing ? "pause" : "play")}</button>
-      <button data-jarvis-player="next" aria-label="Следующий">${icon("skip-forward", "lg")}</button>
-    </div>
-    <div class="row">
-      <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
-      <button class="btn" data-jarvis-ask="перемешай">${icon("shuffle")} Вперемешку</button>
-    </div>
-  </section>
+  ${playerCard(pc, now)}
 
   <section class="card">
     <div class="card-head"><h2>Рабочий стол</h2></div>
@@ -1598,6 +1841,55 @@ function viewJarvis() {
       <button class="btn" id="jarvis-say">${icon("audio-lines")} Сказать в комнате</button>
     </div>
   </section>`;
+}
+
+/* Одна дорога к плееру ассистента. Действие «toggle» он раскладывает сам:
+   видео в острове, окно с видео или музыка — телефону это знать не нужно. */
+const player = (pcId, action, value = null) =>
+  api(`/api/pcs/${encodeURIComponent(pcId)}/justday/player`,
+    { method: "POST", body: JSON.stringify({ action, value }) });
+
+/* Громче/тише — ступенькой от нынешнего уровня, а не «поставь 60»: пульт
+   не знает, на чём остановились, и не должен дёргать музыку к своему числу. */
+async function volumeStep(pcId, delta) {
+  const now = nowPlaying(state.justday);
+  const было = now?.volume ?? state.justday?.player?.volume ?? 70;
+  const стало = Math.max(0, Math.min(130, Math.round(было / 10) * 10 + delta));
+  return player(pcId, "volume", стало);
+}
+
+/* Снимок экрана. Картинка нигде не сохраняется: контроллер отдаёт её одним
+   ответом, шторка показывает и забывает. */
+async function showScreen(pcId, button) {
+  await withBusy(button, async () => {
+    const url = `/api/pcs/${encodeURIComponent(pcId)}/screen?t=${Date.now()}`;
+    // Сначала забираем картинку сами: так ошибку («нет утилиты», «нет
+    // графического сеанса») видно текстом, а не сломанным значком.
+    const response = await fetch(url, { credentials: "same-origin" });
+    if (!response.ok) {
+      let message = `HTTP ${response.status}`;
+      try {
+        message = (await response.json()).error?.message || message;
+      } catch { /* не JSON — оставляем код */ }
+      toast(`Снимок не вышел: ${message}`, "err");
+      return;
+    }
+    const blob = URL.createObjectURL(await response.blob());
+    await openSheet({
+      title: "Экран компьютера",
+      media: blob,
+      yes: "",
+      cancel: "Закрыть",
+      danger: false,
+    });
+    URL.revokeObjectURL(blob);
+  });
+}
+
+function openTerminal(pcId, session = "") {
+  const query = new URLSearchParams({ pc: pcId });
+  if (session) query.set("session", session);
+  location.href = `/terminal?${query}`;
 }
 
 async function jarvisAsk(text, { aloud = false } = {}) {
@@ -1651,8 +1943,12 @@ function viewMore() {
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Приложение на телефон</h2></div>
-    <div class="row"><button class="btn" id="more-apk">${icon("download")} Скачать APK</button></div>
+    <div class="card-head"><h2>Приложение на телефон</h2>
+      <span class="meta">${esc(shell().app ? shell().version : shell().webview ? "старая сборка" : "браузер")}</span></div>
+    <div class="row">
+      <button class="btn" id="more-apk">${icon("download")} Скачать APK</button>
+      <button class="btn" id="more-mic">${icon("mic")} Проверить микрофон</button>
+    </div>
     <div class="meta" id="apk-note">Значок на рабочем столе вместо вкладки браузера.
       Дальше приложение обновляется само: при запуске спрашивает эту же машину.</div>
   </section>
@@ -1851,9 +2147,8 @@ document.addEventListener("pointerdown", (event) => {
   pressTimer = setTimeout(() => {
     pressTimer = null;
     button.dataset.longpress = "1";
-    const added = toggleFavorite(button.dataset.keyPc, button.dataset.keyAction);
-    button.classList.toggle("fav", added);
-    toast(added ? "добавлено в избранное" : "убрано из избранного", "ok");
+    buzz([12, 40, 12]);
+    keyMenu(button);
   }, 500);
 });
 
@@ -1868,6 +2163,84 @@ document.addEventListener("pointercancel", cancelPress);
 document.addEventListener("pointermove", (event) => {
   if (pressedButton && Math.abs(event.movementX) + Math.abs(event.movementY) > 6) cancelPress();
 });
+
+/* Обложка не пришла (ничего не играет, файла нет) — прячем картинку и
+   оставляем цветной квадрат. Слушаем на погружении: событие error у <img>
+   не всплывает, поэтому обычный обработчик на document его не увидит.
+   Обработчик в разметке сюда не годится — у страницы строгий CSP. */
+document.addEventListener("error", (event) => {
+  const image = event.target;
+  if (image instanceof HTMLImageElement) image.style.display = "none";
+}, true);
+
+/* Удержание кнопки открывает её меню.
+
+   Раньше удержание сразу кидало кнопку в избранное — и это был
+   единственный способ что-либо с ней сделать: переставить местами было
+   нельзя вовсе. Теперь удержание спрашивает, а не решает. */
+async function keyMenu(button) {
+  const pcId = button.dataset.keyPc;
+  const id = button.dataset.keyAction;
+  if (!pcId || !id) return;
+
+  const pc = state.pcs.find((p) => p.id === pcId);
+  const action = [...(pc?.actions || []), ...powerFor(pc || {}), ...jarvisKeysFor(pc), ...pcKeysFor(pc)]
+    .find((a) => a.id === id);
+  const name = action?.name || id;
+  const fav = isFavorite(pcId, id);
+  const place = favoriteAt(pcId, id);
+  const inFavourites = fav && place.index >= 0;
+
+  const items = [
+    { id: "run", name: `Выполнить «${name}»`, icon: "circle-play" },
+    fav
+      ? { id: "unfav", name: "Убрать из избранного", icon: "star" }
+      : { id: "fav", name: "В избранное", icon: "star" },
+  ];
+  // Двигать можно только там, где порядок вообще есть, — на первой странице.
+  if (inFavourites && place.total > 1) {
+    if (place.index > 0) items.push({ id: "left", name: "Левее", icon: "arrow-left",
+      sub: `сейчас ${place.index + 1}-я из ${place.total}` });
+    if (place.index < place.total - 1) items.push({ id: "right", name: "Правее", icon: "arrow-right",
+      sub: `сейчас ${place.index + 1}-я из ${place.total}` });
+  }
+  if (action?.session) {
+    items.push({ id: "term", name: "Открыть терминал", icon: "terminal",
+      sub: `сессия «${action.session}»` });
+  }
+  if (action?.editable) {
+    items.push({ id: "edit", name: "Изменить кнопку", icon: "pencil" });
+  }
+
+  const picked = await menuSheet({
+    title: name,
+    text: action?.description || "",
+    icon: action?.icon?.startsWith("lucide:") ? action.icon : "",
+    items,
+  });
+  if (!picked) return;
+
+  if (picked === "run") {
+    // Метку удержания снимаем сами: если палец сдвинулся и обычный click не
+    // пришёл, она осталась бы висеть и съела бы это нажатие.
+    delete button.dataset.longpress;
+    return button.click();
+  }
+  if (picked === "fav" || picked === "unfav") {
+    const added = toggleFavorite(pcId, id);
+    toast(added ? "добавлено в избранное" : "убрано из избранного", "ok");
+    return render(true);
+  }
+  if (picked === "left" || picked === "right") {
+    if (!moveFavorite(pcId, id, picked === "left" ? -1 : 1)) return;
+    return render(true);
+  }
+  if (picked === "term") return openTerminal(pcId, action.session);
+  if (picked === "edit") {
+    location.hash = "#/buttons";
+    return;
+  }
+}
 
 /* ============================================================ нажатия === */
 
@@ -1896,6 +2269,11 @@ document.addEventListener("click", async (event) => {
   if (d.jarvisAsk) {
     buzz(8);
     return jarvisAsk(d.jarvisAsk);
+  }
+  if (d.jarvisVolume) {
+    const pc = activePc();
+    if (!pc) return;
+    return run(button, () => volumeStep(pc.id, Number(d.jarvisVolume)), () => render(true));
   }
   if (d.jarvisPlayer) {
     const pc = activePc();
@@ -1949,6 +2327,13 @@ document.addEventListener("click", async (event) => {
       if (!key) return;
       buzz(8);
       if (key.ask) return jarvisAsk(key.ask);
+      if (key.player) {
+        return run(button, () => player(pcId, key.player), () => render(true));
+      }
+      if (key.volume) {
+        return run(button, () => volumeStep(pcId, key.volume),
+          (result) => toast(result?.done || "готово", "ok"));
+      }
       return run(button,
         () => api(`/api/pcs/${encodeURIComponent(pcId)}/justday/session/${key.session}`, { method: "POST" }),
         (result) => {
@@ -1956,6 +2341,13 @@ document.addEventListener("click", async (event) => {
           toast(names.length ? names.join(", ") : "ничего не изменилось", "ok");
         });
     }
+    if (id === "pc:screen") return showScreen(pcId, button);
+    if (id === "pc:lock") {
+      return run(button,
+        () => api(`/api/pcs/${encodeURIComponent(pcId)}/actions/lock`, { method: "POST" }),
+        (result) => toast(result.message || "экран заблокирован", result.success ? "ok" : "err"));
+    }
+    if (id === "pc:terminal") return openTerminal(pcId);
     if (id === "power:wake") {
       return run(button, () => api(`/api/pcs/${encodeURIComponent(pcId)}/wake`, { method: "POST" }),
         (result) => {
@@ -1996,6 +2388,18 @@ document.addEventListener("click", async (event) => {
       });
   }
 
+  if (button.id === "more-mic") {
+    // Проверка отвечает на единственный вопрос: чинить это в приложении,
+    // в настройках телефона или в адресе, по которому открыт пульт.
+    return openSheet({
+      icon: "lucide:mic",
+      title: "Микрофон",
+      text: await micReport(),
+      yes: "",
+      cancel: "Закрыть",
+      danger: false,
+    });
+  }
   if (button.id === "more-session") {
     return run(button,
       () => api(`/api/pcs/${encodeURIComponent(activePc().id)}/approvals/session`, { method: "POST" }),

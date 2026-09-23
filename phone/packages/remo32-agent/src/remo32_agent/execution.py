@@ -58,6 +58,7 @@ class CommandRunner(Protocol):
         env: dict[str, str] | None = None,
         timeout: float = 30.0,
         detach: bool = False,
+        capture: bool = True,
     ) -> CommandResult: ...
 
 
@@ -88,18 +89,20 @@ class SubprocessRunner:
         env: dict[str, str] | None = None,
         timeout: float = 30.0,
         detach: bool = False,
+        capture: bool = True,
     ) -> CommandResult:
         if not argv:
             raise ValueError("argv пуст")
 
-        log.debug("запуск команды", argv=argv, cwd=cwd, detach=detach)
+        log.debug("запуск команды", argv=argv, cwd=cwd, detach=detach, capture=capture)
+        pipe = asyncio.subprocess.PIPE if capture and not detach else asyncio.subprocess.DEVNULL
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
                 cwd=cwd,
                 env=self._build_env(env),
-                stdout=asyncio.subprocess.DEVNULL if detach else asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL if detach else asyncio.subprocess.PIPE,
+                stdout=pipe,
+                stderr=pipe,
                 stdin=asyncio.subprocess.DEVNULL,
                 # Своя группа процессов: убивая по таймауту, мы не заденем агента,
                 # а отсоединённый GUI переживёт перезапуск службы.
@@ -115,6 +118,24 @@ class SubprocessRunner:
         if detach:
             # Намеренно не ждём: процесс живёт своей жизнью.
             return CommandResult(argv, None, "", "", detached=True)
+
+        if not capture:
+            # Ждём завершения, но не читаем вывод.
+            #
+            # Так запускается tmux: команда `tmux new-session -d` возвращается
+            # сразу, но, если сервера tmux ещё нет, она его и поднимает — а
+            # сервер наследует наши трубы и держит их открытыми, пока жив.
+            # Чтение до конца вывода поэтому не кончалось никогда: первое
+            # нажатие «Claude Code» висело весь таймаут и отчитывалось
+            # ошибкой, хотя сессия уже была создана.
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=timeout)
+            except TimeoutError:
+                _kill_process_group(proc)
+                return CommandResult(
+                    argv, None, "", f"превышен таймаут {timeout} с", timed_out=True
+                )
+            return CommandResult(argv, proc.returncode, "", "")
 
         try:
             raw_out, raw_err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -168,9 +189,17 @@ class RecordingRunner:
         env: dict[str, str] | None = None,
         timeout: float = 30.0,
         detach: bool = False,
+        capture: bool = True,
     ) -> CommandResult:
         self.calls.append(
-            {"argv": list(argv), "cwd": cwd, "env": env, "timeout": timeout, "detach": detach}
+            {
+                "argv": list(argv),
+                "cwd": cwd,
+                "env": env,
+                "timeout": timeout,
+                "detach": detach,
+                "capture": capture,
+            }
         )
         log.info("dry-run: команда НЕ запущена", argv=argv)
         canned = self.responses.get(argv[0]) if argv else None

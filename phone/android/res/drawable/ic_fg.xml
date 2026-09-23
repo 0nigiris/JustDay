@@ -1,16 +1,31 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- Остров JustDay. Adaptive icon обрезает всё за пределами круга
-         диаметром 72dp в центре, поэтому форма живёт внутри него. -->
-    <path android:fillColor="#0B0B0D"
-        android:pathData="M25,43 h58 a11,11 0 0 1 0,22 h-58 a11,11 0 0 1 0,-22 z" />
-    <path android:fillColor="#2C2C2E"
-        android:pathData="M25,43 h58 a11,11 0 0 1 0,22 h-58 a11,11 0 0 1 0,-22 z M27.5,45.5 a8.5,8.5 0 0 0 0,17 h53 a8.5,8.5 0 0 0 0,-17 z" />
+    <!-- Восход над островом: то же, что на значке в браузере.
+
+         Adaptive icon обрезает всё за кругом диаметром 72dp в центре, а
+         производители режут ещё и по-своему, поэтому и солнце, и остров
+         целиком живут внутри круга радиусом 35 от центра (54, 54). -->
+
+    <!-- Солнце -->
+    <path android:pathData="M54,48 m-16,0 a16,16 0 1,0 32,0 a16,16 0 1,0 -32,0">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear"
+                android:startX="54" android:startY="32"
+                android:endX="54" android:endY="64">
+                <item android:offset="0" android:color="#FFD277"/>
+                <item android:offset="0.5" android:color="#FF9A4D"/>
+                <item android:offset="1" android:color="#FF5E7A"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Остров: он же горизонт, из-за которого солнце встаёт -->
+    <path android:fillColor="#07080D"
+        android:pathData="M33,58 h42 a8,8 0 0 1 0,16 h-42 a8,8 0 0 1 0,-16 z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.16"
+        android:pathData="M33,58 h42 a8,8 0 0 1 0,16 h-42 a8,8 0 0 1 0,-16 z M34.2,59.2 a6.8,6.8 0 0 0 0,13.6 h39.6 a6.8,6.8 0 0 0 0,-13.6 z"/>
     <path android:fillColor="#0A84FF"
-        android:pathData="M38,48 m-6,0 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0" />
-    <path android:fillColor="#EBEBF5" android:fillAlpha="0.85"
-        android:pathData="M51,49 h23 a2.5,2.5 0 0 1 0,5 h-23 a2.5,2.5 0 0 1 0,-5 z" />
-    <path android:fillColor="#EBEBF5" android:fillAlpha="0.45"
-        android:pathData="M51,56 h14 a2.5,2.5 0 0 1 0,5 h-14 a2.5,2.5 0 0 1 0,-5 z" />
+        android:pathData="M41,66 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"/>
 </vector>

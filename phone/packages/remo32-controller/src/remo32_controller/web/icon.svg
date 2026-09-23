@@ -1,23 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="JustDay">
-  <!-- Остров JustDay: то же, что живёт наверху экрана компьютера. Ни букв, ни
-       снимка интерфейса — одна форма, которую видно и в 24 пикселя. -->
+  <!-- Восход над островом.
+
+       Прежний значок был островом с полосками текста внутри: в 48 пикселей
+       от него оставалось серое пятно. Здесь всего две формы — солнце и
+       тёмная полоса, из-за которой оно встаёт, — и они узнаются даже в
+       24 пикселя. Заодно это и есть имя: JustDay, просто день.
+
+       Тёплый цвет — единственное место, где приложение позволяет себе не
+       синий: значок должен отличаться от полутора сотен синих кружков на
+       экране телефона. -->
   <defs>
-    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="192" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1C1C1E"/>
-      <stop offset="1" stop-color="#000000"/>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1B2440"/>
+      <stop offset="0.55" stop-color="#0B0E1A"/>
+      <stop offset="1" stop-color="#05060B"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
-                    gradientTransform="translate(66 96) scale(74)">
-      <stop offset="0" stop-color="#0A84FF" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#0A84FF" stop-opacity="0"/>
+    <linearGradient id="sun" x1="96" y1="48" x2="96" y2="124" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD277"/>
+      <stop offset="0.5" stop-color="#FF9A4D"/>
+      <stop offset="1" stop-color="#FF5E7A"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+                    gradientTransform="translate(96 104) scale(78)">
+      <stop offset="0" stop-color="#FF9A4D" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FF9A4D" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <rect width="192" height="192" rx="42" fill="url(#plate)"/>
-  <circle cx="66" cy="96" r="74" fill="url(#glow)"/>
+  <rect width="192" height="192" rx="44" fill="url(#night)"/>
+  <circle cx="96" cy="104" r="78" fill="url(#halo)"/>
+  <circle cx="96" cy="92" r="38" fill="url(#sun)"/>
 
-  <rect x="26" y="68" width="140" height="56" rx="28" fill="#0B0B0D" stroke="#2C2C2E" stroke-width="2"/>
-  <circle cx="60" cy="96" r="13" fill="#0A84FF"/>
-  <rect x="88" y="88" width="54" height="7" rx="3.5" fill="#EBEBF5" opacity="0.85"/>
-  <rect x="88" y="102" width="34" height="7" rx="3.5" fill="#EBEBF5" opacity="0.45"/>
+  <!-- Остров: та же пилюля, что стоит наверху экрана компьютера и из которой
+       сделаны клавиши пульта. Здесь она — горизонт. -->
+  <rect x="26" y="112" width="140" height="38" rx="19" fill="#07080D"/>
+  <rect x="26" y="112" width="140" height="38" rx="19" fill="none"
+        stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="2"/>
+  <circle cx="52" cy="131" r="8" fill="#0A84FF"/>
 </svg>

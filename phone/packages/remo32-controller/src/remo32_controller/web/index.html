@@ -73,8 +73,13 @@
     <div class="sheet-icon" id="sheet-icon"></div>
     <div class="sheet-title" id="sheet-title"></div>
     <div class="sheet-text" id="sheet-text"></div>
-    <div class="sheet-buttons">
-      <button class="btn" data-sheet="no">Отмена</button>
+    <!-- Одна шторка на три случая: спросить «да/нет», показать список
+         действий кнопки и показать картинку (снимок экрана). Лишнее
+         скрывается, поэтому разметка не размножается. -->
+    <div class="sheet-media" id="sheet-media" hidden></div>
+    <div class="sheet-menu" id="sheet-menu" hidden></div>
+    <div class="sheet-buttons" id="sheet-buttons">
+      <button class="btn" id="sheet-no" data-sheet="no">Отмена</button>
       <button class="btn danger" id="sheet-yes" data-sheet="yes">Да</button>
     </div>
   </div>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from remo32_controller.auth.dependencies import Session
@@ -150,6 +150,29 @@ async def justday_player(
         await _registry(request).get(pc_id).client.justday_player(payload.action, payload.value),
         request_id,
     )
+
+
+@router.get("/{pc_id}/screen", response_class=Response, tags=["ПК"])
+async def screen(
+    pc_id: str, request: Request, _session: Session, _request_id: RequestId
+) -> Response:
+    """Что сейчас на экране этого компьютера — картинкой.
+
+    Снимок нигде не сохраняется: он делается по запросу и живёт только в этом
+    ответе, поэтому и кэшировать его нельзя.
+    """
+    png, kind = await _registry(request).get(pc_id).client.screen()
+    log.info("снимок экрана", pc_id=pc_id, bytes=len(png))
+    return Response(png, media_type=kind, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/{pc_id}/justday/art", response_class=Response, tags=["JustDay"])
+async def justday_art(
+    pc_id: str, request: Request, _session: Session, _request_id: RequestId
+) -> Response:
+    """Обложка того, что играет."""
+    data, kind = await _registry(request).get(pc_id).client.justday_art()
+    return Response(data, media_type=kind, headers={"Cache-Control": "no-store"})
 
 
 # Голос, надиктованный в браузере: файл идёт сквозь контроллер к агенту без разбора и

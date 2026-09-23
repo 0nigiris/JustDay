@@ -99,8 +99,15 @@ class AgentContext:
 
         Префикс гарантирует, что агент не подключится к посторонней
         tmux-сессии пользователя и не создаст путаницы.
+
+        Исключение — сессии собственных кнопок вида ``tmux``: «Claude Code»
+        создаёт сессию с тем именем, которое записано в настройках, и
+        терминал обязан попадать именно в неё. Иначе кнопка запускает одно,
+        терминал открывает другое, и обе выглядят сломанными.
         """
         cleaned = "".join(ch for ch in raw if ch.isalnum() or ch in "_-")[:32] or "main"
+        if cleaned in self.registry.tmux_sessions():
+            return cleaned
         prefix = self.settings.terminal.session_prefix
         return cleaned if cleaned.startswith(f"{prefix}-") else f"{prefix}-{cleaned}"
 

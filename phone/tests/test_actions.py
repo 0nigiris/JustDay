@@ -55,6 +55,29 @@ async def test_tmux_action_creates_detached_session(
     assert create[-1] == "claude -c"
 
 
+async def test_tmux_action_does_not_wait_for_its_output(
+    executor: ActionExecutor, runner: RecordingRunner
+) -> None:
+    """Вывод tmux не читаем — иначе кнопка висит, пока жив сервер tmux.
+
+    `tmux new-session -d` возвращается сразу, но заодно поднимает сервер
+    tmux, а тот наследует наши трубы и держит их открытыми, пока существует
+    хоть одна сессия. Из-за этого первое нажатие «Claude Code» висело весь
+    таймаут и отчитывалось ошибкой, хотя сессия уже была создана.
+    """
+    runner.responses["tmux"] = CommandResult(["tmux"], exit_code=1, stdout="", stderr="")
+    await executor.run("claude")
+    assert runner.calls[-1]["capture"] is False
+
+
+async def test_desktop_action_still_captures_nothing_but_detaches(
+    executor: ActionExecutor, runner: RecordingRunner
+) -> None:
+    """Обычные действия вывод по-прежнему читают: он показывается в ответе."""
+    await executor.run("mc-start")
+    assert runner.calls[-1]["capture"] is True
+
+
 async def test_tmux_action_reuses_existing_session(
     executor: ActionExecutor, runner: RecordingRunner
 ) -> None:

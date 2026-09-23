@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from remo32_core.errors import DeviceTimeoutError, DeviceUnreachableError
+from remo32_core.errors import ActionInvalidError, DeviceTimeoutError, DeviceUnreachableError
 from remo32_core.log import get_logger
 
 log = get_logger("agent.justday")
@@ -120,6 +120,37 @@ async def dictate(audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
     finally:
         with contextlib.suppress(OSError):
             os.unlink(path)
+
+
+# Обложки ассистент складывает к себе в кэш, музыку — в свою папку. Больше
+# ниоткуда картинку не отдаём: путь приходит от ассистента, но проверяет его
+# агент — телефон в этот момент просит просто «дай обложку», без путей.
+ART_DIRS = ("/.cache/justday/", "/Music/")
+ART_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+def _art_file(path: str) -> tuple[bytes, str]:
+    real = Path(path).resolve()
+    kind = ART_TYPES.get(real.suffix.lower())
+    if not kind or not any(part in str(real) for part in ART_DIRS) or not real.is_file():
+        raise ActionInvalidError("обложки нет")
+    if real.stat().st_size > 8 * 1024 * 1024:
+        raise ActionInvalidError("обложка слишком большая")
+    return real.read_bytes(), kind
+
+
+async def artwork() -> tuple[bytes, str]:
+    """Обложка играющего трека — файлом, как он лежит на компьютере."""
+    state = await call("media", action="status")
+    path = str((state.get("music") or {}).get("thumb") or "")
+    if not path:
+        raise ActionInvalidError("сейчас ничего не играет")
+    return await asyncio.to_thread(_art_file, path)
 
 
 async def session(action: str) -> dict[str, Any]:

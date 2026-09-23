@@ -45,6 +45,15 @@ class _ActionBase(BaseModel):
         ),
     )
 
+    def captures_output(self) -> bool:
+        """Нужно ли читать вывод команды.
+
+        Почти всегда да: вывод показывается в ответе кнопки. Исключение —
+        команды, которые поднимают собственный демон (tmux), потому что он
+        наследует трубы и не закрывает их никогда.
+        """
+        return True
+
     def resolved_workdir(self) -> Path | None:
         if self.workdir is None:
             return None
@@ -153,6 +162,19 @@ class TmuxAction(_ActionBase):
 
     def executable(self) -> str | None:
         return "tmux"
+
+    def captures_output(self) -> bool:
+        # `tmux new-session -d` поднимает сервер tmux, и тот наследует наши
+        # трубы. Читать их до конца означало бы ждать, пока человек закроет
+        # последнюю сессию: первое нажатие кнопки висело весь таймаут.
+        return False
+
+    def descriptor(self) -> ActionDescriptor:
+        # Имя сессии — единственное, что интерфейсу нужно знать о команде:
+        # по нему он открывает терминал там же, где кнопка её запустила.
+        got = super().descriptor()
+        got.session = self.session
+        return got
 
     def command_string(self) -> str:
         """Команда для tmux одной строкой.

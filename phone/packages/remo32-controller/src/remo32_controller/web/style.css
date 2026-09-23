@@ -950,7 +950,26 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   background: var(--surface-2);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
+.jarvis-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
 .jarvis-track { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+/* Полоса времени: где мы в треке. Цифры моноширинные, чтобы не прыгали. */
+.progress { margin-top: 14px; }
+.progress .bar { margin-top: 0; }
+.progress .times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-top: 5px;
+}
 .jarvis-track b, .jarvis-track .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .transport {
@@ -981,6 +1000,16 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   border: 1px solid var(--hair);
 }
 .transport .big .i { width: 28px; height: 28px; }
+
+/* Второй ряд плеера: то, что нажимают реже, — вперемешку, громкость, повтор. */
+.transport.small { gap: 14px; padding: 4px 0 0; }
+.transport.small button { width: 42px; height: 42px; color: var(--text-dim); }
+.transport.small button.on { color: var(--accent); }
+.transport.small .vol {
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ======================================================= расписание ==== */
 
@@ -1201,6 +1230,34 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   margin-bottom: 8px;
 }
 .sheet-text { color: var(--text-dim); font-size: 15px; line-height: 1.45; }
+/* Шторка в роли меню: список действий одной кнопки. */
+.sheet-menu {
+  display: grid;
+  gap: 2px;
+  margin-top: 18px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.sheet-menu .list-row { background: none; }
+.sheet-menu .list-row + .list-row { border-top: 1px solid var(--hair); }
+
+/* Шторка в роли смотрового окна: снимок экрана. Картинка идёт во всю ширину
+   и не обрезается — смотреть на четверть экрана бессмысленно. */
+.sheet-media { margin-top: 16px; }
+.sheet-media img {
+  display: block;
+  width: 100%;
+  max-height: 62dvh;
+  object-fit: contain;
+  background: #000;
+  border-radius: var(--radius);
+}
+
+/* Спокойный значок — там, где шторка ничего не подтверждает. */
+.sheet-icon.calm { background: var(--accent-soft); color: var(--accent); }
+
 .sheet-buttons { display: flex; gap: 10px; margin-top: 22px; }
 .sheet-buttons .btn { flex: 1; }
 .sheet-form { text-align: left; display: grid; gap: 22px; margin-top: 4px; }

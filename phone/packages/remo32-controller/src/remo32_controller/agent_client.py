@@ -233,6 +233,35 @@ class AgentClient:
         )
         return got
 
+    async def binary(self, path: str, *, timeout: float = 30.0) -> tuple[bytes, str]:
+        """Картинка от агента как есть: снимок экрана, обложка.
+
+        Отдельно от `_request`: тот разбирает конверт JSON, а здесь ответ —
+        сами байты. Ошибку агент всё равно вернёт конвертом, поэтому по типу
+        ответа и решаем, что пришло.
+        """
+        url = f"{self._base_url}{path}"
+        try:
+            response = await self._client.request(
+                "GET", url, headers=self._headers(), timeout=timeout
+            )
+        except httpx.TimeoutException as exc:
+            raise DeviceTimeoutError(f"агент не ответил за {timeout:.0f} с", url=url) from exc
+        except httpx.HTTPError as exc:
+            raise DeviceUnreachableError(f"агент недоступен: {exc}", url=url) from exc
+
+        kind = response.headers.get("content-type", "")
+        if response.status_code == 200 and kind.startswith("image/"):
+            return response.content, kind.split(";")[0]
+        self._parse(response, url)  # не картинка — значит ошибка, она и поднимется
+        raise DeviceUnreachableError("агент вернул не картинку", url=url)
+
+    async def screen(self) -> tuple[bytes, str]:
+        return await self.binary("/api/screen", timeout=40.0)
+
+    async def justday_art(self) -> tuple[bytes, str]:
+        return await self.binary("/api/justday/art", timeout=15.0)
+
     async def justday_session(self, action: str) -> dict[str, Any]:
         got: dict[str, Any] = await self._request(
             "POST", f"/api/justday/session/{action}", timeout=70.0

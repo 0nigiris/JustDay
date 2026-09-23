@@ -32,6 +32,19 @@ def test_session_name_is_prefixed_and_sanitised(agent_settings: AgentSettings) -
     assert ctx.terminal_session_name("") == "remo32-main"
 
 
+def test_session_of_a_button_is_taken_as_is(agent_settings: AgentSettings) -> None:
+    """Терминал обязан попадать в ту сессию, которую запустила кнопка.
+
+    Кнопка «Claude Code» создаёт сессию «claude», а терминал добавлял свой
+    префикс и открывал пустую «remo32-claude». Со стороны это выглядело так,
+    будто не работает ни кнопка, ни терминал.
+    """
+    ctx = AgentContext(agent_settings, runner=RecordingRunner())
+    assert ctx.terminal_session_name("claude") == "claude"
+    # Чужие имена по-прежнему остаются в своём пространстве.
+    assert ctx.terminal_session_name("prod") == "remo32-prod"
+
+
 def test_websocket_refused_when_terminal_disabled(agent_client) -> None:  # type: ignore[no-untyped-def]
     """По умолчанию терминал выключен, и подключиться нельзя."""
     with (

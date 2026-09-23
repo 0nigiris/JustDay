@@ -1,8 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 56" role="img" aria-label="JustDay">
-  <!-- Остров: тот же знак, что на иконке приложения и наверху экрана компьютера.
-       Здесь он цветной, поэтому это картинка, а не маска. -->
-  <rect x="1" y="1" width="138" height="54" rx="27" fill="#0B0B0D" stroke="#2C2C2E" stroke-width="2"/>
-  <circle cx="30" cy="28" r="11" fill="#0A84FF"/>
-  <rect x="54" y="21" width="56" height="6" rx="3" fill="#EBEBF5" opacity="0.85"/>
-  <rect x="54" y="33" width="34" height="6" rx="3" fill="#EBEBF5" opacity="0.45"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 64" role="img" aria-label="JustDay">
+  <!-- Тот же восход, что на значке, — только лёжа: знак на экране входа. -->
+  <defs>
+    <linearGradient id="sun2" x1="34" y1="8" x2="34" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD277"/>
+      <stop offset="0.5" stop-color="#FF9A4D"/>
+      <stop offset="1" stop-color="#FF5E7A"/>
+    </linearGradient>
+    <radialGradient id="halo2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+                    gradientTransform="translate(34 34) scale(40)">
+      <stop offset="0" stop-color="#FF9A4D" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#FF9A4D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="34" cy="34" r="40" fill="url(#halo2)"/>
+  <circle cx="34" cy="30" r="18" fill="url(#sun2)"/>
+  <rect x="6" y="40" width="156" height="20" rx="10" fill="#0B0B0D"/>
+  <rect x="6" y="40" width="156" height="20" rx="10" fill="none"
+        stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1.5"/>
+  <circle cx="20" cy="50" r="5" fill="#0A84FF"/>
+  <rect x="34" y="47" width="64" height="6" rx="3" fill="#EBEBF5" opacity="0.8"/>
+  <rect x="104" y="47" width="30" height="6" rx="3" fill="#EBEBF5" opacity="0.4"/>
 </svg>

@@ -86,6 +86,11 @@ public class MainActivity extends Activity {
         // Интерфейс сам задаёт масштаб через viewport; системное укрупнение
         // шрифта ломало бы сетку пульта.
         s.setTextZoom(100);
+        // Версия оболочки — в User-Agent. Страница по ней понимает, что она
+        // внутри приложения, и может честно сказать «обнови приложение»
+        // вместо «микрофон не разрешён», когда сборка старая и микрофон
+        // странице отдать просто некому.
+        s.setUserAgentString(s.getUserAgentString() + " JustDayApp/" + version());
 
         web.setBackgroundColor(Color.parseColor("#000000"));
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -181,6 +186,15 @@ public class MainActivity extends Activity {
             // Отказ — тоже ответ: страница покажет свою подсказку, а не
             // останется ждать разрешения, которого не будет.
             request.deny();
+        }
+    }
+
+    private String version() {
+        try {
+            String name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            return name == null ? "0" : name;
+        } catch (PackageManager.NameNotFoundException e) {
+            return "0";
         }
     }
 

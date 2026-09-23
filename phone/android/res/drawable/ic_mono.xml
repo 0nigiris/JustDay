@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Одноцветный вариант для тем Android 13+: система заливает его своим
+         цветом, поэтому здесь важна только форма — солнце над островом. -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M54,48 m-15,0 a15,15 0 1,0 30,0 a15,15 0 1,0 -30,0"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M33,58 h42 a8,8 0 0 1 0,16 h-42 a8,8 0 0 1 0,-16 z M35,61 a5,5 0 0 0 0,10 h38 a5,5 0 0 0 0,-10 z"/>
+</vector>
