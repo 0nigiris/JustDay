@@ -1741,6 +1741,19 @@ class Daemon:
                 resp = {"ok": True, "log": self.jobs.tail(req.get("id", ""), int(req.get("lines", 40)))}
             elif cmd == "job_stop":
                 resp = {"ok": self.jobs.stop(req.get("id", ""))}
+            elif cmd == "session":  # «я ушёл» from the island, the phone or the command line
+                from . import session as session_mod
+
+                loop = asyncio.get_running_loop()
+                act = req.get("action", "list")
+                if act == "close":
+                    resp = {"ok": True, **await loop.run_in_executor(None, session_mod.close, req.get("keep"))}
+                elif act == "restore":
+                    resp = await loop.run_in_executor(None, session_mod.restore)
+                elif act == "save":
+                    resp = {"ok": True, **await loop.run_in_executor(None, session_mod.save)}
+                else:
+                    resp = {"ok": True, **(await loop.run_in_executor(None, session_mod.saved) or {"apps": []})}
             elif cmd == "media":  # player buttons and `justday player ACTION`
                 resp = await self.media_control(req.get("action", "status"), req.get("value"))
             elif cmd == "reminder_set":  # `justday timer 10m` and the island's own buttons
