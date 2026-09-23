@@ -1,9 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="42" fill="#0e1116"/>
-  <g fill="#4c8dff">
-    <rect x="34" y="34" width="52" height="52" rx="12"/>
-    <rect x="106" y="34" width="52" height="52" rx="12" opacity=".55"/>
-    <rect x="34" y="106" width="52" height="52" rx="12" opacity=".55"/>
-    <rect x="106" y="106" width="52" height="52" rx="12" opacity=".3"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="JustDay">
+  <!-- Остров JustDay: то же, что живёт наверху экрана компьютера. Ни букв, ни
+       снимка интерфейса — одна форма, которую видно и в 24 пикселя. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1C1C1E"/>
+      <stop offset="1" stop-color="#000000"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+                    gradientTransform="translate(66 96) scale(74)">
+      <stop offset="0" stop-color="#0A84FF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#0A84FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="192" height="192" rx="42" fill="url(#plate)"/>
+  <circle cx="66" cy="96" r="74" fill="url(#glow)"/>
+
+  <rect x="26" y="68" width="140" height="56" rx="28" fill="#0B0B0D" stroke="#2C2C2E" stroke-width="2"/>
+  <circle cx="60" cy="96" r="13" fill="#0A84FF"/>
+  <rect x="88" y="88" width="54" height="7" rx="3.5" fill="#EBEBF5" opacity="0.85"/>
+  <rect x="88" y="102" width="34" height="7" rx="3.5" fill="#EBEBF5" opacity="0.45"/>
 </svg>

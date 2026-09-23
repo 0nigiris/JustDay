@@ -151,7 +151,7 @@ def test_openapi_documents_everything(anon: TestClient) -> None:
 def test_web_interface_is_served(anon: TestClient) -> None:
     response = anon.get("/")
     assert response.status_code == 200
-    assert "Remo32" in response.text
+    assert "JustDay" in response.text
     assert response.headers["content-type"].startswith("text/html")
 
 
