@@ -76,6 +76,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Тесты импортируют друг у друга помощников (`from tests.conftest import ...`),
+# а значит корень проекта должен быть на пути импорта — и у себя, и на сборке.
+pythonpath = ["."]
 asyncio_mode = "auto"
 filterwarnings = ["error::DeprecationWarning:remo32_.*"]
 
