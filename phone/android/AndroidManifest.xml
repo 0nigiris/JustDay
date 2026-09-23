@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ru.onigiri.remo32">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Обновление без магазина: приложение скачивает новую сборку с того же
+         контроллера и открывает системный установщик. Установку всё равно
+         подтверждает человек — тихо поставить APK без системных прав нельзя,
+         и это правильно. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:supportsRtl="true"
+        android:hardwareAccelerated="true"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="fullUser"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Отдать скачанный файл установщику можно только через провайдер:
+             начиная с Android 7 прямая ссылка file:// на чужой процесс
+             запрещена и роняет приложение. Провайдер здесь свой, на 60
+             строк: androidx.core тянула бы за собой Gradle и зависимости
+             ради одного класса. -->
+        <provider
+            android:name=".UpdateProvider"
+            android:authorities="ru.onigiri.remo32.updates"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

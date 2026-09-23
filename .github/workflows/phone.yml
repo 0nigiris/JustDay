@@ -1,0 +1,54 @@
+name: phone
+
+# The phone half (controller, agents, ESP32 simulator, web interface) is its own uv project
+# under phone/, with its own style and its own 257 tests. It keeps its own checks.
+on:
+  push:
+    branches: [main]
+    paths: ["phone/**", ".github/workflows/phone.yml"]
+  pull_request:
+    paths: ["phone/**", ".github/workflows/phone.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: phone
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      - name: Style
+        run: uv run ruff check .
+      - name: Types
+        run: uv run mypy packages
+      - name: Tests
+        run: uv run pytest -q
+
+  javascript:
+    name: Interface syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # The interface has no bundler on purpose, so the check is just as simple:
+      # a syntax error in app.js breaks the whole remote, and silently.
+      - name: Check app.js and terminal.js
+        run: |
+          node --check packages/remo32-controller/src/remo32_controller/web/app.js
+          node --check packages/remo32-controller/src/remo32_controller/web/terminal.js

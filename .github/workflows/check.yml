@@ -26,7 +26,7 @@ jobs:
         run: python -m compileall -q src voice tests plugin
 
       - name: Shell scripts parse
-        run: find . -name '*.sh' -not -path './.git/*' -print -exec bash -n {} +
+        run: find . -name '*.sh' -not -path './.git/*' -not -path './phone/*' -print -exec bash -n {} +
 
       - name: Defaults load
         # Only what the pure-Python parts import; the GPU and audio stacks never run on a runner.

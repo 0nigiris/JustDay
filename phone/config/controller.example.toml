@@ -1,0 +1,137 @@
+# Пример конфигурации центрального контроллера Remo32.
+#
+# Пути поиска: ./config/controller.toml, ~/.config/remo32/controller.toml,
+# /etc/remo32/controller.toml. Либо явно: REMO32_CONTROLLER_CONFIG=...
+#
+# СЕКРЕТОВ ЗДЕСЬ НЕТ. Через окружение задаются:
+#   REMO32_PASSWORD_HASH   — argon2-хэш пароля (remo32-controller --hash-password)
+#   REMO32_AGENT_TOKEN     — общий токен агентов (или отдельный на каждый ПК)
+#   REMO32_SESSION_SECRET  — необязательно: иначе создастся файл session.key
+#   REMO32_MQTT_PASSWORD   — пароль MQTT-брокера, если используется
+#   REMO32_ESP32_TOKEN     — токен ESP32 при transport = "http"
+
+data_dir = "~/.local/share/remo32"
+
+[server]
+# ГДЕ ЭТО РАБОТАЕТ: на основном ПК, который включён постоянно. Он же
+# управляет вторым (шумным) ПК — будит его magic packet'ом по домашней сети.
+#
+# Следствие, о котором важно помнить: контроллер живёт на той самой машине,
+# которая может умереть. Себя он не разбудит. Эту дыру закрывает сторож на
+# плате ESP32 — см. секцию [esp32] и guarded_by_esp32 у основного ПК.
+#
+# ВАЖНО: не 0.0.0.0. Укажите адрес Tailscale этой машины (tailscale ip -4),
+# чтобы контроллер был доступен только внутри вашей частной сети.
+host = "127.0.0.1"
+port = 8080
+log_level = "INFO"
+log_format = "console"
+# Адрес, по которому вы открываете интерфейс. Нужен для passkey.
+# public_origin = "https://desktop.tailnet-abc123.ts.net:8080"
+
+[auth]
+session_ttl_hours = 720          # 30 дней: не логиниться заново каждый день
+cookie_name = "remo32_session"
+# При работе по http://127.0.0.1 поставьте false, иначе cookie не сохранится.
+cookie_secure = true
+
+# Вход по паролю. Держите включённым даже при использовании passkey:
+# это единственный путь восстановления, если passkey потерян или сменился адрес.
+password_enabled = true
+
+# Passkey (отпечаток пальца). Требует HTTPS и совпадения домена.
+# В Tailscale: включите HTTPS Certificates в админке и получите сертификат
+# командой `tailscale cert <имя>.<tailnet>.ts.net`.
+webauthn_enabled = true
+# webauthn_rp_id = "desktop.tailnet-abc123.ts.net"
+webauthn_rp_name = "Remo32"
+
+# Терминал — самая мощная дверь: это оболочка на машине. Сессия живёт
+# неделями, поэтому здесь спрашивается не «вошёл ли когда-то», а «вошёл ли
+# недавно»: украденная cookie даёт пульт, но не shell. 0 — не требовать.
+terminal_max_session_age_minutes = 240
+
+max_failed_attempts = 10
+lockout_seconds = 300
+
+[poller]
+interval_seconds = 5.0
+timeout_seconds = 3.0
+stale_after_seconds = 30.0
+offline_after_failures = 2       # не мигать «офлайн» из-за одного потерянного пакета
+
+[wol]
+enabled = true
+repeat = 3
+# false — контроллер сам шлёт magic packet. Он стоит в домашней сети, значит
+# широковещательный пакет доходит, и плата для побудки второго ПК не нужна.
+prefer_esp32 = false
+
+[esp32]
+# Роль платы в этой схеме — не пульт, а страховка. Основной ПК включён
+# постоянно, и если он всё-таки умрёт (свет отключили, зависание после
+# недельного аптайма), командовать побудкой будет некому: контроллер лежит
+# вместе с ним. Плата замечает пропажу сама и сама шлёт magic packet.
+#
+# Настраивается это НЕ здесь, а на самой плате — командой guard в её консоли:
+#   guard --on --host 192.168.1.10 --mac 5c:f9:dd:11:22:33 --bcast 192.168.1.255
+#   guard --grace 10 --retry 15 --tries 3
+#   save
+enabled = true
+# mock — симулятор в этом же процессе (железо не нужно)
+# http — реальная плата в домашней сети
+# mqtt — реальная плата через брокер (работает и снаружи дома)
+transport = "mock"
+device_id = "esp32-main"
+name = "ESP32"
+timeout_seconds = 5.0
+poll_interval_seconds = 10.0
+offline_after_seconds = 45.0
+
+# --- при transport = "http" ---
+# base_url = "http://192.168.1.50"
+
+# --- при transport = "mqtt" ---
+# mqtt_host = "xxxxx.s1.eu.hivemq.cloud"
+# mqtt_port = 8883
+# mqtt_tls = true
+# mqtt_username = "remo32"
+# mqtt_topic_prefix = "remo32"
+
+# ---------------------------------------------------------------------------
+# УПРАВЛЯЕМЫЕ ПК
+# ---------------------------------------------------------------------------
+
+[[pcs]]
+id = "desktop"
+name = "Основной ПК"
+description = "Рабочая машина"
+# Адрес агента. Внутри Tailscale используйте адрес 100.x.y.z — тогда
+# соединение шифруется и не зависит от домашней сети.
+agent_url = "http://127.0.0.1:8765"
+agent_token_env = "REMO32_AGENT_TOKEN_DESKTOP"
+mac_address = "5c:f9:dd:11:22:33"
+# Точнее, чем 255.255.255.255: пакет уходит в нужную подсеть.
+broadcast_address = "192.168.1.255"
+wol_port = 9
+# kvm_port = 1                   # номер входа KVM, когда он появится
+terminal_enabled = false         # терминал должен быть разрешён И здесь, И в агенте
+
+# На этом ПК живёт сам контроллер: он же домашний сервер. Выключение оставит
+# телефон без управления, поэтому интерфейс переспросит отдельно и дважды.
+hosts_controller = true
+
+# За этим ПК следит сторож на плате. Перед плановым выключением контроллер
+# предупредит её, иначе она посчитает выключение аварией и включит ПК обратно.
+guarded_by_esp32 = true
+guard_snooze_minutes = 480       # 8 часов тишины: хватает на ночь
+
+[[pcs]]
+id = "server"
+name = "Серверный ПК"
+description = "Minecraft и прочее"
+agent_url = "http://100.x.y.z:8765"
+agent_token_env = "REMO32_AGENT_TOKEN_SERVER"
+# mac_address = "??:??:??:??:??:??"   # посмотреть на самом ПК: cat /sys/class/net/<iface>/address
+broadcast_address = "192.168.1.255"
+terminal_enabled = false

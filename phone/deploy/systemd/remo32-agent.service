@@ -1,0 +1,60 @@
+# Агент Remo32 — ПОЛЬЗОВАТЕЛЬСКАЯ служба.
+#
+# Устанавливается в ~/.config/systemd/user/remo32-agent.service
+# и запускается от вашего имени, а НЕ от root. Это принципиально:
+# агент запускает приложения на вашем рабочем столе и не должен иметь
+# прав, которых у вас самих нет.
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now remo32-agent
+#   systemctl --user status remo32-agent
+#
+# Чтобы служба работала, когда вы не вошли в систему графически:
+#   sudo loginctl enable-linger $USER
+
+[Unit]
+Description=Remo32 Agent
+Documentation=https://github.com/local/remo32
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Секреты — из файла окружения с правами 0600, а не из этого юнита:
+# юнит читается всеми, EnvironmentFile — нет.
+EnvironmentFile=%h/.config/remo32/agent.env
+Environment=REMO32_AGENT_CONFIG=%h/.config/remo32/agent.toml
+Environment=PYTHONUNBUFFERED=1
+
+# %REPO% подставляет install.sh — это каталог, куда вы склонировали
+# репозиторий. Если ставите юнит руками, впишите путь сами.
+# Запуск напрямую из окружения проекта, а не через «uv run»: uv при каждом
+# старте пишет в ~/.cache/uv, а ProtectHome=read-only это запрещает —
+# служба падала с «Read-only file system». Зависимости обновляются
+# командой «uv sync» вручную, службе для работы uv не нужен.
+ExecStart=%REPO%/.venv/bin/remo32-agent
+WorkingDirectory=%REPO%
+
+Restart=always
+RestartSec=5
+# Не сдаваться после серии перезапусков: агент должен вернуться сам.
+StartLimitIntervalSec=0
+
+# --- Ограничения ---------------------------------------------------------
+# Агент по своей природе запускает программы, поэтому изолировать его
+# полностью нельзя. Но лишнее отбираем.
+NoNewPrivileges=false
+PrivateTmp=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=remo32-agent
+
+[Install]
+WantedBy=default.target

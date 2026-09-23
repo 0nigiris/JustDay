@@ -1,0 +1,40 @@
+# Значения по умолчанию для Remo32.
+# Файл коммитится; sdkconfig (результат) — нет, он в .gitignore.
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# --- PSRAM ---------------------------------------------------------------
+# PSRAM ВЫКЛЮЧЕН НАМЕРЕННО.
+# У платы автора встроенная память ESP32-S3 неисправна, а прошивке она не
+# нужна: всё помещается во внутреннюю. Не включайте, не проверив железо.
+# CONFIG_SPIRAM is not set
+
+# --- Флеш 16 МБ ----------------------------------------------------------
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- Сторожевой таймер ---------------------------------------------------
+# Если задача зависнет и перестанет кормить сторожевой таймер, плата
+# перезагрузится сама. Для устройства, которое стоит дома без присмотра,
+# это обязательное поведение.
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_INT_WDT=y
+
+# Перезагружаться при панике, а не зависать в отладчике.
+CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+
+# --- Сеть ----------------------------------------------------------------
+CONFIG_LWIP_SO_RCVBUF=y
+CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# --- Прочее --------------------------------------------------------------
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y

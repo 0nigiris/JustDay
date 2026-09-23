@@ -1,0 +1,287 @@
+# Пример конфигурации агента Remo32.
+#
+# Скопируйте в один из путей, которые агент ищет сам:
+#   ./config/agent.toml            (для разработки)
+#   ~/.config/remo32/agent.toml    (для пользовательской службы)
+#   /etc/remo32/agent.toml         (для системной службы)
+# либо укажите путь явно: REMO32_AGENT_CONFIG=/path/to/agent.toml
+#
+# СЕКРЕТОВ ЗДЕСЬ НЕТ И БЫТЬ НЕ ДОЛЖНО.
+# Токен агента задаётся переменной окружения REMO32_AGENT_TOKEN
+# либо файлом, указанным в security.token_file (права 0600).
+
+agent_id = "desktop"
+display_name = "Основной ПК"
+
+[server]
+# 127.0.0.1 — агент виден только самой машине.
+# Чтобы контроллер мог достучаться, укажите адрес Tailscale этой машины
+# (посмотреть: tailscale ip -4) или адрес в домашней сети.
+host = "127.0.0.1"
+port = 8765
+log_level = "INFO"
+log_format = "console"   # в systemd осмысленнее "json"
+
+[security]
+# token_file = "~/.config/remo32/agent.token"
+allow_insecure_no_token = false
+
+[power]
+shutdown_enabled = true
+restart_enabled = true
+lock_enabled = true
+# dry_run = true — команды питания только логируются. Включите на время
+# знакомства с системой, чтобы случайное нажатие ничего не выключило.
+dry_run = false
+delay_seconds = 5
+
+[terminal]
+# Удалённый терминал выключен по умолчанию. Это самая мощная возможность
+# системы: включайте осознанно.
+enabled = false
+session_prefix = "remo32"
+default_session = "main"
+max_sessions = 4
+idle_timeout_seconds = 3600
+audit_log = "~/.local/share/remo32/terminal-audit.log"
+
+[approvals]
+# Подтверждение входа и sudo с телефона — как часы Apple для Mac.
+#
+# Пароль не хранится и не передаётся: подтверждается то, что телефон у вас
+# в руках. Работает через PAM, настройка — в MANUAL.md.
+#
+# Выключено по умолчанию, потому что меняет то, как компьютер пускает к
+# себе. Кто получит ваш разблокированный телефон, войдёт в систему и
+# получит root. И ещё: любая программа от вашего имени может подделать
+# одобрение — каталог обмена лежит в вашем домашнем каталоге.
+enabled = false
+directory = "~/.local/share/remo32/approvals"
+# Сколько живёт разрешение на вход, выданное заранее. Ровно на дорогу от
+# телефона до компьютера, не больше.
+login_ttl_seconds = 120
+
+[actions_editor]
+# Правка кнопок прямо из интерфейса: «Ещё» → «Свои кнопки».
+#
+# Включено по умолчанию, потому что иначе добавить кнопку — это поход к
+# машине, текстовый редактор и перезапуск службы, то есть возможность,
+# которой не пользуются.
+#
+# Понимать, что это даёт, всё же нужно: кнопка — это команда, которую
+# машина выполнит, и задать её сможет любой, кто вошёл в интерфейс. Это не
+# оболочка (вид действия из списка, команда разбирается на аргументы и не
+# идёт через sh), но и не безобидно. Выключите, если пультом пользуется
+# не только владелец машины.
+enabled = true
+# Куда интерфейс складывает заведённые кнопки. Этот файл пишет программа;
+# кнопки, которые нужно сохранить навсегда, держите ниже, в самом agent.toml.
+store_path = "~/.config/remo32/actions.toml"
+max_actions = 64
+
+# ---------------------------------------------------------------------------
+# ДЕЙСТВИЯ
+#
+# Каждое действие имеет вид (kind), и от вида зависит набор полей.
+# Произвольная строка для оболочки нигде не принимается: команда всегда
+# задаётся списком аргументов argv.
+# ---------------------------------------------------------------------------
+
+# --- Разработка -------------------------------------------------------------
+
+# Аналог "cd ~/JII && claude -c", но без интерпретации строки оболочкой.
+# Запускается в tmux, поэтому переживает обрыв связи с телефоном,
+# а веб-терминал потом подключается к этой же сессии.
+[[actions]]
+id = "claude"
+name = "Claude Code"
+kind = "tmux"
+session = "claude"
+workdir = "~/JII"
+argv = ["claude", "-c"]
+icon = "🤖"
+group = "Разработка"
+
+[[actions]]
+id = "vscode"
+name = "VS Code"
+kind = "desktop"
+argv = ["code"]
+icon = "📝"
+group = "Разработка"
+
+[[actions]]
+id = "terminal-session"
+name = "Фоновый терминал"
+description = "Создаёт tmux-сессию, к которой можно подключиться из веб-терминала"
+kind = "tmux"
+session = "main"
+workdir = "~"
+argv = ["bash", "-l"]
+icon = "⌨️"
+group = "Разработка"
+
+# --- Игры и стрим -----------------------------------------------------------
+
+[[actions]]
+id = "steam"
+name = "Steam"
+kind = "desktop"
+argv = ["steam"]
+icon = "🎮"
+group = "Игры"
+
+[[actions]]
+id = "obs"
+name = "OBS Studio"
+kind = "desktop"
+argv = ["obs"]
+icon = "🎥"
+group = "Игры"
+
+# --- Minecraft --------------------------------------------------------------
+#
+# Предполагается пользовательский systemd-юнит ~/.config/systemd/user/minecraft.service.
+# Готовый пример: deploy/systemd/minecraft.service.example
+
+[[actions]]
+id = "mc-start"
+name = "Minecraft: запустить"
+kind = "systemd_user"
+unit = "minecraft.service"
+verb = "start"
+icon = "⛏️"
+group = "Minecraft"
+
+[[actions]]
+id = "mc-stop"
+name = "Minecraft: остановить"
+kind = "systemd_user"
+unit = "minecraft.service"
+verb = "stop"
+icon = "🛑"
+group = "Minecraft"
+dangerous = true
+
+[[actions]]
+id = "mc-restart"
+name = "Minecraft: перезапустить"
+kind = "systemd_user"
+unit = "minecraft.service"
+verb = "restart"
+icon = "🔄"
+group = "Minecraft"
+dangerous = true
+
+# --- Звук (PipeWire) --------------------------------------------------------
+
+[[actions]]
+id = "vol-up"
+name = "Громче"
+kind = "exec"
+argv = ["wpctl", "set-volume", "-l", "1.5", "@DEFAULT_AUDIO_SINK@", "5%+"]
+icon = "🔊"
+group = "Звук"
+
+[[actions]]
+id = "vol-down"
+name = "Тише"
+kind = "exec"
+argv = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"]
+icon = "🔉"
+group = "Звук"
+
+[[actions]]
+id = "mute"
+name = "Выключить звук"
+kind = "exec"
+argv = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]
+icon = "🔇"
+group = "Звук"
+
+# --- Медиа (playerctl) ------------------------------------------------------
+
+[[actions]]
+id = "play-pause"
+name = "Пауза / играть"
+kind = "exec"
+argv = ["playerctl", "play-pause"]
+icon = "⏯️"
+group = "Медиа"
+
+[[actions]]
+id = "next-track"
+name = "Следующий трек"
+kind = "exec"
+argv = ["playerctl", "next"]
+icon = "⏭️"
+group = "Медиа"
+
+[[actions]]
+id = "prev-track"
+name = "Предыдущий трек"
+kind = "exec"
+argv = ["playerctl", "previous"]
+icon = "⏮️"
+group = "Медиа"
+
+# --- Рабочий стол -----------------------------------------------------------
+
+[[actions]]
+id = "lock"
+name = "Заблокировать экран"
+kind = "exec"
+argv = ["loginctl", "lock-session"]
+icon = "🔒"
+group = "Рабочий стол"
+
+[[actions]]
+id = "screenshot"
+name = "Скриншот"
+description = "Сохраняет снимок экрана в ~/Pictures (Wayland, grim)"
+kind = "shell_script"
+script = "/home/oni/.local/share/remo32/scripts/screenshot.sh"
+icon = "📸"
+group = "Рабочий стол"
+
+[[actions]]
+id = "notify"
+name = "Пикнуть на ПК"
+description = "Показывает уведомление — удобно, чтобы найти включённый ПК"
+kind = "desktop"
+argv = ["notify-send", "Remo32", "Привет с телефона"]
+icon = "🔔"
+group = "Рабочий стол"
+
+# ---------------------------------------------------------------------------
+# ПОДСВЕТКА
+#
+# Работает через OpenRGB и его профили. Профиль — это снимок состояния всех
+# устройств, сохранённый в ~/.config/OpenRGB/*.orp; здесь мы лишь просим
+# применить готовый, а не описываем цвета в конфиге.
+#
+# ВАЖНО: OpenRGB должен быть запущен с ключом --server, иначе каждый вызов
+# заново инициализирует шину i2c (около 20 секунд) и конфликтует с уже
+# работающим окном программы. С сервером профиль применяется за ~1 секунду.
+# Автозапуск правится в ~/.config/autostart/OpenRGB.desktop.
+# ---------------------------------------------------------------------------
+
+[[actions]]
+id = "rgb-off"
+name = "Погасить свет"
+description = "Вся подсветка: корпус, вентиляторы, память, клавиатура, мышь"
+kind = "exec"
+argv = ["openrgb", "--profile", "off"]
+icon = "🌑"
+group = "Подсветка"
+timeout_seconds = 60
+
+[[actions]]
+id = "rgb-on"
+name = "Включить свет"
+description = "Вернуть дневной профиль подсветки"
+kind = "exec"
+argv = ["openrgb", "--profile", "white"]
+icon = "💡"
+group = "Подсветка"
+timeout_seconds = 60
