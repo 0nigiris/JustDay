@@ -296,6 +296,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("screenshot", help="capture the screen as a small JPEG and print its path")
     sp.add_argument("--all", action="store_true", help="all monitors instead of the active window")
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
+    sp = sub.add_parser("guard", help="предупреждение перед выключением компьютера: status | on | off")
+    sp.add_argument("action", nargs="?", choices=["status", "on", "off"], default="status")
     sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
     sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
@@ -503,6 +505,10 @@ def main(argv: list[str] | None = None) -> None:
         from . import desktop
 
         _print(desktop.recent(a.hours))
+    elif a.cmd == "guard":
+        from . import manage
+
+        _print(manage.guard(a.action))
     elif a.cmd == "session":
         from . import session
 

@@ -1,0 +1,24 @@
+[Unit]
+Description=JustDay: предупреждение перед выключением компьютера
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Компьютер — ещё и сервер: на нём живёт управление с телефона, музыка для колонок
+# и сессии Claude Code. Выключение по ошибке стоит дороже, чем лишний вопрос.
+#
+# Никакого своего окна: служба берёт у logind блокирующую задержку, и KDE сам
+# показывает её причину в окне выхода вместе с кнопкой «всё равно выключить».
+# Отключить: systemctl --user disable --now justday-guard
+ExecStart=/usr/bin/systemd-inhibit \
+    --what=shutdown \
+    --who=JustDay \
+    --why="Этот компьютер — ваш сервер: телефон управляет им и будит его. После выключения поднять его можно будет только кнопкой на корпусе или платой-сторожем." \
+    --mode=block \
+    sleep infinity
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

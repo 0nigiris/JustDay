@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -280,3 +281,26 @@ def overview() -> dict:
             "local_models": local_models(), "mail_password": bool(providers.secret_get("mail")),
             "calendar": len(__import__("justday.calendar_lane", fromlist=["urls"]).urls()),
             "memory": memory_files(), "autostart": autostart(), "services": services(), "about": about()}
+
+
+GUARD_UNIT = "justday-guard.service"
+
+
+def guard(action: str = "status") -> dict:
+    """Предупреждение перед выключением компьютера.
+
+    Служба ничего не рисует сама: она берёт у logind блокирующую задержку, и окно выхода
+    KDE показывает её причину вместе с кнопкой «всё равно выключить». Поэтому включение —
+    это ровно enable/disable пользовательской службы."""
+    unit_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd/user"
+    if action in ("on", "off"):
+        if action == "on":
+            unit_dir.mkdir(parents=True, exist_ok=True)
+            (unit_dir / GUARD_UNIT).write_text(
+                (config.REPO_DIR / "systemd" / GUARD_UNIT).read_text(encoding="utf-8"), encoding="utf-8")
+            subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=20)
+        subprocess.run(["systemctl", "--user", "enable" if action == "on" else "disable", "--now", GUARD_UNIT],
+                       capture_output=True, timeout=30)
+    state = subprocess.run(["systemctl", "--user", "is-active", GUARD_UNIT],
+                           capture_output=True, text=True, timeout=10).stdout.strip()
+    return {"on": state == "active", "unit": GUARD_UNIT, "state": state}
