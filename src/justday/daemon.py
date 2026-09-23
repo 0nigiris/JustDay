@@ -1232,6 +1232,7 @@ class Daemon:
     # else looks just as likely. "Flower Man" is sure — there is one. "No name" is not.
     SURE_GAP = 0.22          # how much better the first hit must be than the second
     SURE_HIT = 0.72          # how much of the query the first title must actually contain
+    SURE_LOCAL = 0.95        # a downloaded track this close to the words asked for is *the* one
 
     @staticmethod
     def _title_hit(entry: dict, query: str) -> float:
@@ -1262,9 +1263,11 @@ class Daemon:
         opts = []
         for e in shown:
             dur = f"{e['duration'] // 60}:{e['duration'] % 60:02d}" if e.get("duration") else ""
+            note = t("в фонотеке") if e.get("mine") else ""
             opts.append({"label": e["title"][:42], "icon": "media-playback-start",
-                         "description": " · ".join(x for x in (e.get("channel", ""), dur) if x),
-                         "thumb": e.get("thumb_url", "")})
+                         "description": " · ".join(x for x in (e.get("channel", ""), dur, note) if x),
+                         # своё — картинкой с диска, чужое — по ссылке
+                         "thumb": e.get("thumb") if e.get("mine") else e.get("thumb_url", "")})
         self.publish(kind="card", card={"type": "question", "header": t("Какую включить?"),
                                         "question": t("Нашёл несколько — «{what}»", what=query),
                                         "options": opts})
@@ -1287,6 +1290,23 @@ class Daemon:
                 return shown[i]
         best_by_words = max(shown, key=lambda e: self._title_hit(e, ans))
         return best_by_words if self._title_hit(best_by_words, ans) > 0 else shown[0]
+
+    async def _ask_with_library(self, local: dict, query: str, loop) -> dict | None:
+        """Похоже нашлось и на диске, и снаружи — показываем и то, и другое.
+
+        Фонотека идёт первой: она играет мгновенно и без сети. Если сети нет
+        или поиск не удался, вопроса не будет — молча берём своё.
+        """
+        try:
+            outside = await loop.run_in_executor(None, media.find, query, "music", 2)
+        except Exception as e:
+            log.info("search for the choice failed (%s), playing what is downloaded", e)
+            return local
+        seen = local.get("url", "")
+        outside = [e for e in outside if e.get("url") != seen][:2]
+        if not outside:
+            return local
+        return await self._ask_which_song([{**local, "channel": local.get("artist", ""), "mine": True}, *outside], query)
 
     async def play_music(self, query: str, count: int = 1, mode: str = "replace", playlist: bool = False,
                          shuffle: bool = False) -> dict:
@@ -1322,7 +1342,32 @@ class Daemon:
             if not playlist and count == 1 and mode == "replace" and not media.is_url(query):
                 near = media.find_local(query, limit=1)
                 if near and near[0]["score"] >= 0.82:
-                    return await self.play_library(query, count=1)
+                    # Точное попадание — играем молча. Похожее, но не точное —
+                    # спрашиваем, и в варианты кладём и то, что лежит на диске,
+                    # и то, что нашлось снаружи: «включи No Name» может значить
+                    # и скачанное когда-то, и совсем другую песню.
+                    if near[0]["score"] >= self.SURE_LOCAL or self.silent():
+                        return await self.play_library(query, count=1)
+                    chosen = await self._ask_with_library(near[0], query, loop)
+                    if chosen is None:
+                        return {"ok": True, "done": t("хорошо, не включаю")}
+                    if chosen.get("file") and not chosen.get("url", "").startswith("http"):
+                        return await self.play_library(chosen["title"], count=1)
+                    entries = [chosen]
+                    self.music.set_loading({"title": chosen["title"], "progress": 0})
+                    first = await loop.run_in_executor(None, media.cached_track, chosen)
+                    if not first:
+                        first = await loop.run_in_executor(None, media.stream_track, chosen)
+                        spawn(self._cache_track(chosen))
+                    self.music.set_loading(None)
+                    await self.music.load([first], mode)
+                    self.music.source = ""
+                    self.music.remember()
+                    self._music_started = time.monotonic()
+                    self._pause_videos()
+                    events.emit("media_play", title=first["title"], file=first.get("file", ""), source="choice")
+                    return {"ok": True, "title": first["title"], "artist": first.get("artist", ""),
+                            "done": t("играет {what}", what=first["title"])}
             self.music.set_loading({"title": query, "progress": 0})
             source = ""
             if playlist or (media.is_url(query) and "list=" in query):  # an album / playlist / "best of"
