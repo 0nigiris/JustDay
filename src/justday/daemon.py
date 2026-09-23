@@ -467,7 +467,47 @@ class Daemon:
             return
         await self.handle_utterance(text)
 
-    async def handle_utterance(self, text: str, source: str = "voice") -> None:
+    async def handle_local(self, text: str, source: str = "voice") -> str | None:
+        """Everything JustDay can do without the cloud, in the order it tries them: the morning briefing,
+        the voice switch, the player, timers, instant desktop commands, the calendar, the mail.
+
+        Returns what was done (sometimes an empty string — it has already been said), or None when this
+        is a request only the brain can answer. Voice and keyboard take exactly the same road."""
+        if briefing.wanted(text) and briefing.due() and (said := await self.morning()):
+            return said
+        if (on := fastpath.voice_switch(text)) is not None:
+            await self.set_voice(on)
+            return t("голос включён") if on else t("голос выключен")
+        if await self.media_fast(text) or await self.reminder_fast(text):
+            return ""
+        gen = self._cancel_gen
+        done = await asyncio.get_running_loop().run_in_executor(None, fastpath.try_handle, text)
+        if gen != self._cancel_gen:
+            return ""
+        if done:
+            events.emit("fast", text=text, desc=done)
+            self.publish(detail=done, kind="tool")
+            self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {done}. Не повторяй это действие.]")
+            self.state = "thinking" if self.brain.busy else "idle"
+            await self.earcon("done")
+            return done
+        if calendar_lane.CAL_WORDS.search(text):
+            try:
+                cal = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.handle, text)
+            except Exception as e:  # offline, or a calendar that moved
+                log.warning("calendar failed: %s", e)
+                cal = (t("Не получилось открыть календарь."), None)
+            if cal and gen == self._cancel_gen:
+                reply, card = cal
+                if card:
+                    self.publish(kind="card", card=card)
+                await self.say(reply)
+                return reply
+        if self.cfg["mail"]["address"] and self.mail.wants(text) and (await self.handle_mail(text) or gen != self._cancel_gen):
+            return ""
+        return None
+
+    async def handle_utterance(self, text: str, source: str = "voice") -> str | None:
         if self._approval and not self._approval.done():
             ans = self._match_answer(text)
             if ans is not None:
@@ -479,40 +519,8 @@ class Daemon:
                 return
             await self.cancel_all()
             return
-        if briefing.wanted(text) and briefing.due() and await self.morning():
-            return
-        if (on := fastpath.voice_switch(text)) is not None:
-            await self.set_voice(on)
-            return
-        if await self.media_fast(text):
-            return
-        if await self.reminder_fast(text):
-            return
-        gen = self._cancel_gen
-        done = await asyncio.get_running_loop().run_in_executor(None, fastpath.try_handle, text)
-        if gen != self._cancel_gen:
-            return
-        if done:
-            events.emit("fast", text=text, desc=done)
-            self.publish(detail=done, kind="tool")
-            self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {done}. Не повторяй это действие.]")
-            self.state = "thinking" if self.brain.busy else "idle"
-            await self.earcon("done")
-            return
-        if calendar_lane.CAL_WORDS.search(text):
-            try:
-                cal = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.handle, text)
-            except Exception as e:
-                log.warning("calendar failed: %s", e)
-                cal = (t("Не получилось открыть календарь."), None)
-            if cal and gen == self._cancel_gen:
-                reply, card = cal
-                if card:
-                    self.publish(kind="card", card=card)
-                await self.say(reply)
-                return
-        if self.cfg["mail"]["address"] and self.mail.wants(text) and (await self.handle_mail(text) or gen != self._cancel_gen):
-            return
+        if (local := await self.handle_local(text, source)) is not None:
+            return local
         if self.brain.busy:
             if self.brain.waiting_on_tool() >= SIDE_AFTER_S:
                 # the main session sits inside a long command (an upgrade, a build): an injected message would
@@ -1561,26 +1569,17 @@ class Daemon:
             elif cmd == "stop":
                 await self.cancel_all()
                 resp = {"ok": True}
+            elif cmd == "ask" and (local := await self.handle_local(req["text"], "cli")) is not None:
+                resp = {"ok": True, "result": local or t("сделано")}  # «пауза» works while the brain is busy too
             elif cmd == "ask" and self.brain.busy and not req.get("wait"):
                 await self.brain.inject(req["text"], source="cli")
                 resp = {"ok": True, "result": "(передано в текущую задачу)"}
-            elif cmd == "ask" and (on := fastpath.voice_switch(req["text"])) is not None:
-                await self.set_voice(on)  # typed or spoken, «молчи» means the same thing
-                resp = {"ok": True, "result": t("голос включён") if on else t("голос выключен")}
-            elif cmd == "ask" and briefing.wanted(req["text"]) and briefing.due() and (said := await self.morning()):
-                resp = {"ok": True, "result": said}
             elif cmd == "ask":
-                done = await asyncio.get_running_loop().run_in_executor(None, fastpath.try_handle, req["text"])
-                if done:
-                    events.emit("fast", text=req["text"], desc=done)
-                    self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{req['text']}» → {done}. Не повторяй это действие.]")
-                    resp = {"ok": True, "result": f"(мгновенно) {done}"}
-                elif req.get("silent"):
+                if req.get("silent"):
                     reply = await self.brain.ask(req["text"], source="cli")
                 else:
                     reply = await self.run_turn(req["text"], source="cli")
-                if not done:
-                    resp = {"ok": True, "result": reply}
+                resp = {"ok": True, "result": reply}
             elif cmd == "say":
                 self.stop_speaking()
                 await self.say(req["text"], force=True)  # `justday say` and voice previews are heard even when muted
