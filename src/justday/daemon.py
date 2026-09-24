@@ -1351,7 +1351,9 @@ class Daemon:
                     chosen = await self._ask_with_library(near[0], query, loop)
                     if chosen is None:
                         return {"ok": True, "done": t("хорошо, не включаю")}
-                    if chosen.get("file") and not chosen.get("url", "").startswith("http"):
+                    # Своё узнаём по пометке, а не по ссылке: у скачанного трека
+                    # в фонотеке ссылка на ютуб как раз есть — оттуда его и взяли.
+                    if chosen.get("mine"):
                         return await self.play_library(chosen["title"], count=1)
                     entries = [chosen]
                     self.music.set_loading({"title": chosen["title"], "progress": 0})
