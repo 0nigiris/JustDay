@@ -49,6 +49,7 @@ def _cost(model: str, u: dict) -> float:
 def report(days: int = 7) -> dict:
     """Расход по дням плюс стартовый контекст последней сессии."""
     since = time.time() - days * 86400
+    first_day = time.strftime("%Y-%m-%d", time.localtime(since))
     by_day: dict[str, dict] = defaultdict(lambda: {"steps": 0, "context": 0, "write": 0, "read": 0, "out": 0, "usd": 0.0})
     start_context, start_day = 0, ""
     for path in sorted(sessions_dir().glob("*.jsonl"), key=lambda p: p.stat().st_mtime):
@@ -72,6 +73,8 @@ def report(days: int = 7) -> dict:
             if not context:
                 continue
             day = str(record.get("timestamp", ""))[:10]
+            if day < first_day:  # старая сессия, дописанная сегодня: её прошлые дни здесь не нужны
+                continue
             row = by_day[day]
             row["steps"] += 1
             row["context"] += context

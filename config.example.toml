@@ -62,6 +62,8 @@ effort = "low"              # low = fast replies; heavy thinking is delegated to
 permission_mode = "auto"    # auto = classifier-reviewed autonomy; risky actions ask you
 chrome = true               # Claude in Chrome browser control (needs claude.ai login)
 resume_within_hours = 12    # keep the conversation across restarts
+tool_search = "on"          # on = tool schemas load on demand (31k start context instead of 111k); auto | off
+context_window = 200000     # conversation ceiling: history is compacted there (0 = let Claude Code decide)
 
 [workers]
 model = ""                  # model for Claude Code worker sessions, "" = your Claude Code default

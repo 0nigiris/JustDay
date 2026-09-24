@@ -397,12 +397,12 @@ class Brain:
             if self.persist:
                 events.save_state(brain_session_id=msg.session_id, brain_last_active=time.time())
             u = msg.usage or {}
-            # context: сколько контекста перечитывается на каждом шаге — главный счётчик расхода,
-            # из него видно, стоит ли начать разговор заново (`justday tokens`).
+            # in_tokens: весь контекст, прочитанный за ход (он складывается по шагам — каждый шаг
+            # перечитывает разговор целиком). Главный счётчик расхода; разбивка по дням в `justday tokens`.
             events.emit("turn_done", session=msg.session_id, turns=msg.num_turns, ms=msg.duration_ms,
                         cost_usd=msg.total_cost_usd, error=msg.is_error, subtype=msg.subtype,
-                        context=(u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
-                                 + u.get("cache_read_input_tokens", 0)),
+                        in_tokens=(u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+                                   + u.get("cache_read_input_tokens", 0)),
                         out_tokens=u.get("output_tokens", 0))
             self._turn_done.set()
         elif isinstance(msg, SystemMessage):
