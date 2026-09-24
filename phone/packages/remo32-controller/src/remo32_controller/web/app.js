@@ -1796,7 +1796,7 @@ function slider({ id, label, icon: name, value, max = 100, action }) {
   return `<div class="slider" data-slider="${esc(action)}" data-slider-max="${max}">
     <span class="ico">${icon(name)}</span>
     <input type="range" id="${esc(id)}" min="0" max="${max}" step="5" value="${v}"
-      aria-label="${esc(label)}">
+      style="--fill:${Math.round((v / max) * 100)}%" aria-label="${esc(label)}">
     <span class="val">${v}%</span>
   </div>`;
 }
@@ -2346,6 +2346,10 @@ document.addEventListener("input", (event) => {
   state.sliding = true;
   const val = box.querySelector(".val");
   if (val) val.textContent = `${event.target.value}%`;
+  // Закрашенная часть дорожки — та же величина, что и подпись: без неё
+  // ползунок выглядит пустым на любом значении.
+  const max = Number(box.dataset.sliderMax) || 100;
+  event.target.style.setProperty("--fill", `${Math.round((event.target.value / max) * 100)}%`);
 });
 
 // Палец убрали мимо ползунка (или экран перехватил жест) — запрет на

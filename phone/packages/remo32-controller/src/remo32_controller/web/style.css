@@ -1043,12 +1043,20 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
 .slider input[type="range"]::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 999px;
-  background: var(--surface-2);
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0 var(--fill, 0%),
+    var(--surface-2) var(--fill, 0%) 100%
+  );
 }
 .slider input[type="range"]::-moz-range-track {
   height: 8px;
   border-radius: 999px;
-  background: var(--surface-2);
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0 var(--fill, 0%),
+    var(--surface-2) var(--fill, 0%) 100%
+  );
 }
 .slider input[type="range"]::-webkit-slider-thumb {
   appearance: none;
