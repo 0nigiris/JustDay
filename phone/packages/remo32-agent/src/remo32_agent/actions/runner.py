@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from datetime import datetime
 
@@ -21,6 +22,7 @@ from remo32_agent.actions.models import (
     ActionConfig,
     DesktopAction,
     ExecAction,
+    MacroAction,
     ShellScriptAction,
     SystemdAction,
     TmuxAction,
@@ -109,14 +111,34 @@ class ActionRegistry:
         items = [self._describe(a, a.id in editable) for a in self._actions.values()]
         return sorted(items, key=lambda d: (d.group or "", d.name))
 
-    @staticmethod
-    def _describe(action: ActionConfig, editable: bool = False) -> ActionDescriptor:
+    def _describe(self, action: ActionConfig, editable: bool = False) -> ActionDescriptor:
         descriptor = action.descriptor()
         descriptor.available = action.is_available()
         descriptor.editable = editable
+        if isinstance(action, MacroAction):
+            # Мультидействие само по себе не запускает ничего: доступно оно
+            # ровно настолько, насколько доступны его шаги.
+            missing = self._broken_steps(action)
+            if missing:
+                descriptor.available = False
+                note = "шаги недоступны: " + ", ".join(missing)
+                descriptor.description = (
+                    f"{descriptor.description} — {note}" if descriptor.description else note
+                )
+                return descriptor
         if not descriptor.available:
             descriptor.description = _mark_unavailable(action, descriptor.description)
         return descriptor
+
+    def _broken_steps(self, macro: MacroAction) -> list[str]:
+        """Шаги, которых нет или которые на этой машине не запустятся."""
+        known = self._actions
+        broken = []
+        for step in macro.steps:
+            found = known.get(step)
+            if found is None or not found.is_available():
+                broken.append(step)
+        return broken
 
     # --- правка из интерфейса -------------------------------------------
 
@@ -180,9 +202,12 @@ class ActionExecutor:
     def registry(self) -> ActionRegistry:
         return self._registry
 
-    async def run(self, action_id: str) -> ActionResult:
+    async def run(self, action_id: str, _seen: frozenset[str] = frozenset()) -> ActionResult:
         action = self._registry.get(action_id)
         started = utcnow()
+
+        if isinstance(action, MacroAction):
+            return await self._run_macro(action, started, _seen)
 
         if not action.is_available():
             log.warning("действие недоступно", action=action_id, exe=action.executable())
@@ -234,6 +259,58 @@ class ActionExecutor:
             capture=action.captures_output(),
         )
         return _result_from_command(action_id, started, result)
+
+    async def _run_macro(
+        self, macro: MacroAction, started: datetime, seen: frozenset[str]
+    ) -> ActionResult:
+        """Шаги по порядку. Кнопка отвечает одной строкой: что удалось, где встало."""
+        if macro.id in seen:
+            # Мультидействие, которое зовёт само себя, — опечатка, а не замысел.
+            return ActionResult(
+                action_id=macro.id,
+                success=False,
+                started_at=started,
+                finished_at=utcnow(),
+                message=f"кнопка «{macro.id}» вызывает сама себя",
+            )
+        seen = seen | {macro.id}
+        done: list[str] = []
+        failed: str | None = None
+        detail = ""
+        for index, step in enumerate(macro.steps):
+            if index and macro.pause_ms:
+                await asyncio.sleep(macro.pause_ms / 1000)
+            try:
+                result = await self.run(step, seen)
+            except ActionNotFoundError:
+                failed, detail = step, "такой кнопки нет"
+                break
+            name = self._registry.get(step).name if step in self._registry else step
+            if result.success:
+                done.append(name)
+                continue
+            failed, detail = name, (result.message or "не получилось")
+            if macro.stop_on_error:
+                break
+        log.info("мультидействие", action=macro.id, done=len(done), failed=failed)
+        if failed is None:
+            message = "выполнено: " + ", ".join(done) if done else "выполнено"
+            return ActionResult(
+                action_id=macro.id,
+                success=True,
+                started_at=started,
+                finished_at=utcnow(),
+                exit_code=0,
+                message=message,
+            )
+        did = ("сделано: " + ", ".join(done) + "; ") if done else ""
+        return ActionResult(
+            action_id=macro.id,
+            success=False,
+            started_at=started,
+            finished_at=utcnow(),
+            message=f"{did}остановились на «{failed}»: {detail}"[:300],
+        )
 
     def _build_argv(self, action: ActionConfig) -> list[str]:
         """Единственное место, где описание превращается в команду."""

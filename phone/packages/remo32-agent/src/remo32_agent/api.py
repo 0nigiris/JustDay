@@ -370,7 +370,16 @@ def build_router(ctx: AgentContext) -> APIRouter:
     async def justday_player(
         command: JustDayPlayer, request_id: RequestId
     ) -> ApiResponse[dict[str, Any]]:
-        """Кнопки плеера: pause, resume, next, prev, volume и остальные."""
+        """Кнопки плеера: pause, resume, next, prev, volume и остальные.
+
+        Отдельным действием здесь же едет громкость голоса ассистента: для
+        телефона это соседний ползунок, и заводить ради него ещё один
+        маршрут значило бы разносить одно и то же по разным местам.
+        """
+        if command.action == "voice_volume":
+            return ApiResponse[dict[str, Any]].success(
+                await justday.voice_volume(int(command.value or 0)), request_id
+            )
         return ApiResponse[dict[str, Any]].success(
             await justday.player(command.action, command.value), request_id
         )

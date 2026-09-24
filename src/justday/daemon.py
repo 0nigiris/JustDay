@@ -1807,7 +1807,10 @@ class Daemon:
             elif cmd == "status":
                 resp = {"ok": True, "state": self.state, "brain_busy": self.brain.busy,
                         "session": self.brain.session_id, "wakeword": bool(self._wake), "silent": self.silent(),
-                        "mic_source": self.mic.source, "model": self.cfg["brain"]["model"]}
+                        "mic_source": self.mic.source, "model": self.cfg["brain"]["model"],
+                        # Громкость самого ассистента: телефону она нужна, чтобы
+                        # показать ползунок там же, где ползунок музыки.
+                        "volume": self.player.volume}
             elif cmd in ("approve", "deny"):
                 pending = self._approval is not None and not self._approval.done()
                 if pending:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from remo32_agent.actions.models import DesktopAction, ExecAction
+from remo32_agent.actions.models import DesktopAction, ExecAction, MacroAction
 from remo32_agent.actions.runner import ActionExecutor, ActionRegistry
 from remo32_agent.execution import CommandResult, RecordingRunner
 from remo32_agent.platforms import get_adapter
@@ -156,3 +156,63 @@ async def test_duplicate_ids_rejected_by_registry() -> None:
                 ExecAction(id="dup", name="B", argv=["true"]),
             ]
         )
+
+
+# --- мультидействие ---------------------------------------------------------
+
+
+def _macro_executor(
+    runner: RecordingRunner, **macro: object
+) -> tuple[ActionExecutor, ActionRegistry]:
+    actions = [
+        ExecAction(id="light", name="Свет", argv=["/usr/bin/true"]),
+        ExecAction(id="obs", name="OBS", argv=["/usr/bin/true"]),
+        ExecAction(id="gone", name="Нет такой программы", argv=["/nonexistent/remo32-нет"]),
+        MacroAction(id="stream", name="Начать стрим", **macro),  # type: ignore[arg-type]
+    ]
+    registry = ActionRegistry(actions)  # type: ignore[arg-type]
+    return ActionExecutor(registry, runner, get_adapter("linux")), registry
+
+
+async def test_macro_runs_steps_in_order(runner: RecordingRunner) -> None:
+    executor, _ = _macro_executor(runner, steps=["light", "obs"])
+    result = await executor.run("stream")
+
+    assert result.success
+    assert result.message == "выполнено: Свет, OBS"
+    assert [c["argv"] for c in runner.calls] == [["/usr/bin/true"], ["/usr/bin/true"]]  # type: ignore[misc]
+
+
+async def test_macro_stops_on_first_failure(runner: RecordingRunner) -> None:
+    executor, _ = _macro_executor(runner, steps=["light", "gone", "obs"])
+    result = await executor.run("stream")
+
+    assert not result.success
+    # Видно и что успело сработать, и где встало: иначе кнопка молчит.
+    assert "Свет" in result.message and "Нет такой программы" in result.message
+    assert len(runner.calls) == 1
+
+
+async def test_macro_can_keep_going_after_failure(runner: RecordingRunner) -> None:
+    executor, _ = _macro_executor(runner, steps=["gone", "obs"], stop_on_error=False)
+    result = await executor.run("stream")
+
+    assert not result.success
+    assert len(runner.calls) == 1  # недоступный шаг до запуска не доходит
+
+
+async def test_macro_does_not_call_itself(runner: RecordingRunner) -> None:
+    executor, _ = _macro_executor(runner, steps=["stream"])
+    result = await executor.run("stream")
+
+    assert not result.success
+    assert "сама себя" in result.message
+
+
+async def test_macro_is_unavailable_when_a_step_is(runner: RecordingRunner) -> None:
+    _, registry = _macro_executor(runner, steps=["light", "gone"])
+    described = registry.describe("stream")
+
+    assert not described.available
+    assert "gone" in (described.description or "")
+    assert described.steps == ["light", "gone"]

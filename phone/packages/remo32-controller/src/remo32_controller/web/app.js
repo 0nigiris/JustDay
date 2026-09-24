@@ -140,6 +140,7 @@ const state = {
   justdayHeard: "",      // что он расслышал в надиктованном: без этого непонятно, чему он ответил
   editor: null,          // состояние редактора кнопок текущего ПК
   buttonForm: null,      // черновик формы: null — форма закрыта
+  sliding: false,        // палец ведёт ползунок: перерисовка увела бы ручку из-под него
   rendering: false,
 };
 
@@ -1119,6 +1120,7 @@ function approvalBlock() {
 
 const KIND_NAMES = {
   desktop: "Приложение",
+  macro: "Несколько действий",
   exec: "Программа",
   tmux: "Команда в tmux",
   systemd_user: "Служба (пользователя)",
@@ -1128,6 +1130,7 @@ const KIND_NAMES = {
 
 const KIND_HINTS = {
   desktop: "Запускает окно на экране компьютера: браузер, игру, редактор.",
+  macro: "Одно нажатие — несколько уже готовых кнопок по порядку: открыть OBS, запустить сцену, приглушить музыку.",
   exec: "Запускает программу без графики. Окна не будет.",
   tmux: "Запускает команду в фоновой сессии tmux — она переживёт обрыв связи, и к ней можно подключиться из терминала.",
   systemd_user: "Управляет службой, настроенной у пользователя.",
@@ -1206,6 +1209,58 @@ function viewButtons() {
       и программа их не переписывает.</div>` : ""}`;
 }
 
+/* Шаги мультидействия: список уже существующих кнопок этой машины плюс
+   порядок, в котором их нажать. Своё имя шага не придумывается — иначе
+   кнопка молча сломается, когда действие переименуют. */
+function macroFields(draft) {
+  const pc = editorPc();
+  const all = (pc?.actions || []).filter((a) => a.id !== draft.id && a.kind !== "macro");
+  const steps = draft.steps || [];
+  const byId = new Map(all.map((a) => [a.id, a]));
+
+  const chosen = steps.length
+    ? `<div class="list steps">${steps.map((id, i) => {
+        const a = byId.get(id);
+        return `<div class="list-row step">
+          <span class="ico">${esc(a?.icon || "•")}</span>
+          <span class="body">
+            <span class="title">${esc(a?.name || id)}</span>
+            <span class="sub">${i + 1}${a ? "" : " · кнопки больше нет"}</span>
+          </span>
+          <button class="btn tiny" data-step-up="${i}" ${i ? "" : "disabled"} aria-label="выше">↑</button>
+          <button class="btn tiny" data-step-down="${i}" ${i === steps.length - 1 ? "disabled" : ""} aria-label="ниже">↓</button>
+          <button class="btn tiny danger" data-step-out="${i}" aria-label="убрать">✕</button>
+        </div>`;
+      }).join("")}</div>`
+    : `<div class="meta">Шагов пока нет: добавьте хотя бы один.</div>`;
+
+  return `
+    <div class="field">
+      <label>Шаги</label>
+      ${chosen}
+    </div>
+    <div class="field">
+      <label for="f-step-add">Добавить шаг</label>
+      <select id="f-step-add">
+        <option value="">— выберите кнопку —</option>
+        ${all.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}${a.group ? ` · ${esc(a.group)}` : ""}</option>`).join("")}
+      </select>
+      <div class="hint">Шаги идут сверху вниз. Мультидействие внутри мультидействия не берём.</div>
+    </div>
+    <div class="field">
+      <label for="f-pause">Пауза между шагами, мс</label>
+      <input id="f-pause" type="number" min="0" max="60000" step="100" value="${Number(draft.pause_ms) || 0}">
+      <div class="hint">Окну нужно успеть появиться. 0 — без пауз.</div>
+    </div>
+    <div class="kv">
+      <div>
+        <span class="label">Остановиться на первой ошибке</span>
+        <button class="switch ${draft.stop_on_error === false ? "" : "on"}" id="f-stop-on-error"
+          aria-pressed="${draft.stop_on_error === false ? "false" : "true"}"></button>
+      </div>
+    </div>`;
+}
+
 /* Поля, зависящие от вида действия. Отдельная функция, потому что при
    смене вида перерисовывается только этот кусок — введённое имя и значок
    при этом обязаны сохраниться. */
@@ -1232,6 +1287,8 @@ function kindFields(draft) {
       <div class="hint">Необязательно. Отсюда команда начнёт работу.</div>
     </div>`;
 
+  if (draft.kind === "macro") return macroFields(draft);
+
   if (draft.kind === "desktop" || draft.kind === "exec") return program + workdir;
 
   if (draft.kind === "tmux") {
@@ -1243,7 +1300,11 @@ function kindFields(draft) {
     </div>` + program + workdir;
   }
 
-  if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
+  if (draft.kind === "macro") {
+    body.steps = draft.steps || [];
+    body.pause_ms = Math.max(0, Math.min(60000, Number(el("f-pause")?.value) || 0));
+    body.stop_on_error = draft.stop_on_error !== false;
+  } else if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
     const verbs = ["start", "stop", "restart", "reload", "status", "is-active"];
     return `
     <div class="field">
@@ -1347,7 +1408,11 @@ function collectForm() {
   if (group) body.group = group;
   if (workdir) body.workdir = workdir;
 
-  if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
+  if (draft.kind === "macro") {
+    body.steps = draft.steps || [];
+    body.pause_ms = Math.max(0, Math.min(60000, Number(el("f-pause")?.value) || 0));
+    body.stop_on_error = draft.stop_on_error !== false;
+  } else if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
     body.unit = value("f-unit");
     body.verb = value("f-verb");
   } else if (draft.kind === "shell_script") {
@@ -1720,6 +1785,22 @@ const clock = (seconds) => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 };
 
+/* Ползунок — то, чего на пульте не хватало больше всего: громкость
+   хочется вести пальцем, а не подбирать нажатиями по десять процентов.
+
+   Значение уходит на отпускании, а не на каждое движение: иначе пока палец
+   едет, к ассистенту летит два десятка запросов. Пока палец на ползунке,
+   перерисовка запрещена — она вернула бы ручку туда, где значение было. */
+function slider({ id, label, icon: name, value, max = 100, action }) {
+  const v = Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
+  return `<div class="slider" data-slider="${esc(action)}" data-slider-max="${max}">
+    <span class="ico">${icon(name)}</span>
+    <input type="range" id="${esc(id)}" min="0" max="${max}" step="5" value="${v}"
+      aria-label="${esc(label)}">
+    <span class="val">${v}%</span>
+  </div>`;
+}
+
 /* Плеер. Кнопки те же, что на пульте, и работают они так же «умно»: пауза
    останавливает то, что играет, — видео в острове, окно с видео или музыку.
 
@@ -1767,11 +1848,14 @@ function playerCard(pc, now) {
       <button data-jarvis-player="shuffle" class="${now.shuffle ? "on" : ""}"
         aria-label="Вперемешку">${icon("shuffle")}</button>
       <button data-jarvis-volume="-10" aria-label="Тише">${icon("volume-1")}</button>
-      <span class="meta vol">${now.volume ?? ""}${now.volume == null ? "" : " %"}</span>
       <button data-jarvis-volume="10" aria-label="Громче">${icon("volume-2")}</button>
       <button data-jarvis-player="repeat" class="${now.repeat !== "off" ? "on" : ""}"
         aria-label="Повтор">${icon(now.repeat === "one" ? "repeat-1" : "repeat")}</button>
     </div>
+    ${slider({
+      id: "vol-music", label: "Громкость музыки", icon: "volume-2",
+      value: now.volume ?? 70, max: 130, action: "volume",
+    })}
     <div class="row">
       <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
       <button class="btn" data-jarvis-player="stop">${icon("circle-stop")} Остановить</button>
@@ -1840,6 +1924,11 @@ function viewJarvis() {
       <button class="btn" data-jarvis-ask="говори">${icon("volume-2")} Говори</button>
       <button class="btn" id="jarvis-say">${icon("audio-lines")} Сказать в комнате</button>
     </div>
+    ${slider({
+      id: "vol-voice", label: "Громкость голоса", icon: "audio-lines",
+      value: jd?.volume ?? 100, action: "voice_volume",
+    })}
+    <div class="meta">Это громкость самого ассистента, не системная: её и меняют чаще всего.</div>
   </section>`;
 }
 
@@ -2043,6 +2132,8 @@ async function render(force = false) {
   // Идёт запись голоса: перерисовка убрала бы полоски громкости и таймер
   // из-под пальца, а человек решил бы, что кнопка не сработала.
   if (dict.on || dict.busy) return;
+  // Палец ведёт ползунок громкости — ручку из-под него не забираем.
+  if (state.sliding && !force) return;
   state.rendering = true;
 
   const current = screenNow();
@@ -2246,8 +2337,50 @@ async function keyMenu(button) {
 
 /* Смена вида действия меняет набор полей. Введённое до этого сохраняем:
    человек уже написал название и значок, терять их из-за смены вида нельзя. */
-document.addEventListener("change", (event) => {
-  if (event.target.id !== "f-kind" || !state.buttonForm) return;
+/* Ползунки громкости. Подпись меняется сразу, а запрос уходит один раз —
+   когда палец отпустил: по событию на каждое движение мы бы завалили
+   ассистента полусотней «поставь 45, поставь 50, поставь 55». */
+document.addEventListener("input", (event) => {
+  const box = event.target.closest?.(".slider");
+  if (!box) return;
+  state.sliding = true;
+  const val = box.querySelector(".val");
+  if (val) val.textContent = `${event.target.value}%`;
+});
+
+// Палец убрали мимо ползунка (или экран перехватил жест) — запрет на
+// перерисовку снимаем, иначе пульт замрёт до следующего касания.
+for (const done of ["pointerup", "pointercancel"]) {
+  document.addEventListener(done, () => {
+    if (state.sliding) state.sliding = false;
+  });
+}
+
+document.addEventListener("change", async (event) => {
+  const box = event.target.closest?.(".slider");
+  if (box) {
+    state.sliding = false;
+    const pc = activePc();
+    if (!pc) return;
+    const level = Number(event.target.value);
+    try {
+      await player(pc.id, box.dataset.slider, level);
+      buzz(6);
+    } catch (err) {
+      toast(err.message || "не вышло", "err");
+    }
+    return;
+  }
+  if (!state.buttonForm) return;
+  if (event.target.id === "f-step-add") {
+    const id = event.target.value;
+    if (!id) return;
+    stashForm();
+    state.buttonForm.steps = [...(state.buttonForm.steps || []), id];
+    state.buttonForm.error = null;
+    return render(true);
+  }
+  if (event.target.id !== "f-kind") return;
   stashForm();
   state.buttonForm.kind = event.target.value;
   state.buttonForm.error = null;
@@ -2446,6 +2579,28 @@ document.addEventListener("click", async (event) => {
     state.form.open = true;
     return render(true);
   }
+  if (state.buttonForm && (d.stepUp || d.stepDown || d.stepOut)) {
+    stashForm();
+    const steps = [...(state.buttonForm.steps || [])];
+    const at = Number(d.stepUp ?? d.stepDown ?? d.stepOut);
+    if (d.stepOut) steps.splice(at, 1);
+    else {
+      const to = d.stepUp ? at - 1 : at + 1;
+      [steps[at], steps[to]] = [steps[to], steps[at]];
+    }
+    state.buttonForm.steps = steps;
+    buzz(6);
+    return render(true);
+  }
+  if (button.id === "f-stop-on-error") {
+    stashForm();
+    const next = state.buttonForm.stop_on_error === false;
+    state.buttonForm.stop_on_error = next;
+    button.classList.toggle("on", next);
+    button.setAttribute("aria-pressed", next ? "true" : "false");
+    buzz(6);
+    return;
+  }
   if (button.id === "f-dangerous") {
     stashForm();
     state.buttonForm.dangerous = !state.buttonForm.dangerous;
@@ -2465,6 +2620,11 @@ document.addEventListener("click", async (event) => {
     const body = collectForm();
     if (!body.name) {
       draft.error = "Без названия кнопку не найти на пульте";
+      Object.assign(draft, body);
+      return render(true);
+    }
+    if (body.kind === "macro" && !(body.steps || []).length) {
+      draft.error = "Добавьте хотя бы один шаг";
       Object.assign(draft, body);
       return render(true);
     }

@@ -1011,6 +1011,65 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   font-variant-numeric: tabular-nums;
 }
 
+/* Ползунок громкости. Дорожка высокая и ручка крупная: это трогают пальцем
+   на ходу, а не мышью. Системный вид range на Android и в вебвью разный,
+   поэтому рисуем сами. */
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px 2px;
+}
+.slider .ico { flex: none; color: var(--text-dim); display: grid; place-items: center; }
+.slider .ico .i { width: 20px; height: 20px; }
+.slider .val {
+  flex: none;
+  min-width: 48px;
+  text-align: right;
+  font-size: 14px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.slider input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  touch-action: pan-y;
+}
+.slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.slider input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.slider input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.slider input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.12); }
+
 /* ======================================================= расписание ==== */
 
 .sched { margin-bottom: 12px; }
@@ -1145,6 +1204,20 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   white-space: nowrap;
 }
 .list-row .chev { flex: none; color: var(--text-faint); font-size: 17px; }
+/* Шаги мультидействия: строка списка с тремя маленькими кнопками справа.
+   Кнопки не растягиваются — иначе название шага съедается ими на узком экране. */
+.list .step { gap: 9px; }
+.list .step .body { margin-right: 4px; }
+.btn.tiny {
+  flex: none;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 9px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+.btn.tiny[disabled] { opacity: 0.35; }
+
 .list-row.danger .title { color: var(--danger); }
 .list-row.danger .ico { background: var(--danger-soft); color: var(--danger); }
 

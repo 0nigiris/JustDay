@@ -203,7 +203,42 @@ class DesktopAction(_ActionBase):
         return self.argv[0]
 
 
+class MacroAction(_ActionBase):
+    """Несколько действий подряд по одному нажатию.
+
+    То, ради чего на пульте заводят «начать стрим»: поднять OBS, включить
+    свет, приглушить музыку. Шаги — это идентификаторы уже описанных
+    действий, поэтому мультидействие не расширяет круг того, что машина
+    умеет: оно лишь нажимает существующие кнопки по порядку.
+    """
+
+    kind: Literal[ActionKind.MACRO] = ActionKind.MACRO
+    steps: list[str] = Field(min_length=1, max_length=16, description="Идентификаторы действий")
+    pause_ms: int = Field(
+        0, ge=0, le=60_000, description="Пауза между шагами: окну нужно успеть появиться"
+    )
+    stop_on_error: bool = Field(
+        True,
+        description=(
+            "Шаг не удался — дальше не идём. Обычно это верно: следующий шаг "
+            "рассчитывает, что предыдущий сделал своё дело."
+        ),
+    )
+
+    @field_validator("steps")
+    @classmethod
+    def _sane(cls, v: list[str]) -> list[str]:
+        if any(not s.strip() for s in v):
+            raise ValueError("пустой шаг")
+        return v
+
+    def descriptor(self) -> ActionDescriptor:
+        got = super().descriptor()
+        got.steps = list(self.steps)
+        return got
+
+
 ActionConfig = Annotated[
-    ExecAction | ShellScriptAction | SystemdAction | TmuxAction | DesktopAction,
+    ExecAction | ShellScriptAction | SystemdAction | TmuxAction | DesktopAction | MacroAction,
     Field(discriminator="kind"),
 ]

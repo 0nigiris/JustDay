@@ -84,6 +84,9 @@ async def status() -> dict[str, Any]:
         "silent": state.get("silent", ""),
         "model": state.get("model", ""),
         "wakeword": bool(state.get("wakeword")),
+        # Громкость голоса ассистента — не системная и не музыкальная: её
+        # и настраивают чаще всего, поэтому она едет вместе с состоянием.
+        "volume": state.get("volume"),
         "player": player.get("music") or player.get("player") or {},
         "reminders": reminders.get("reminders") or [],
     }
@@ -101,6 +104,11 @@ async def say(text: str) -> dict[str, Any]:
 
 async def player(action: str, value: Any = None) -> dict[str, Any]:
     return await call("media", action=action, value=value)
+
+
+async def voice_volume(value: int) -> dict[str, Any]:
+    """Громкость самого ассистента (голос и сигналы), 0–100."""
+    return await call("volume", value=max(0, min(100, int(value))))
 
 
 async def dictate(audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
