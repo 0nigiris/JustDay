@@ -512,6 +512,9 @@ class Daemon:
         if (on := fastpath.voice_switch(text)) is not None:
             await self.set_voice(on)
             return t("голос включён") if on else t("голос выключен")
+        if fastpath.wants_fresh_session(text):
+            await self.brain.new_session()
+            return t("Начинаю заново.")
         if (what := fastpath.session_switch(text)) is not None:
             return await self.session_switch(what)
         if await self.media_fast(text) or await self.reminder_fast(text):

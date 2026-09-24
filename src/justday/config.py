@@ -130,6 +130,12 @@ DEFAULTS: dict = {
         "effort": "low",
         "permission_mode": "auto",
         "chrome": True,
+        # Схемы инструментов в контексте: on — подгружаются по мере надобности (стартовый контекст
+        # втрое меньше, а значит и счёт), auto — решает Claude Code, off — все схемы сразу.
+        "tool_search": "on",
+        # Потолок разговора в токенах: дойдя до него, Claude Code сжимает историю и продолжает.
+        # 200 000 — окно, за которым начинается вдвое более дорогой тариф; 0 = как решит Claude Code.
+        "context_window": 200000,
         # Resume the previous conversation if it was active within this many hours.
         "resume_within_hours": 12,
         "claude_cli": "claude",

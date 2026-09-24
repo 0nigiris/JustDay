@@ -129,6 +129,22 @@ def session_switch(text: str) -> str | None:
     return "restore" if BACK.match(t) else None
 
 
+# «Начни заново» — разговор с чистого листа: предыдущий контекст больше не перечитывается
+# на каждом шаге, а значит следующая просьба обойдётся в разы дешевле.
+# Голое «заново» сюда не входит: это часто «переделай то же самое», а не «забудь всё».
+FRESH = re.compile(r"^((начни|начнем|начнём|поговорим)( разговор)? (заново|с нуля|по новой)|с нуля|по новой|"
+                   r"нов(ый|ая) (разговор|сессия|тема)|начни новый разговор|"
+                   r"забудь (весь )?(разговор|этот разговор|о чем мы говорили|о чём мы говорили)|"
+                   r"сбрось (контекст|разговор|сессию)|"
+                   r"start (over|fresh|a new (chat|conversation|session))|new (chat|conversation|session)|"
+                   r"forget (this|our) (chat|conversation|talk))$")
+
+
+def wants_fresh_session(text: str) -> bool:
+    """«Начни заново», «сбрось контекст» — разговор начинается с чистого листа."""
+    return bool(FRESH.match(_clean(text)))
+
+
 def voice_switch(text: str) -> bool | None:
     """True for «говори», False for «молчи», None when the phrase is not about the voice at all."""
     t = _clean(text)

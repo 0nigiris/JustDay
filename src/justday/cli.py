@@ -307,6 +307,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
+    sp = sub.add_parser("tokens", help="во что обходится разговор: токены и деньги по дням")
+    sp.add_argument("--days", type=int, default=7)
+    sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("recent", help="recently used files and Claude Code projects")
     sp.add_argument("--hours", type=float, default=48)
     sp = sub.add_parser("claude", help="Claude Code worker sessions")
@@ -501,6 +504,24 @@ def main(argv: list[str] | None = None) -> None:
         _print(desktop.windows(a.action, " ".join(a.query)))
     elif a.cmd == "screenshot":
         _print(screenshot(a.all, a.full))
+    elif a.cmd == "tokens":
+        from . import usage
+
+        got = usage.report(a.days)
+        if a.json:
+            _print(got)
+            return
+        n = usage.spaced
+        print(f"Расход мозга за {a.days} дн.  (шаг — один запрос к модели, их в ответе обычно несколько)")
+        print(f"{'дата':<12}{'шагов':>7}{'контекст/шаг':>15}{'ответ':>9}{'≈$':>9}")
+        for row in [*got["days"], {"day": "всего", **got["total"]}]:
+            day = row["day"][5:] if row["day"][:2].isdigit() else row["day"]
+            print(f"{day:<12}{row['steps']:>7}{n(row['per_step']):>15}{n(row['out']):>9}{row['usd']:>9.2f}")
+        window = config.load()["brain"]["context_window"]
+        print(f"\nстартовый контекст последней сессии: {n(got['start_context'])} токенов")
+        if window:
+            print(f"потолок разговора: {n(window)} токенов, дальше история сжимается")
+        print("разговор с нуля — «начни заново»: короткий контекст стоит в разы дешевле длинного")
     elif a.cmd == "recent":
         from . import desktop
 

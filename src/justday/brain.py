@@ -124,6 +124,19 @@ def humanize_tool(name: str, inp: dict) -> str:
     return describe_tool(name, inp)
 
 
+def _tool_search_env(mode: str) -> dict[str, str]:
+    """on — схемы всегда по требованию, auto — на усмотрение Claude Code, off — все сразу."""
+    if mode == "off":
+        return {}
+    return {"ENABLE_TOOL_SEARCH": "auto" if mode == "auto" else "1"}
+
+
+def _window_env(window: int) -> dict[str, str]:
+    """Потолок разговора: за 200 тысяч токенов начинается вдвое более дорогой тариф, а дойдя
+    до потолка, Claude Code сжимает историю сам и разговор продолжается с короткого пересказа."""
+    return {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(int(window))} if window else {}
+
+
 class Brain:
     def __init__(
         self,
@@ -187,8 +200,11 @@ class Brain:
             # kwin keyboard_type*: layout-dependent / pastes twice and presses Enter twice — `act` "type" instead
             disallowed_tools=["mcp__plugin_justday_kwin__screenshot", "mcp__plugin_justday_kwin__launch_app",
                               "mcp__plugin_justday_kwin__keyboard_type", "mcp__plugin_justday_kwin__keyboard_type_unicode"],
-            # load MCP tool schemas upfront when they fit: one round-trip less
-            env={"ENABLE_TOOL_SEARCH": "auto", **providers.env(self.cfg)},
+            # Схемы инструментов — по требованию: со всеми MCP сразу стартовый контекст 111 тысяч
+            # токенов, с поиском по инструментам — 43 тысячи, и столько же платится на каждом шаге.
+            # Цена — один лишний шаг, когда инструмент понадобился впервые.
+            env={**_tool_search_env(b.get("tool_search", "on")), **_window_env(b.get("context_window", 0)),
+                 **providers.env(self.cfg)},
             can_use_tool=self._can_use_tool,
             resume=resume,
             extra_args=extra,
@@ -380,8 +396,14 @@ class Brain:
             self._tool_since = None
             if self.persist:
                 events.save_state(brain_session_id=msg.session_id, brain_last_active=time.time())
+            u = msg.usage or {}
+            # context: сколько контекста перечитывается на каждом шаге — главный счётчик расхода,
+            # из него видно, стоит ли начать разговор заново (`justday tokens`).
             events.emit("turn_done", session=msg.session_id, turns=msg.num_turns, ms=msg.duration_ms,
-                        cost_usd=msg.total_cost_usd, error=msg.is_error, subtype=msg.subtype)
+                        cost_usd=msg.total_cost_usd, error=msg.is_error, subtype=msg.subtype,
+                        context=(u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+                                 + u.get("cache_read_input_tokens", 0)),
+                        out_tokens=u.get("output_tokens", 0))
             self._turn_done.set()
         elif isinstance(msg, SystemMessage):
             if msg.subtype == "init":
