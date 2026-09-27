@@ -151,6 +151,22 @@ class TTS:
             pace = ""
         return " ".join(part for part in (style, pace) if part)
 
+    def native_pace(self) -> float:
+        """Насколько быстрее модель говорит сама, когда её об этом просят.
+
+        Замер на одной фразе: 8,3 с обычным темпом против 6,9 с по просьбе —
+        около 1,2. Но от фразы к фразе выходит по-разному, поэтому засчитываем
+        осторожные 1,12: остаток доберёт растяжение, и оно будет мягким.
+        """
+        speed = self.speed
+        if speed >= 1.3:
+            return 1.2
+        if speed >= 1.08:
+            return 1.12
+        if speed <= 0.9:
+            return 0.92
+        return 1.0
+
     async def stream(self, sentence: str):
         """Neural voice (justday-voice service): yields int16 PCM bytes at NEURAL_RATE as they are generated.
         Raises OSError when the service is unavailable (the caller falls back to Silero)."""
