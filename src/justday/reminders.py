@@ -30,7 +30,11 @@ TIMER_WORDS = re.compile(r"\b(таймер\w*|timers?)\b", re.I)
 ALARM_WORDS = re.compile(r"\b(будильник\w*|разбуди\w*|подъ[ёе]м|alarms?|wake me)\b", re.I)
 REMIND_WORDS = re.compile(r"\b(напомн\w*|напоминани\w*|remind\w*)\b", re.I)
 CANCEL_WORDS = re.compile(r"\b(отмени|убери|удали|выключи|сбрось|останови|cancel|stop|delete)\b", re.I)
-LEFT_WORDS = re.compile(r"\b(сколько|остал\w+|how (much|long)|left)\b", re.I)
+LEFT_WORDS = re.compile(r"\b(сколько|остал\w+|каки\w+|как\w+ там|есть ли|покажи|список|перечисли|"
+                        r"how (much|long)|what|which|list|show|left)\b", re.I)
+# Существительное, а не глагол: «сколько осталось на таймере» — про таймер,
+# «напомни, что мне осталось сделать» — обычная просьба, её ведёт модель.
+THING_WORDS = re.compile(r"\b(таймер\w*|будильник\w*|напоминани\w*|timers?|alarms?|reminders?)\b", re.I)
 
 
 def _load() -> list[dict]:
@@ -148,7 +152,7 @@ def parse(text: str) -> dict | None:
         return None
     if CANCEL_WORDS.search(low):
         return {"action": "cancel", "which": low}
-    if LEFT_WORDS.search(low):
+    if LEFT_WORDS.search(low) and THING_WORDS.search(low):
         return {"action": "list"}
     at = parse_time(low)
     span = None if at else parse_span(low)
