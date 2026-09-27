@@ -114,12 +114,17 @@ async def voice_volume(value: int) -> dict[str, Any]:
     return await call("volume", value=max(0, min(100, int(value))))
 
 
-async def dictate(audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
+async def dictate(
+    audio: bytes, suffix: str = ".webm", *, to_inbox: bool = False, created: float = 0.0
+) -> dict[str, Any]:
     """Надиктованное с телефона. Звук ложится во временный файл и распознаётся ассистентом —
     той же моделью, что слушает микрофон на столе. Файл удаляется сразу после ответа:
     записи голоса не накапливаются нигде.
 
-    Распознавание может занять несколько секунд, поэтому ждём столько же, сколько и просьбу."""
+    Распознавание может занять несколько секунд, поэтому ждём столько же, сколько и просьбу.
+
+    `to_inbox` — запись, наговоренная без связи: её не выполняют сразу, а кладут в список
+    сообщений. Час спустя «поставь таймер на десять минут» значит уже не то, что значило."""
     # mkstemp, а не NamedTemporaryFile: файл должен пережить запись и дожить до конца
     # распознавания, а закрыть его нужно раньше — читает его другой процесс. Права 0600
     # ставит сам mkstemp, так что чужой пользователь запись не прочтёт.
@@ -127,7 +132,9 @@ async def dictate(audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(audio)
-        return await call("dictate", path=path, timeout=ASK_TIMEOUT)
+        return await call(
+            "dictate", path=path, inbox=to_inbox, created=created, timeout=ASK_TIMEOUT
+        )
     finally:
         with contextlib.suppress(OSError):
             os.unlink(path)

@@ -37,9 +37,12 @@ class TestАгент:
     def test_запись_уходит_ассистенту(self, agent_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         видел: dict[str, Any] = {}
 
-        async def fake(audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
+        async def fake(
+            audio: bytes, suffix: str = ".webm", *, to_inbox: bool = False, created: float = 0.0
+        ) -> dict[str, Any]:
             видел["bytes"] = audio
             видел["suffix"] = suffix
+            видел["to_inbox"] = to_inbox
             return {"ok": True, "text": "поставь таймер", "result": "готово"}
 
         monkeypatch.setattr("remo32_agent.justday.dictate", fake)
@@ -133,9 +136,17 @@ class TestКонтроллер:
     ) -> None:
         видел: dict[str, Any] = {}
 
-        async def fake(self: object, audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
+        async def fake(
+            self: object,
+            audio: bytes,
+            suffix: str = ".webm",
+            *,
+            to_inbox: bool = False,
+            created: float = 0.0,
+        ) -> dict[str, Any]:
             видел["bytes"] = audio
             видел["suffix"] = suffix
+            видел["to_inbox"] = to_inbox
             return {"ok": True, "text": "включи музыку", "result": "включаю"}
 
         monkeypatch.setattr(

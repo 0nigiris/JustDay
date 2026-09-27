@@ -182,6 +182,64 @@ function restoreState() {
 
 const outbox = () => store.json(KEY_OUTBOX, []);
 
+/* Записи голоса ждут связи в IndexedDB: в localStorage двоичное не положишь,
+   а минута речи весит под мегабайт. Здесь только то, что ещё не доставлено, —
+   отданное удаляется сразу. */
+const VOICE_DB = "remo32-voice";
+
+function voiceStore(mode) {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(VOICE_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("clips", { keyPath: "id" });
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      resolve(db.transaction("clips", mode).objectStore("clips"));
+    };
+  });
+}
+
+const dbDone = (request) => new Promise((resolve, reject) => {
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+async function keepVoice(blob, suffix, seconds, pcId) {
+  try {
+    const clips = await voiceStore("readwrite");
+    const id = `${Date.now()}`;
+    await dbDone(clips.add({ id, blob, suffix, seconds, pc: pcId || "", at: Date.now() / 1000 }));
+    // В общей очереди запись видна строкой, чтобы карточка «ждут отправки»
+    // показывала и голос тоже.
+    const items = outbox();
+    items.push({ id, voice: true, seconds, text: `голосом, ${dictClock(Math.round(seconds))}`,
+      pc: pcId || "", at: Date.now() / 1000 });
+    store.setJson(KEY_OUTBOX, items.slice(-50));
+    return true;
+  } catch (error) {
+    console.warn("[remo32] запись не сохранилась:", error);
+    return false;
+  }
+}
+
+async function takeVoice(id) {
+  try {
+    const clips = await voiceStore("readonly");
+    return await dbDone(clips.get(id));
+  } catch {
+    return null;
+  }
+}
+
+async function forgetVoice(id) {
+  try {
+    const clips = await voiceStore("readwrite");
+    await dbDone(clips.delete(id));
+  } catch {
+    /* нечего удалять — и хорошо */
+  }
+}
+
 /* Сообщение, оставленное без связи. Уйдёт при первой встрече с компьютером —
    ассистент прочитает его сам и доложит, когда проснётся. */
 function queueMessage(text, pcId) {
@@ -191,7 +249,9 @@ function queueMessage(text, pcId) {
 }
 
 function dropMessage(id) {
-  store.setJson(KEY_OUTBOX, outbox().filter((item) => item.id !== id));
+  const item = outbox().find((entry) => entry.id === id);
+  if (item?.voice) forgetVoice(id);
+  store.setJson(KEY_OUTBOX, outbox().filter((entry) => entry.id !== id));
 }
 
 /* Отдаём накопившееся. Что не ушло — остаётся в очереди: лучше передать
@@ -202,12 +262,25 @@ async function flushOutbox(pcId) {
   let sent = 0;
   for (const item of items) {
     try {
-      await api(`/api/pcs/${encodeURIComponent(pcId)}/justday/inbox`,
-        { method: "POST", body: JSON.stringify({ text: item.text, created: item.at }) });
+      if (item.voice) {
+        const clip = await takeVoice(item.id);
+        if (!clip) {  // запись потерялась (чистка данных) — строку тоже убираем
+          dropMessage(item.id);
+          continue;
+        }
+        const query = `suffix=${encodeURIComponent(clip.suffix)}&inbox=true&created=${clip.at}`;
+        await api(`/api/pcs/${encodeURIComponent(pcId)}/justday/dictate?${query}`,
+          { method: "POST", body: clip.blob, raw: true });
+        await forgetVoice(item.id);
+      } else {
+        await api(`/api/pcs/${encodeURIComponent(pcId)}/justday/inbox`,
+          { method: "POST", body: JSON.stringify({ text: item.text, created: item.at }) });
+      }
       dropMessage(item.id);
       sent += 1;
     } catch (error) {
       if (error.offline) break;
+      if (item.voice) await forgetVoice(item.id);
       dropMessage(item.id);  // компьютер ответил «не возьму» — второй раз не поможет
     }
   }
@@ -1905,6 +1978,17 @@ async function dictSend() {
 
   const pc = activePc();
   if (!pc) return;
+  const seconds = (Date.now() - dict.started) / 1000;
+  // Без связи запись не пропадает: она ложится в очередь и уедет, когда
+  // компьютер отзовётся. Распознает он же — на телефоне распознавать нечем.
+  if (!state.online || pc.state !== "online") {
+    const kept = await keepVoice(blob, dict.suffix, seconds, pc.id);
+    toast(kept ? "Записал. Передам, когда компьютер появится" : "Не удалось сохранить запись",
+      kept ? "ok" : "err");
+    buzz(kept ? [12, 40, 12] : 30);
+    await render(true);
+    return;
+  }
   dict.busy = true;
   state.justdayHeard = "";
   state.justdayAnswer = "";
@@ -2084,7 +2168,8 @@ function outboxCard() {
   return `<section class="card">
     <div class="card-head"><h2>Ждут отправки</h2><span class="meta">${items.length}</span></div>
     <div class="list">${items.map((item) => `<div class="step">
-      <div><b>${esc(item.text)}</b><span class="meta">${esc(ago(Date.now() / 1000 - item.at))}</span></div>
+      <div><b>${item.voice ? `${icon("mic")} ${esc(item.text)}` : esc(item.text)}</b>
+        <span class="meta">${esc(ago(Date.now() / 1000 - item.at))}</span></div>
       <button class="btn tiny" data-outbox-drop="${esc(item.id)}" aria-label="Убрать">${icon("x")}</button>
     </div>`).join("")}</div>
     <div class="meta">Уйдёт само, как только компьютер окажется в сети: ассистент прочитает
@@ -2098,13 +2183,15 @@ function viewJarvisOffline(pc) {
   return `
   <section class="hero">
     <div class="hero-state"><span class="dot"></span> ${esc(pc ? pc.name : "компьютер")} не в сети</div>
+    ${micBlock()}
     <form id="jarvis-form" class="jarvis-form">
       <input type="text" id="jarvis-text" placeholder="Оставить сообщение ассистенту" autocomplete="off"
         enterkeyhint="send">
       <button class="btn primary" type="submit" aria-label="Записать">${icon("chevron-right")}</button>
     </form>
-    <div class="meta">Он прочитает это, когда компьютер включится, и сам скажет,
-      что сделал, а что отложил.</div>
+    <div class="meta">Скажите или напишите — он прочитает, когда компьютер включится,
+      и сам решит, что сделать сейчас, а что отложить. Распознавание всё равно на компьютере:
+      запись подождёт его в телефоне.</div>
   </section>
   ${outboxCard()}
   ${plansCard()}`;

@@ -136,3 +136,36 @@ class TestОболочкаБезСети:
 def test_оболочка_доступна_без_входа(anon, path: str) -> None:  # type: ignore[no-untyped-def]
     """Иначе приложение без связи показало бы экран входа вместо пульта."""
     assert anon.get(path).status_code == 200
+
+
+class TestГолосБезСвязи:
+    """Наговорённое в дороге: распознаёт компьютер, но выполнять сразу нельзя."""
+
+    def test_запись_ложится_в_список_а_не_выполняется(self, agent_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        видел: dict[str, Any] = {}
+
+        async def fake_call(command: str, **payload: Any) -> dict[str, Any]:
+            видел.update(cmd=command, **payload)
+            return {"ok": True, "text": "поставь обновление", "id": "x", "pending": 1}
+
+        monkeypatch.setattr("remo32_agent.justday.call", fake_call)
+        response = agent_client.post(
+            "/api/justday/dictate?inbox=true&created=1700000000",
+            content=b"\x1a\x45\xdf\xa3" + b"opus" * 400,
+        )
+        assert response.status_code == 200
+        assert видел["cmd"] == "dictate"
+        # Главное: пометка «в список» и время записи доезжают до ассистента.
+        assert видел["inbox"] is True
+        assert видел["created"] == 1700000000.0
+
+    def test_обычная_надиктовка_выполняется_как_раньше(self, agent_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        видел: dict[str, Any] = {}
+
+        async def fake_call(command: str, **payload: Any) -> dict[str, Any]:
+            видел.update(**payload)
+            return {"ok": True, "text": "включи музыку", "result": "включаю"}
+
+        monkeypatch.setattr("remo32_agent.justday.call", fake_call)
+        agent_client.post("/api/justday/dictate", content=b"\x1a\x45\xdf\xa3" + b"opus" * 400)
+        assert видел["inbox"] is False

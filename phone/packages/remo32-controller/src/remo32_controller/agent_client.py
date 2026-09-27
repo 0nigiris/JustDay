@@ -222,13 +222,19 @@ class AgentClient:
         )
         return got
 
-    async def justday_dictate(self, audio: bytes, suffix: str = ".webm") -> dict[str, Any]:
+    async def justday_dictate(
+        self, audio: bytes, suffix: str = ".webm", *, to_inbox: bool = False, created: float = 0.0
+    ) -> dict[str, Any]:
         """Запись голоса уходит на компьютер как есть: контроллер её не хранит и не читает."""
+        params: dict[str, Any] = {"suffix": suffix}
+        if to_inbox:  # наговорено без связи: не выполнять сейчас, а положить в список
+            params["inbox"] = "true"
+            params["created"] = created
         got: dict[str, Any] = await self._request(
             "POST",
             "/api/justday/dictate",
             content=audio,
-            params={"suffix": suffix},
+            params=params,
             timeout=190.0,
         )
         return got

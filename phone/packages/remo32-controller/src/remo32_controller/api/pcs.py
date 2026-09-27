@@ -241,6 +241,8 @@ async def justday_dictate(
     _session: Session,
     request_id: RequestId,
     suffix: str = Query(".webm", max_length=8, pattern=r"^\.[a-z0-9]{2,6}$"),
+    inbox: bool = Query(False, description="Наговорено без связи: положить в список, не выполнять"),
+    created: float = Query(0.0, description="Когда записали на телефоне (unix-время)"),
 ) -> ApiResponse[dict[str, Any]]:
     """Надиктованное с телефона: запись уезжает на ПК, ответ приходит как на обычную просьбу."""
     audio = await request.body()
@@ -248,9 +250,12 @@ async def justday_dictate(
         raise ActionInvalidError("пустая запись")
     if len(audio) > DICTATE_LIMIT:
         raise ActionInvalidError("запись слишком длинная")
-    log.info("надиктовка", pc_id=pc_id, bytes=len(audio))
+    log.info("надиктовка", pc_id=pc_id, bytes=len(audio), inbox=inbox)
     return ApiResponse[dict[str, Any]].success(
-        await _registry(request).get(pc_id).client.justday_dictate(audio, suffix), request_id
+        await _registry(request)
+        .get(pc_id)
+        .client.justday_dictate(audio, suffix, to_inbox=inbox, created=created),
+        request_id,
     )
 
 

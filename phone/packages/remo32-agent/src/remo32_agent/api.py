@@ -461,6 +461,10 @@ def build_router(ctx: AgentContext) -> APIRouter:
         request: Request,
         request_id: RequestId,
         suffix: str = Query(".webm", max_length=8, pattern=r"^\.[a-z0-9]{2,6}$"),
+        inbox: bool = Query(
+            False, description="Наговорено без связи: не выполнять, а положить в список"
+        ),
+        created: float = Query(0.0, description="Когда записали на телефоне (unix-время)"),
     ) -> ApiResponse[dict[str, Any]]:
         """Звук с телефона. Распознаёт ассистент на этой машине — наружу запись не уходит."""
         audio = await request.body()
@@ -468,7 +472,9 @@ def build_router(ctx: AgentContext) -> APIRouter:
             raise ActionInvalidError("пустая запись")
         if len(audio) > 8 * 1024 * 1024:  # минута речи весит около 700 КБ
             raise ActionInvalidError("запись слишком длинная")
-        return ApiResponse[dict[str, Any]].success(await justday.dictate(audio, suffix), request_id)
+        return ApiResponse[dict[str, Any]].success(
+            await justday.dictate(audio, suffix, to_inbox=inbox, created=created), request_id
+        )
 
     @router.post(
         "/api/justday/session/{action}",

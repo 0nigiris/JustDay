@@ -687,8 +687,12 @@ class Daemon:
             return ""
         return self.stt.transcribe(np.frombuffer(raw, dtype=np.int16))
 
-    async def dictate(self, path: str) -> dict:
-        """Надиктованное с телефона: распознать здесь и выполнить, как сказанное вслух."""
+    async def dictate(self, path: str, to_inbox: bool = False, created: float = 0.0) -> dict:
+        """Надиктованное с телефона: распознать здесь и выполнить, как сказанное вслух.
+
+        `to_inbox` — запись, наговоренная без связи: выполнять её сейчас поздно и опасно
+        («выключи компьютер», сказанное час назад, к делу уже не относится). Такое ложится
+        в список сообщений, и ассистент разберётся с ним, когда доложит хозяину."""
         loop = asyncio.get_running_loop()
         self.state = "transcribing"
         try:
@@ -698,6 +702,11 @@ class Daemon:
         if not text:
             events.emit("dictate_empty")
             return {"ok": False, "error": t("Не расслышал.")}
+        if to_inbox:
+            rec = inbox.add(text, "phone-voice", created)
+            events.emit("inbox_add", source="phone-voice", text=text[:200])
+            self._inbox_soon()
+            return {"ok": True, "text": text, "id": rec["id"], "pending": len(inbox.pending())}
         events.emit("heard", text=text, source="phone")
         self.publish(kind="heard", detail=text)
         local = await self.handle_local(text, "phone")
@@ -1971,7 +1980,8 @@ class Daemon:
             elif cmd == "job_stop":
                 resp = {"ok": self.jobs.stop(req.get("id", ""))}
             elif cmd == "dictate":  # звук с телефона: распознаём здесь и выполняем как обычную просьбу
-                resp = await self.dictate(req.get("path", ""))
+                resp = await self.dictate(req.get("path", ""), bool(req.get("inbox")),
+                                          float(req.get("created") or 0))
             elif cmd == "session":  # «я ушёл» from the island, the phone or the command line
                 from . import session as session_mod
 
