@@ -104,6 +104,73 @@ def run(scene: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "scene": scene["name"], "opened": opened, "closed": closed, "failed": failed}
 
 
+def save(scene: dict[str, Any]) -> dict[str, Any]:
+    """Дописать сценарий в config.toml — так его заводит сам ассистент.
+
+    Файл принадлежит человеку: остальное в нём не трогаем, новый сценарий
+    дописывается в конец отдельной таблицей, как если бы его написали руками.
+    Сценарий с тем же именем заменяется целиком.
+    """
+    name = " ".join(str(scene.get("name") or "").split())
+    if not name:
+        raise ValueError("у сценария должно быть имя")
+    lines = []
+    try:
+        lines = config.CONFIG_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        pass
+    lines = _drop(lines, name)
+    block = ["", "[[scenes]]", f'name = "{name}"']
+    for key in ("phrases", "open", "close"):
+        values = [str(v) for v in (scene.get(key) or []) if str(v).strip()]
+        if values:
+            block.append(f"{key} = [" + ", ".join(f'"{v}"' for v in values) + "]")
+    # Команд (`run`) здесь намеренно нет: их пишет человек руками, осознанно.
+    for key in ("music", "say"):
+        if scene.get(key):
+            block.append(f'{key} = "{scene[key]}"')
+    if scene.get("silent") is not None:
+        block.append(f"silent = {'true' if scene['silent'] else 'false'}")
+    config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config.CONFIG_FILE.write_text("\n".join([*lines, *block]).strip() + "\n", encoding="utf-8")
+    return {"ok": True, "name": name, "file": str(config.CONFIG_FILE)}
+
+
+def _drop(lines: list[str], name: str) -> list[str]:
+    """Убрать прежний сценарий с таким именем — и только его."""
+    out: list[str] = []
+    i = 0
+    same = re.compile(rf'\s*name\s*=\s*"{re.escape(name)}"\s*$')
+    while i < len(lines):
+        if lines[i].strip() != "[[scenes]]":
+            out.append(lines[i])
+            i += 1
+            continue
+        end = i + 1
+        while end < len(lines) and not lines[end].lstrip().startswith("["):
+            end += 1
+        block = lines[i:end]
+        if not any(same.match(b) for b in block):
+            out += block
+        i = end
+    while out and not out[-1].strip():
+        out.pop()
+    return out
+
+
+def forget(name: str) -> dict[str, Any]:
+    """Убрать сценарий из config.toml."""
+    try:
+        lines = config.CONFIG_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {"ok": False, "error": "нет файла настроек"}
+    kept = _drop(lines, name)
+    if len(kept) == len(lines):
+        return {"ok": False, "error": f"сценария «{name}» нет"}
+    config.CONFIG_FILE.write_text("\n".join(kept).strip() + "\n", encoding="utf-8")
+    return {"ok": True, "name": name}
+
+
 def summary(result: dict[str, Any]) -> str:
     """Одна фраза о том, что произошло: её и говорят вслух."""
     parts = []

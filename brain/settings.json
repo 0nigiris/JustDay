@@ -99,7 +99,9 @@
       "Bash(justday test:*)",
       "Bash(justday plan:*)",
       "Bash(justday note:*)",
-      "Bash(justday inbox:*)"
+      "Bash(justday inbox:*)",
+      "Bash(justday scene:*)",
+      "Bash(justday diary:*)"
     ],
     "ask": [
       "Bash(rm -rf:*)",

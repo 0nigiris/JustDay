@@ -307,9 +307,15 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
-    sp = sub.add_parser("scene", help="сценарии: list | run <имя или фраза>")
-    sp.add_argument("action", nargs="?", choices=["list", "run"], default="list")
+    sp = sub.add_parser("scene", help="сценарии: list | run <имя> | add <имя> | forget <имя>")
+    sp.add_argument("action", nargs="?", choices=["list", "run", "add", "forget"], default="list")
     sp.add_argument("which", nargs="*")
+    sp.add_argument("--phrase", action="append", default=[], help="фраза, которой зовут сценарий")
+    sp.add_argument("--open", action="append", default=[], help="что открыть")
+    sp.add_argument("--close", action="append", default=[], help="что закрыть")
+    sp.add_argument("--music", default="", help="что включить («моя» = фонотека)")
+    sp.add_argument("--say", default="", help="что сказать вслух")
+    sp.add_argument("--silent", choices=["on", "off"], help="замолчать на время сценария")
     sp = sub.add_parser("plan", help="планы в Obsidian: add | list | done | open")
     sp.add_argument("action", nargs="?", choices=["add", "list", "done", "open"], default="list")
     sp.add_argument("text", nargs="*")
@@ -527,6 +533,16 @@ def main(argv: list[str] | None = None) -> None:
 
         if a.action == "run":
             _print(control("scene_run", id=" ".join(a.which), timeout=60))
+        elif a.action == "add":
+            got = scenes.save({"name": " ".join(a.which), "phrases": a.phrase, "open": a.open,
+                               "close": a.close, "music": a.music, "say": a.say,
+                               "silent": None if a.silent is None else a.silent == "on"})
+            control("reload_settings", timeout=10)
+            _print(got)
+        elif a.action == "forget":
+            got = scenes.forget(" ".join(a.which))
+            control("reload_settings", timeout=10)
+            _print(got)
         else:
             _print({"scenes": [{"id": s["id"], "name": s["name"], "phrases": s["phrases"],
                                 "open": s["open"], "close": s["close"]} for s in scenes.all_scenes()]})
