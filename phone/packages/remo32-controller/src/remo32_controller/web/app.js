@@ -750,7 +750,9 @@ function powerFor(pc) {
 }
 
 function deckButton(pc, action) {
-  const off = action.available === false;
+  // Без связи кнопка всё равно показывается — так видно, что пульт на месте
+  // и чего ждать, когда компьютер вернётся, — но нажимать её нечем.
+  const off = action.available === false || !state.online || pc.state === "offline" || pc.state === "unknown";
   return `<button class="key ${action.dangerous ? "danger" : ""} ${isFavorite(pc.id, action.id) ? "fav" : ""}"
     data-key-pc="${esc(pc.id)}" data-key-action="${esc(action.id)}"
     ${off ? "disabled" : ""}
