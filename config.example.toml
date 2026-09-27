@@ -65,6 +65,10 @@ resume_within_hours = 12    # keep the conversation across restarts
 tool_search = "on"          # on = tool schemas load on demand (31k start context instead of 111k); auto | off
 context_window = 200000     # conversation ceiling: history is compacted there (0 = let Claude Code decide)
 
+[notes]
+# vault = ""                # Obsidian vault for plans and notes ("" = the one Obsidian has open)
+# plans = "Планы.md"        # the checklist file inside it
+
 [workers]
 model = ""                  # model for Claude Code worker sessions, "" = your Claude Code default
 auto_review = true          # when a worker finishes, JustDay checks its work and reports

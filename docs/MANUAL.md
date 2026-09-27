@@ -235,6 +235,17 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 
 Имя ищется так: детектор речи замечает начало фразы, и Whisper распознаёт её первые 1,6 секунды. Это происходит только на компьютере, звук никуда не уходит и не сохраняется. Пока JustDay говорит сам, имя не ищется, чтобы он не разбудил себя. Отключить только имена: «По имени» в тех же настройках (`wakeword.names = false`). С видеокартой распознавание начала фразы занимает доли секунды, без неё около секунды.
 
+**Если просыпается сам по себе.** Чаще всего виноваты колонки: микрофон слышит и их, поэтому «Джарвис» из ролика зовёт его так же, как вы. Что с этим сделано и что можно докрутить:
+
+```bash
+justday wake                 # кто будит и сколько раз впустую (за 3 дня)
+justday config set wakeword.threshold 0.6                 # строже к «Hey Jarvis»
+justday config set wakeword.threshold_while_playing 0.8   # строже, пока играет звук
+justday config set wakeword.names false                   # совсем не просыпаться по имени
+```
+
+Пока играет музыка или видео, планка поднимается сама (`threshold_while_playing`, по умолчанию 0,7 против обычных 0,5) — и для «Hey Jarvis», и для имени, услышанного в речи. После пустого пробуждения полминуты слушает строже: ложные срабатывания приходят сериями. Ещё одна защита — «Под мой голос» (`voiceprint.mode = wake`): чужой голос из ролика не разбудит, даже если имя произнесено чётко.
+
 ### Dynamic Island сверху экрана
 Чёрный «остров» на [Quickshell](https://quickshell.org) (`island/`), который плавно меняет размер под содержимое:
 - **спрятан**, пока JustDay простаивает; **наведите курсор на верхний край** по центру экрана — выедет плашка с именем и временем;
@@ -545,8 +556,43 @@ systemctl --user restart justday && justday new-session   # применить
 | Синонимы приложений для мгновенного пути | `[apps.aliases]` в `~/.config/justday/config.toml` | JustDay дописывает, когда вы говорите, как что называете |
 | Журнал всех просьб, ответов и действий | `~/.local/state/justday/events.jsonl` | демон; по нему JustDay отвечает на «что мы делали вчера» |
 | Текущий разговор | сессия Claude Code; восстанавливается после перезапуска в течение 12 часов | Claude Code |
+| Планы и заметки | хранилище Obsidian (`Планы.md` и отдельные заметки) | JustDay по просьбе «запиши», «в планы»; и вы руками |
+| Сообщения, оставленные с телефона без связи | `~/.local/state/justday/inbox.jsonl` | пульт, когда компьютер был выключен |
 
 Команды: `justday memory` (показать всё), `justday memory path`, `justday memory edit`, `justday new-session` (забыть разговор, память останется). В настройках острова (раздел «Память») заметки можно читать, править, удалять (в корзину) и добавлять свои, там же редактируется профиль.
+
+### Планы — в Obsidian
+
+Всё, что «на потом», JustDay пишет в ваше хранилище Obsidian обычным markdown: файл правится руками, и ассистент видит правки сразу.
+
+```bash
+justday plan list           # открытые пункты
+justday plan add "забрать посылку"
+justday plan done 1         # или часть текста: justday plan done посылку
+justday plan open           # открыть список в Obsidian
+justday note "Идеи для видео" "текст заметки"
+```
+
+Хранилище находится само (по настройкам Obsidian). Если их несколько — укажите в `~/.config/justday/config.toml`:
+
+```toml
+[notes]
+vault = "/home/oni/Documents/suka"   # "" = найти открытое в Obsidian
+plans = "Планы.md"
+```
+
+Разница между планом и напоминанием: «запиши, чтобы не забыть» — план, «напомни в шесть» — таймер.
+
+### Сообщения с телефона, пока компьютера не было
+
+Пульт на телефоне работает и без компьютера. Написанное там ложится в очередь и уходит, как только компьютер отзовётся; JustDay читает накопившееся при пробуждении и докладывает своими словами — что сделал сразу, что положил в планы.
+
+```bash
+justday inbox          # что приходило и что ещё не доложено
+justday inbox clear
+```
+
+Ход модели на это тратится один: сообщения, пришедшие пачкой, докладываются вместе.
 
 ### Люди: ассистент учится
 
@@ -621,7 +667,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `[audio]` | `input`/`output` (часть имени устройства PipeWire), `earcons`, `silence_seconds`, `followup_seconds`, `double_tap_seconds`, `max_utterance_seconds`, `no_speech_timeout_seconds` |
 | `[stt]` | `model` (large-v3-turbo / small), `device` (cuda/cpu), `compute_type`, `language`, `initial_prompt` (подсказка словами: имена, названия) |
 | `[tts]` | `engine` (qwen/silero/espeak/none), `voice` (нейроголос: jarvis или свой), `neural_quality` (fast/best), `speaker` (Silero: aidar, eugene, baya, kseniya, xenia) |
-| `[wakeword]` | `enabled` (слово пробуждения), `names` (просыпаться по имени «Джарвис»/«JustDay»), `threshold` («Hey Jarvis», модель английская) |
+| `[wakeword]` | `enabled` (слово пробуждения), `names` (просыпаться по имени «Джарвис»/«JustDay»), `threshold` («Hey Jarvis», модель английская), `threshold_while_playing` (планка, пока из колонок идёт звук) |
 | `[voiceprint]` | `mode`: off / wake / always ([«Под мой голос»](#под-мой-голос)) |
 | `[island]` | `animations` (spring/smooth/off), `hover_reveal`, `show_weather`, `show_events`, `show_notifications`, `city`, `screen` (например DP-2) |
 | `[updates]` | `check` (проверять обновления), `interval_hours` |
@@ -629,6 +675,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `[workers]` | `model`, `permission_mode`, `poll_seconds`, `auto_review` |
 | `[desktop]` | `accessibility`: метки кнопок на скриншотах |
 | `[local_llm]` | `url`, `model`, `num_ctx`, `keep_alive` (через сколько выгружать модель из видеопамяти) |
+| `[notes]` | `vault` (хранилище Obsidian, "" = найти открытое), `plans` (файл списка планов) |
 | `[mail]` | `address`, `imap_host`, `smtp_host`, `query`, `other_query`, `max_letters`, `announce`, `poll_seconds` |
 | `[apps.aliases]` | `"дискорд" = "org.equicord.equibop"`: как вы называете приложение → его desktop id (`justday apps find <имя>`) |
 | `[ui]` | `notifications` |
