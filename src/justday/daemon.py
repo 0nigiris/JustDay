@@ -1787,6 +1787,11 @@ class Daemon:
             await m.seek(0)
         elif action in ("pause", "resume", "toggle", "next", "prev", "stop"):
             await getattr(m, action)()
+            if action == "toggle":
+                # Ответ должен говорить, что получилось, а не как называлась кнопка:
+                # телефон показывал «пауза» и когда музыка как раз поехала дальше.
+                await asyncio.sleep(0.05)
+                action = "pause" if (m.state() or {}).get("paused") else "resume"
         elif action == "jump":
             await m.jump(int(value or 0))
         elif action in ("repeat", "repeat_off", "repeat_all", "repeat_one"):
