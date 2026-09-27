@@ -817,6 +817,21 @@ function jarvisKeysFor(pc) {
     { ...jarvisKey(key, playing, speaking), available: true, group: "JustDay" }));
 }
 
+/* Сценарии описаны на компьютере («я сел работать»): пульт просто делает из
+   них кнопки. Своей страницей — иначе они потерялись бы среди плеера. */
+function sceneKeysFor(pc) {
+  if (!pc || pc.state !== "online") return [];
+  return (state.justday?.scenes || []).map((scene) => ({
+    id: `scene:${scene.id}`,
+    name: scene.name,
+    icon: scene.icon || "lucide:zap",
+    scene: scene.id,
+    available: true,
+    group: "Сценарии",
+    description: "Сценарий: несколько действий одной кнопкой",
+  }));
+}
+
 function pcKeysFor(pc) {
   if (!pc || pc.state !== "online") return [];
   return PC_KEYS.map((key) => ({ ...key, available: true }));
@@ -861,7 +876,8 @@ function viewDeck() {
       Добавьте секцию <code>[[pcs]]</code> в конфигурацию контроллера.</div>`;
   }
 
-  const all = [...(pc.actions || []), ...powerFor(pc), ...jarvisKeysFor(pc), ...pcKeysFor(pc)];
+  const all = [...(pc.actions || []), ...powerFor(pc), ...sceneKeysFor(pc),
+    ...jarvisKeysFor(pc), ...pcKeysFor(pc)];
   const byId = new Map(all.map((a) => [a.id, a]));
 
   // Порядок избранного — тот, в котором его добавляли: пользователь сам
@@ -872,6 +888,8 @@ function viewDeck() {
     .filter(Boolean);
 
   const groups = new Map();
+  const scenesKeys = sceneKeysFor(pc);
+  if (scenesKeys.length) groups.set("Сценарии", scenesKeys);
   const jarvis = jarvisKeysFor(pc);
   if (jarvis.length) groups.set("JustDay", jarvis);
   for (const action of pc.actions || []) {
@@ -2903,6 +2921,11 @@ document.addEventListener("click", async (event) => {
           const names = (key.session === "close" ? result.closed : result.started) || [];
           toast(names.length ? names.join(", ") : "ничего не изменилось", "ok");
         });
+    }
+    if (id.startsWith("scene:")) {
+      buzz([10, 30, 10]);
+      return run(button, () => player(pcId, "scene", id.slice(6)),
+        (result) => toast(result?.done || "сценарий выполнен", "ok"));
     }
     if (id === "pc:screen") return showScreen(pcId, button);
     if (id === "pc:lock") {

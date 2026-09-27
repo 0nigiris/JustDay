@@ -307,6 +307,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
+    sp = sub.add_parser("scene", help="сценарии: list | run <имя или фраза>")
+    sp.add_argument("action", nargs="?", choices=["list", "run"], default="list")
+    sp.add_argument("which", nargs="*")
     sp = sub.add_parser("plan", help="планы в Obsidian: add | list | done | open")
     sp.add_argument("action", nargs="?", choices=["add", "list", "done", "open"], default="list")
     sp.add_argument("text", nargs="*")
@@ -516,6 +519,14 @@ def main(argv: list[str] | None = None) -> None:
         _print(desktop.windows(a.action, " ".join(a.query)))
     elif a.cmd == "screenshot":
         _print(screenshot(a.all, a.full))
+    elif a.cmd == "scene":
+        from . import scenes
+
+        if a.action == "run":
+            _print(control("scene_run", id=" ".join(a.which), timeout=60))
+        else:
+            _print({"scenes": [{"id": s["id"], "name": s["name"], "phrases": s["phrases"],
+                                "open": s["open"], "close": s["close"]} for s in scenes.all_scenes()]})
     elif a.cmd == "plan":
         from . import notes
 

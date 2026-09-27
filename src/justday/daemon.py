@@ -21,7 +21,29 @@ from typing import ClassVar
 
 import numpy as np
 
-from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, inbox, island, jobs, mail, media, namespot, notifications, numerals, offline, palette, reminders, voiceprint, workers
+from . import (
+    audio,
+    briefing,
+    calendar_lane,
+    config,
+    desktop,
+    events,
+    fastpath,
+    inbox,
+    island,
+    jobs,
+    mail,
+    media,
+    namespot,
+    notifications,
+    numerals,
+    offline,
+    palette,
+    reminders,
+    scenes,
+    voiceprint,
+    workers,
+)
 from . import brain as brain_mod
 from . import tts as tts_mod
 from . import weather as weather_mod
@@ -212,6 +234,23 @@ class Daemon:
         await self.say(text)
         self.state = "thinking" if self.brain.busy else "idle"
         return text
+
+    async def run_scene(self, scene: dict) -> str:
+        """Сценарий целиком: окна, команды, музыка, тишина. Без модели и без сети."""
+        loop = asyncio.get_running_loop()
+        self.publish(detail=scene["name"], kind="tool")
+        result = await loop.run_in_executor(None, scenes.run, scene)
+        if scene.get("silent") is not None:
+            await self.set_voice(not scene["silent"])
+        if scene.get("music"):
+            spawn(self.play_library(shuffle=True) if scene["music"] in ("моя", "library", "фонотека")
+                  else self.play_music(scene["music"]))
+        said = scene.get("say") or scenes.summary(result)
+        events.emit("scene", name=scene["name"], opened=result["opened"], closed=result["closed"])
+        self.brain.note(f"[Сценарий «{scene['name']}» уже выполнен мгновенно, без тебя: "
+                        f"{scenes.summary(result)}. Не повторяй эти действия.]")
+        await self.say(said)
+        return said
 
     async def session_switch(self, what: str) -> str:
         """«Я ушёл» — remember the open applications and ask them to close; «я вернулся» — open them again.
@@ -523,6 +562,8 @@ class Daemon:
         if fastpath.wants_fresh_session(text):
             await self.brain.new_session()
             return t("Начинаю заново.")
+        if (scene := scenes.match(text)) is not None:
+            return await self.run_scene(scene)
         if (what := fastpath.session_switch(text)) is not None:
             return await self.session_switch(what)
         if await self.media_fast(text) or await self.reminder_fast(text):
@@ -1895,6 +1936,8 @@ class Daemon:
             elif cmd == "status":
                 resp = {"ok": True, "state": self.state, "brain_busy": self.brain.busy,
                         "session": self.brain.session_id, "wakeword": bool(self._wake), "silent": self.silent(),
+                        "scenes": [{"id": s["id"], "name": s["name"], "icon": s["icon"]}
+                                   for s in scenes.all_scenes()],
                         "mic_source": self.mic.source, "model": self.cfg["brain"]["model"],
                         # Громкость самого ассистента: телефону она нужна, чтобы
                         # показать ползунок там же, где ползунок музыки.
@@ -2000,6 +2043,15 @@ class Daemon:
                 events.emit("inbox_add", source=rec["source"], text=rec["text"][:200])
                 self._inbox_soon()
                 resp = {"ok": True, "id": rec["id"], "pending": len(inbox.pending())}
+            elif cmd == "scene_list":
+                resp = {"ok": True, "scenes": [{"id": s["id"], "name": s["name"], "icon": s["icon"],
+                                                "phrases": s["phrases"]} for s in scenes.all_scenes()]}
+            elif cmd == "scene_run":
+                scene = scenes.by_id(req.get("id", "")) or scenes.match(req.get("id", ""))
+                if scene is None:
+                    resp = {"ok": False, "error": "нет такого сценария"}
+                else:
+                    resp = {"ok": True, "done": await self.run_scene(scene)}
             elif cmd == "plan_list":  # планы лежат в Obsidian; телефон и остров читают их отсюда
                 from . import notes
 

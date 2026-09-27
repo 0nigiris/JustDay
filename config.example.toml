@@ -65,6 +65,17 @@ resume_within_hours = 12    # keep the conversation across restarts
 tool_search = "on"          # on = tool schemas load on demand (31k start context instead of 111k); auto | off
 context_window = 200000     # conversation ceiling: history is compacted there (0 = let Claude Code decide)
 
+# Сценарии: несколько привычных действий одной фразой, мимо модели.
+# [[scenes]]
+# name = "Работа"
+# phrases = ["я сел работать", "рабочий режим"]
+# open = ["code", "дискорд"]          # как вы их называете — синонимы из [apps.aliases] работают
+# close = ["steam"]
+# run = [["justday", "player", "volume", "30"]]   # списком аргументов, не строкой для оболочки
+# music = "lo-fi"                     # "моя" = фонотека; пусто — музыку не трогать
+# silent = false                      # true — ассистент замолкает на время сценария
+# say = "Рабочее место готово"        # что сказать вслух (пусто — скажет, что именно сделал)
+
 [notes]
 # vault = ""                # Obsidian vault for plans and notes ("" = the one Obsidian has open)
 # plans = "Планы.md"        # the checklist file inside it

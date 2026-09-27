@@ -87,6 +87,9 @@ async def status() -> dict[str, Any]:
         # Громкость голоса ассистента — не системная и не музыкальная: её
         # и настраивают чаще всего, поэтому она едет вместе с состоянием.
         "volume": state.get("volume"),
+        # Сценарии приходят вместе со статусом: пульт делает из них кнопки,
+        # а список задаётся на компьютере — телефон его не придумывает.
+        "scenes": state.get("scenes") or [],
         "player": player.get("music") or player.get("player") or {},
         # Видео телефон раньше не видел вовсе: шло кино — плеер писал «ничего не играет»,
         # хотя пауза с той же кнопки работала. Остров показывает и то, и другое; теперь и пульт.
@@ -179,6 +182,11 @@ async def inbox_add(text: str, created: float = 0.0) -> dict[str, Any]:
 
 async def inbox_list(limit: int = 20) -> dict[str, Any]:
     return await call("inbox_list", limit=limit)
+
+
+async def scene(scene_id: str) -> dict[str, Any]:
+    """Сценарий: «я сел работать» — окна, музыка, тишина одной кнопкой."""
+    return await call("scene_run", id=scene_id, timeout=60.0)
 
 
 async def plans(only_open: bool = True) -> dict[str, Any]:

@@ -149,6 +149,9 @@ DEFAULTS: dict = {
         "poll_seconds": 15,
         "auto_review": True,
     },
+    # Сценарии: «я сел работать» — несколько привычных действий одной фразой, без модели.
+    # [[scenes]] name / phrases / open / close / run / music / silent / say — см. config.example.toml.
+    "scenes": [],
     # Планы и заметки пишутся в хранилище Obsidian: vault "" = найти открытое самому.
     "notes": {"vault": "", "plans": "Планы.md"},
     "ui": {"notifications": True},

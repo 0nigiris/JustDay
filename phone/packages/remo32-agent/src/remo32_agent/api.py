@@ -389,6 +389,10 @@ def build_router(ctx: AgentContext) -> APIRouter:
         телефона это соседний ползунок, и заводить ради него ещё один
         маршрут значило бы разносить одно и то же по разным местам.
         """
+        if command.action == "scene":
+            return ApiResponse[dict[str, Any]].success(
+                await justday.scene(str(command.value or "")), request_id
+            )
         if command.action == "voice_volume":
             return ApiResponse[dict[str, Any]].success(
                 await justday.voice_volume(int(command.value or 0)), request_id
