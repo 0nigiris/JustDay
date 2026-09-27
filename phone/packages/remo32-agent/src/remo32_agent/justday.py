@@ -88,6 +88,9 @@ async def status() -> dict[str, Any]:
         # и настраивают чаще всего, поэтому она едет вместе с состоянием.
         "volume": state.get("volume"),
         "player": player.get("music") or player.get("player") or {},
+        # Видео телефон раньше не видел вовсе: шло кино — плеер писал «ничего не играет»,
+        # хотя пауза с той же кнопки работала. Остров показывает и то, и другое; теперь и пульт.
+        "video": player.get("island_video") or player.get("window") or {},
         "reminders": reminders.get("reminders") or [],
     }
 
@@ -159,6 +162,29 @@ async def artwork() -> tuple[bytes, str]:
     if not path:
         raise ActionInvalidError("сейчас ничего не играет")
     return await asyncio.to_thread(_art_file, path)
+
+
+async def inbox_add(text: str, created: float = 0.0) -> dict[str, Any]:
+    """Сообщение, оставленное на телефоне. Компьютер мог быть выключен — ассистент
+    прочитает его, когда проснётся, и сам решит, что с ним делать."""
+    return await call("inbox_add", text=text, source="phone", created=created)
+
+
+async def inbox_list(limit: int = 20) -> dict[str, Any]:
+    return await call("inbox_list", limit=limit)
+
+
+async def plans(only_open: bool = True) -> dict[str, Any]:
+    """Планы из хранилища Obsidian."""
+    return await call("plan_list", open=only_open)
+
+
+async def plan_add(text: str, note: str = "") -> dict[str, Any]:
+    return await call("plan_add", text=text, note=note)
+
+
+async def plan_done(which: str) -> dict[str, Any]:
+    return await call("plan_done", which=which)
 
 
 async def session(action: str) -> dict[str, Any]:

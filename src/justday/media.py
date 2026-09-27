@@ -519,6 +519,46 @@ def open_window(target: str, start: float = 0, title: str = "", fullscreen: bool
     subprocess.Popen(detached([*cmd, "--", target]), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def window_state() -> dict | None:
+    """Что показывает отдельное окно с видео: название, пауза, место. None — окна нет.
+
+    Телефону это нужно затем же, зачем острову: кнопки плеера должны управлять тем,
+    что человек сейчас смотрит, а не только музыкой.
+    """
+    import socket
+
+    if not VIDEO_SOCK.exists():
+        return None
+    want = (("media-title", "title"), ("pause", "paused"), ("time-pos", "pos"), ("duration", "duration"))
+    got: dict = {}
+    try:
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.settimeout(1)
+            sock.connect(str(VIDEO_SOCK))
+            for i, (prop, _) in enumerate(want, 1):
+                sock.sendall((json.dumps({"command": ["get_property", prop], "request_id": i}) + "\n").encode())
+            answers: dict[int, object] = {}
+            fh = sock.makefile("r", encoding="utf-8")
+            while len(answers) < len(want):
+                line = fh.readline()
+                if not line:
+                    break
+                try:
+                    reply = json.loads(line)
+                except ValueError:
+                    continue
+                if "request_id" in reply:  # события mpv идут в том же потоке, но без request_id
+                    answers[int(reply["request_id"])] = reply.get("data")
+    except OSError:
+        return None
+    for i, (_, name) in enumerate(want, 1):
+        got[name] = answers.get(i)
+    if not got.get("title"):
+        return None
+    return {"title": str(got["title"]), "paused": bool(got.get("paused")),
+            "pos": round(float(got.get("pos") or 0), 1), "duration": round(float(got.get("duration") or 0), 1)}
+
+
 def window_command(*args) -> bool:
     """Pause / resume the video window, if one is open."""
     import socket

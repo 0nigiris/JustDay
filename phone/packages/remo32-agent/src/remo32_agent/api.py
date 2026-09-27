@@ -80,6 +80,19 @@ class JustDayPlayer(BaseModel):
     value: int | str | None = None
 
 
+class JustDayInbox(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    created: float | None = Field(
+        None, description="Когда сообщение набрали на телефоне (unix-время)"
+    )
+
+
+class JustDayPlan(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    note: str = Field("", max_length=120)
+    done: bool = Field(False, description="Закрыть пункт вместо добавления")
+
+
 class TerminalInfo(BaseModel):
     enabled: bool
     sessions: list[str] = Field(default_factory=list)
@@ -383,6 +396,60 @@ def build_router(ctx: AgentContext) -> APIRouter:
         return ApiResponse[dict[str, Any]].success(
             await justday.player(command.action, command.value), request_id
         )
+
+    @router.post(
+        "/api/justday/inbox",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Оставить сообщение ассистенту",
+    )
+    async def justday_inbox_add(
+        command: JustDayInbox, request_id: RequestId
+    ) -> ApiResponse[dict[str, Any]]:
+        """То, что написали на телефоне без связи с компьютером.
+
+        Просьба не выполняется сразу: она ложится в список, и ассистент
+        доложит о ней, когда компьютер включится и он освободится.
+        """
+        return ApiResponse[dict[str, Any]].success(
+            await justday.inbox_add(command.text, command.created or 0.0), request_id
+        )
+
+    @router.get(
+        "/api/justday/inbox",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Что уже передано и доложено",
+    )
+    async def justday_inbox_list(request_id: RequestId) -> ApiResponse[dict[str, Any]]:
+        return ApiResponse[dict[str, Any]].success(await justday.inbox_list(), request_id)
+
+    @router.get(
+        "/api/justday/plans",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Планы из Obsidian",
+    )
+    async def justday_plans(
+        request_id: RequestId, closed: bool = False
+    ) -> ApiResponse[dict[str, Any]]:
+        return ApiResponse[dict[str, Any]].success(await justday.plans(not closed), request_id)
+
+    @router.post(
+        "/api/justday/plans",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Добавить или закрыть пункт плана",
+    )
+    async def justday_plan_write(
+        command: JustDayPlan, request_id: RequestId
+    ) -> ApiResponse[dict[str, Any]]:
+        got = (
+            await justday.plan_done(command.text)
+            if command.done
+            else await justday.plan_add(command.text, command.note)
+        )
+        return ApiResponse[dict[str, Any]].success(got, request_id)
 
     @router.post(
         "/api/justday/dictate",

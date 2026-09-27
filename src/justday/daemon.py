@@ -21,7 +21,7 @@ from typing import ClassVar
 
 import numpy as np
 
-from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, island, jobs, mail, media, namespot, notifications, numerals, offline, palette, reminders, voiceprint, workers
+from . import audio, briefing, calendar_lane, config, desktop, events, fastpath, inbox, island, jobs, mail, media, namespot, notifications, numerals, offline, palette, reminders, voiceprint, workers
 from . import brain as brain_mod
 from . import tts as tts_mod
 from . import weather as weather_mod
@@ -83,6 +83,7 @@ class Daemon:
         self._names: list[str] = []  # spellings of the assistant's names, for trimming them off a woken phrase
         self._quiet_until = 0.0  # the assistant's own voice may still echo in the room
         self._event_queue: asyncio.Queue[str] = asyncio.Queue()
+        self._inbox_timer: asyncio.Task | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._spoken = 0
         self._discard_recording = False
@@ -1146,6 +1147,38 @@ class Daemon:
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                 spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
 
+    # ---------------- сообщения с телефона ----------------
+    def _inbox_soon(self, delay: float = 4.0) -> None:
+        """Доложить о накопившемся — но не мгновенно.
+
+        Сообщения приходят пачкой: телефон, увидев компьютер в сети, отдаёт всё, что
+        накопил в дороге. Небольшая пауза собирает их в один доклад вместо пяти."""
+        if self._inbox_timer and not self._inbox_timer.done():
+            self._inbox_timer.cancel()
+        self._inbox_timer = spawn(self._inbox_report(delay))
+
+    async def _inbox_report(self, delay: float) -> None:
+        await asyncio.sleep(delay)
+        items = inbox.pending()
+        if not items:
+            return
+        # Ждём, пока ассистент освободится: перебивать им же начатую работу незачем,
+        # сообщения и так пролежали дольше.
+        while self.brain.busy or self.state != "idle":
+            await asyncio.sleep(5)
+            if not inbox.pending():
+                return
+        items = inbox.pending()
+        inbox.mark_reported([i["id"] for i in items])
+        self.publish(kind="tool", detail=t("Сообщения с телефона: {n}", n=len(items)))
+        one = len(items) == 1
+        self._event_queue.put_nowait(
+            f"[Событие JustDay] Пока тебя не было, с телефона {'пришла просьба' if one else 'пришли просьбы'}:\n"
+            f"{inbox.summary(items)}\n"
+            "Доложи хозяину коротко, своими словами («вот что мне передали с телефона…»), и сам реши по смыслу: "
+            "что-то сделай сразу, что-то занеси в планы (`justday plan add …`), о чём-то спроси. "
+            "Если просьба уже неактуальна по времени — скажи об этом и не делай.")
+
     # ---------------- music and video ----------------
     def _on_player(self, state: dict | None) -> None:
         self._player_state = state
@@ -1669,7 +1702,12 @@ class Daemon:
         """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | color NAME | status"""
         m = self.music
         if action == "status":
-            return {"ok": True, "music": m.state(), "island_video": self.island_video}
+            # window: видео в отдельном окне mpv — им телефон тоже управляет, но состояние
+            # у окна спрашивают отдельно: оно живёт само по себе.
+            return {"ok": True, "music": m.state(), "island_video": self.island_video,
+                    "window": media.window_state()}
+        if action == "library":  # кнопка «Моя музыка» на телефоне: файлы уже на диске, модель тут не нужна
+            return await self.play_library(shuffle=True)
         if action == "volume":  # works with nothing playing too: it is the level the next song starts at
             v = max(0, min(130, int(value if value is not None else m.volume)))
             await m.set_volume(v)
@@ -1909,6 +1947,27 @@ class Daemon:
                     resp = {"ok": True, **await loop.run_in_executor(None, session_mod.save)}
                 else:
                     resp = {"ok": True, **(await loop.run_in_executor(None, session_mod.saved) or {"apps": []})}
+            elif cmd == "inbox_add":  # сообщение с телефона: компьютера могло не быть рядом
+                rec = inbox.add(req.get("text", ""), req.get("source", "phone"), float(req.get("created") or 0))
+                events.emit("inbox_add", source=rec["source"], text=rec["text"][:200])
+                self._inbox_soon()
+                resp = {"ok": True, "id": rec["id"], "pending": len(inbox.pending())}
+            elif cmd == "plan_list":  # планы лежат в Obsidian; телефон и остров читают их отсюда
+                from . import notes
+
+                resp = {"ok": True, "items": notes.items(only_open=bool(req.get("open", True))),
+                        "file": str(notes.plans_path())}
+            elif cmd == "plan_add":
+                from . import notes
+
+                resp = notes.add(req.get("text", ""), req.get("note", ""))
+            elif cmd == "plan_done":
+                from . import notes
+
+                resp = notes.mark_done(req.get("which", ""))
+            elif cmd == "inbox_list":
+                resp = {"ok": True, "items": inbox.recent(int(req.get("limit") or 20)),
+                        "pending": len(inbox.pending())}
             elif cmd == "media":  # player buttons and `justday player ACTION`
                 resp = await self.media_control(req.get("action", "status"), req.get("value"))
             elif cmd == "reminder_set":  # `justday timer 10m` and the island's own buttons
@@ -1983,6 +2042,7 @@ class Daemon:
         if shutil.which("dbus-monitor"):
             spawn(self._watch_notifications())
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
+        self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop.set)

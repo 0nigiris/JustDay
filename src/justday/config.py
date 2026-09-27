@@ -146,6 +146,8 @@ DEFAULTS: dict = {
         "poll_seconds": 15,
         "auto_review": True,
     },
+    # Планы и заметки пишутся в хранилище Obsidian: vault "" = найти открытое самому.
+    "notes": {"vault": "", "plans": "Планы.md"},
     "ui": {"notifications": True},
     # «Я ушёл» closes the open applications and remembers them; «я вернулся» opens them again.
     # keep: what is never closed (a substring of the window class or the application name).

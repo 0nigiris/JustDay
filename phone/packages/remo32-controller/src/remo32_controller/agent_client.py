@@ -259,6 +259,33 @@ class AgentClient:
     async def screen(self) -> tuple[bytes, str]:
         return await self.binary("/api/screen", timeout=40.0)
 
+    async def justday_inbox_add(self, text: str, created: float = 0.0) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST", "/api/justday/inbox", json={"text": text, "created": created}, timeout=20.0
+        )
+        return got
+
+    async def justday_inbox_list(self) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request("GET", "/api/justday/inbox", timeout=15.0)
+        return got
+
+    async def justday_plans(self, closed: bool = False) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "GET", "/api/justday/plans", params={"closed": str(closed).lower()}, timeout=15.0
+        )
+        return got
+
+    async def justday_plan_write(
+        self, text: str, *, done: bool = False, note: str = ""
+    ) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST",
+            "/api/justday/plans",
+            json={"text": text, "done": done, "note": note},
+            timeout=20.0,
+        )
+        return got
+
     async def justday_art(self) -> tuple[bytes, str]:
         return await self.binary("/api/justday/art", timeout=15.0)
 

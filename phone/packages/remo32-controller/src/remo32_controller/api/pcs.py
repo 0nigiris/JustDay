@@ -152,6 +152,60 @@ async def justday_player(
     )
 
 
+class JustDayInbox(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    created: float | None = None
+
+
+class JustDayPlan(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    note: str = Field("", max_length=120)
+    done: bool = False
+
+
+@router.post("/{pc_id}/justday/inbox", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
+async def justday_inbox_add(
+    pc_id: str, payload: JustDayInbox, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    """Сообщение, написанное на телефоне, пока компьютера не было рядом."""
+    client = _registry(request).get(pc_id).client
+    log.info("сообщение ассистенту в очередь", pc_id=pc_id)
+    return ApiResponse[dict[str, Any]].success(
+        await client.justday_inbox_add(payload.text, payload.created or 0.0), request_id
+    )
+
+
+@router.get("/{pc_id}/justday/inbox", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
+async def justday_inbox_list(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_inbox_list(), request_id
+    )
+
+
+@router.get("/{pc_id}/justday/plans", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
+async def justday_plans(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId, closed: bool = False
+) -> ApiResponse[dict[str, Any]]:
+    """Планы из хранилища Obsidian на этом компьютере."""
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_plans(closed), request_id
+    )
+
+
+@router.post("/{pc_id}/justday/plans", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
+async def justday_plan_write(
+    pc_id: str, payload: JustDayPlan, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request)
+        .get(pc_id)
+        .client.justday_plan_write(payload.text, done=payload.done, note=payload.note),
+        request_id,
+    )
+
+
 @router.get("/{pc_id}/screen", response_class=Response, tags=["ПК"])
 async def screen(
     pc_id: str, request: Request, _session: Session, _request_id: RequestId

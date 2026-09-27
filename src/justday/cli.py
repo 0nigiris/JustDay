@@ -307,6 +307,16 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
+    sp = sub.add_parser("plan", help="планы в Obsidian: add | list | done | open")
+    sp.add_argument("action", nargs="?", choices=["add", "list", "done", "open"], default="list")
+    sp.add_argument("text", nargs="*")
+    sp = sub.add_parser("note", help="заметка в Obsidian: justday note «Заголовок» текст…")
+    sp.add_argument("title")
+    sp.add_argument("text", nargs="*")
+    sp.add_argument("--folder", default="", help="подкаталог внутри хранилища")
+    sp = sub.add_parser("inbox", help="сообщения, оставленные с телефона: list | add | clear")
+    sp.add_argument("action", nargs="?", choices=["list", "add", "clear"], default="list")
+    sp.add_argument("text", nargs="*")
     sp = sub.add_parser("tokens", help="во что обходится разговор: токены и деньги по дням")
     sp.add_argument("--days", type=int, default=7)
     sp.add_argument("--json", action="store_true")
@@ -504,6 +514,33 @@ def main(argv: list[str] | None = None) -> None:
         _print(desktop.windows(a.action, " ".join(a.query)))
     elif a.cmd == "screenshot":
         _print(screenshot(a.all, a.full))
+    elif a.cmd == "plan":
+        from . import notes
+
+        text = " ".join(a.text)
+        if a.action == "add":
+            _print(notes.add(text))
+        elif a.action == "done":
+            _print(notes.mark_done(text))
+        elif a.action == "open":
+            link = notes.open_in_obsidian(text or str(notes.plans_path()))
+            subprocess.Popen(["xdg-open", link], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _print({"ok": bool(link), "link": link})
+        else:
+            _print({"file": str(notes.plans_path()), "items": notes.items(only_open=bool(text != "all"))})
+    elif a.cmd == "note":
+        from . import notes
+
+        _print(notes.note(a.title, " ".join(a.text) or os.environ.get("JUSTDAY_TEXT", ""), a.folder))
+    elif a.cmd == "inbox":
+        from . import inbox
+
+        if a.action == "add":
+            _print(control("inbox_add", text=" ".join(a.text), source="cli"))
+        elif a.action == "clear":
+            _print({"ok": True, "removed": inbox.clear()})
+        else:
+            _print({"pending": len(inbox.pending()), "items": inbox.recent()})
     elif a.cmd == "tokens":
         from . import usage
 

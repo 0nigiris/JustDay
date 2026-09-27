@@ -1226,6 +1226,39 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
 }
 .btn.tiny[disabled] { opacity: 0.35; }
 
+/* Пункт плана: квадратик слева, текст справа. Тот же ряд, что у шагов
+   мультидействия, только галочка стоит первой — по ней и целятся. */
+.plan {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--hair);
+}
+.plan:last-child { border-bottom: none; }
+.plan b { font-size: 15px; font-weight: 500; display: block; }
+.plan .meta { font-size: 12px; }
+.list .step { justify-content: space-between; padding: 10px 13px; border-bottom: 1px solid var(--hair); }
+.list .step:last-child { border-bottom: none; }
+
+/* «Компьютер не в сети» — состояние, а не ошибка: тёплая полоса вверху
+   экрана вместо пустого места с красной надписью. */
+.offline-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--warn-soft, rgba(255, 176, 32, 0.12));
+  border: 1px solid rgba(255, 176, 32, 0.28);
+  border-radius: var(--radius-lg);
+}
+.offline-note b { display: block; font-size: 15px; }
+.offline-note .meta { font-size: 12px; }
+.offline-note .ico { font-size: 20px; color: #ffb020; }
+.offline-note > div { flex: 1; min-width: 0; }
+.offline-note .btn { flex: none; min-width: 42px; height: 38px; padding: 0 10px; }
+
 .list-row.danger .title { color: var(--danger); }
 .list-row.danger .ico { background: var(--danger-soft); color: var(--danger); }
 

@@ -97,7 +97,15 @@ function connect() {
       return;
     }
     if (event.code === 4403) {
+      // Вход неделями держится, а терминал требует свежего: раньше это
+      // выглядело как «нажал и ничего», причём с одной и той же надписью
+      // каждый раз. Теперь ведём ко входу и возвращаем сюда же.
       term.writeln(`\r\n\x1b[31m${event.reason || "терминал запрещён"}\x1b[0m`);
+      term.writeln("\x1b[33mоткрываю вход — после него вернётесь сюда\x1b[0m");
+      try {
+        sessionStorage.setItem("remo32.after-login", location.pathname + location.search);
+      } catch {}
+      setTimeout(() => (location.href = "/"), 1800);
       return;
     }
     // Обрыв связи — обычное дело на телефоне. Процессы в tmux при этом

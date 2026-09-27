@@ -99,11 +99,21 @@ const KEY_ROUTE = "remo32.route";
 async function api(path, options = {}) {
   // raw — тело уходит как есть (запись голоса). Всё остальное — JSON.
   const { raw = false, ...rest } = options;
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    headers: raw ? { "Content-Type": "application/octet-stream" } : { "Content-Type": "application/json" },
-    ...rest,
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      credentials: "same-origin",
+      headers: raw ? { "Content-Type": "application/octet-stream" } : { "Content-Type": "application/json" },
+      ...rest,
+    });
+  } catch (cause) {
+    // Компьютера нет в сети — это не поломка приложения, а обычное его
+    // состояние: оно должно остаться рабочим и сказать об этом словами.
+    const error = new Error("компьютер не в сети");
+    error.offline = true;
+    error.cause = cause;
+    throw error;
+  }
 
   let body = null;
   try {
@@ -142,6 +152,75 @@ const state = {
   buttonForm: null,      // черновик формы: null — форма закрыта
   sliding: false,        // палец ведёт ползунок: перерисовка увела бы ручку из-под него
   rendering: false,
+  online: true,          // отвечает ли контроллер
+  syncedAt: 0,           // когда в последний раз получили настоящие данные
+  plans: null,           // планы из Obsidian на активном ПК
+};
+
+/* ================================================= жизнь без сети ======= */
+
+const KEY_CACHE = "remo32.cache";
+const KEY_OUTBOX = "remo32.outbox";
+
+/* Последний увиденный состав: с ним приложение открывается и в дороге —
+   видно, какие есть компьютеры, кнопки и планы, просто ничего не нажимается. */
+function rememberState() {
+  store.setJson(KEY_CACHE, {
+    at: Date.now(),
+    pcs: state.pcs.map((pc) => ({ ...pc, state: "unknown" })),
+    plans: state.plans,
+  });
+}
+
+function restoreState() {
+  const saved = store.json(KEY_CACHE, null);
+  if (!saved) return;
+  if (!state.pcs.length) state.pcs = saved.pcs || [];
+  if (!state.plans) state.plans = saved.plans || null;
+  state.syncedAt = saved.at || 0;
+}
+
+const outbox = () => store.json(KEY_OUTBOX, []);
+
+/* Сообщение, оставленное без связи. Уйдёт при первой встрече с компьютером —
+   ассистент прочитает его сам и доложит, когда проснётся. */
+function queueMessage(text, pcId) {
+  const items = outbox();
+  items.push({ id: `${Date.now()}-${items.length}`, text, pc: pcId || "", at: Date.now() / 1000 });
+  store.setJson(KEY_OUTBOX, items.slice(-50));
+}
+
+function dropMessage(id) {
+  store.setJson(KEY_OUTBOX, outbox().filter((item) => item.id !== id));
+}
+
+/* Отдаём накопившееся. Что не ушло — остаётся в очереди: лучше передать
+   позже, чем потерять. */
+async function flushOutbox(pcId) {
+  const items = outbox();
+  if (!items.length || !pcId) return 0;
+  let sent = 0;
+  for (const item of items) {
+    try {
+      await api(`/api/pcs/${encodeURIComponent(pcId)}/justday/inbox`,
+        { method: "POST", body: JSON.stringify({ text: item.text, created: item.at }) });
+      dropMessage(item.id);
+      sent += 1;
+    } catch (error) {
+      if (error.offline) break;
+      dropMessage(item.id);  // компьютер ответил «не возьму» — второй раз не поможет
+    }
+  }
+  if (sent) toast(`Передал ассистенту: ${sent === 1 ? "сообщение" : `${sent} сообщения`}`, "ok");
+  return sent;
+}
+
+const ago = (seconds) => {
+  const m = Math.round(seconds / 60);
+  if (m < 1) return "только что";
+  if (m < 60) return `${m} мин назад`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h} ч назад` : `${Math.round(h / 24)} дн назад`;
 };
 
 /* Компьютер, которым сейчас управляет пульт. Если сохранённый исчез из
@@ -295,13 +374,37 @@ function showLogin(status = null) {
   }
 }
 
+/* Возврат туда, откуда послали входить (терминал требует свежего входа). */
+function resumeAfterLogin() {
+  let back = "";
+  try {
+    back = sessionStorage.getItem("remo32.after-login") || "";
+    sessionStorage.removeItem("remo32.after-login");
+  } catch {}
+  if (back && back.startsWith("/") && !back.startsWith("//")) {
+    location.href = back;
+    return true;
+  }
+  return false;
+}
+
 function showMain() {
   el("login").hidden = true;
   el("main").hidden = false;
 }
 
 async function refreshAuth() {
-  const status = await api("/api/auth/status");
+  let status;
+  try {
+    status = await api("/api/auth/status");
+  } catch (error) {
+    if (!error.offline) throw error;
+    // Без связи спрашивать пароль бессмысленно: проверить его всё равно
+    // некому. Показываем пульт таким, каким он был, и ждём компьютера.
+    state.online = false;
+    showMain();
+    return true;
+  }
   state.auth = status;
   if (status.authenticated) {
     showMain();
@@ -320,6 +423,7 @@ el("password-form").addEventListener("submit", async (event) => {
       body: JSON.stringify({ password: el("password").value }),
     });
     el("password").value = "";
+    if (resumeAfterLogin()) return;
     showMain();
     await start();
   } catch (error) {
@@ -367,6 +471,7 @@ el("passkey-btn").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({ handle, credential: serializeAssertion(assertion) }),
     });
+    if (resumeAfterLogin()) return;
     showMain();
     await start();
   } catch (error) {
@@ -473,15 +578,47 @@ function syncChrome() {
   store.set(KEY_ROUTE, route());
 }
 
-document.addEventListener("submit", (event) => {
-  if (event.target.id !== "jarvis-form") return;
-  event.preventDefault();
-  const field = el("jarvis-text");
-  const text = field.value.trim();
-  if (!text) return;
-  field.value = "";
-  field.blur();
-  jarvisAsk(text);
+document.addEventListener("submit", async (event) => {
+  if (event.target.id === "jarvis-form") {
+    event.preventDefault();
+    const field = el("jarvis-text");
+    const text = field.value.trim();
+    if (!text) return;
+    field.value = "";
+    field.blur();
+    // Без связи просьба не пропадает, а ложится в очередь: компьютер
+    // прочитает её, когда включится.
+    if (!state.online || activePc()?.state !== "online") {
+      queueMessage(text, activePc()?.id);
+      toast("Записал. Передам, когда компьютер появится", "ok");
+      await render(true);
+      return;
+    }
+    jarvisAsk(text);
+    return;
+  }
+  if (event.target.id === "plan-form") {
+    event.preventDefault();
+    const field = el("plan-text");
+    const text = field.value.trim();
+    if (!text) return;
+    field.value = "";
+    field.blur();
+    const pc = activePc();
+    if (!state.online || pc?.state !== "online") {
+      queueMessage(`В планы: ${text}`, pc?.id);
+      toast("Запишу в планы, когда компьютер появится", "ok");
+      await render(true);
+      return;
+    }
+    try {
+      await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/plans`,
+        { method: "POST", body: JSON.stringify({ text, note: "с телефона" }) });
+    } catch (error) {
+      toast(error.message, "err");
+    }
+    await render(true);
+  }
 });
 
 window.addEventListener("hashchange", async () => {
@@ -1457,10 +1594,14 @@ async function loadEditor(force = false) {
    очередь ДАЛЬШЕ, а не список, из которого надо выбирать нынешний трек по
    номеру. Раньше телефон читал его наугад: кнопка всегда показывала «играть»
    и всегда слала `resume`, поэтому пауза с телефона не работала вовсе. */
+/* Что играет прямо сейчас: музыка, а если её нет — видео (в острове или в
+   отдельном окне). Раньше пульт знал только про музыку и писал «ничего не
+   играет» посреди фильма, хотя пауза с той же кнопки его останавливала. */
 function nowPlaying(jd) {
   const m = jd?.player || {};
-  if (!m.title && !m.file && !m.url) return null;
+  if (!m.title && !m.file && !m.url) return videoPlaying(jd);
   return {
+    kind: "music",
     title: m.title || "",
     artist: m.artist || "",
     cover: m.cover || m.color || "",
@@ -1474,6 +1615,31 @@ function nowPlaying(jd) {
     next: m.next || "",
     index: m.index ?? null,
     count: m.count ?? null,
+  };
+}
+
+/* Видео: перемотки по списку у него нет, поэтому карточка проще — название,
+   место в ролике и пауза. Скачивание показываем полоской загрузки: пока
+   ролик едет на диск, человек видит, что дело движется. */
+function videoPlaying(jd) {
+  const v = jd?.video || {};
+  if (!v.title) return null;
+  const loading = v.progress !== undefined && v.progress < 1 && !v.file;
+  return {
+    kind: "video",
+    title: v.title,
+    artist: v.channel || "",
+    cover: "",
+    source: loading ? `загружается ${Math.round((v.progress || 0) * 100)}%` : "видео",
+    playing: v.playing !== false && !v.paused,
+    position: v.pos || 0,
+    duration: v.duration || 0,
+    volume: null,
+    shuffle: false,
+    repeat: "off",
+    next: "",
+    index: null,
+    count: null,
   };
 }
 
@@ -1812,20 +1978,22 @@ function playerCard(pc, now) {
       <div class="card-head"><h2>Плеер</h2></div>
       <div class="meta">Ничего не играет.</div>
       <div class="row">
-        <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
+        <button class="btn" data-jarvis-player="library">${icon("list-music")} Моя музыка</button>
         <button class="btn" data-jarvis-ask="включи что-нибудь">${icon("sparkles")} На твой вкус</button>
       </div>
     </section>`;
   }
 
+  const video = now.kind === "video";
   const done = now.duration ? Math.min(1, now.position / now.duration) : 0;
   const art = `/api/pcs/${encodeURIComponent(pc.id)}/justday/art?v=${encodeURIComponent(now.title)}`;
-  return `<section class="card">
-    <div class="card-head"><h2>Плеер</h2>${now.source
+  return `<section class="card" data-player="${video ? "video" : "music"}"
+      data-pos="${now.position}" data-duration="${now.duration}" data-playing="${now.playing ? "1" : ""}">
+    <div class="card-head"><h2>${video ? "Видео" : "Плеер"}</h2>${now.source
       ? `<span class="meta">${esc(now.source)}</span>` : ""}</div>
     <div class="jarvis-now">
       <div class="jarvis-cover" style="background:${esc(now.cover || "#222")}">
-        <img src="${esc(art)}" alt="" loading="lazy">
+        ${video ? icon("video", "lg") : `<img src="${esc(art)}" alt="" loading="lazy">`}
       </div>
       <div class="jarvis-track">
         <b>${esc(now.title)}</b>
@@ -1839,12 +2007,14 @@ function playerCard(pc, now) {
       <div class="times"><span>${clock(now.position)}</span><span>${clock(now.duration)}</span></div>
     </div>` : ""}
     <div class="transport">
-      <button data-jarvis-player="prev" aria-label="Предыдущий">${icon("skip-back", "lg")}</button>
+      ${video ? `<button data-jarvis-player="restart" aria-label="Сначала">${icon("rotate-ccw", "lg")}</button>`
+        : `<button data-jarvis-player="prev" aria-label="Предыдущий">${icon("skip-back", "lg")}</button>`}
       <button class="big" data-jarvis-player="toggle"
         aria-label="${now.playing ? "Пауза" : "Играть"}">${icon(now.playing ? "pause" : "play")}</button>
-      <button data-jarvis-player="next" aria-label="Следующий">${icon("skip-forward", "lg")}</button>
+      ${video ? `<button data-jarvis-player="stop" aria-label="Закрыть">${icon("x", "lg")}</button>`
+        : `<button data-jarvis-player="next" aria-label="Следующий">${icon("skip-forward", "lg")}</button>`}
     </div>
-    <div class="transport small">
+    ${video ? "" : `<div class="transport small">
       <button data-jarvis-player="shuffle" class="${now.shuffle ? "on" : ""}"
         aria-label="Вперемешку">${icon("shuffle")}</button>
       <button data-jarvis-volume="-10" aria-label="Тише">${icon("volume-1")}</button>
@@ -1855,17 +2025,93 @@ function playerCard(pc, now) {
     ${slider({
       id: "vol-music", label: "Громкость музыки", icon: "volume-2",
       value: now.volume ?? 70, max: 130, action: "volume",
-    })}
+    })}`}
     <div class="row">
-      <button class="btn" data-jarvis-ask="включи мою музыку">${icon("list-music")} Моя музыка</button>
-      <button class="btn" data-jarvis-player="stop">${icon("circle-stop")} Остановить</button>
+      <button class="btn" data-jarvis-player="library">${icon("list-music")} Моя музыка</button>
+      <button class="btn" data-jarvis-player="stop">${icon("circle-stop")}
+        ${video ? "Закрыть видео" : "Остановить"}</button>
     </div>
   </section>`;
+}
+
+/* Полоска идёт сама. Данные с компьютера приходят раз в несколько секунд —
+   если ждать их, время в плеере дёргается рывками по пять секунд и кажется,
+   что всё зависло. Между обновлениями считаем секунды сами, а следующий
+   ответ сервера ставит точное значение на место. */
+function tickProgress() {
+  const card = document.querySelector("[data-player]");
+  if (!card || !card.dataset.playing) return;
+  const duration = Number(card.dataset.duration) || 0;
+  const position = Math.min(duration || Infinity, (Number(card.dataset.pos) || 0) + 1);
+  card.dataset.pos = position;
+  const fill = card.querySelector(".progress .bar i");
+  const shown = card.querySelector(".progress .times span");
+  if (fill && duration) fill.style.transform = `scaleX(${(position / duration).toFixed(3)})`;
+  if (shown) shown.textContent = clock(position);
+}
+
+/* Планы живут в Obsidian на компьютере, но смотреть их удобнее с телефона:
+   список открытых пунктов, галочка и строка «добавить». Без связи показываем
+   последний известный список — в дороге он и нужен чаще всего. */
+function plansCard() {
+  const items = (state.plans?.items || []).filter((item) => !item.done);
+  const stale = !state.online;
+  return `<section class="card">
+    <div class="card-head"><h2>Планы</h2>${stale
+      ? `<span class="meta">как было ${esc(ago((Date.now() - state.syncedAt) / 1000))}</span>`
+      : `<span class="meta">Obsidian</span>`}</div>
+    ${items.length
+      ? `<div class="list">${items.map((item) => `<div class="plan">
+          <button class="btn tiny" data-plan-done="${esc(item.text)}" aria-label="Готово"
+            ${stale ? "disabled" : ""}>${icon("square")}</button>
+          <div><b>${esc(item.text)}</b>${item.note ? `<span class="meta">${esc(item.note)}</span>` : ""}</div>
+        </div>`).join("")}</div>`
+      : `<div class="meta">${stale ? "Список появится, когда компьютер отзовётся." : "Пусто — и хорошо."}</div>`}
+    <form id="plan-form" class="jarvis-form">
+      <input type="text" id="plan-text" placeholder="Добавить пункт" autocomplete="off" enterkeyhint="done">
+      <button class="btn primary" type="submit" aria-label="Добавить">${icon("plus")}</button>
+    </form>
+  </section>`;
+}
+
+/* Что написано без связи и ещё не доставлено. Здесь же видно, что именно
+   ассистент прочитает, когда компьютер проснётся. */
+function outboxCard() {
+  const items = outbox();
+  if (!items.length) return "";
+  return `<section class="card">
+    <div class="card-head"><h2>Ждут отправки</h2><span class="meta">${items.length}</span></div>
+    <div class="list">${items.map((item) => `<div class="step">
+      <div><b>${esc(item.text)}</b><span class="meta">${esc(ago(Date.now() / 1000 - item.at))}</span></div>
+      <button class="btn tiny" data-outbox-drop="${esc(item.id)}" aria-label="Убрать">${icon("x")}</button>
+    </div>`).join("")}</div>
+    <div class="meta">Уйдёт само, как только компьютер окажется в сети: ассистент прочитает
+      и доложит, что с этим делать.</div>
+  </section>`;
+}
+
+/* Экран без связи: пульт остаётся рабочим — видно планы, можно оставить
+   сообщение. Кнопки, которым нужен компьютер, просто не показываем. */
+function viewJarvisOffline(pc) {
+  return `
+  <section class="hero">
+    <div class="hero-state"><span class="dot"></span> ${esc(pc ? pc.name : "компьютер")} не в сети</div>
+    <form id="jarvis-form" class="jarvis-form">
+      <input type="text" id="jarvis-text" placeholder="Оставить сообщение ассистенту" autocomplete="off"
+        enterkeyhint="send">
+      <button class="btn primary" type="submit" aria-label="Записать">${icon("chevron-right")}</button>
+    </form>
+    <div class="meta">Он прочитает это, когда компьютер включится, и сам скажет,
+      что сделал, а что отложил.</div>
+  </section>
+  ${outboxCard()}
+  ${plansCard()}`;
 }
 
 function viewJarvis() {
   const pc = activePc();
   if (!pc) return `<div class="empty">ПК не настроены</div>`;
+  if (!state.online || pc.state === "offline" || pc.state === "unknown") return viewJarvisOffline(pc);
   if (pc.state !== "online") {
     return `<div class="empty">${esc(pc.name)} не отвечает. Разбудить его можно на вкладке «ПК».</div>`;
   }
@@ -1906,6 +2152,9 @@ function viewJarvis() {
   </section>
 
   ${playerCard(pc, now)}
+
+  ${outboxCard()}
+  ${plansCard()}
 
   <section class="card">
     <div class="card-head"><h2>Рабочий стол</h2></div>
@@ -2146,6 +2395,8 @@ async function render(force = false) {
     state.pcs = pcs;
     state.esp32 = esp32;
     state.schedules = schedules;
+    state.online = true;
+    state.syncedAt = Date.now();
     if (current === "more") state.auth = await api("/api/auth/status").catch(() => state.auth);
 
     // Запросы на подтверждение спрашиваем у активного ПК на каждой
@@ -2166,6 +2417,11 @@ async function render(force = false) {
         ? await api(`/api/pcs/${encodeURIComponent(jpc.id)}/justday`).catch(() => ({ available: false }))
         : null;
     }
+    if (current === "jarvis" && pc && pc.state === "online") {
+      state.plans = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/plans`).catch(() => state.plans);
+      await flushOutbox(pc.id);  // всё, что записали в дороге, уходит при первой встрече
+    }
+    rememberState();
 
     // Лист, на котором стоит палец, при обновлении данных сбрасываться
     // не должен.
@@ -2186,12 +2442,37 @@ async function render(force = false) {
       fillActionSelect(state.schedules.find((s) => s.id === state.form.editId)?.action_id);
     }
   } catch (error) {
-    if (error.message !== "требуется вход") {
+    if (error.offline) {
+      // Пульт остаётся рабочим: что знали — показываем, чего не знаем —
+      // честно говорим. Написанное уйдёт, как только компьютер отзовётся.
+      state.online = false;
+      restoreState();
+      state.pcs = state.pcs.map((pc) => ({ ...pc, state: "offline" }));
+      state.approvals = [];
+      state.justday = null;
+      syncChrome();
+      el("view").innerHTML = offlineBanner() + ROUTES[current].view();
+    } else if (error.message !== "требуется вход") {
       el("view").innerHTML = `<div class="empty">Ошибка: ${esc(error.message)}</div>`;
     }
   } finally {
     state.rendering = false;
   }
+}
+
+/* Плашка «не в сети»: видно, когда были последние данные и сколько
+   сообщений ждёт отправки. */
+function offlineBanner() {
+  const waiting = outbox().length;
+  const seen = state.syncedAt ? `данные ${ago((Date.now() - state.syncedAt) / 1000)}` : "данных ещё не было";
+  return `<div class="offline-note">
+    <span class="ico">${icon("wifi-off")}</span>
+    <div>
+      <b>Компьютер не в сети</b>
+      <span class="meta">${esc(seen)}${waiting ? ` · ${waiting} ${waiting === 1 ? "сообщение ждёт" : "сообщений ждут"} отправки` : ""}</span>
+    </div>
+    <button class="btn" data-refresh="1">${icon("refresh-cw")}</button>
+  </div>`;
 }
 
 async function withBusy(button, fn) {
@@ -2402,6 +2683,19 @@ document.addEventListener("click", async (event) => {
   }
   if (d.refresh) {
     return run(button, () => render(true));
+  }
+  if (d.planDone) {
+    const pc = activePc();
+    if (!pc || !state.online) return toast("нет связи с компьютером", "err");
+    buzz(8);
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/plans`,
+        { method: "POST", body: JSON.stringify({ text: d.planDone, done: true }) }),
+      () => render(true));
+  }
+  if (d.outboxDrop) {
+    dropMessage(d.outboxDrop);
+    return render(true);
   }
   if (d.jarvisAsk) {
     buzz(8);
@@ -2874,12 +3168,28 @@ async function start() {
   setInterval(() => {
     if (!document.hidden) render();
   }, 15000);
+  setInterval(() => {
+    if (!document.hidden) tickProgress();
+  }, 1000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) render();
+  });
+  // Телефон снова в сети — не ждём следующего опроса.
+  window.addEventListener("online", () => render(true));
+}
+
+/* Оболочка в кэше: без неё приложение без связи вообще не открывалось —
+   белый экран с ошибкой сети вместо пульта. */
+function keepShellOffline() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw.js").catch((error) => {
+    console.warn("[remo32] офлайн-режим недоступен:", error.message);
   });
 }
 
 (async () => {
+  keepShellOffline();
+  restoreState();
   // Без адреса в строке открываем экран, на котором ушли в прошлый раз.
   if (!location.hash) {
     const saved = store.get(KEY_ROUTE);

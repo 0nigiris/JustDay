@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -140,6 +141,30 @@ def install_security_headers(app: FastAPI, settings: ControllerSettings) -> None
         return response
 
 
+def precache_list() -> list[str]:
+    """Что service worker кладёт в кэш при установке: вся оболочка пульта.
+
+    Список собирается по каталогу, а не пишется руками: забытый значок
+    означал бы дырку в интерфейсе ровно там, где связи нет и починить
+    нечем.
+    """
+    version = asset_version()
+    files = ["/", "/terminal"]
+    for path in sorted(WEB_DIR.rglob("*")):
+        if not path.is_file() or path.name in ("preview.html", "preview.js", "sw.js"):
+            continue
+        files.append(f"/static/{path.relative_to(WEB_DIR).as_posix()}?v={version}")
+    return files
+
+
+def _service_worker() -> Response:
+    """sw.js отдаётся из корня: иначе он управлял бы только /static."""
+    code = (WEB_DIR / "sw.js").read_text(encoding="utf-8")
+    code = code.replace("__ASSET_VERSION__", asset_version())
+    code = code.replace("__PRECACHE__", json.dumps(precache_list(), ensure_ascii=False))
+    return Response(code, media_type="application/javascript", headers=NO_CACHE)
+
+
 def _page(name: str) -> HTMLResponse:
     html = (WEB_DIR / name).read_text(encoding="utf-8")
     return HTMLResponse(
@@ -240,5 +265,17 @@ def create_app(
         @app.get("/terminal", include_in_schema=False)
         async def terminal_page() -> HTMLResponse:
             return _page("terminal.html")
+
+        @app.get("/sw.js", include_in_schema=False)
+        async def service_worker() -> Response:
+            return _service_worker()
+
+        @app.get("/favicon.ico", include_in_schema=False)
+        async def favicon() -> Response:
+            """Браузер просит его сам, молча и всегда: без этого в журнале
+            копятся 404 на ровном месте."""
+            return Response(
+                (WEB_DIR / "icon.svg").read_bytes(), media_type="image/svg+xml", headers=NO_CACHE
+            )
 
     return app
