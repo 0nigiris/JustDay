@@ -109,6 +109,9 @@ DEFAULTS: dict = {
         "speaker": "eugene",
         "sample_rate": 48000,
         "speed": 1.15,  # 1.0 = as the model speaks; 1.1–1.3 sounds like a person in a hurry
+        # Манера речи словами — нейроголос понимает её сам («спокойно, деловито»).
+        # Темп из speed превращается в такую же просьбу, вместо растяжения готовой речи.
+        "style": "",
         "latin": "auto",  # auto = spell English the Russian way only for voices that cannot read it (silero, espeak)
         "numbers": True,  # say figures as words: «7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
         # ElevenLabs (engine = "elevenlabs"): the key lives in ~/.config/justday/secrets.env, never here.

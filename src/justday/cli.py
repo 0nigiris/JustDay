@@ -382,8 +382,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("voice", help="voices: list | design NAME DESCRIPTION | record SECONDS | clone NAME WAV TEXT | "
                                       "delete ID | preview TEXT | speed 1.2 | volume 80 | eleven [VOICE_ID] | "
                                       "key (reads stdin) | mute | unmute | games [on|off]")
-    sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "volume",
-                                       "eleven", "key", "mute", "unmute", "games"])
+    sp.add_argument("action", choices=["list", "design", "record", "clone", "delete", "preview", "speed", "tempo",
+                                       "volume", "eleven", "key", "mute", "unmute", "games"])
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("job", help="long commands in the background, so the assistant stays free: "
                                     "`justday job start \"Обновление системы\" -- jii update --json` · list · log ID · stop ID")
@@ -638,6 +638,15 @@ def main(argv: list[str] | None = None) -> None:
             _print(manage.voice_request({"cmd": "clone", "name": args[0], "audio": args[1], "text": " ".join(args[2:])}))
         elif a.action == "delete":
             _print(manage.voice_request({"cmd": "delete", "id": args[0]}))
+        elif a.action == "tempo":  # темп в самом образце голоса: чисто, без призвука растяжения
+            voice = config.load()["tts"].get("voice", "jarvis")
+            got = manage.voice_tempo(voice, float(args[0]) if args else 1.0)
+            if got.get("ok"):
+                # Растягивать речь после синтеза больше не нужно — это и был призвук.
+                config.set_value("tts", "speed", 1.0)
+                subprocess.run(["systemctl", "--user", "restart", "justday-voice.service"], capture_output=True)
+                control("reload_settings", timeout=10)
+            _print(got)
         elif a.action == "speed":  # how fast the assistant talks, 0.5–2.0
             if args:
                 config.set_value("tts", "speed", max(0.5, min(2.0, float(args[0]))))

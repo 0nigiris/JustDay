@@ -2,7 +2,7 @@
 
 Runs in its own virtualenv (CUDA PyTorch) and serves the daemon over a user-only Unix socket:
   request  : one JSON line
-     {"cmd": "say", "text": "...", "voice": "butler"}           → binary stream of PCM frames
+     {"cmd": "say", "text": "...", "voice": "butler", "instruct": "говори быстрее"} → PCM frames
      {"cmd": "voices"}                                           → JSON line
      {"cmd": "design", "name": "...", "description": "...", "sample": "..."}  → JSON line (creates a voice)
      {"cmd": "clone", "name": "...", "audio": "/path.wav", "text": "transcript"} → JSON line
@@ -91,7 +91,11 @@ def to_pcm16(chunk: np.ndarray) -> bytes:
     return (np.clip(chunk, -1.0, 1.0) * 32767).astype("<i2").tobytes()
 
 
-def say(conn: socket.socket, text: str, voice: str) -> None:
+def say(conn: socket.socket, text: str, voice: str, instruct: str = "") -> None:
+    """`instruct` — манера речи словами («говори быстрее», «спокойно, деловито»).
+
+    Модель умеет менять темп сама, и это звучит чисто. Растягивание уже готовой
+    речи — то, что давало металлический призвук, — здесь больше не нужно."""
     voices = voice_dirs()
     d = voices.get(voice) or next(iter(voices.values()))
     ref_text = (d / "ref.txt").read_text(encoding="utf-8").strip()
@@ -99,7 +103,8 @@ def say(conn: socket.socket, text: str, voice: str) -> None:
         m = load_base()
         for chunk, sr, _timing in m.generate_voice_clone_streaming(
                 text=text, language="Russian" if re.search(r"[а-яё]", text, re.I) else "Auto",
-                ref_audio=str(d / "ref.wav"), ref_text=ref_text, chunk_size=12):  # ~1 s chunks: fewer seams
+                ref_audio=str(d / "ref.wav"), ref_text=ref_text, chunk_size=12,  # ~1 s chunks: fewer seams
+                instruct=instruct or None):
             if sr != RATE:
                 chunk = np.interp(np.linspace(0, len(chunk), int(len(chunk) * RATE / sr), endpoint=False),
                                   np.arange(len(chunk)), chunk)
@@ -150,7 +155,7 @@ def handle(conn: socket.socket) -> None:
             req = json.loads(f.readline() or b"{}")
             cmd = req.get("cmd")
             if cmd == "say":
-                say(conn, req["text"], req.get("voice", ""))
+                say(conn, req["text"], req.get("voice", ""), str(req.get("instruct") or ""))
                 return
             if cmd == "voices":
                 resp = {"ok": True, "voices": voice_list()}

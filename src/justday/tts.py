@@ -132,6 +132,25 @@ class TTS:
     NEURAL_RATE = 24000
     SOCKET = config.RUNTIME_DIR / "justday-voice.sock"
 
+    def instruct(self) -> str:
+        """Манера речи словами — то, что модель понимает сама.
+
+        Темп раньше набирался растяжением уже готовой речи, и это слышно
+        металлическим призвуком. Модель умеет говорить быстрее сама, если
+        попросить; просьба на английском работает заметно сильнее русской.
+        Свою формулировку можно задать в `tts.style`."""
+        style = str(self.cfg.get("style") or "").strip()
+        speed = self.speed
+        if speed >= 1.3:
+            pace = "Speak much faster than usual, brisk and energetic."
+        elif speed >= 1.08:
+            pace = "Speak noticeably faster than usual, brisk and business-like."
+        elif speed <= 0.9:
+            pace = "Speak slower than usual, calm and unhurried."
+        else:
+            pace = ""
+        return " ".join(part for part in (style, pace) if part)
+
     async def stream(self, sentence: str):
         """Neural voice (justday-voice service): yields int16 PCM bytes at NEURAL_RATE as they are generated.
         Raises OSError when the service is unavailable (the caller falls back to Silero)."""
@@ -141,7 +160,8 @@ class TTS:
 
         reader, writer = await asyncio.open_unix_connection(str(self.SOCKET))
         try:
-            req = {"cmd": "say", "text": sentence, "voice": self.cfg.get("voice", "butler")}
+            req = {"cmd": "say", "text": sentence, "voice": self.cfg.get("voice", "butler"),
+                   "instruct": self.instruct()}
             writer.write((json.dumps(req, ensure_ascii=False) + "\n").encode())
             await writer.drain()
             while True:

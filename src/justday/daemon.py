@@ -356,7 +356,10 @@ class Daemon:
         if engine == "elevenlabs":
             stream, rate, native = self.tts.eleven_stream(sentence), self.tts.ELEVEN_RATE, max(0.7, min(1.2, self.tts.speed))
         else:
-            stream, rate, native = self.tts.stream(sentence), self.tts.NEURAL_RATE, 1.0
+            # Нейроголос набирает темп сам, по словесной просьбе (`instruct`),
+            # поэтому растягивать его речь после синтеза больше не нужно —
+            # именно это растяжение и давало металлический призвук.
+            stream, rate, native = self.tts.stream(sentence), self.tts.NEURAL_RATE, self.tts.speed
         stretch = audio.Stretcher(self.tts.speed / native, rate)
         try:
             first = await stream.__anext__()

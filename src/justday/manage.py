@@ -50,6 +50,63 @@ def voice_request(req: dict, timeout: float = 600) -> dict:
         return {"ok": False, "error": f"голосовой сервис недоступен ({e}); scripts/setup-voice.sh"}
 
 
+def voice_dir(voice_id: str) -> Path | None:
+    """Каталог голоса: сначала свои, потом встроенные."""
+    for root in (config.DATA_DIR / "voices", config.REPO_DIR / "voice" / "voices"):
+        d = root / voice_id
+        if (d / "ref.wav").exists():
+            return d
+    return None
+
+
+def voice_tempo(voice_id: str, tempo: float) -> dict:
+    """Темп — в сам образец голоса, а не в речь после синтеза.
+
+    Нейроголос копирует образец целиком, вместе с его скоростью. Раньше
+    ускорение делалось уже по готовой речи (WSOLA) — отсюда металлический
+    призвук, на который и жалуются. Если ускорить образец один раз хорошим
+    алгоритмом, модель просто заговорит быстрее, и растягивать больше нечего.
+
+    Встроенный голос при этом не переписывается: ускоренная копия ложится
+    в пользовательский каталог голосов и перекрывает встроенную, как любой
+    свой голос. `tempo 1.0` просто убирает копию, и всё как было.
+    """
+    tempo = max(0.6, min(1.6, float(tempo)))
+    source = voice_dir(voice_id)
+    if source is None:
+        return {"ok": False, "error": f"нет такого голоса: {voice_id}"}
+    mine = config.DATA_DIR / "voices" / voice_id
+    original = mine / "ref-original.wav"
+    if original.exists():  # копия уже делалась: растягиваем всегда исходник
+        source_ref = original
+    else:
+        source_ref = (source / "ref-original.wav") if (source / "ref-original.wav").exists() else source / "ref.wav"
+    if abs(tempo - 1.0) < 0.01:
+        if mine.exists() and original.exists():
+            shutil.copy2(original, mine / "ref.wav")
+            return {"ok": True, "voice": voice_id, "tempo": 1.0, "restored": True}
+        return {"ok": True, "voice": voice_id, "tempo": 1.0, "restored": False}
+    if not shutil.which("ffmpeg"):
+        return {"ok": False, "error": "нужен ffmpeg (он умеет растягивать звук без призвука)"}
+    mine.mkdir(parents=True, exist_ok=True)
+    if not original.exists():
+        shutil.copy2(source_ref, original)
+    for name in ("ref.txt", "voice.json"):  # текст образца и описание едут вместе со звуком
+        if (source / name).exists() and not (mine / name).exists():
+            shutil.copy2(source / name, mine / name)
+    # rubberband звучит заметно чище atempo, но есть не в каждой сборке ffmpeg
+    for chain in (f"rubberband=tempo={tempo:.3f}", f"atempo={tempo:.3f}"):
+        tmp = mine / "ref-tempo.wav"
+        done = subprocess.run(["ffmpeg", "-y", "-i", str(original), "-filter:a", chain, str(tmp)],
+                              capture_output=True, timeout=120)
+        if done.returncode == 0 and tmp.exists() and tmp.stat().st_size > 1000:
+            tmp.replace(mine / "ref.wav")
+            return {"ok": True, "voice": voice_id, "tempo": round(tempo, 3),
+                    "filter": chain.split("=")[0], "file": str(mine / "ref.wav")}
+        tmp.unlink(missing_ok=True)
+    return {"ok": False, "error": "ffmpeg не смог растянуть образец"}
+
+
 def eleven_voices() -> dict:
     """Voices available on the ElevenLabs account behind the stored key (names and ids, nothing else)."""
     import urllib.error
