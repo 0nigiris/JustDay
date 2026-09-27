@@ -9,6 +9,7 @@ Singleton {
 
     // ───────────── live state from the daemon ─────────────
     property string dstate: "offline"      // idle listening transcribing thinking speaking approval offline
+    property bool followup: false          // слушаем продолжение разговора, а не новый зов: ответ остаётся на виду
     property real level: 0
     property int workers: 0
     property var settings: ({})
@@ -166,7 +167,7 @@ Singleton {
         if (approvalText) return "approval"
         if (settingsOpen) return "settings"
         if (card) return "card"
-        if (dstate === "listening") return "listening"
+        if (dstate === "listening") return answerOpen ? "answer" : "listening"
         if (video) return "video"                      // stays while the assistant works: a caption line shows it
         if (playerOpen && musicOn) return "player"
         if (notification) return "notification"
@@ -322,6 +323,7 @@ Singleton {
         if (m.update !== undefined) update = m.update
         if (m.next_event !== undefined) nextEvent = m.next_event
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
+        if (m.followup !== undefined) followup = m.followup
         if (m.player !== undefined) {
             const was = player
             if (m.player && m.player.paused && was && !was.paused) { pauseGrace = true; graceTimer.restart() }
@@ -335,7 +337,14 @@ Singleton {
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
             dstate = m.state
-            if (m.state === "listening") { activity = ""; activityIcon = ""; answerOpen = false }
+            if (m.state === "listening") {
+                activity = ""; activityIcon = ""
+                // продолжение разговора: ответ дочитывается, пока микрофон ждёт — отсчёт замирает
+                if (followup && answerOpen) answerTimer.stop()
+                else answerOpen = false
+            }
+            // заговорили в ответ — прошлая реплика больше не нужна, её место занимает «Думаю…»
+            if ((m.state === "thinking" || m.state === "transcribing") && was === "listening") answerOpen = false
             if ((m.state === "thinking" || m.state === "transcribing") && was !== "thinking" && was !== "speaking")
                 busySince = Date.now()
             if (m.state === "idle" && answerOpen) answerTimer.restart()
@@ -387,7 +396,7 @@ Singleton {
         id: answerTimer
         // without a voice the text is all there is: give time to read it
         interval: jd.voiceOn && jd.micOn ? Math.min(15000, 4000 + jd.answer.length * 45) : Math.min(60000, 8000 + jd.answer.length * 70)
-        onTriggered: if (jd.islandHovered) restart(); else jd.answerOpen = false
+        onTriggered: if (jd.islandHovered || jd.dstate === "listening") restart(); else jd.answerOpen = false
     }
     Timer { id: cardTimer; onTriggered: if (jd.islandHovered) restart(); else jd.card = null }
     Timer { id: leaveTimer; interval: 700; onTriggered: jd.peeking = false }

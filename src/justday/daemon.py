@@ -491,6 +491,7 @@ class Daemon:
     async def _listen_once(self, followup: bool, prefill=None) -> None:
         self.mic.start()
         self._last_mic_use = time.monotonic()
+        self.publish(followup=followup)  # остров: продолжение разговора не гасит ответ на экране
         self.state = "listening"
         self._listen_cancel = asyncio.Event()
         self._discard_recording = False

@@ -1157,7 +1157,14 @@ ShellRoot {
                 spacing: 10
                 Ring { size: 18 }
                 Label1 { text: JD.assistantName; Layout.fillWidth: true }
-                Label2 { text: JD.dstate === "speaking" ? JD.tr("говорит") : "" }
+                Label2 {
+                    text: JD.dstate === "speaking" ? JD.tr("говорит")
+                        : JD.dstate === "listening" ? JD.tr("слушает продолжение") : ""
+                }
+                Waveform {
+                    visible: JD.dstate === "listening"
+                    Layout.preferredWidth: 40; Layout.preferredHeight: 20
+                }
                 IconButton {
                     icon: "edit-copy"; size: 26
                     onClicked: { Quickshell.execDetached(["wl-copy", "--", JD.answer]); JD.flash(JD.tr("Скопировано"), "edit-copy", JD.accentGreen); JD.answerOpen = false }
