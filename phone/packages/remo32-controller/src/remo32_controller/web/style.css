@@ -665,6 +665,21 @@ main#view {
 .key.danger .key-ico { background: var(--danger-soft); color: var(--danger); }
 .key.danger .key-cap { color: var(--danger); }
 
+/* Переключатель во включённом состоянии: зелёная точка в углу и подсветка
+   значка. Цветом «включено» отличается от «избранного» — синего, — иначе
+   на пульте два разных смысла выглядели бы одинаково. */
+.key.on .key-ico { background: rgba(48, 209, 88, 0.26); color: #30d158; }
+.key.on::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #30d158;
+}
+
 /* ======================================================= стримдек ======= */
 
 /* Телефон повернули набок. Ничего не настраивается и не выбирается:

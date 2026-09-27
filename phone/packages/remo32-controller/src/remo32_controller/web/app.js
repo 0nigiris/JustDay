@@ -774,8 +774,7 @@ const JARVIS_KEYS = [
   { id: "jarvis:repeat", name: "Повтор", icon: "lucide:repeat", player: "repeat" },
   { id: "jarvis:softer", name: "Тише", icon: "lucide:volume-1", volume: -10 },
   { id: "jarvis:louder", name: "Громче", icon: "lucide:volume-2", volume: +10 },
-  { id: "jarvis:quiet", name: "Молчи", icon: "lucide:volume-x", ask: "молчи" },
-  { id: "jarvis:speak", name: "Говори", icon: "lucide:audio-lines", ask: "говори" },
+  { id: "jarvis:voice", name: "Голос", icon: "lucide:audio-lines", voice: true },
   { id: "jarvis:today", name: "Что сегодня", icon: "lucide:sun", ask: "что у меня сегодня?" },
   { id: "jarvis:timer", name: "Таймер 10 мин", icon: "lucide:timer", ask: "поставь таймер на 10 минут" },
   { id: "jarvis:away", name: "Я ушёл", icon: "lucide:log-out", session: "close" },
@@ -793,18 +792,29 @@ const PC_KEYS = [
 ];
 
 /* Кнопка плеера показывает то, что сделает нажатие, а не то, что сейчас
-   происходит: играет музыка — на кнопке пауза. */
-function jarvisKey(key, playing) {
-  if (key.id !== "jarvis:play") return key;
-  return playing
-    ? { ...key, name: "Пауза", icon: "lucide:pause" }
-    : { ...key, name: "Играть", icon: "lucide:play" };
+   происходит: играет музыка — на кнопке пауза. Голос — одна клавиша вместо
+   пары «молчи»/«говори»: состояние ассистент и так сообщает, так что кнопка
+   просто светится, когда он говорит вслух. */
+function jarvisKey(key, playing, speaking) {
+  if (key.id === "jarvis:play") {
+    return playing
+      ? { ...key, name: "Пауза", icon: "lucide:pause" }
+      : { ...key, name: "Играть", icon: "lucide:play" };
+  }
+  if (key.id === "jarvis:voice") {
+    return speaking
+      ? { ...key, name: "Молчи", icon: "lucide:volume-x", ask: "молчи", active: true }
+      : { ...key, name: "Говори", icon: "lucide:audio-lines", ask: "говори", active: false };
+  }
+  return key;
 }
 
 function jarvisKeysFor(pc) {
   if (!pc || pc.state !== "online" || state.justday?.available === false) return [];
   const playing = nowPlaying(state.justday)?.playing ?? false;
-  return JARVIS_KEYS.map((key) => ({ ...jarvisKey(key, playing), available: true, group: "JustDay" }));
+  const speaking = !state.justday?.silent;  // "off" — голос выключен, "game" — молчит из-за игры
+  return JARVIS_KEYS.map((key) => (
+    { ...jarvisKey(key, playing, speaking), available: true, group: "JustDay" }));
 }
 
 function pcKeysFor(pc) {
@@ -826,7 +836,8 @@ function deckButton(pc, action) {
   // Без связи кнопка всё равно показывается — так видно, что пульт на месте
   // и чего ждать, когда компьютер вернётся, — но нажимать её нечем.
   const off = action.available === false || !state.online || pc.state === "offline" || pc.state === "unknown";
-  return `<button class="key ${action.dangerous ? "danger" : ""} ${isFavorite(pc.id, action.id) ? "fav" : ""}"
+  return `<button class="key ${action.dangerous ? "danger" : ""} ${isFavorite(pc.id, action.id) ? "fav" : ""}
+    ${action.active ? "on" : ""}"
     data-key-pc="${esc(pc.id)}" data-key-action="${esc(action.id)}"
     ${off ? "disabled" : ""}
     title="${esc(action.description || action.name)}">
@@ -1333,6 +1344,7 @@ function approvalBlock() {
 const KIND_NAMES = {
   desktop: "Приложение",
   macro: "Несколько действий",
+  toggle: "Переключатель",
   exec: "Программа",
   tmux: "Команда в tmux",
   systemd_user: "Служба (пользователя)",
@@ -1343,6 +1355,7 @@ const KIND_NAMES = {
 const KIND_HINTS = {
   desktop: "Запускает окно на экране компьютера: браузер, игру, редактор.",
   macro: "Одно нажатие — несколько уже готовых кнопок по порядку: открыть OBS, запустить сцену, приглушить музыку.",
+  toggle: "Одна клавиша вместо пары: нажатия чередуются — включить, выключить, снова включить. Кнопка подсвечена, когда включено.",
   exec: "Запускает программу без графики. Окна не будет.",
   tmux: "Запускает команду в фоновой сессии tmux — она переживёт обрыв связи, и к ней можно подключиться из терминала.",
   systemd_user: "Управляет службой, настроенной у пользователя.",
@@ -1476,6 +1489,34 @@ function macroFields(draft) {
 /* Поля, зависящие от вида действия. Отдельная функция, потому что при
    смене вида перерисовывается только этот кусок — введённое имя и значок
    при этом обязаны сохраниться. */
+/* Переключатель: две уже существующие кнопки — одна включает, другая
+   выключает. Состояние помнит компьютер, поэтому после перезапуска службы
+   кнопка не начинает сначала. */
+function toggleFields(draft) {
+  const pc = editorPc();
+  const all = (pc?.actions || []).filter((a) => a.id !== draft.id && a.kind !== "toggle");
+  const options = (chosen) => `<option value="">— выберите кнопку —</option>` + all.map((a) =>
+    `<option value="${esc(a.id)}" ${a.id === chosen ? "selected" : ""}>${esc(a.name)}${
+      a.group ? ` · ${esc(a.group)}` : ""}</option>`).join("");
+  return `
+    <div class="field">
+      <label for="f-on">Включает</label>
+      <select id="f-on">${options(draft.on)}</select>
+    </div>
+    <div class="field">
+      <label for="f-off">Выключает</label>
+      <select id="f-off">${options(draft.off)}</select>
+      <div class="hint">Первое нажатие сделает то, что противоположно нынешнему состоянию.</div>
+    </div>
+    <div class="kv">
+      <div>
+        <span class="label">Сейчас считается включённым</span>
+        <button class="switch ${draft.starts_on ? "on" : ""}" id="f-starts-on"
+          aria-pressed="${draft.starts_on ? "true" : "false"}"></button>
+      </div>
+    </div>`;
+}
+
 function kindFields(draft) {
   const argvText = (draft.argv || []).join("\n");
   const program = `
@@ -1501,6 +1542,8 @@ function kindFields(draft) {
 
   if (draft.kind === "macro") return macroFields(draft);
 
+  if (draft.kind === "toggle") return toggleFields(draft);
+
   if (draft.kind === "desktop" || draft.kind === "exec") return program + workdir;
 
   if (draft.kind === "tmux") {
@@ -1512,11 +1555,7 @@ function kindFields(draft) {
     </div>` + program + workdir;
   }
 
-  if (draft.kind === "macro") {
-    body.steps = draft.steps || [];
-    body.pause_ms = Math.max(0, Math.min(60000, Number(el("f-pause")?.value) || 0));
-    body.stop_on_error = draft.stop_on_error !== false;
-  } else if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
+  if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
     const verbs = ["start", "stop", "restart", "reload", "status", "is-active"];
     return `
     <div class="field">
@@ -1624,6 +1663,10 @@ function collectForm() {
     body.steps = draft.steps || [];
     body.pause_ms = Math.max(0, Math.min(60000, Number(el("f-pause")?.value) || 0));
     body.stop_on_error = draft.stop_on_error !== false;
+  } else if (draft.kind === "toggle") {
+    body.on = value("f-on");
+    body.off = value("f-off");
+    body.starts_on = Boolean(draft.starts_on);
   } else if (draft.kind === "systemd_user" || draft.kind === "systemd_system") {
     body.unit = value("f-unit");
     body.verb = value("f-verb");
@@ -2978,6 +3021,15 @@ document.addEventListener("click", async (event) => {
     state.buttonForm.steps = steps;
     buzz(6);
     return render(true);
+  }
+  if (button.id === "f-starts-on") {
+    stashForm();
+    const next = !state.buttonForm.starts_on;
+    state.buttonForm.starts_on = next;
+    button.classList.toggle("on", next);
+    button.setAttribute("aria-pressed", next ? "true" : "false");
+    buzz(6);
+    return;
   }
   if (button.id === "f-stop-on-error") {
     stashForm();

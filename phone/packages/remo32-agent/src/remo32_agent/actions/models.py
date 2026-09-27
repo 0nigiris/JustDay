@@ -238,7 +238,38 @@ class MacroAction(_ActionBase):
         return got
 
 
+class ToggleAction(_ActionBase):
+    """Одна клавиша вместо пары «включить» и «выключить».
+
+    На пульте место дорогое, а половина кнопок ходит парами: свет включить —
+    свет выключить, микрофон замьютить — размьютить. Переключатель помнит,
+    что сделал в прошлый раз, и в следующий раз делает обратное. Состояние
+    хранится рядом с кнопками и переживает перезапуск службы.
+
+    Если состояние разошлось с действительностью (свет выключили выключателем
+    на стене), долгое нажатие в интерфейсе даёт выбрать нужную сторону.
+    """
+
+    kind: Literal[ActionKind.TOGGLE] = ActionKind.TOGGLE
+    on: str = Field(min_length=1, description="Действие, включающее")
+    off: str = Field(min_length=1, description="Действие, выключающее")
+    starts_on: bool = Field(
+        False, description="С чего начать, пока ни разу не нажимали: включено или выключено"
+    )
+
+    def descriptor(self) -> ActionDescriptor:
+        got = super().descriptor()
+        got.steps = [self.on, self.off]
+        return got
+
+
 ActionConfig = Annotated[
-    ExecAction | ShellScriptAction | SystemdAction | TmuxAction | DesktopAction | MacroAction,
+    ExecAction
+    | ShellScriptAction
+    | SystemdAction
+    | TmuxAction
+    | DesktopAction
+    | MacroAction
+    | ToggleAction,
     Field(discriminator="kind"),
 ]

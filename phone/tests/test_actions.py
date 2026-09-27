@@ -216,3 +216,50 @@ async def test_macro_is_unavailable_when_a_step_is(runner: RecordingRunner) -> N
     assert not described.available
     assert "gone" in (described.description or "")
     assert described.steps == ["light", "gone"]
+
+
+class TestПереключатель:
+    """Одна клавиша вместо пары «включить»/«выключить»."""
+
+    @pytest.fixture
+    def toggle_registry(self, tmp_path, sample_actions):  # type: ignore[no-untyped-def]
+        from remo32_agent.actions.models import ToggleAction
+        from remo32_agent.actions.runner import ActionRegistry
+        from remo32_agent.actions.toggles import ToggleState
+
+        toggle = ToggleAction(id="light", name="Свет", on="beep", off="beep")
+        actions = [*sample_actions, toggle]
+        return ActionRegistry(actions, toggles=ToggleState(tmp_path / "toggles.json"))
+
+    @pytest.mark.anyio
+    async def test_нажатия_чередуются(self, toggle_registry, runner) -> None:  # type: ignore[no-untyped-def]
+        from remo32_agent.actions.runner import ActionExecutor
+
+        executor = ActionExecutor(toggle_registry, runner, get_adapter("linux"))
+        first = await executor.run("light")
+        second = await executor.run("light")
+        assert first.success and second.success
+        assert first.message == "включено"
+        assert second.message == "выключено"
+
+    @pytest.mark.anyio
+    async def test_состояние_видно_в_описании(self, toggle_registry, runner) -> None:  # type: ignore[no-untyped-def]
+        from remo32_agent.actions.runner import ActionExecutor
+
+        assert toggle_registry.describe("light").active is False
+        await ActionExecutor(toggle_registry, runner, get_adapter("linux")).run("light")
+        assert toggle_registry.describe("light").active is True
+
+    @pytest.mark.anyio
+    async def test_неудачный_шаг_не_меняет_состояние(self, tmp_path, runner) -> None:  # type: ignore[no-untyped-def]
+        from remo32_agent.actions.models import ExecAction, ToggleAction
+        from remo32_agent.actions.runner import ActionExecutor, ActionRegistry
+        from remo32_agent.actions.toggles import ToggleState
+
+        broken = ExecAction(id="broken", name="Сломано", argv=["/нет/такой/программы"])
+        toggle = ToggleAction(id="light", name="Свет", on="broken", off="broken")
+        registry = ActionRegistry([broken, toggle], toggles=ToggleState(tmp_path / "t.json"))
+        result = await ActionExecutor(registry, runner, get_adapter("linux")).run("light")
+        assert result.success is False
+        # Иначе следующее нажатие попыталось бы «вернуть» то, чего не произошло.
+        assert registry.describe("light").active is False

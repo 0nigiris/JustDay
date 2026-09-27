@@ -26,8 +26,10 @@ from remo32_agent.actions.models import (
     ShellScriptAction,
     SystemdAction,
     TmuxAction,
+    ToggleAction,
 )
 from remo32_agent.actions.store import ActionStore
+from remo32_agent.actions.toggles import ToggleState
 from remo32_agent.execution import CommandResult, CommandRunner
 from remo32_agent.platforms import PlatformAdapter
 from remo32_core.errors import (
@@ -54,6 +56,7 @@ class ActionRegistry:
         self,
         actions: Iterable[ActionConfig],
         store: ActionStore | None = None,
+        toggles: ToggleState | None = None,
     ) -> None:
         self._static: dict[str, ActionConfig] = {}
         for action in actions:
@@ -61,6 +64,11 @@ class ActionRegistry:
                 raise ValueError(f"дублирующийся идентификатор действия: {action.id}")
             self._static[action.id] = action
         self._store = store
+        self._toggles = toggles or ToggleState()
+
+    @property
+    def toggles(self) -> ToggleState:
+        return self._toggles
 
     @property
     def store(self) -> ActionStore | None:
@@ -115,9 +123,12 @@ class ActionRegistry:
         descriptor = action.descriptor()
         descriptor.available = action.is_available()
         descriptor.editable = editable
-        if isinstance(action, MacroAction):
-            # Мультидействие само по себе не запускает ничего: доступно оно
-            # ровно настолько, насколько доступны его шаги.
+        if isinstance(action, ToggleAction):
+            # Кнопка показывает своё состояние: включено сейчас или нет.
+            descriptor.active = self._toggles.is_on(action.id, action.starts_on)
+        if isinstance(action, MacroAction | ToggleAction):
+            # Ни мультидействие, ни переключатель сами по себе ничего не запускают:
+            # доступны они ровно настолько, насколько доступны их шаги.
             missing = self._broken_steps(action)
             if missing:
                 descriptor.available = False
@@ -130,11 +141,12 @@ class ActionRegistry:
             descriptor.description = _mark_unavailable(action, descriptor.description)
         return descriptor
 
-    def _broken_steps(self, macro: MacroAction) -> list[str]:
+    def _broken_steps(self, macro: MacroAction | ToggleAction) -> list[str]:
         """Шаги, которых нет или которые на этой машине не запустятся."""
         known = self._actions
         broken = []
-        for step in macro.steps:
+        steps = macro.steps if isinstance(macro, MacroAction) else [macro.on, macro.off]
+        for step in steps:
             found = known.get(step)
             if found is None or not found.is_available():
                 broken.append(step)
@@ -208,6 +220,9 @@ class ActionExecutor:
 
         if isinstance(action, MacroAction):
             return await self._run_macro(action, started, _seen)
+
+        if isinstance(action, ToggleAction):
+            return await self._run_toggle(action, started, _seen)
 
         if not action.is_available():
             log.warning("действие недоступно", action=action_id, exe=action.executable())
@@ -310,6 +325,52 @@ class ActionExecutor:
             started_at=started,
             finished_at=utcnow(),
             message=f"{did}остановились на «{failed}»: {detail}"[:300],
+        )
+
+    async def _run_toggle(
+        self, toggle: ToggleAction, started: datetime, seen: frozenset[str]
+    ) -> ActionResult:
+        """Нажатие делает обратное тому, что сделали в прошлый раз."""
+        if toggle.id in seen:
+            return ActionResult(
+                action_id=toggle.id,
+                success=False,
+                started_at=started,
+                finished_at=utcnow(),
+                message=f"кнопка «{toggle.id}» вызывает сама себя",
+            )
+        store = self._registry.toggles
+        on_now = store.is_on(toggle.id, toggle.starts_on)
+        step = toggle.off if on_now else toggle.on
+        try:
+            result = await self.run(step, seen | {toggle.id})
+        except ActionNotFoundError:
+            return ActionResult(
+                action_id=toggle.id,
+                success=False,
+                started_at=started,
+                finished_at=utcnow(),
+                message=f"нет действия «{step}»",
+            )
+        if not result.success:
+            # Не получилось — состояние не трогаем: иначе следующее нажатие
+            # попыталось бы вернуть то, чего не случилось.
+            return ActionResult(
+                action_id=toggle.id,
+                success=False,
+                started_at=started,
+                finished_at=utcnow(),
+                message=result.message or "не получилось",
+            )
+        store.set(toggle.id, not on_now)
+        log.info("переключатель", action=toggle.id, on=not on_now)
+        return ActionResult(
+            action_id=toggle.id,
+            success=True,
+            started_at=started,
+            finished_at=utcnow(),
+            exit_code=0,
+            message="включено" if not on_now else "выключено",
         )
 
     def _build_argv(self, action: ActionConfig) -> list[str]:
