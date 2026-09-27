@@ -606,6 +606,17 @@ plans = "Планы.md"
 
 Разница между планом и напоминанием: «запиши, чтобы не забыть» — план, «напомни в шесть» — таймер.
 
+### Дневник дня
+
+Вечером (по умолчанию в 23:00) JustDay сам записывает в хранилище страницу дня: о чём просили, какие сценарии запускались, что закрыто в планах и во что обошёлся день. Собирается из журнала и планов, поэтому ничего не стоит — модель для этого не будится.
+
+```bash
+justday diary            # записать страницу за сегодня
+justday diary 2026-09-20 --open
+```
+
+Выключить: `diary_hour = 0` в секции `[notes]`. Свои слова к странице ассистент допишет, если попросить («подведи итоги дня»).
+
 ### Сообщения с телефона, пока компьютера не было
 
 Наговорить можно и без связи: запись ждёт компьютера в телефоне, а он распознаёт её и кладёт в тот же список — не выполняя. Час спустя «поставь таймер на десять минут» значит уже не то, что значило.
@@ -692,7 +703,7 @@ justday inbox clear
 | `[user]` | `name` (подпись в письмах), `address_as` («сэр»), `assistant_name` («Джарвис»), `assistant_aliases` (`["JustDay"]`), `language` (`ru` / `en`) |
 | `[audio]` | `input`/`output` (часть имени устройства PipeWire), `earcons`, `silence_seconds`, `followup_seconds`, `double_tap_seconds`, `max_utterance_seconds`, `no_speech_timeout_seconds` |
 | `[stt]` | `model` (large-v3-turbo / small), `device` (cuda/cpu), `compute_type`, `language`, `initial_prompt` (подсказка словами: имена, названия) |
-| `[tts]` | `engine` (qwen/silero/espeak/none), `voice` (нейроголос: jarvis или свой), `neural_quality` (fast/best), `speaker` (Silero: aidar, eugene, baya, kseniya, xenia) |
+| `[tts]` | `engine` (qwen/silero/espeak/none), `voice` (нейроголос: jarvis или свой), `neural_quality` (fast/best), `speaker` (Silero: aidar, eugene, baya, kseniya, xenia), `speed` (темп), `style` (манера речи словами: «спокойно, деловито») |
 | `[wakeword]` | `enabled` (слово пробуждения), `names` (просыпаться по имени «Джарвис»/«JustDay»), `threshold` («Hey Jarvis», модель английская), `threshold_while_playing` (планка, пока из колонок идёт звук) |
 | `[voiceprint]` | `mode`: off / wake / always ([«Под мой голос»](#под-мой-голос)) |
 | `[island]` | `animations` (spring/smooth/off), `hover_reveal`, `show_weather`, `show_events`, `show_notifications`, `city`, `screen` (например DP-2) |
@@ -701,7 +712,7 @@ justday inbox clear
 | `[workers]` | `model`, `permission_mode`, `poll_seconds`, `auto_review` |
 | `[desktop]` | `accessibility`: метки кнопок на скриншотах |
 | `[local_llm]` | `url`, `model`, `num_ctx`, `keep_alive` (через сколько выгружать модель из видеопамяти) |
-| `[notes]` | `vault` (хранилище Obsidian, "" = найти открытое), `plans` (файл списка планов) |
+| `[notes]` | `vault` (хранилище Obsidian, "" = найти открытое), `plans` (файл списка планов), `diary` (папка дневника), `diary_hour` (во сколько записывать страницу дня, 0 = не записывать) |
 | `[[scenes]]` | `name`, `phrases`, `open`, `close`, `run`, `music`, `silent`, `say` — несколько дел одной фразой |
 | `[mail]` | `address`, `imap_host`, `smtp_host`, `query`, `other_query`, `max_letters`, `announce`, `poll_seconds` |
 | `[apps.aliases]` | `"дискорд" = "org.equicord.equibop"`: как вы называете приложение → его desktop id (`justday apps find <имя>`) |

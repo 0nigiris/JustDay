@@ -156,7 +156,8 @@ DEFAULTS: dict = {
     # [[scenes]] name / phrases / open / close / run / music / silent / say — см. config.example.toml.
     "scenes": [],
     # Планы и заметки пишутся в хранилище Obsidian: vault "" = найти открытое самому.
-    "notes": {"vault": "", "plans": "Планы.md"},
+    # diary_hour: во сколько сама записывается страница дня (0 = не записывать).
+    "notes": {"vault": "", "plans": "Планы.md", "diary": "Дневник", "diary_hour": 23},
     "ui": {"notifications": True},
     # «Я ушёл» closes the open applications and remembers them; «я вернулся» opens them again.
     # keep: what is never closed (a substring of the window class or the application name).

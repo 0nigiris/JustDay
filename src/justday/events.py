@@ -34,6 +34,29 @@ def emit(kind: str, **data: Any) -> None:
     log.info("%s %s", kind, json.dumps(short, ensure_ascii=False))
 
 
+def read(day: str = "") -> list[dict[str, Any]]:
+    """События за один день (YYYY-MM-DD) или все, если день не назван.
+
+    Журнал дописывается построчно и переживает падения, поэтому последняя
+    строка бывает оборванной — на чтении это не должно сказываться.
+    """
+    out: list[dict[str, Any]] = []
+    try:
+        lines = config.EVENTS_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        if not line.startswith("{"):
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if not day or str(record.get("ts", "")).startswith(day):
+            out.append(record)
+    return out
+
+
 def load_state() -> dict:
     try:
         return json.loads(config.STATE_FILE.read_text())

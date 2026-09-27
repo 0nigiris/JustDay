@@ -1181,6 +1181,7 @@ class Daemon:
                     self.publish(update=self.update_info)
                 except Exception as e:
                     log.info("update check failed: %s", type(e).__name__)
+            await self._diary_maybe()
             if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
                 self._last_cal = time.monotonic()
                 try:
@@ -1234,6 +1235,26 @@ class Daemon:
                     self._event_queue.put_nowait(msg)
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                 spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
+
+    async def _diary_maybe(self) -> None:
+        """Страница дня в Obsidian, вечером и сама.
+
+        Собирается из фактов — журнала и планов, — поэтому ничего не стоит.
+        Ассистенту достаточно дописать к ней пару слов, если его попросят."""
+        hour = int(self.cfg["notes"].get("diary_hour") or 0)
+        if not hour:
+            return
+        today = time.strftime("%Y-%m-%d")
+        if time.localtime().tm_hour < hour or events.load_state().get("diary_day") == today:
+            return
+        events.save_state(diary_day=today)  # даже если не выйдет: второй раз за вечер не пробуем
+        try:
+            from . import notes
+
+            got = await asyncio.get_running_loop().run_in_executor(None, notes.diary)
+            events.emit("diary", file=got["file"], asked=got["asked"], closed=got["closed"])
+        except Exception as e:
+            log.info("страница дня не записалась: %s", e)
 
     # ---------------- сообщения с телефона ----------------
     def _inbox_soon(self, delay: float = 4.0) -> None:

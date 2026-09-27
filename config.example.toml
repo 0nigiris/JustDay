@@ -35,7 +35,8 @@ engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | sile
 voice = "jarvis"            # neural voice: jarvis, or one you designed/cloned (justday voice list)
 neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
-speed = 1.15                # how fast it talks (0.5–2.0); the pitch does not move
+speed = 1.15                # how fast it talks (0.5–2.0); the neural voice is asked to speak faster, not stretched
+# style = ""                # manner of speech in words: «спокойно, деловито» — the neural voice understands it
 numbers = true              # «в 7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
 latin = "auto"              # auto | keep (multilingual voices read English themselves) | translit (Silero, espeak)
 # ElevenLabs (engine = "elevenlabs"): the key goes to ~/.config/justday/secrets.env, never here.
@@ -77,6 +78,7 @@ context_window = 200000     # conversation ceiling: history is compacted there (
 # say = "Рабочее место готово"        # что сказать вслух (пусто — скажет, что именно сделал)
 
 [notes]
+# diary_hour = 23           # во сколько сама пишется страница дня (0 = не писать)
 # vault = ""                # Obsidian vault for plans and notes ("" = the one Obsidian has open)
 # plans = "Планы.md"        # the checklist file inside it
 

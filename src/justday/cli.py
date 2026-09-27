@@ -313,6 +313,9 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("plan", help="планы в Obsidian: add | list | done | open")
     sp.add_argument("action", nargs="?", choices=["add", "list", "done", "open"], default="list")
     sp.add_argument("text", nargs="*")
+    sp = sub.add_parser("diary", help="страница дня в Obsidian: чем занимались, что закрыли, во что обошлось")
+    sp.add_argument("day", nargs="?", default="", help="YYYY-MM-DD (по умолчанию сегодня)")
+    sp.add_argument("--open", action="store_true", help="открыть её в Obsidian")
     sp = sub.add_parser("note", help="заметка в Obsidian: justday note «Заголовок» текст…")
     sp.add_argument("title")
     sp.add_argument("text", nargs="*")
@@ -541,6 +544,14 @@ def main(argv: list[str] | None = None) -> None:
             _print({"ok": bool(link), "link": link})
         else:
             _print({"file": str(notes.plans_path()), "items": notes.items(only_open=bool(text != "all"))})
+    elif a.cmd == "diary":
+        from . import notes
+
+        got = notes.diary(a.day, os.environ.get("JUSTDAY_TEXT", ""))
+        if a.open:
+            subprocess.Popen(["xdg-open", notes.open_in_obsidian(got["file"])],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _print(got)
     elif a.cmd == "note":
         from . import notes
 

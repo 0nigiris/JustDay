@@ -148,6 +148,68 @@ def note(title: str, text: str, folder: str = "") -> dict:
     return {"ok": True, "file": str(path)}
 
 
+def diary(day: str = "", extra: str = "") -> dict:
+    """Страница дня в хранилище: чем занимались, что закрыли, во что это обошлось.
+
+    Собирается из фактов — журнала событий и файла планов, — а не из пересказа
+    модели: страница пишется каждый вечер, и платить за неё ходом было бы
+    странно. Ассистенту остаётся дописать своё, если попросят.
+    """
+    import time as _time
+
+    from . import events, usage
+
+    day = day or _time.strftime("%Y-%m-%d")
+    root = vault()
+    if root is None:
+        raise RuntimeError("хранилище Obsidian не найдено")
+    folder = str(config.load()["notes"].get("diary") or "Дневник")
+    path = (root / folder / f"{day}.md").resolve()
+    if root.resolve() not in path.parents:
+        raise RuntimeError("дневник должен лежать внутри хранилища")
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    asked: list[str] = []
+    instant = 0
+    scenes_run: list[str] = []
+    turns = 0
+    for record in events.read(day):
+        kind = record.get("kind")
+        if kind == "request" and record.get("source") in ("voice", "phone", "cli", None):
+            text = " ".join(str(record.get("text", "")).split())
+            if text and not text.startswith("[Событие JustDay]"):
+                asked.append(f"- {str(record.get('ts', ''))[11:16]} — {text[:160]}")
+        elif kind == "fast":
+            instant += 1
+        elif kind == "scene":
+            scenes_run.append(str(record.get("name", "")))
+        elif kind == "turn_done":
+            turns += 1
+
+    done_today = [i for i in items() if i["done"] and i["day"] == day]
+    left = [i for i in items(only_open=True)]
+    money = usage.report(1)["days"]
+    spent = next((d["usd"] for d in money if d["day"] == day), 0.0)
+
+    lines = [f"# {day}", ""]
+    if asked:
+        lines += ["## О чём просили", *asked[:60], ""]
+    if scenes_run:
+        lines += ["## Сценарии", "- " + ", ".join(dict.fromkeys(scenes_run)), ""]
+    lines += ["## Планы",
+              f"Закрыто сегодня: {len(done_today)} · осталось: {len(left)}", ""]
+    if done_today:
+        lines += [f"- [x] {i['text']}" for i in done_today] + [""]
+    lines += ["## Цифры дня",
+              f"Просьб: {len(asked)} · ответов модели: {turns} · мгновенных команд: {instant} · "
+              f"≈${spent:.2f}", ""]
+    if extra:
+        lines += ["## Заметки", extra, ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return {"ok": True, "file": str(path), "asked": len(asked), "closed": len(done_today),
+            "left": len(left), "usd": round(spent, 2)}
+
+
 def open_in_obsidian(file: str = "") -> str:
     """Ссылка obsidian://, открывающая хранилище (и нужный файл) в приложении."""
     from urllib.parse import quote

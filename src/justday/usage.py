@@ -49,24 +49,10 @@ def wake_report(days: int = 3) -> dict:
 
 
 def _events(since: float) -> list[dict]:
-    from . import config
+    from . import events
 
-    out = []
-    try:
-        lines = config.EVENTS_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return out
     edge = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(since))
-    for line in lines:
-        if not line.startswith("{"):
-            continue
-        try:
-            record = json.loads(line)
-        except ValueError:
-            continue
-        if str(record.get("ts", "")) >= edge:
-            out.append(record)
-    return out
+    return [r for r in events.read() if str(r.get("ts", "")) >= edge]
 
 
 def spaced(n: int) -> str:
