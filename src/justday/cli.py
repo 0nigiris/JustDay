@@ -317,6 +317,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("inbox", help="сообщения, оставленные с телефона: list | add | clear")
     sp.add_argument("action", nargs="?", choices=["list", "add", "clear"], default="list")
     sp.add_argument("text", nargs="*")
+    sp = sub.add_parser("wake", help="кто будит ассистента и сколько раз впустую")
+    sp.add_argument("--days", type=int, default=3)
     sp = sub.add_parser("tokens", help="во что обходится разговор: токены и деньги по дням")
     sp.add_argument("--days", type=int, default=7)
     sp.add_argument("--json", action="store_true")
@@ -541,6 +543,23 @@ def main(argv: list[str] | None = None) -> None:
             _print({"ok": True, "removed": inbox.clear()})
         else:
             _print({"pending": len(inbox.pending()), "items": inbox.recent()})
+    elif a.cmd == "wake":
+        from . import usage
+
+        got = usage.wake_report(a.days)
+        names = {"wake": "слово/имя", "button": "кнопка или клавиша", "phone": "телефон",
+                 "cli": "командная строка", "?": "неизвестно"}
+        print(f"Пробуждения за {a.days} дн.")
+        print(f"{'откуда':<24}{'всего':>7}{'впустую':>9}")
+        for source, row in sorted(got["sources"].items(), key=lambda kv: -kv[1]["woke"]):
+            print(f"{names.get(source, source):<24}{row['woke']:>7}{row['empty']:>9}")
+        total = got["total"]
+        share = 100 * total["empty"] / max(1, total["woke"])
+        print(f"{'всего':<24}{total['woke']:>7}{total['empty']:>9}   ({share:.0f}% впустую)")
+        w = config.load()["wakeword"]
+        print(f"\nпорог слова пробуждения: {w['threshold']}, при играющем звуке: "
+              f"{w.get('threshold_while_playing')}")
+        print("ложных много — поднимите порог: justday config set wakeword.threshold 0.6")
     elif a.cmd == "tokens":
         from . import usage
 

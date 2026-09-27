@@ -84,6 +84,7 @@ class Daemon:
         self._quiet_until = 0.0  # the assistant's own voice may still echo in the room
         self._event_queue: asyncio.Queue[str] = asyncio.Queue()
         self._inbox_timer: asyncio.Task | None = None
+        self._wake_strict_until = 0.0  # после ложного срабатывания слушаем строже
         self._loop: asyncio.AbstractEventLoop | None = None
         self._spoken = 0
         self._discard_recording = False
@@ -451,7 +452,7 @@ class Daemon:
         self._discard_recording = False
         if not followup and prefill is None:  # mid-phrase after the name: a beep would land in the recording
             await self.earcon("listen")
-        events.emit("listen_start", followup=followup)
+        events.emit("listen_start", followup=followup, source=self._activation)
         rec = self.recorder
         if followup:
             rec = audio.UtteranceRecorder(self.mic, rec.silence_s, self.cfg["audio"]["followup_seconds"], rec.max_s)
@@ -474,7 +475,13 @@ class Daemon:
             self.state = after
             return
         if pcm is None or len(pcm) < audio.RATE * 0.3:
-            events.emit("listen_empty")
+            events.emit("listen_empty", source=self._activation)
+            # Разбудили и никто не заговорил — скорее всего, показалось. Следующие
+            # полминуты слово пробуждения слушаем строже: ложные срабатывания идут
+            # сериями (звук из колонок, чужой голос в ролике), а настоящий зов после
+            # такого всё равно проходит — по кнопке или чуть громче.
+            if self._activation == "wake":
+                self._wake_strict_until = time.monotonic() + 30
             self.state = after
             return
         mode = self.cfg["voiceprint"]["mode"]
@@ -992,6 +999,31 @@ class Daemon:
                                       f"confirm-message again before sending."}
 
     # ---------------- background: wake word, mic idle, worker reports ----------------
+    def _wake_threshold(self) -> float:
+        """Насколько уверенно должно прозвучать слово пробуждения прямо сейчас.
+
+        Пока играет музыка или видео, микрофон слышит колонки — «Джарвис» из ролика
+        будил ассистента наравне с хозяином. И сразу после пустого пробуждения планка
+        тоже выше: такие срабатывания приходят сериями."""
+        w = self.cfg["wakeword"]
+        base = float(w["threshold"])
+        loud = bool(self.island_video) or bool(self._player_state and not self._player_state.get("paused"))
+        if loud:
+            base = max(base, float(w.get("threshold_while_playing") or base))
+        if time.monotonic() < self._wake_strict_until:
+            base = min(0.95, base + 0.15)
+        return base
+
+    def _name_min_prob(self) -> float:
+        """Та же строгость, что и у слова пробуждения, но для имени, услышанного в речи."""
+        loud = bool(self.island_video) or bool(self._player_state and not self._player_state.get("paused"))
+        base = namespot.MIN_NAME_PROB
+        if loud:
+            base = 0.65
+        if time.monotonic() < self._wake_strict_until:
+            base = max(base, 0.7)
+        return base
+
     def _setup_wakeword(self) -> None:
         w = self.cfg["wakeword"]
         if not w["enabled"] or not self.mic_on():
@@ -1015,7 +1047,7 @@ class Daemon:
             if self.state == "listening" or time.monotonic() < self._wake_cooldown:
                 return
             score = max(self._wake.predict(frame).values())
-            if score >= w["threshold"]:
+            if score >= self._wake_threshold():
                 self._wake_cooldown = time.monotonic() + 2.5
                 self._wake.reset()
                 events.emit("wakeword", score=round(float(score), 2))
@@ -1038,7 +1070,8 @@ class Daemon:
                     prefill = None
                 loop.call_soon_threadsafe(self._wake_by_name, prefill, lambda: prefill and prefill())
 
-            spotter = namespot.NameSpotter(self.stt.transcribe_head, names, lambda: self.mic.seq, on_name)
+            spotter = namespot.NameSpotter(self.stt.transcribe_head, names, lambda: self.mic.seq, on_name,
+                                           min_prob=self._name_min_prob)
             self.mic.subscribe(lambda f: spotter.feed(
                 f, self.state in ("idle", "thinking") and time.monotonic() > max(self._quiet_until, self._wake_cooldown)))
         self.mic.start()

@@ -23,6 +23,52 @@ PRICES = {
 DEFAULT_PRICE = PRICES["sonnet"]
 
 
+def wake_report(days: int = 3) -> dict:
+    """Кто будил ассистента и сколько раз впустую.
+
+    Ложное срабатывание видно по паре событий: разбудили — и никто не заговорил.
+    Разбивка по источникам отвечает на главный вопрос: это слово пробуждения,
+    имя, услышанное в речи, или случайно задетая кнопка."""
+    since = time.time() - days * 86400
+    by_source: dict[str, dict[str, int]] = {}
+    waiting = ""
+    for record in _events(since):
+        kind = record.get("kind")
+        if kind == "listen_start" and not record.get("followup"):
+            waiting = str(record.get("source") or "?")
+            row = by_source.setdefault(waiting, {"woke": 0, "empty": 0})
+            row["woke"] += 1
+        elif kind in ("listen_empty", "listen_cancelled") and waiting:
+            by_source[waiting]["empty"] += 1
+            waiting = ""
+        elif kind == "heard":
+            waiting = ""
+    total = {"woke": sum(r["woke"] for r in by_source.values()),
+             "empty": sum(r["empty"] for r in by_source.values())}
+    return {"days": days, "sources": by_source, "total": total}
+
+
+def _events(since: float) -> list[dict]:
+    from . import config
+
+    out = []
+    try:
+        lines = config.EVENTS_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return out
+    edge = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(since))
+    for line in lines:
+        if not line.startswith("{"):
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if str(record.get("ts", "")) >= edge:
+            out.append(record)
+    return out
+
+
 def spaced(n: int) -> str:
     """12345 → «12 345»: в отчёте важны порядки, а не цифры подряд."""
     return f"{n:,}".replace(",", "\u202f")

@@ -120,7 +120,10 @@ DEFAULTS: dict = {
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase
     # wake_names: which names wake it (empty = the assistant name only)
-    "wakeword": {"enabled": False, "names": True, "wake_names": [], "model": "hey_jarvis", "threshold": 0.5},
+    # threshold_while_playing: пока из колонок идёт звук, микрофон слышит и его —
+    # «Джарвис», сказанный в ролике, будил ассистента наравне с хозяином.
+    "wakeword": {"enabled": False, "names": True, "wake_names": [], "model": "hey_jarvis",
+                 "threshold": 0.5, "threshold_while_playing": 0.7},
     "brain": {
         # claude | ollama | openrouter | deepseek | custom — see `justday model list`
         "provider": "claude",

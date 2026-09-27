@@ -73,7 +73,8 @@ class NameSpotter:
 
     def __init__(self, transcribe: Callable[[np.ndarray], tuple[str, list[tuple[str, float]], float]],
                  names: list[str], seq: Callable[[], int],
-                 on_wake: Callable[[np.ndarray, bool, Callable[[], list[tuple[int, np.ndarray]]]], None]):
+                 on_wake: Callable[[np.ndarray, bool, Callable[[], list[tuple[int, np.ndarray]]]], None],
+                 min_prob: Callable[[], float] | None = None):
         from .audio import voice_activity_model
 
         self.vad = voice_activity_model()
@@ -81,6 +82,10 @@ class NameSpotter:
         self.variants = spellings(names)
         self.on_wake = on_wake
         self.seq = seq
+        # Насколько уверенно должно прозвучать имя. Обычно хватает обычной планки,
+        # но когда из колонок идёт звук, в микрофон попадает и он: имя, произнесённое
+        # в ролике, звучит для Whisper так же, как сказанное в комнате.
+        self.min_prob = min_prob or (lambda: MIN_NAME_PROB)
         self._pre: list[np.ndarray] = []
         self._clip: list[np.ndarray] | None = None
         self._silence = 0.0
@@ -134,7 +139,7 @@ class NameSpotter:
         if no_speech > 0.5 or not words:
             return False
         first = [p for w, p in words[:3] if _norm(w) and _norm(w) not in FILLERS]
-        if not first or first[0] < MIN_NAME_PROB:
+        if not first or first[0] < self.min_prob():
             return False
         tokens = _norm(text).split()
         names = sum(t in self.variants for t in tokens)
