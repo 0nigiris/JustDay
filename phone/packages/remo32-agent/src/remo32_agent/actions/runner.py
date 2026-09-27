@@ -177,6 +177,9 @@ class ActionRegistry:
         if not any(a.id == action_id for a in current):
             raise ActionNotFoundError(f"кнопка не найдена: {action_id}", action_id=action_id)
         store.save([a for a in current if a.id != action_id])
+        # Состояние переключателя переживать саму кнопку не должно: заведённая
+        # заново под тем же именем начала бы с чужой памяти.
+        self._toggles.forget(action_id)
 
     def _require_store(self) -> ActionStore:
         if self._store is None:

@@ -263,3 +263,23 @@ class TestПереключатель:
         assert result.success is False
         # Иначе следующее нажатие попыталось бы «вернуть» то, чего не произошло.
         assert registry.describe("light").active is False
+
+    @pytest.mark.anyio
+    async def test_удаление_кнопки_забывает_её_состояние(self, tmp_path, runner) -> None:  # type: ignore[no-untyped-def]
+        """Иначе новая кнопка с тем же именем начала бы с чужой памяти."""
+        from remo32_agent.actions.models import ExecAction, ToggleAction
+        from remo32_agent.actions.runner import ActionExecutor, ActionRegistry
+        from remo32_agent.actions.store import ActionStore
+        from remo32_agent.actions.toggles import ToggleState
+
+        store = ActionStore(tmp_path / "actions.toml")
+        store.save([
+            ExecAction(id="step", name="Шаг", argv=["/usr/bin/true"]),
+            ToggleAction(id="light", name="Свет", on="step", off="step"),
+        ])
+        toggles = ToggleState(tmp_path / "toggles.json")
+        registry = ActionRegistry([], store=store, toggles=toggles)
+        await ActionExecutor(registry, runner, get_adapter("linux")).run("light")
+        assert toggles.is_on("light") is True
+        registry.delete("light")
+        assert toggles.is_on("light") is False

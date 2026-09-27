@@ -52,18 +52,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Точное совпадение, вместе с ?v=… в адресе. Искать «тот же файл с любой
+  // версией» нельзя: после обновления интерфейса страница просила новый
+  // app.js, а получала из кэша старый — и вела себя странно ровно так, как
+  // жалуются на обновления. Версию в адресе ставит сервер, поэтому точное
+  // совпадение означает «ровно та сборка, которую просит страница».
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((hit) => {
-      const fresh = fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => hit);
-      return hit || fresh;
+    caches.open(CACHE).then(async (cache) => {
+      const exact = await cache.match(request);
+      if (exact) return exact;
+      try {
+        const response = await fetch(request);
+        if (response.ok) cache.put(request, response.clone());
+        return response;
+      } catch (error) {
+        // Сети нет: отдаём эту же вещь любой версии — лучше вчерашний значок,
+        // чем дырка в интерфейсе.
+        const any = await caches.match(request, { ignoreSearch: true });
+        if (any) return any;
+        throw error;
+      }
     }),
   );
 });
