@@ -366,9 +366,12 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("play", help="play music: finds it on YouTube, downloads the audio, plays in JustDay's player "
                                      "(count=N for several songs, playlist=1 for an album/playlist, shuffle=1, next=1 / add=1 to queue); also a file or a folder")
     sp.add_argument("query", nargs="+")
-    sp = sub.add_parser("video", help="play a video (search words or a link): where=island|window|browser, "
-                                      "asks the user when not given (Settings → Медиа)")
+    sp = sub.add_parser("video", help="play a video (search words or a link); --where island|window|browser, "
+                                      "or say it in the words themselves («в островке»); otherwise the setting decides "
+                                      "(Settings → Музыка и видео)")
     sp.add_argument("query", nargs="+")
+    sp.add_argument("--where", choices=["island", "window", "browser"], default="",
+                    help="where to play it: the island, its own window, or the YouTube page")
     sp = sub.add_parser("player", help="JustDay's player: status | pause | resume | toggle | next | prev | restart | stop | "
                                        "seek SECONDS | volume 0-130 | repeat off|all|one | shuffle on|off | jump INDEX | "
                                        "color жёлтый|#ffd23f|auto (the colour of the track on the island)")
@@ -804,7 +807,7 @@ def main(argv: list[str] | None = None) -> None:
             r = control("media_play", timeout=300, query=q, count=int(kw.get("count", 1)), mode=mode,
                         playlist=yes("playlist") or yes("album"), shuffle=yes("shuffle"))
         else:
-            r = control("media_video", timeout=900, query=q, where=kw.get("where", ""))
+            r = control("media_video", timeout=900, query=q, where=getattr(a, "where", "") or kw.get("where", ""))
         print(json.dumps(r, ensure_ascii=False))
         sys.exit(0 if r.get("ok") else 1)
     elif a.cmd == "player":
