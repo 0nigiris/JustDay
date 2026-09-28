@@ -115,6 +115,25 @@ _CONTROLS = [
 ]
 
 
+# «верни видео в островок» — из отдельного окна обратно на остров; «продолжи ролик» — тот, что закрыли
+_POPIN = re.compile(r"^(?:верни|вернуть|перенеси|перекинь|убери)\s*(?:видео|ролик|его)?\s*(?:обратно\s*)?"
+                    r"(?:в|на)\s+остров\w*$|^(?:bring|move)\s+(?:the\s+)?(?:video|it)\s+back(?:\s+to\s+the\s+island)?$", re.I)
+_RESUME_VIDEO = re.compile(r"^(?:продолжи|включи|верни|доиграй)\s*(?:смотреть\s*)?(?:ролик|видео)"
+                           r"(?:\s*(?:обратно|дальше|снова))?$|^(?:resume|continue)\s+(?:the\s+)?video$", re.I)
+
+
+def video_word(text: str) -> str:
+    """"popin" (окно → островок), "resume" (продолжить закрытый ролик) или "" — это не про то."""
+    t = re.sub(r"[^\w\s]", " ", _NAME.sub("", text.lower().replace("ё", "е")))
+    t = re.sub(r"\b(пожалуйста|please|давай|ка|ну|мне)\b", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    if _POPIN.match(t):
+        return "popin"
+    if _RESUME_VIDEO.match(t):
+        return "resume"
+    return ""
+
+
 def control_word(text: str) -> str | None:
     t = re.sub(r"[^\w\s]", " ", _NAME.sub("", text.lower().replace("ё", "е")))
     t = re.sub(r"\b(пожалуйста|please|давай|ка|ну)\b", " ", t)
@@ -553,7 +572,8 @@ def window_state() -> dict | None:
 
     if not VIDEO_SOCK.exists():
         return None
-    want = (("media-title", "title"), ("pause", "paused"), ("time-pos", "pos"), ("duration", "duration"))
+    want = (("media-title", "title"), ("pause", "paused"), ("time-pos", "pos"), ("duration", "duration"),
+            ("path", "path"))
     got: dict = {}
     try:
         with socket.socket(socket.AF_UNIX) as sock:
@@ -580,7 +600,18 @@ def window_state() -> dict | None:
     if not got.get("title"):
         return None
     return {"title": str(got["title"]), "paused": bool(got.get("paused")),
-            "pos": round(float(got.get("pos") or 0), 1), "duration": round(float(got.get("duration") or 0), 1)}
+            "pos": round(float(got.get("pos") or 0), 1), "duration": round(float(got.get("duration") or 0), 1),
+            "path": str(got.get("path") or "")}   # файл или ссылка: по ней ролик возвращается в островок
+
+
+def window_close() -> bool:
+    """Закрыть окно с видео (ролик переезжает в островок)."""
+    ok = window_command("quit")
+    for _ in range(20):
+        if not VIDEO_SOCK.exists():
+            break
+        time.sleep(0.05)
+    return ok
 
 
 def window_command(*args) -> bool:

@@ -98,6 +98,7 @@ show_notifications = true   # mirror desktop notifications (they never leave the
 city = ""                   # weather location; empty = no weather requests
 top_margin = 8              # room above the island: a panel along the top edge stays clickable
 video_width = 640           # the island video frame, in points — drag its corner, the size is kept here
+video_volume = 1.0          # how loud that frame is, 0–1 (the wheel over the video)
 screen = ""                 # monitor name, e.g. DP-2; empty = top-left one
 
 [updates]

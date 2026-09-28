@@ -177,6 +177,7 @@ DEFAULTS: dict = {
         # How much room to leave above the island: a panel along the top edge stays reachable
         "top_margin": 8,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here
+        "video_volume": 1.0,  # how loud that frame is, 0–1 (the wheel over it)
     },
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},

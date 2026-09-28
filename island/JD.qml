@@ -120,8 +120,22 @@ Singleton {
     readonly property real videoRoom: Math.max(360, Math.min(screenWidth - 40, Math.round((screenHeight - topMargin - 70) * 16 / 9)))
     function videoFit(w) { return Math.max(360, Math.min(videoRoom, Math.round(w))) }
     function setVideoWidth(w) { videoWidth = videoFit(w) }
-    property real videoVolume: 1.0        // колесо над кадром; приглушение на время разговора идёт сверху
-    function setVideoVolume(v) { videoVolume = Math.max(0, Math.min(1, v)) }
+    // громкость кадра запоминается, как и его размер; приглушение на время разговора идёт сверху
+    property real videoVolume: island.video_volume === undefined ? 1 : Math.max(0, Math.min(1, island.video_volume))
+    function setVideoVolume(v) { videoVolume = Math.max(0, Math.min(1, v)); volumeSave.restart() }
+    function saveVideoVolume() { Quickshell.execDetached(["justday", "config", "set", "island.video_volume", String(videoVolume.toFixed(2))]) }
+    // ползунок двигают пикселями, а в файл пишем один раз, когда его отпустили
+    Timer { id: volumeSave; interval: 900; onTriggered: jd.saveVideoVolume() }
+    property real videoRate: 1.0         // скорость: 0.5 … 2
+    property bool videoLoop: false       // повтор одного ролика
+    property bool videoMini: false       // кадр свёрнут в пилюлю, звук идёт дальше
+    property bool videoPlaying: false    // что делает кадр прямо сейчас — для пилюли
+    property real videoPos: 0
+    property real videoDur: 0
+    property var videoLast: null         // закрытый ролик: {title, pos, in_window} — его можно продолжить
+    function videoResume() { send({ cmd: "video_resume" }) }     // продолжить с того же места
+    function videoPopin() { send({ cmd: "video_popin" }) }       // забрать ролик из отдельного окна
+    function videoDrop(target) { send({ cmd: "video_drop", target: target }) }   // бросили файл или ссылку на остров
     // размер запоминается, когда уголок отпустили: не на каждый пиксель перетаскивания
     function saveVideoWidth() { Quickshell.execDetached(["justday", "config", "set", "island.video_width", String(Math.round(videoWidth))]) }
     signal videoCommand(string action)  // pause / resume / toggle / restart from the daemon ("пауза" by voice)
@@ -184,7 +198,7 @@ Singleton {
         if (card) return "card"
         // видео выше слушания: оно не исчезает, когда заговорили с ассистентом — слушание,
         // «думаю…» и ответ идут строкой поверх кадра, как субтитры
-        if (video) return "video"
+        if (video && !videoMini) return "video"
         if (dstate === "listening") return answerOpen ? "answer" : "listening"
         if (playerOpen && musicOn) return "player"
         if (notification) return "notification"
@@ -192,6 +206,7 @@ Singleton {
         if (answerOpen) return "answer"
         if (dstate === "transcribing") return "transcribing"
         if (dstate === "thinking" || dstate === "speaking") return "thinking"
+        if (video && videoMini && workers === 0) return "videopill"
         if (musicShown && workers === 0) return "music"
         if (peeking || workers > 0) return "peek"
         return "hidden"
@@ -348,7 +363,9 @@ Singleton {
             playerAt = Date.now()
             if (!m.player) playerOpen = false
         }
-        if (m.video !== undefined) video = m.video   // размер кадра не сбрасывается: его выбрали руками
+        // размер кадра не сбрасывается: его выбрали руками. Новый ролик всегда открывается развёрнутым
+        if (m.video !== undefined) { if (!!m.video !== !!video) videoMini = false; video = m.video }
+        if (m.video_last !== undefined) videoLast = m.video_last
         if (m.reminders !== undefined) reminders = m.reminders
         if (m.jobs !== undefined) jobs = m.jobs || []
         if (m.state !== undefined && m.state !== dstate) {

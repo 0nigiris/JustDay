@@ -138,8 +138,9 @@ ShellRoot {
             readonly property Item content: ({
                 expanded: expandedView, settings: settingsHolder, compose: composeView, approval: approvalView, card: cardView, listening: listeningView,
                 notification: notificationView, alarm: alarmView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
-                peek: peekView, hidden: peekView, music: musicView, player: playerView, video: videoView })[mode]
-            readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music"].includes(mode) && !JD.detailOpen
+                peek: peekView, hidden: peekView, music: musicView, player: playerView, video: videoView,
+                videopill: videoPillView })[mode]
+            readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen
 
             width: mode === "hidden" ? 140 : Math.max(120, content.implicitWidth)
             height: mode === "hidden" ? 8 : content.implicitHeight
@@ -165,10 +166,41 @@ ShellRoot {
 
             HoverHandler { onHoveredChanged: JD.islandHovered = hovered }
 
+            // бросьте на остров файл или ссылку — они заиграют прямо здесь
+            DropArea {
+                id: dropZone
+                anchors.fill: parent
+                z: 50
+                onDropped: drop => {
+                    let target = ""
+                    if (drop.hasUrls && drop.urls.length) target = drop.urls[0].toString()
+                    else if (drop.hasText) target = (drop.text || "").trim().split(/\s+/)[0]
+                    if (target.startsWith("file://")) target = decodeURIComponent(target.slice(7))
+                    if (!target) return
+                    JD.videoDrop(target)
+                    drop.accept(Qt.CopyAction)
+                }
+            }
+            Rectangle {
+                anchors.fill: parent
+                z: 49
+                visible: dropZone.containsDrag
+                radius: island.radius
+                color: Qt.rgba(JD.accentPink.r, JD.accentPink.g, JD.accentPink.b, 0.18)
+                border.width: 2
+                border.color: JD.accentPink
+                Label1 {
+                    anchors.centerIn: parent
+                    text: JD.tr("Отпустите — включу здесь")
+                    visible: island.height > 60
+                }
+            }
+
             TapHandler {
                 enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification", "alarm"].includes(island.mode)
                 onTapped: {
                     if (island.mode === "music") { JD.playerOpen = true; return }
+                    if (island.mode === "videopill") { JD.videoMini = false; return }   // кадр обратно на экран
                     if (island.mode === "answer") { JD.answerOpen = false; return }
                     JD.expanded = true
                 }
@@ -199,6 +231,7 @@ ShellRoot {
                 MusicView { id: musicView; shown: island.mode === "music" }
                 PlayerView { id: playerView; shown: island.mode === "player" }
                 VideoView { id: videoView; shown: island.mode === "video" }
+                VideoPillView { id: videoPillView; shown: island.mode === "videopill" }
                 ListeningView { id: listeningView; shown: island.mode === "listening" }
                 ThinkingView { id: thinkingView; shown: island.mode === "thinking" || island.mode === "transcribing" }
                 FlashView { id: flashView; shown: island.mode === "flash" }
@@ -985,6 +1018,34 @@ ShellRoot {
         }
     }
 
+    // свёрнутый кадр: ролик играет дальше, а экран свободен — как пилюля музыки
+    component VideoPillView: View {
+        id: vp2
+        readonly property var v: JD.video || ({})
+        implicitWidth: vpRow.implicitWidth + 26
+        implicitHeight: 40
+        RowLayout {
+            id: vpRow
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 10 }
+            spacing: 10
+            Rectangle {
+                implicitWidth: 26; implicitHeight: 26; radius: 7
+                color: Qt.rgba(JD.accentPink.r, JD.accentPink.g, JD.accentPink.b, 0.22)
+                Icon { anchors.centerIn: parent; name: "video-x-generic"; implicitSize: 15 }
+            }
+            Label1 { text: vp2.v.title || JD.tr("Видео"); Layout.maximumWidth: 220 }
+            Label2 {
+                text: JD.fmtTime(JD.videoPos) + " / " + JD.fmtTime(JD.videoDur)
+                font.features: { "tnum": 1 }
+                visible: JD.videoDur > 0
+            }
+            IconButton { icon: JD.videoPlaying ? "media-playback-pause" : "media-playback-start"; size: 26
+                         onClicked: JD.videoCommand("toggle") }
+            IconButton { icon: "view-fullscreen"; size: 26; onClicked: JD.videoMini = false }
+            IconButton { icon: "window-close"; size: 26; onClicked: videoView.close() }
+        }
+    }
+
     // a video inside the island (downloaded first; played by Qt right here)
     component VideoView: View {
         id: vv
@@ -1023,14 +1084,27 @@ ShellRoot {
             id: player
             source: vv.ready ? "file://" + vv.v.file : ""
             videoOutput: screenOut
+            playbackRate: JD.videoRate
             audioOutput: AudioOutput {
                 // своя громкость кадра (колесо над видео), приглушённая, пока ассистент слушает или говорит
                 volume: JD.videoVolume * (["listening", "speaking", "approval"].includes(JD.dstate) ? 0.25 : 1.0)
                 muted: Quickshell.env("JUSTDAY_ISLAND_MUTE") === "1"  // the headless test stand stays silent
             }
             onSourceChanged: { vv.ended = false; if (source.toString() !== "") play() }
-            onPlaybackStateChanged: JD.send({ cmd: "video_state", playing: playbackState === MediaPlayer.PlayingState, pos: position / 1000 })
-            onMediaStatusChanged: if (mediaStatus === MediaPlayer.EndOfMedia) { vv.ended = true; endTimer.restart() }
+            // ролик, который вернули из окна или продолжили, начинается с той же секунды
+            onMediaStatusChanged: {
+                if (mediaStatus === MediaPlayer.LoadedMedia && (vv.v.start || 0) > 1 && position < 1000)
+                    position = vv.v.start * 1000
+                if (mediaStatus === MediaPlayer.EndOfMedia) {
+                    if (JD.videoLoop) { position = 0; play() }
+                    else { vv.ended = true; endTimer.restart() }
+                }
+            }
+            onPlaybackStateChanged: {
+                JD.videoPlaying = playbackState === MediaPlayer.PlayingState
+                JD.send({ cmd: "video_state", playing: playbackState === MediaPlayer.PlayingState, pos: position / 1000 })
+            }
+            onPositionChanged: { JD.videoPos = position / 1000; JD.videoDur = duration / 1000 }
         }
         Timer { id: endTimer; interval: 12000; onTriggered: if (vv.ended) { if (JD.islandHovered) restart(); else vv.close() } }
         Connections {
@@ -1114,33 +1188,94 @@ ShellRoot {
                                      else { vv.smallWidth = JD.videoWidth; vv.grow(JD.videoRoom) } }
                     }
                     IconButton { icon: "window-new"; size: 28; visible: vv.ready; onClicked: vv.popout(false) }
+                    IconButton { icon: "go-up"; size: 28; visible: vv.ready; onClicked: JD.videoMini = true }
                     IconButton { icon: "internet-web-browser"; size: 28; visible: !!vv.v.url && vv.v.url.startsWith("http")
                                  onClicked: { Quickshell.execDetached(["xdg-open", vv.v.url + (player.position > 3000 ? "&t=" + Math.floor(player.position / 1000) + "s" : "")]); vv.close() } }
                     IconButton { icon: "window-close"; size: 28; onClicked: vv.close() }
                 }
             }
 
-            // bottom: play/pause, time, progress
+            // низ: перемотка, время, прогресс, громкость, скорость, повтор — то, что ждёшь от плеера
             Rectangle {
+                id: vctl
                 visible: vv.ready
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                height: 60
+                height: 96
                 opacity: vv.chrome && !vv.busyLine ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 200 } }
                 gradient: Gradient {
                     GradientStop { position: 0; color: "transparent" }
-                    GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.75) }
+                    GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.55) }
+                    GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.92) }
                 }
-                RowLayout {
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 22; rightMargin: 26; bottomMargin: 12 }
-                    spacing: 12
-                    IconButton { icon: player.playbackState === MediaPlayer.PlayingState ? "media-playback-pause" : "media-playback-start"; size: 30; onClicked: vv.toggle() }
-                    Label2 { text: JD.fmtTime(player.position / 1000) + " / " + JD.fmtTime(player.duration / 1000); color: JD.text1; font.pixelSize: 11; font.features: { "tnum": 1 } }
+                readonly property bool roomy: vv.width > 560     // на узком кадре остаётся главное
+                ColumnLayout {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                              leftMargin: 20; rightMargin: 24; bottomMargin: 10 }
+                    spacing: 2
                     SeekBar {
                         Layout.fillWidth: true
                         tint: JD.accentPink
                         value: player.duration > 0 ? player.position / player.duration : 0
                         onSeek: frac => { player.position = frac * player.duration; vv.ended = false }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        IconButton { icon: "rotate-ccw"; size: 28; onClicked: vv.seekBy(-10000) }
+                        IconButton { icon: player.playbackState === MediaPlayer.PlayingState ? "media-playback-pause" : "media-playback-start"
+                                     size: 34; onClicked: vv.toggle() }
+                        IconButton { icon: "refresh-cw"; size: 28; onClicked: vv.seekBy(10000) }
+                        Label2 {
+                            text: JD.fmtTime(player.position / 1000) + " / " + JD.fmtTime(player.duration / 1000)
+                            color: JD.text1; font.pixelSize: 11; font.features: { "tnum": 1 }
+                            Layout.leftMargin: 4
+                        }
+                        Item { Layout.fillWidth: true }
+                        // громкость этого ролика: она запоминается и не трогает ни музыку, ни систему
+                        Icon {
+                            name: JD.videoVolume === 0 ? "audio-volume-muted" : "audio-volume-high"
+                            implicitSize: 15; tint: JD.text2
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: { JD.setVideoVolume(JD.videoVolume > 0 ? 0 : 1); JD.saveVideoVolume() } }
+                        }
+                        SeekBar {
+                            visible: vctl.roomy
+                            Layout.preferredWidth: 76
+                            live: true
+                            thickness: 3
+                            tint: Qt.rgba(1, 1, 1, 0.8)
+                            value: JD.videoVolume
+                            onSeek: frac => JD.setVideoVolume(frac)
+                        }
+                        // скорость: 0.5 … 2, по кругу
+                        Rectangle {
+                            visible: vctl.roomy
+                            implicitWidth: rateLabel.implicitWidth + 20; implicitHeight: 28; radius: 14
+                            color: JD.videoRate === 1 ? (rateHover.hovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.14))
+                                                      : Qt.rgba(JD.accentPink.r, JD.accentPink.g, JD.accentPink.b, 0.32)
+                            Label1 {
+                                id: rateLabel
+                                anchors.centerIn: parent
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                text: (JD.videoRate % 1 === 0 ? JD.videoRate.toFixed(0) : String(JD.videoRate)) + "×"
+                                color: JD.videoRate === 1 ? JD.text1 : JD.accentPink
+                            }
+                            HoverHandler { id: rateHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: {
+                                    const steps = [0.5, 0.75, 1, 1.25, 1.5, 2]
+                                    JD.videoRate = steps[(steps.indexOf(JD.videoRate) + 1) % steps.length]
+                                }
+                            }
+                        }
+                        ModeButton {
+                            icon: "media-repeat-single"; on: JD.videoLoop; tint: JD.accentPink
+                            implicitWidth: 30; implicitHeight: 30
+                            onClicked: JD.videoLoop = !JD.videoLoop
+                        }
                     }
                 }
             }
@@ -1670,6 +1805,8 @@ ShellRoot {
             { cmd: "/video", title: JD.tr("Сделать видео"), icon: "video-x-generic", fill: JD.tr("Сделай видео: ") },
             { cmd: "/play", title: JD.tr("Включить песню"), icon: "media-playback-start", fill: JD.tr("Включи песню ") },
             { cmd: "/watch", title: JD.tr("Включить видео"), icon: "video-x-generic", fill: JD.tr("Включи видео ") },
+            { cmd: "/resume", title: JD.videoLast && JD.videoLast.in_window ? JD.tr("Вернуть видео в островок") : JD.tr("Продолжить ролик"),
+              icon: "circle-play", run: () => { if (JD.videoLast && JD.videoLast.in_window) JD.videoPopin(); else JD.videoResume() } },
             { cmd: "/music", title: JD.tr("Сделать музыку"), icon: "audio-x-generic", fill: JD.tr("Сделай трек: ") },
             { cmd: "/install", title: JD.tr("Установить программу"), icon: "system-software-install", fill: JD.tr("Установи ") },
             { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
@@ -2216,6 +2353,14 @@ ShellRoot {
                         RowLayout {
                             spacing: 8
                             Chip { icon: "media-playback-start"; label: JD.tr("Включить"); onClicked: JD.openCompose(JD.tr("Включи песню ")) }
+                            // закрытый ролик никуда не делся: его можно доглядеть с той же секунды
+                            Chip {
+                                visible: !!JD.videoLast
+                                icon: JD.videoLast && JD.videoLast.in_window ? "go-top" : "video-x-generic"
+                                label: JD.videoLast && JD.videoLast.in_window ? JD.tr("Вернуть в островок") : JD.tr("Продолжить ролик")
+                                onClicked: { JD.expanded = false
+                                             if (JD.videoLast && JD.videoLast.in_window) JD.videoPopin(); else JD.videoResume() }
+                            }
                             Chip { icon: "document-open-folder"; label: JD.tr("Моя музыка")
                                    onClicked: { JD.expanded = false; JD.send({ cmd: "media_play", query: "~/Music/JustDay/YouTube", mode: "replace", shuffle: true }) } }
                         }

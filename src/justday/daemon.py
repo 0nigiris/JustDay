@@ -131,6 +131,7 @@ class Daemon:
         self.music = media.MusicPlayer(self._on_player, int(self.cfg["media"]["volume"]))
         self._player_state: dict | None = None
         self.island_video: dict | None = None
+        self.last_video: dict | None = None   # закрытый ролик: его можно продолжить с того же места
 
     # ---------------- live status (overlay) ----------------
     @property
@@ -1329,6 +1330,16 @@ class Daemon:
 
     async def media_fast(self, text: str) -> bool:
         """"пауза" / "следующая" for our player and "включи песню …" / "включи видео …" — without the brain."""
+        move = media.video_word(text)
+        if move:
+            r = await (self.video_popin() if move == "popin" else self.resume_video())
+            if r.get("ok"):
+                events.emit("fast", text=text, desc=r.get("done", ""))
+                self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {r.get('done', '')}. Не повторяй.]")
+                await self.earcon("done")
+                return True
+            self.publish(kind="error", detail=t("Нечего вернуть"))
+            return True
         act = media.control_word(text)
         if act and (self.music.active or self.island_video):
             r = await self.media_control(act)
@@ -1736,7 +1747,8 @@ class Daemon:
             return "island"
         return next((w for w, rx in self.WHERE_WORDS if rx.search(ans)), None)
 
-    async def play_video(self, query: str, where: str = "", random: bool = False) -> dict:
+    async def play_video(self, query: str, where: str = "", random: bool = False, start: float = 0.0,
+                         title: str = "") -> dict:
         loop = asyncio.get_running_loop()
         query = query.strip()
         # «включи видео про котов в островке»: место названо в самой просьбе. Оно сильнее настройки —
@@ -1749,7 +1761,8 @@ class Daemon:
         path = Path(query).expanduser()
         try:
             if query.startswith(("/", "~", "./")) and path.exists():
-                e = {"id": "", "title": path.stem, "channel": "", "duration": 0, "url": str(path), "thumb_url": "", "file": str(path)}
+                e = {"id": "", "title": title or path.stem, "channel": "", "duration": 0, "url": str(path),
+                     "thumb_url": "", "file": str(path)}
             else:
                 self.publish(kind="tool", detail=t("Ищу видео: {q}", q=query), icon="youtube")
                 # «рандомное видео от …»: the daemon picks one out of the first results itself, which is
@@ -1771,12 +1784,13 @@ class Daemon:
             await self.music.pause()
         done = {"island": t("видео в острове"), "window": t("видео в окне"), "browser": t("видео на YouTube")}[where]
         if where == "browser" and not e.get("file"):
-            media.open_browser(e["url"])
+            media.open_browser(e["url"], start)
         elif where == "window" or (where == "browser" and e.get("file")):
-            media.open_window(e.get("file") or e["url"], title=e["title"])
+            media.open_window(e.get("file") or e["url"], start=start, title=e["title"])
         else:
             self.island_video = {"title": e["title"], "channel": e.get("channel", ""), "url": e["url"],
-                                 "thumb": e.get("thumb_url", ""), "file": e.get("file", ""), "progress": 0.0}
+                                 "thumb": e.get("thumb_url", ""), "file": e.get("file", ""), "progress": 0.0,
+                                 "start": max(0.0, start)}
             self.publish(video=self.island_video)
             if not e.get("file"):
                 def progress(v: dict) -> None:
@@ -1795,6 +1809,58 @@ class Daemon:
                 self.publish(video=self.island_video)
         events.emit("media_video", title=e["title"], where=where)
         return {"ok": True, "title": e["title"], "where": where, "url": e["url"], "done": done + ": " + e["title"]}
+
+    def remember_video(self, pos: float = 0.0, in_window: bool = False) -> None:
+        """Закрытый ролик остаётся в памяти — как песня остаётся в очереди плеера.
+
+        in_window: ролик не закрыт, а уехал в отдельное окно — его можно вернуть назад."""
+        v = self.island_video
+        if not v or not (v.get("file") or v.get("url")):
+            return
+        self.last_video = {"title": v.get("title", ""), "channel": v.get("channel", ""), "url": v.get("url", ""),
+                           "file": v.get("file", ""), "thumb": v.get("thumb", ""),
+                           "pos": max(0.0, pos or float(v.get("pos") or 0)), "at": time.time(),
+                           "in_window": in_window}
+
+    AUDIO_SUFFIXES: ClassVar = (".mp3", ".flac", ".ogg", ".opus", ".wav", ".m4a", ".aac", ".wma")
+
+    async def play_dropped(self, target: str) -> dict:
+        """Файл или ссылка, брошенные на остров: песня уходит в плеер, всё остальное — в кадр."""
+        target = (target or "").strip()
+        if not target:
+            return {"ok": False, "error": "nothing was dropped"}
+        if target.lower().endswith(self.AUDIO_SUFFIXES):
+            return await self.play_music(target)
+        return await self.play_video(target, where="island")
+
+    async def resume_video(self, where: str = "island") -> dict:
+        """Продолжить последний закрытый ролик с того же места."""
+        v = self.last_video
+        if not v:
+            return {"ok": False, "error": "nothing to resume"}
+        target = v.get("file") or v.get("url")
+        if v.get("file") and not Path(v["file"]).exists():
+            target = v.get("url") or ""
+        if not target:
+            return {"ok": False, "error": "the video is gone"}
+        return await self.play_video(target, where=where, start=float(v.get("pos") or 0), title=v.get("title", ""))
+
+    async def video_popin(self) -> dict:
+        """Отдельное окно mpv → обратно в островок, с той же секунды."""
+        loop = asyncio.get_running_loop()
+        st = await loop.run_in_executor(None, media.window_state)
+        if not st:
+            return {"ok": False, "error": "no video window"}
+        target = st.get("path") or st.get("url") or ""
+        if not target:
+            return {"ok": False, "error": "the window does not say what it plays"}
+        pos = float(st.get("pos") or 0)
+        await loop.run_in_executor(None, media.window_close)
+        r = await self.play_video(target, where="island", start=pos, title=st.get("title", ""))
+        if r.get("ok") and self.last_video:
+            self.last_video["in_window"] = False
+            self.publish(video_last=self.last_video)
+        return r
 
     async def _reconnect_brain(self) -> None:
         while self.brain.busy:
@@ -1937,7 +2003,7 @@ class Daemon:
                 self._subs.add(writer)
                 hello = {"state": self.state, "workers": self._workers_active, "settings": island.settings_snapshot(self.cfg),
                          "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
-                         "player": self._player_state, "video": self.island_video,
+                         "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
                          "reminders": self._reminders_state(), "jobs": self.jobs.state()}
                 try:
                     writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
@@ -2129,17 +2195,25 @@ class Daemon:
                     None, notifications.open_notification_app, req.get("app", ""), req.get("desktop", ""))}
             elif cmd == "video_state":  # the island reports its video (playing / position / closed)
                 if req.get("closed"):
+                    self.remember_video(float(req.get("pos") or 0))
                     self.island_video = None
-                    self.publish(video=None)
+                    self.publish(video=None, video_last=self.last_video)
                 elif self.island_video:
                     self.island_video.update(playing=bool(req.get("playing")), pos=float(req.get("pos") or 0))
                 resp = {"ok": True}
+            elif cmd == "video_resume":  # продолжить закрытый ролик с той же секунды
+                resp = await self.resume_video()
+            elif cmd == "video_popin":  # окно mpv → обратно в островок, с того же места
+                resp = await self.video_popin()
+            elif cmd == "video_drop":  # файл или ссылку бросили на остров
+                resp = await self.play_dropped(req.get("target", ""))
             elif cmd == "video_popout":  # island video → its own window, from the same second
                 v = self.island_video or {}
                 if v.get("file"):
                     media.open_window(v["file"], float(req.get("pos") or 0), v.get("title", ""), bool(req.get("fullscreen")))
+                self.remember_video(float(req.get("pos") or 0), in_window=True)
                 self.island_video = None
-                self.publish(video=None)
+                self.publish(video=None, video_last=self.last_video)
                 resp = {"ok": True}
             elif cmd == "reload_settings":  # after `justday config set`: hot-apply what can be
                 resp = {"ok": True, "restart_needed": self.reload_settings()}
