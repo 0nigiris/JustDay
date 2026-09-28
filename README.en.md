@@ -35,7 +35,7 @@ The installer shows one line per step, installs what is missing (asking for your
 
 | You need | For |
 |---|---|
-| KDE Plasma 6 on Wayland, PipeWire | the island, hotkeys, window control |
+| KDE Plasma 6 on Wayland, PipeWire | the island, hotkeys, window control (on X11 and Plasma 5 everything works except the island and clicks inside other windows) |
 | A Claude subscription **or** a free model | the brain: Claude, Ollama's cloud, OpenRouter, DeepSeek, local Ollama |
 | An NVIDIA GPU — *optional* | the neural voice, fast speech recognition, local models and the studio. Without one JustDay still works: by text, with a simple voice and a cloud model |
 
@@ -308,7 +308,9 @@ justday logs -f                          # what it hears and does
 
 **Will it send or delete something on its own?** Messages and mail only after your “yes”. Deleting files, `sudo`, removing software and other dangerous actions need a confirmation too.
 
-**Other desktops (GNOME, X11)?** Only KDE Plasma 6 on Wayland for now: the island, hotkeys and window control rely on KWin.
+**Other desktops (GNOME, X11, Plasma 5)?** In full, only KDE Plasma 6 on Wayland: the island is drawn with `wlr-layer-shell` and clicks inside other windows go through KWin 6. On X11 and Plasma 5 the installer notices and skips what cannot work: voice, speech recognition, hotkeys (Plasma 5 too), instant commands, timers, mail, the players and the studio all run, and answers arrive as speech and ordinary notifications instead of the island.
+
+**No admin rights (`sudo`)?** The install runs to the end: everything but the system packages lives in your home folder. The installer sets up `uv`, Claude Code, the Python environment and the models, and picks up `yt-dlp` for music through `uv tool`. At the end it lists what is missing, what stops working because of it, and the exact command for an admin. You can also skip the question entirely: `JUSTDAY_NO_SUDO=1 ./install.sh`.
 
 **Where do studio files go?** `~/Pictures/JustDay`, `~/Videos/JustDay`, `~/Music/JustDay` and `~/Documents/JustDay/3D`; the island has “Open” and “Show in folder” buttons.
 

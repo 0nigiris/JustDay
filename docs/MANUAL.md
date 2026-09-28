@@ -126,6 +126,8 @@ flowchart TD
 
 ### Требования
 - Linux с **KDE Plasma 6 на Wayland**, PipeWire. Проверено на Fedora 44; установщик знает dnf, apt и pacman.
+- **X11 и Plasma 5** тоже пригодны, только беднее: нет острова (ему нужен `wlr-layer-shell`) и нет кликов внутри чужих окон (это KWin 6). Установщик определяет сеанс сам, не ставит ни Quickshell, ни kwin-mcp и не просит ради них заголовки для сборки; горячие клавиши настраиваются и через `kwriteconfig5`, выделенный текст читается через `xclip`, а ответы приходят голосом и обычными уведомлениями.
+- **Права администратора не обязательны.** Без `sudo` установка не прерывается: всё, кроме системных пакетов, ставится в домашнюю папку, `yt-dlp` берётся через `uv tool`, а в конце выводится список недостающих пакетов с объяснением, что от этого не работает, и готовой командой для администратора. Сразу без вопросов: `JUSTDAY_NO_SUDO=1 ./install.sh`.
 - **Видеокарта NVIDIA** желательна. Whisper работает и на CPU (поставьте `stt.model = "small"`), но медленнее. Для локальной модели нужно от 10 ГБ видеопамяти (RTX 3060 12 ГБ подходит).
 - Аккаунт Claude (Pro/Max) **или** ключ другого провайдера, **или** только локальная модель.
 - Около 15 ГБ диска: зависимости ~2 ГБ, Whisper ~1,6 ГБ, Ollama ~1,4 ГБ, Qwen 3.5 9B 6,6 ГБ.
@@ -139,12 +141,12 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 
 Установщик идемпотентный, повторный запуск ничего не ломает. Что он делает:
 1. Переносит старую установку под именем `jarvis`, если она есть (`scripts/migrate-from-jarvis.sh`).
-2. Ставит недостающие системные пакеты через sudo: `pipewire-utils`, `wl-clipboard`, `playerctl`, `yt-dlp`, `plocate`, `fd`, `ripgrep`, `jq`, `spectacle`, `libnotify`, `espeak-ng`, `kitty`, `ImageMagick`, `zstd`, `libsecret`, `gtk4-layer-shell`, `python3-gobject`, `python3-cairo`, `qdbus-qt6`, `dbus-tools`, а также заголовки для сборки kwin-mcp (`gcc`, `pkgconf`, `dbus-devel`, `glib2-devel`, `cairo-devel`, `cairo-gobject-devel`, `gobject-introspection-devel`, `at-spi2-core-devel`). Для apt и pacman имена пакетов подставляются автоматически.
+2. Ставит недостающие системные пакеты через sudo (только те, что нужны этому сеансу: Quickshell — лишь на Wayland, заголовки для сборки — лишь там, где работает kwin-mcp; без пароля шаг пропускается, а установка идёт дальше): `pipewire-utils`, `wl-clipboard` (на X11 — `xclip`), `playerctl`, `yt-dlp`, `plocate`, `fd`, `ripgrep`, `jq`, `spectacle`, `libnotify`, `espeak-ng`, `kitty`, `ImageMagick`, `zstd`, `libsecret`, `gtk4-layer-shell`, `python3-gobject`, `python3-cairo`, `qdbus-qt6`, `dbus-tools`, а также заголовки для сборки kwin-mcp (`gcc`, `pkgconf`, `dbus-devel`, `glib2-devel`, `cairo-devel`, `cairo-gobject-devel`, `gobject-introspection-devel`, `at-spi2-core-devel`). Для apt и pacman имена пакетов подставляются автоматически.
 3. Ставит `uv`, если его нет, и Claude Code официальным установщиком.
-4. Ставит kwin-mcp через `uv tool`, версия закреплена: `plugin/bin/kwin_live.py` опирается на его внутренности.
+4. Ставит kwin-mcp через `uv tool`, версия закреплена: `plugin/bin/kwin_live.py` опирается на его внутренности. На X11 и Plasma 5 шаг пропускается — без KWin 6 он всё равно не нужен.
 5. Создаёт Python-окружение (`uv sync`: faster-whisper, torch CPU для Silero, Agent SDK, openWakeWord) и команды `justday` и `jarvis` в `~/.local/bin`.
 6. Пишет `~/.config/justday/config.toml` (находит USB-микрофон) и профиль `~/.local/share/justday/brain/CLAUDE.md`.
-7. Включает сервисы `justday.service` (демон) и `justday-island.service` (Dynamic Island на Quickshell; сам Quickshell установщик ставит: на Fedora — из COPR, на Arch — из репозитория).
+7. Включает сервисы `justday.service` (демон) и `justday-island.service` (Dynamic Island на Quickshell; сам Quickshell установщик ставит: на Fedora — из COPR, на Arch — из репозитория). На X11 остров не включается совсем, чтобы служба не падала по кругу.
 8. Регистрирует горячие клавиши KDE: Meta+J и F19 для разговора, Meta+Shift+J для отмены. При переустановке ваши сочетания не трогает.
 9. При первой установке запускает **мастер настройки** `justday setup` (8 шагов, Enter оставляет значение по умолчанию):
    1. язык: русский или English;

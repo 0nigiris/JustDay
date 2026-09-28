@@ -169,6 +169,10 @@ class Daemon:
             msg = {"kind": "fast", "detail": brain_mod.one_line(data.get("desc", "")), "icon": fastpath.last_icon}
         elif kind in ("heard", "say", "draft"):
             msg = {"kind": kind, "detail": data.get("text", "")}
+            # Острова может не быть вовсе (X11, Plasma 5, Quickshell не поставлен): тогда ответ
+            # показывает обычное уведомление — иначе он существует только как звук.
+            if kind == "say" and not self._subs and data.get("text"):
+                self.notify(data["text"], icon="dialog-information")
         elif kind == "approval_request":
             msg = {"kind": "approval", "detail": data.get("desc", ""), "reason": data.get("reason", "")}
         elif kind in ("approval_result", "cancel", "turn_done", "listen_empty", "listen_cancelled"):

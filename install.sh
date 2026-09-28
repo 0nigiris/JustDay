@@ -82,15 +82,28 @@ printf '\n  %sJustDay%s\n  %s%s%s\n\n' "$B" "$N" "$D" "$(t 'Голосовой �
 
 # ───────────── the computer ─────────────
 desktop="${XDG_CURRENT_DESKTOP:-?}"
+PLASMA=0
 if [[ "$desktop" == *KDE* ]]; then
-  v=$(plasmashell --version 2>/dev/null | awk '{print $2}' | cut -d. -f1)
-  desktop="KDE Plasma${v:+ $v}"
+  PLASMA=$(plasmashell --version 2>/dev/null | awk '{print $2}' | cut -d. -f1)
+  PLASMA=${PLASMA:-0}
+  desktop="KDE Plasma${PLASMA:+ $PLASMA}"
 fi
 session="${XDG_SESSION_TYPE:-?}"; session="${session^}"
 gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | sed 's/^NVIDIA //' || true)
+# Что эта машина потянет. Остальное просто не ставится — вместо ошибки на пол-установки.
+WAYLAND=0; [[ "${XDG_SESSION_TYPE:-}" == wayland ]] && WAYLAND=1
+ISLAND=$WAYLAND                       # остров рисуется через wlr-layer-shell: только Wayland
+DESKTOP_CONTROL=0                     # нажимать кнопки в чужих окнах умеет только KWin 6 на Wayland
+[[ $WAYLAND == 1 && "${XDG_CURRENT_DESKTOP:-}" == *KDE* && ${PLASMA:-0} -ge 6 ]] && DESKTOP_CONTROL=1
 row '✓' "$G" "$(t 'Компьютер' 'Computer')" "$desktop · $session${gpu:+ · $gpu}"
-[[ "${XDG_SESSION_TYPE:-}" == wayland ]] || warn "$(t 'Не Wayland: управлять рабочим столом получится только в KDE Plasma 6 на Wayland.' 'Not Wayland: desktop control needs KDE Plasma 6 on Wayland.')"
-[[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]] || warn "$(t 'Не KDE: горячие клавиши и управление столом придётся настроить вручную.' 'Not KDE: hotkeys and desktop control need manual setup.')"
+if [[ $WAYLAND == 0 ]]; then
+  warn "$(t 'X11: голос, горячие клавиши и уведомления работают; остров сверху экрана — нет, ему нужен Wayland.' 'X11: voice, hotkeys and notifications work; the island at the top of the screen does not — it needs Wayland.')"
+fi
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* && ${PLASMA:-0} -gt 0 && ${PLASMA:-0} -lt 6 ]]; then
+  warn "$(t "Plasma $PLASMA: горячие клавиши настроятся, а нажимать кнопки в чужих окнах ассистент не сможет — для этого нужен KWin 6." "Plasma $PLASMA: hotkeys are set up, but the assistant cannot press buttons inside other windows — that needs KWin 6.")"
+elif [[ "${XDG_CURRENT_DESKTOP:-}" != *KDE* ]]; then
+  warn "$(t 'Не KDE: горячие клавиши и управление столом придётся настроить вручную.' 'Not KDE: hotkeys and desktop control need manual setup.')"
+fi
 [[ -n "$gpu" ]] || warn "$(t 'Нет видеокарты NVIDIA: речь будет распознаваться на процессоре, медленнее.' 'No NVIDIA GPU: speech recognition runs on the CPU, slower.')"
 flush_warns
 
@@ -111,24 +124,31 @@ get_code() {
 step "$(t 'Программа' 'Program')" get_code
 
 # ───────────── system packages (only what is missing) ─────────────
+MISSING=()   # то, что не удалось поставить: сводка в конце, а установка идёт дальше
 need=()
-for pair in pw-record:pipewire-utils wl-copy:wl-clipboard playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
+for pair in pw-record:pipewire-utils playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
             fd:fd-find rg:ripgrep jq:jq spectacle:spectacle gtk-launch:gtk3 notify-send:libnotify \
             espeak-ng:espeak-ng git:git kitty:kitty magick:ImageMagick zstd:zstd secret-tool:libsecret qdbus-qt6:qt6-qttools \
             ffmpeg:ffmpeg; do
   command -v "${pair%%:*}" >/dev/null || need+=("${pair#*:}")
 done
+# clipboard: wl-clipboard on Wayland, xclip on X11
+if [[ $WAYLAND == 1 ]]; then command -v wl-copy >/dev/null || need+=(wl-clipboard)
+else command -v xclip >/dev/null || need+=(xclip); fi
 # the island's typeface
 fc-list : family 2>/dev/null | grep -qx Inter || need+=(rsms-inter-fonts)
-# the island itself (Fedora ships it in a COPR, Arch in its own repos)
-command -v qs >/dev/null || need+=(quickshell)
-# kwin-mcp builds dbus-python, pygobject and pycairo from source: compiler + headers + AT-SPI typelib
-command -v gcc >/dev/null || need+=(gcc)
-command -v pkg-config >/dev/null || need+=(pkgconf-pkg-config)
-for pc in dbus-1:dbus-devel glib-2.0:glib2-devel cairo:cairo-devel cairo-gobject:cairo-gobject-devel gobject-introspection-1.0:gobject-introspection-devel \
-          atspi-2:at-spi2-core-devel; do
-  pkg-config --exists "${pc%%:*}" 2>/dev/null || need+=("${pc#*:}")
-done
+# the island itself (Fedora ships it in a COPR, Arch in its own repos) — Wayland only
+if [[ $ISLAND == 1 ]]; then command -v qs >/dev/null || need+=(quickshell); fi
+# kwin-mcp builds dbus-python, pygobject and pycairo from source: compiler + headers + AT-SPI typelib.
+# On X11 or Plasma 5 it is not installed at all, so none of this is asked for either.
+if [[ $DESKTOP_CONTROL == 1 ]]; then
+  command -v gcc >/dev/null || need+=(gcc)
+  command -v pkg-config >/dev/null || need+=(pkgconf-pkg-config)
+  for pc in dbus-1:dbus-devel glib-2.0:glib2-devel cairo:cairo-devel cairo-gobject:cairo-gobject-devel gobject-introspection-1.0:gobject-introspection-devel \
+            atspi-2:at-spi2-core-devel; do
+    pkg-config --exists "${pc%%:*}" 2>/dev/null || need+=("${pc#*:}")
+  done
+fi
 command -v dbus-monitor >/dev/null || need+=(dbus-tools)
 if ((${#need[@]})); then
   if command -v dnf >/dev/null; then PM=(sudo dnf install -y)
@@ -150,23 +170,38 @@ if ((${#need[@]})); then
     PM=()
   fi
   mapfile -t need < <(printf '%s\n' "${need[@]}" | awk 'NF && !seen[$0]++')
+  # Нет пароля администратора — не беда: всё остальное ставится в домашнюю папку и работает.
+  # Чего именно не будет без пакета, написано в конце (skipped_note).
   if ((${#PM[@]} == 0)); then
     row '!' "$Y" "$(t 'Системные пакеты' 'System packages')" "$(t 'неизвестный менеджер пакетов' 'unknown package manager')"
-    printf '     %s\n' "$(t 'Поставьте вручную:' 'Install by hand:') ${need[*]}"
+    MISSING=("${need[@]}")
+  elif [[ "${JUSTDAY_NO_SUDO:-}" == 1 ]]; then
+    row '!' "$Y" "$(t 'Системные пакеты' 'System packages')" "$(t 'пропущены: JUSTDAY_NO_SUDO=1' 'skipped: JUSTDAY_NO_SUDO=1')"
+    MISSING=("${need[@]}")
   elif sudo -n true 2>/dev/null || { [[ -r /dev/tty ]] && { : </dev/tty; } 2>/dev/null; }; then
     if ! sudo -n true 2>/dev/null; then
       printf '  %s•%s  %s%s%s\n' "$C" "$N" "$(pad "$(t 'Системные пакеты' 'System packages')" 28)" "$D" "${need[*]}"
-      printf '     %s%s%s\n' "$D" "$(t 'Для них нужен пароль администратора — только для этого шага.' 'These need your admin password — for this step only.')" "$N"
-      sudo -v </dev/tty || { printf '\n  %s\n\n' "$(t 'Без пароля поставить пакеты не получится.' 'Cannot install the packages without the password.')"; exit 1; }
-      printf '\e[1A\e[K\e[1A\e[K\e[1A\e[K'   # the list, the hint and sudo's own prompt: the step line replaces them
+      printf '     %s%s%s\n' "$D" "$(t 'Для них нужен пароль администратора — только для этого шага. Без него установка продолжится без этих пакетов.' 'These need your admin password — for this step only. Without it the install carries on without them.')" "$N"
+      if sudo -v </dev/tty; then
+        printf '\e[1A\e[K\e[1A\e[K\e[1A\e[K'   # the list, the hint and sudo's own prompt: the step line replaces them
+      else
+        printf '\e[1A\e[K\e[1A\e[K\e[1A\e[K'
+        row '!' "$Y" "$(t 'Системные пакеты' 'System packages')" "$(t 'без прав администратора' 'no admin rights')"
+        MISSING=("${need[@]}")
+      fi
     fi
-    install_packages() {
-      [[ -n ${COPR:-} ]] && sudo dnf copr enable -y "$COPR"
-      "${PM[@]}" "${need[@]}"; note "$(t 'поставлено' 'installed'): ${#need[@]}"; }
-    step "$(t 'Системные пакеты' 'System packages')" install_packages
+    if ((${#MISSING[@]} == 0)); then
+      install_packages() {
+        [[ -n ${COPR:-} ]] && sudo dnf copr enable -y "$COPR"
+        "${PM[@]}" "${need[@]}"; note "$(t 'поставлено' 'installed'): ${#need[@]}"; }
+      step "$(t 'Системные пакеты' 'System packages')" install_packages
+    fi
   else
     row '!' "$Y" "$(t 'Системные пакеты' 'System packages')" "$(t 'некому спросить пароль' 'no terminal to ask for a password')"
-    printf '     %s\n' "${PM[*]} ${need[*]}"
+    MISSING=("${need[@]}")
+  fi
+  if ((${#MISSING[@]})); then
+    printf '     %s%s%s\n' "$D" "$(t 'Поставит администратор:' 'For an admin to run:') ${PM[*]:-<package manager>} ${MISSING[*]}" "$N"
   fi
 else
   row '✓' "$G" "$(t 'Системные пакеты' 'System packages')" "$(t 'всё уже есть' 'all there')"
@@ -184,18 +219,35 @@ get_claude() {
 }
 step "Claude Code" get_claude
 
-get_kwin_mcp() {
-  command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
-  # pinned: plugin/bin/kwin_live.py extends this server's internals (engine, AT-SPI helper)
-  local rev="${KWIN_MCP_REV:-7cef7afc402d3c5892f39825290bbbe1851ae1d0}"
-  if uv tool install --python 3.12 --reinstall "git+https://github.com/VibeProgramm/kwin-mcp@$rev"; then
-    note "kwin-mcp"
-  else
-    note "$(t 'не поставилось' 'not installed')"
-    warn "$(t 'Без него ассистент не сможет нажимать кнопки в окнах. Подробности в журнале.' 'Without it the assistant cannot press buttons in windows. See the log.')"
-  fi
+get_uv() {
+  if command -v uv >/dev/null; then note "$(t 'уже есть' 'already here')"
+  else curl -LsSf https://astral.sh/uv/install.sh | sh; note "$(t 'установлен' 'installed')"; fi
 }
-step "$(t 'Управление рабочим столом' 'Desktop control')" get_kwin_mcp
+step "uv" get_uv
+
+# Без прав администратора кое-что ставится и в домашнюю папку — музыка не должна пропадать
+# только потому, что на этом компьютере нет пароля.
+if ((${#MISSING[@]})) && [[ " ${MISSING[*]} " == *" yt-dlp "* ]] && ! command -v yt-dlp >/dev/null; then
+  user_tools() { uv tool install yt-dlp; note "yt-dlp"; }
+  step "$(t 'Музыка и видео' 'Music and video')" user_tools
+  MISSING=("${MISSING[@]/yt-dlp/}")
+fi
+
+if [[ $DESKTOP_CONTROL == 1 ]]; then
+  get_kwin_mcp() {
+    # pinned: plugin/bin/kwin_live.py extends this server's internals (engine, AT-SPI helper)
+    local rev="${KWIN_MCP_REV:-7cef7afc402d3c5892f39825290bbbe1851ae1d0}"
+    if uv tool install --python 3.12 --reinstall "git+https://github.com/VibeProgramm/kwin-mcp@$rev"; then
+      note "kwin-mcp"
+    else
+      note "$(t 'не поставилось' 'not installed')"
+      warn "$(t 'Без него ассистент не сможет нажимать кнопки в окнах. Подробности в журнале.' 'Without it the assistant cannot press buttons in windows. See the log.')"
+    fi
+  }
+  step "$(t 'Управление рабочим столом' 'Desktop control')" get_kwin_mcp
+else
+  row '•' "$C" "$(t 'Управление рабочим столом' 'Desktop control')" "$(t 'пропущено: нужен KWin 6 на Wayland' 'skipped: needs KWin 6 on Wayland')"
+fi
 
 # ───────────── python env and models ─────────────
 python_env() {
@@ -245,7 +297,7 @@ services() {
   systemctl --user daemon-reload
   systemctl --user enable justday.service
   systemctl --user restart justday.service
-  if command -v qs >/dev/null; then
+  if [[ $ISLAND == 1 ]] && command -v qs >/dev/null; then
     sed "s|@REPO@|$APP_DIR|; s|@QS@|$(command -v qs)|" "$APP_DIR/systemd/justday-island.service" > "$UNIT_DIR/justday-island.service"
     systemctl --user disable --now justday-overlay.service 2>/dev/null || true   # the old GTK pill, now gone
     rm -f "$UNIT_DIR/justday-overlay.service"
@@ -253,6 +305,11 @@ services() {
     systemctl --user enable justday-island.service
     systemctl --user restart justday-island.service
     note "$(t 'ассистент · остров' 'assistant · island')"
+  elif [[ $ISLAND == 0 ]]; then
+    # На X11 остров не запускается — служба не включается, чтобы не падать по кругу.
+    systemctl --user disable --now justday-island.service 2>/dev/null || true
+    note "$(t 'ассистент · без острова (X11)' 'assistant · no island (X11)')"
+    warn "$(t 'Остров рисуется через wlr-layer-shell, а он есть только на Wayland. Ответы будут приходить голосом и обычными уведомлениями.' 'The island is drawn with wlr-layer-shell, which only exists on Wayland. Answers come as speech and ordinary notifications.')"
   else
     note "$(t 'ассистент · без острова' 'assistant · no island')"
     warn "$(t 'Острову нужен Quickshell — поставьте его и запустите установку ещё раз' 'The island needs Quickshell — install it and run the installer again'): https://quickshell.org/docs/guide/install-setup/"
@@ -276,10 +333,11 @@ if [[ "${JUSTDAY_VOICE:-}" == 1 ]]; then
 fi
 
 # ───────────── hotkeys (KDE) ─────────────
-if command -v kwriteconfig6 >/dev/null; then
+if command -v kwriteconfig6 >/dev/null || command -v kwriteconfig5 >/dev/null; then
   hotkeys() {
     local current
-    current=$(kreadconfig6 --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null || true)
+    local kread; kread=$(command -v kreadconfig6 || command -v kreadconfig5)
+    current=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null || true)
     if [[ -z "$current" || -n "${JUSTDAY_HOTKEY:-}" ]]; then   # keep shortcuts the user changed in Settings
       "$APP_DIR/scripts/setup-hotkey.sh" --talk "$HOTKEY"
       note "$HOTKEY $(t 'говорить' 'talk') · Meta+K $(t 'написать' 'type')"
@@ -297,8 +355,38 @@ if [[ "$FIRST_RUN" == 1 || "${JUSTDAY_SETUP:-}" == 1 ]] && [[ "${JUSTDAY_SETUP:-
   "$HOME/.local/bin/justday" setup </dev/tty || printf '  %s\n' "$(t 'Мастер прерван — продолжить можно командой justday setup' 'Wizard interrupted — continue with: justday setup')"
 fi
 
+# ───────────── what could not be installed without an admin ─────────────
+why_missing() {
+  case "$1" in
+    yt-dlp) t 'музыка и видео с YouTube' 'music and video from YouTube' ;;
+    pipewire*) t 'микрофон' 'the microphone' ;;
+    espeak-ng) t 'запасной голос' 'the fallback voice' ;;
+    quickshell) t 'остров сверху экрана' 'the island at the top of the screen' ;;
+    wl-clipboard|xclip) t 'выделенный текст и вставка' 'the selected text and pasting' ;;
+    kitty) t 'терминал для длинных команд' 'the terminal for long commands' ;;
+    ImageMagick|imagemagick) t 'картинки студии' 'studio pictures' ;;
+    spectacle|kde-spectacle) t 'снимки экрана' 'screenshots' ;;
+    ffmpeg*) t 'звук и видео' 'sound and video' ;;
+    libsecret*) t 'пароли в связке ключей' 'passwords in the keyring' ;;
+    plocate|fd|fd-find|ripgrep) t 'быстрый поиск файлов' 'fast file search' ;;
+    libnotify*) t 'уведомления' 'notifications' ;;
+    *) printf '' ;;
+  esac
+}
+mapfile -t MISSING < <(printf '%s\n' "${MISSING[@]:-}" | awk 'NF')
+if ((${#MISSING[@]})); then
+  printf '\n  %s%s%s\n' "$B$Y" "$(t 'Осталось без администратора' 'Left out: no admin rights')" "$N"
+  for pkg in "${MISSING[@]}"; do
+    reason=$(why_missing "$pkg")
+    printf '     %s%s%s%s\n' "$(pad "$pkg" 22)" "$D" "${reason:+— $reason}" "$N"
+  done
+  printf '  %s%s%s\n' "$D" "$(t 'Попросите администратора:' 'Ask an admin to run:') ${PM[*]:-<package manager>} ${MISSING[*]}" "$N"
+  printf '  %s%s%s\n' "$D" "$(t 'Остальное уже работает — всё лежит в домашней папке.' 'Everything else already works — it all lives in your home folder.')" "$N"
+fi
+
 # ───────────── done ─────────────
-talk=$(kreadconfig6 --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null | cut -d, -f1 | cut -f1 || true)
+kread=$(command -v kreadconfig6 || command -v kreadconfig5 || echo true)
+talk=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null | cut -d, -f1 | cut -f1 || true)
 talk=${talk:-$HOTKEY}
 printf '\n  %s%s%s  %s%s%s\n\n' "$B$G" "$(t 'Готово' 'Done')" "$N" "$D" "$(t 'за' 'in') $(clock $((SECONDS - STARTED)))" "$N"
 if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true'; then

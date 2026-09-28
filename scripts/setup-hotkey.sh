@@ -29,10 +29,19 @@ done
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$APPS"
 
+# Plasma 6 или Plasma 5 — файлы и ключи те же, разные только имена утилит
+KWRITE=$(command -v kwriteconfig6 || command -v kwriteconfig5 || true)
+KBUILD=$(command -v kbuildsycoca6 || command -v kbuildsycoca5 || true)
+QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus || command -v qdbus-qt5 || true)
+if [[ -z "$KWRITE" ]]; then
+  echo "нужен kwriteconfig6 или kwriteconfig5 (KDE Plasma)" >&2
+  exit 1
+fi
+
 unregister() {  # $1 desktop id
   gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel \
     --method org.kde.KGlobalAccel.unregister "$1" "_launch" >/dev/null 2>&1 || true
-  qdbus-qt6 org.kde.kglobalaccel "/component/${1//[.-]/_}" org.kde.kglobalaccel.Component.cleanUp >/dev/null 2>&1 || true
+  [[ -n "$QDBUS" ]] && "$QDBUS" org.kde.kglobalaccel "/component/${1//[.-]/_}" org.kde.kglobalaccel.Component.cleanUp >/dev/null 2>&1 || true
 }
 
 register() {  # $1 desktop id, $2 name, $3 command, $4.. keys
@@ -50,7 +59,7 @@ X-KDE-GlobalAccel-CommandShortcut=true
 X-KDE-Shortcuts=$keys_csv
 EOF
   unregister "$id"
-  kwriteconfig6 --file kglobalshortcutsrc --group services --group "$id" --key _launch "$keys_tab"
+  "$KWRITE" --file kglobalshortcutsrc --group services --group "$id" --key _launch "$keys_tab"
   echo "shortcut ${keys_csv} → $cmd"
 }
 
@@ -58,11 +67,11 @@ if ((REMOVE)); then
   for id in net.local.justday.desktop net.local.justday-stop.desktop net.local.justday-type.desktop \
             net.local.justday-yes.desktop net.local.justday-no.desktop; do
     unregister "$id"
-    kwriteconfig6 --file kglobalshortcutsrc --group services --group "$id" --key _launch --delete
+    "$KWRITE" --file kglobalshortcutsrc --group services --group "$id" --key _launch --delete
     rm -f "$APPS/$id"
   done
-  [[ -n "$MOUSE" ]] && kwriteconfig6 --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --delete --notify
-  kbuildsycoca6 >/dev/null 2>&1
+  { [[ -n "$MOUSE" ]] && "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --delete --notify; } || true
+  { [[ -n "$KBUILD" ]] && "$KBUILD" >/dev/null 2>&1; } || true
   echo "JustDay shortcuts removed"
   exit 0
 fi
@@ -78,16 +87,16 @@ optional() {  # $1 desktop id, $2 name, $3 command, $4 key ("" = remove)
     register "$1" "$2" "$3" "$4"
   else
     unregister "$1"
-    kwriteconfig6 --file kglobalshortcutsrc --group services --group "$1" --key _launch --delete
+    "$KWRITE" --file kglobalshortcutsrc --group services --group "$1" --key _launch --delete
     rm -f "$APPS/$1"
   fi
 }
 optional net.local.justday-type.desktop "JustDay: написать" "$HOME/.local/bin/justday compose" "$TYPE"
 optional net.local.justday-yes.desktop "JustDay: да / разрешить" "$HOME/.local/bin/justday approve" "$YES"
 optional net.local.justday-no.desktop "JustDay: нет / отклонить" "$HOME/.local/bin/justday deny" "$NO"
-kbuildsycoca6 >/dev/null 2>&1
+{ [[ -n "$KBUILD" ]] && "$KBUILD" >/dev/null 2>&1; } || true
 
 if [[ -n "$MOUSE" ]]; then
-  kwriteconfig6 --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --notify "Key,$TALK"
+  "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --notify "Key,$TALK"
   echo "mouse $MOUSE → $TALK"
 fi

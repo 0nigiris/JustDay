@@ -832,12 +832,18 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _screen_context() -> dict:
-    """The text selected right now (primary selection) — for "explain this", "translate this"."""
-    try:
-        sel = subprocess.run(["wl-paste", "--primary", "--no-newline", "--type", "text/plain"],
-                             capture_output=True, text=True, timeout=1).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        sel = ""
+    """The text selected right now (primary selection) — for "explain this", "translate this".
+
+    Wayland answers through wl-paste, X11 through xclip: the shortcut works the same on both."""
+    sel = ""
+    for cmd in (["wl-paste", "--primary", "--no-newline", "--type", "text/plain"],
+                ["xclip", "-o", "-selection", "primary"]):
+        try:
+            sel = subprocess.run(cmd, capture_output=True, text=True, timeout=1).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            sel = ""
+        if sel:
+            break
     if not sel:
         return {}
     return {"selection": sel[:6000]}  # (the active window lookup takes ~0.7 s — too slow for a shortcut)
