@@ -1076,6 +1076,13 @@ def _config_cmd(a) -> None:
         value = float(a.value)
     elif isinstance(old, list):
         value = [x.strip() for x in a.value.split(",") if x.strip()]
+    elif old is None:  # ключ, которого ещё нет в файле: число остаётся числом, а не строкой
+        if a.value.lower() in ("true", "false"):
+            value = a.value.lower() == "true"
+        elif re.fullmatch(r"-?\d+", a.value):
+            value = int(a.value)
+        elif re.fullmatch(r"-?\d+\.\d+", a.value):
+            value = float(a.value)
     config.set_value(section, key, value)
     control("reload_settings", timeout=5)
     print(f"{a.key} = {value}")

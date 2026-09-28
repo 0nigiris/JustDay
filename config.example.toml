@@ -96,6 +96,8 @@ show_weather = true
 show_events = true
 show_notifications = true   # mirror desktop notifications (they never leave the computer)
 city = ""                   # weather location; empty = no weather requests
+top_margin = 8              # room above the island: a panel along the top edge stays clickable
+video_width = 640           # the island video frame, in points — drag its corner, the size is kept here
 screen = ""                 # monitor name, e.g. DP-2; empty = top-left one
 
 [updates]
@@ -116,7 +118,8 @@ announce = true             # say "новое письмо от …" when import
 poll_seconds = 180
 
 [media]                     # own player: songs from YouTube are downloaded and play in a background mpv
-video_where = "ask"         # ask | island | window | browser — where "включи видео …" plays
+video_where = "ask"         # ask | island | window | browser — where "включи видео …" plays by default
+video_where_strict = false  # true = keep that place even when the request says "в островке"
 volume = 70                 # the player's own volume, 0–130
 color = "theme"             # theme = the artwork's colour, and when the artwork says nothing about the music
                             #         (a character's theme on a black sleeve) the colour of what it is about,

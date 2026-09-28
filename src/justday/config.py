@@ -174,6 +174,9 @@ DEFAULTS: dict = {
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         "city": "",  # weather location; empty = no weather requests at all
         "screen": "",  # monitor name (e.g. DP-2); empty = the one at the top-left
+        # How much room to leave above the island: a panel along the top edge stays reachable
+        "top_margin": 8,
+        "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here
     },
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
@@ -199,7 +202,9 @@ DEFAULTS: dict = {
     # asked of the model once per track and kept in ~/.local/state/justday/colors.json; cover = the old way,
     # the brightest pixel of the artwork. color_web: let that question use web search for tracks the model
     # does not know. Track titles (never the audio) leave the machine for this, like any other request.
-    "media": {"video_where": "ask", "volume": 70, "duck": True, "show_player": True,
+    # video_where_strict: keep the chosen place even when the request names another one
+    # ("включи в островке" is honoured by default, whatever video_where says)
+    "media": {"video_where": "ask", "video_where_strict": False, "volume": 70, "duck": True, "show_player": True,
               "color": "theme", "color_web": True},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},

@@ -70,23 +70,30 @@ ShellRoot {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "justday-island"
         readonly property bool big: ["expanded", "settings", "compose", "player"].includes(island.mode)
+        // Мышь перехватывается на весь экран только там, где это нужно для закрытия щелчком мимо:
+        // меню, настройки, поле ввода. Плеер и видео живут поверх окон, не отнимая ни панель, ни рабочий стол.
+        readonly property bool modal: ["expanded", "settings", "compose"].includes(island.mode)
+        Binding { target: JD; property: "screenWidth"; value: win.screen ? win.screen.width : 1920 }
+        Binding { target: JD; property: "screenHeight"; value: win.screen ? win.screen.height : 1080 }
         // the text field takes the keyboard at once (it was opened by a shortcut); menus only on click
         WlrLayershell.keyboardFocus: island.mode === "compose" ? WlrKeyboardFocus.Exclusive
-                                   : big ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-        implicitWidth: 1000
-        implicitHeight: 880
+                                   : big || island.mode === "video" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        // окно шире самого острова: видео растягивают почти во весь экран, а щелчки всё равно
+        // проходят везде, кроме него самого — маска ниже отвечает за это
+        implicitWidth: Math.max(1000, Math.min(JD.screenWidth, JD.videoWidth + 80))
+        implicitHeight: Math.min(JD.screenHeight, 880 + JD.topMargin)
         color: "transparent"
 
         // clicks pass through everywhere except the island (and the whole area while expanded, to close on outside click)
         mask: Region {
-            item: win.big ? backdrop : island
+            item: win.modal ? backdrop : island
             Region { item: hotZone }
         }
 
         MouseArea {
             id: backdrop
             anchors.fill: parent
-            enabled: win.big
+            enabled: win.modal
             onClicked: JD.closeAll()
         }
 
@@ -100,6 +107,29 @@ ShellRoot {
         }
 
         Shortcut { sequence: "Escape"; enabled: win.big; onActivated: JD.closeAll() }
+        Shortcut { sequence: "Escape"; enabled: island.mode === "video"; onActivated: videoView.close() }
+
+        // Клавиши плеера — те, что ждёшь от плеера. Работают, когда по нему щёлкнули:
+        // остров просит клавиатуру «по требованию» и не отбирает её у других окон.
+        readonly property bool playing: ["player", "video"].includes(island.mode)
+        readonly property bool onVideo: island.mode === "video"
+        Shortcut { sequences: ["Space", "K"]; enabled: win.playing
+                   onActivated: win.onVideo ? videoView.toggle() : JD.media("toggle") }
+        Shortcut { sequence: "Right"; enabled: win.playing
+                   onActivated: win.onVideo ? videoView.seekBy(5000) : JD.media("seek", JD.playerPos(Date.now()) + 10) }
+        Shortcut { sequence: "Left"; enabled: win.playing
+                   onActivated: win.onVideo ? videoView.seekBy(-5000) : JD.media("seek", Math.max(0, JD.playerPos(Date.now()) - 10)) }
+        Shortcut { sequence: "Up"; enabled: win.playing
+                   onActivated: win.onVideo ? JD.setVideoVolume(JD.videoVolume + 0.05) : JD.media("volume", Math.min(100, (JD.player ? JD.player.volume || 0 : 0) + 5)) }
+        Shortcut { sequence: "Down"; enabled: win.playing
+                   onActivated: win.onVideo ? JD.setVideoVolume(JD.videoVolume - 0.05) : JD.media("volume", Math.max(0, (JD.player ? JD.player.volume || 0 : 0) - 5)) }
+        Shortcut { sequence: "M"; enabled: win.playing
+                   onActivated: win.onVideo ? JD.setVideoVolume(JD.videoVolume > 0 ? 0 : 1)
+                                            : JD.media("volume", (JD.player && JD.player.volume > 0) ? 0 : 70) }
+        Shortcut { sequence: "N"; enabled: island.mode === "player"; onActivated: JD.media("next") }
+        Shortcut { sequence: "P"; enabled: island.mode === "player"; onActivated: JD.media("prev") }
+        Shortcut { sequence: "F"; enabled: win.onVideo
+                   onActivated: JD.videoBig ? videoView.grow(videoView.smallWidth) : videoView.grow(JD.videoRoom) }
 
         // ───────────── the island ─────────────
         Rectangle {
@@ -119,7 +149,7 @@ ShellRoot {
             Behavior on pill { enabled: JD.animOn; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
             radius: Math.min(height / 2, pill * height / 2 + (1 - pill) * (mode === "settings" ? 34 : 30))
             anchors.horizontalCenter: parent.horizontalCenter
-            y: mode === "hidden" ? -14 : 8
+            y: mode === "hidden" ? JD.topMargin - 22 : JD.topMargin
             opacity: mode === "hidden" ? 0 : 1
             scale: mode === "hidden" ? 0.7 : 1
             color: JD.ink
@@ -127,8 +157,8 @@ ShellRoot {
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, win.big ? 0.10 : 0.06)
 
-            Behavior on width { enabled: JD.animOn; SpringAnimation { spring: JD.springK; damping: JD.springDamping; epsilon: 0.3 } }
-            Behavior on height { enabled: JD.animOn; SpringAnimation { spring: JD.springK; damping: JD.springDamping; epsilon: 0.3 } }
+            Behavior on width { enabled: JD.animOn && !JD.videoResizing; SpringAnimation { spring: JD.springK; damping: JD.springDamping; epsilon: 0.3 } }
+            Behavior on height { enabled: JD.animOn && !JD.videoResizing; SpringAnimation { spring: JD.springK; damping: JD.springDamping; epsilon: 0.3 } }
             Behavior on y { enabled: JD.animOn; SpringAnimation { spring: JD.springK - 0.2; damping: Math.max(0.4, JD.springDamping); epsilon: 0.2 } }
             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             Behavior on scale { enabled: JD.animOn; SpringAnimation { spring: JD.springK - 0.2; damping: Math.max(0.42, JD.springDamping); epsilon: 0.005 } }
@@ -765,6 +795,13 @@ ShellRoot {
                 GradientStop { position: 0.6; color: "transparent" }
             }
         }
+        // колесо над плеером — громкость, как над любым плеером
+        WheelHandler {
+            onWheel: e => {
+                const v = Math.max(0, Math.min(100, (pl.p.volume || 0) + (e.angleDelta.y > 0 ? 5 : -5)))
+                JD.media("volume", v); pl.optimistic({ volume: v })
+            }
+        }
         ColumnLayout {
             id: plCol
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
@@ -811,7 +848,7 @@ ShellRoot {
                 }
                 IconButton { icon: "view-grid"; size: 26; Layout.alignment: Qt.AlignTop
                              onClicked: { JD.playerOpen = false; JD.expanded = true } }
-                IconButton { icon: "window-close"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
+                IconButton { icon: "go-up"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
             }
             SeekBar {
                 Layout.fillWidth: true
@@ -954,9 +991,12 @@ ShellRoot {
         readonly property var v: JD.video || ({})
         readonly property bool ready: !!v.file
         property bool ended: false
-        readonly property bool busyLine: ["thinking", "speaking", "transcribing"].includes(JD.dstate) || JD.answerOpen
-        implicitWidth: JD.videoBig ? 960 : 640
+        readonly property bool busyLine: ["listening", "thinking", "speaking", "transcribing"].includes(JD.dstate) || JD.answerOpen
+        readonly property bool hearing: JD.dstate === "listening"
+        property real smallWidth: 640      // куда вернуться из «во весь экран»
+        implicitWidth: JD.videoWidth
         implicitHeight: Math.round(implicitWidth * 9 / 16)
+        function grow(w) { JD.setVideoWidth(w); JD.saveVideoWidth() }
 
         function close() {
             player.stop()
@@ -969,6 +1009,10 @@ ShellRoot {
             JD.send({ cmd: "video_popout", pos: at, fullscreen: fullscreen })
             JD.video = null
         }
+        function seekBy(ms) {
+            player.position = Math.max(0, Math.min(player.duration || 0, player.position + ms))
+            vv.ended = false
+        }
         function toggle() {
             if (vv.ended) { player.position = 0; vv.ended = false; player.play() }
             else if (player.playbackState === MediaPlayer.PlayingState) player.pause()
@@ -980,8 +1024,8 @@ ShellRoot {
             source: vv.ready ? "file://" + vv.v.file : ""
             videoOutput: screenOut
             audioOutput: AudioOutput {
-                // quieter while the assistant listens or talks
-                volume: ["listening", "speaking", "approval"].includes(JD.dstate) ? 0.25 : 1.0
+                // своя громкость кадра (колесо над видео), приглушённая, пока ассистент слушает или говорит
+                volume: JD.videoVolume * (["listening", "speaking", "approval"].includes(JD.dstate) ? 0.25 : 1.0)
                 muted: Quickshell.env("JUSTDAY_ISLAND_MUTE") === "1"  // the headless test stand stays silent
             }
             onSourceChanged: { vv.ended = false; if (source.toString() !== "") play() }
@@ -1064,7 +1108,11 @@ ShellRoot {
                         Label1 { text: vv.v.title || ""; Layout.fillWidth: true }
                         Label2 { text: vv.v.channel || ""; visible: !!vv.v.channel; font.pixelSize: 11; Layout.fillWidth: true }
                     }
-                    IconButton { icon: JD.videoBig ? "view-restore" : "view-fullscreen"; size: 28; onClicked: JD.videoBig = !JD.videoBig }
+                    IconButton {
+                        icon: JD.videoBig ? "view-restore" : "view-fullscreen"; size: 28
+                        onClicked: { if (JD.videoBig) vv.grow(vv.smallWidth)
+                                     else { vv.smallWidth = JD.videoWidth; vv.grow(JD.videoRoom) } }
+                    }
                     IconButton { icon: "window-new"; size: 28; visible: vv.ready; onClicked: vv.popout(false) }
                     IconButton { icon: "internet-web-browser"; size: 28; visible: !!vv.v.url && vv.v.url.startsWith("http")
                                  onClicked: { Quickshell.execDetached(["xdg-open", vv.v.url + (player.position > 3000 ? "&t=" + Math.floor(player.position / 1000) + "s" : "")]); vv.close() } }
@@ -1097,6 +1145,73 @@ ShellRoot {
                 }
             }
 
+            // колесо — громкость, Ctrl+колесо — размер кадра
+            WheelHandler {
+                acceptedModifiers: Qt.NoModifier
+                onWheel: e => JD.setVideoVolume(JD.videoVolume + (e.angleDelta.y > 0 ? 0.05 : -0.05))
+            }
+            WheelHandler {
+                acceptedModifiers: Qt.ControlModifier
+                onWheel: e => { JD.setVideoWidth(JD.videoWidth + (e.angleDelta.y > 0 ? 80 : -80)); JD.saveVideoWidth() }
+            }
+
+            // сколько сейчас громкость / какой размер — пока его меняют
+            Rectangle {
+                anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 96 }
+                width: sizeLabel.implicitWidth + 24; height: 28; radius: 14
+                color: Qt.rgba(0, 0, 0, 0.7)
+                opacity: volumeHint.running || JD.videoResizing ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+                Label2 {
+                    id: sizeLabel
+                    anchors.centerIn: parent
+                    color: JD.text1
+                    font.features: { "tnum": 1 }
+                    text: JD.videoResizing ? Math.round(JD.videoWidth) + " × " + Math.round(JD.videoWidth * 9 / 16)
+                                           : JD.tr("Громкость") + " " + Math.round(JD.videoVolume * 100) + "%"
+                }
+            }
+            Timer { id: volumeHint; interval: 1100 }
+            Connections { target: JD; function onVideoVolumeChanged() { volumeHint.restart() } }
+
+            // уголок: тянуть — менять размер кадра. Размер запоминается, когда его отпускают
+            Item {
+                anchors { right: parent.right; bottom: parent.bottom }
+                width: 30; height: 30
+                opacity: vv.chrome || JD.videoResizing ? 0.85 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Repeater {   // три косые чёрточки у самого угла, как у любого окна, которое можно тянуть
+                    model: 3
+                    Rectangle {
+                        required property int index
+                        readonly property real away: 6 + index * 5      // как далеко от угла
+                        width: 7 + index * 6; height: 2; radius: 1
+                        color: JD.text1
+                        rotation: -45
+                        x: 30 - away - width / 2
+                        y: 30 - away - height / 2
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.SizeFDiagCursor
+                    property real fromX: 0
+                    property real fromWidth: 0
+                    onPressed: m => {
+                        // от точки экрана, а не от своей: уголок уезжает вместе с краем кадра
+                        fromX = mapToGlobal(m.x, m.y).x
+                        fromWidth = JD.videoWidth
+                        JD.videoResizing = true
+                    }
+                    // остров растёт в обе стороны от центра: край уходит на половину прибавки
+                    onPositionChanged: m => { if (pressed) JD.setVideoWidth(fromWidth + 2 * (mapToGlobal(m.x, m.y).x - fromX)) }
+                    onReleased: { JD.videoResizing = false; JD.saveVideoWidth() }
+                    onCanceled: { JD.videoResizing = false; JD.saveVideoWidth() }
+                }
+            }
+
             // the assistant keeps working over the video: its words run as a caption
             Rectangle {
                 anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 16 }
@@ -1112,9 +1227,12 @@ ShellRoot {
                     anchors.centerIn: parent
                     width: Math.min(implicitWidth, vv.width - 76)
                     spacing: 10
-                    Ring { size: 16 }
+                    Ring { visible: !vv.hearing; size: 16; tint: JD.accentOrange }
+                    Waveform { visible: vv.hearing; Layout.preferredWidth: 42; Layout.preferredHeight: 20 }
                     Label1 {
-                        text: JD.answerOpen ? JD.answer : (JD.activity || JD.tr("Думаю…"))
+                        text: JD.answerOpen ? JD.answer
+                            : vv.hearing ? (JD.activity || JD.tr("Слушаю…"))
+                            : (JD.activity || JD.tr("Думаю…"))
                         font.weight: Font.Medium
                         wrapMode: Text.Wrap
                         maximumLineCount: 2

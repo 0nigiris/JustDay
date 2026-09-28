@@ -59,6 +59,27 @@ _LIBRARY = re.compile(r"^(?:включи|поставь|вруби|запуст�
                       r"music|songs|playlist|something|anything)$", re.I)
 
 
+# «включи видео про кота в островке» — место названо прямо в просьбе, спрашивать нечего.
+# Только явные обороты: «тут», «здесь» и «плеер» сами по себе слишком часто часть названия.
+_WHERE_ASKED: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("browser", re.compile(r"\b(?:в|во|на)\s+(?:браузер\w*|ютуб\w*|youtube|хром\w*|firefox|сайте)\b"
+                           r"|\bin\s+(?:the\s+)?browser\b|\bon\s+youtube\b", re.I)),
+    ("window", re.compile(r"\b(?:в|во)\s+(?:отдельн\w+\s+)?(?:окне|окошке|плеере)\b|\bотдельным окном\b"
+                          r"|\bво весь экран\b|\bin\s+(?:a|its own)\s+window\b|\bfullscreen\b", re.I)),
+    # «на острове» — это про географию («выживание на острове»), а не про остров сверху экрана
+    ("island", re.compile(r"\bостровк\w+\b|\bв\s+остров\w*\b|\bin\s+the\s+island\b", re.I)),
+)
+
+
+def where_asked(text: str) -> tuple[str, str]:
+    """("island" | "window" | "browser" | "", фраза без слов о месте) — где человек попросил включить."""
+    for where, rx in _WHERE_ASKED:
+        if rx.search(text):
+            rest = re.sub(r"\s+", " ", rx.sub(" ", text)).strip(" ,.«»\"'")
+            return where, rest
+    return "", text.strip()
+
+
 def parse(text: str) -> tuple[str, str] | None:
     """("music" | "video" | "video_random" | "library", query) for "включи песню …", else None."""
     t = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
@@ -69,6 +90,9 @@ def parse(text: str) -> tuple[str, str] | None:
         if m:
             q = _RANDOM.sub(" ", m.group("q")).strip(" ,.«»\"'")
             q = re.sub(r"\s+", " ", q)
+            # «включи видео в островке» — сказано только место, искать нечего: это работа модели
+            if kind == "video" and not where_asked(q)[1]:
+                return None
             if q and len(q) <= 120 and not _LOCAL.search(q):
                 if kind == "video" and _RANDOM.search(t):
                     return "video_random", q

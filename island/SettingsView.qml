@@ -797,6 +797,11 @@ Item {
                 }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
+                    title: JD.tr("Отступ сверху")
+                    subtitle: JD.tr("Если панель стоит у верхнего края — опустите остров под неё, и панель останется под курсором")
+                    SSlider { key: "island.top_margin"; from: 0; to: 120; step: 2; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row {
                     title: JD.tr("Монитор")
                     Choice {
                         key: "island.screen"
@@ -804,7 +809,7 @@ Item {
                     }
                 }
             }
-            Note { text: JD.tr("Все изменения применяются сразу. Погода и события — в разделе «Виджеты». Открыть меню клавишей: команда <tt>qs -p ~/JustDay/island ipc call island toggle</tt> в Системных настройках → Комбинации клавиш.") }
+            Note { text: JD.tr("Все изменения применяются сразу. Погода и события — в разделе «Виджеты». Видео на острове тянется за правый нижний уголок, размер запоминается. Плеер и видео не забирают экран: мимо них можно нажимать на панель и окна. Открыть меню клавишей: команда <tt>qs -p ~/JustDay/island ipc call island toggle</tt> в Системных настройках → Комбинации клавиш.") }
         }
     }
 
@@ -1182,6 +1187,12 @@ Item {
                         current: win.get("media.video_where") || "ask"
                         onPicked: v => { win.set("media.video_where", v); win.notify(JD.tr("Сохранено")) }
                     }
+                }
+                Row {
+                    visible: (win.get("media.video_where") || "ask") !== "ask"
+                    title: JD.tr("Слушаться, если попросить другое")
+                    subtitle: JD.tr("«Включи видео про котов в островке» — и оно откроется в островке, что бы ни стояло выше. Выключено — место всегда одно")
+                    Toggle { checked: !win.get("media.video_where_strict"); onToggled: v => win.set("media.video_where_strict", !v) }
                 }
             }
             GroupTitle { text: JD.tr("МУЗЫКА") }

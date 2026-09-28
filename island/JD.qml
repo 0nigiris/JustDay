@@ -110,7 +110,20 @@ Singleton {
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
     onPlayerOpenChanged: if (!playerOpen) artOpen = false
     property var video: null            // {title, channel, thumb, file, progress} — a video playing inside the island
-    property bool videoBig: false
+    // ширина кадра в точках: её тянут за уголок, а запомненная лежит в island.video_width
+    property real videoWidth: videoFit(island.video_width || 640)
+    property bool videoResizing: false   // пока тянут за уголок, остров не пружинит, а следует за курсором
+    property real screenWidth: 1920      // shell.qml подставляет настоящие размеры монитора
+    property real screenHeight: 1080
+    readonly property bool videoBig: videoWidth >= videoRoom - 1   // уже во всю ширину, некуда расти
+    // кадр 16:9 целиком на экране: и в ширину, и в высоту, с местом под панель сверху
+    readonly property real videoRoom: Math.max(360, Math.min(screenWidth - 40, Math.round((screenHeight - topMargin - 70) * 16 / 9)))
+    function videoFit(w) { return Math.max(360, Math.min(videoRoom, Math.round(w))) }
+    function setVideoWidth(w) { videoWidth = videoFit(w) }
+    property real videoVolume: 1.0        // колесо над кадром; приглушение на время разговора идёт сверху
+    function setVideoVolume(v) { videoVolume = Math.max(0, Math.min(1, v)) }
+    // размер запоминается, когда уголок отпустили: не на каждый пиксель перетаскивания
+    function saveVideoWidth() { Quickshell.execDetached(["justday", "config", "set", "island.video_width", String(Math.round(videoWidth))]) }
     signal videoCommand(string action)  // pause / resume / toggle / restart from the daemon ("пауза" by voice)
     readonly property var mediaCfg: settings.media || ({})
     readonly property bool musicOn: !!player && (!!player.file || !!player.loading)
@@ -156,6 +169,8 @@ Singleton {
     readonly property real springK: animStyle === "smooth" ? 7.5 : 4.2
     readonly property real springDamping: animStyle === "smooth" ? 1.0 : 0.36
     function dur(ms) { return animOn ? ms : 0 }
+    // сколько оставить сверху: панель KDE у верхнего края больше не уходит под остров
+    readonly property real topMargin: island.top_margin === undefined ? 8 : Math.max(0, Math.min(400, island.top_margin))
     property bool peeking: false
     property bool detailOpen: false
     property bool islandHovered: false
@@ -167,8 +182,10 @@ Singleton {
         if (approvalText) return "approval"
         if (settingsOpen) return "settings"
         if (card) return "card"
+        // видео выше слушания: оно не исчезает, когда заговорили с ассистентом — слушание,
+        // «думаю…» и ответ идут строкой поверх кадра, как субтитры
+        if (video) return "video"
         if (dstate === "listening") return answerOpen ? "answer" : "listening"
-        if (video) return "video"                      // stays while the assistant works: a caption line shows it
         if (playerOpen && musicOn) return "player"
         if (notification) return "notification"
         if (flashText) return "flash"
@@ -331,7 +348,7 @@ Singleton {
             playerAt = Date.now()
             if (!m.player) playerOpen = false
         }
-        if (m.video !== undefined) { video = m.video; if (!m.video) videoBig = false }
+        if (m.video !== undefined) video = m.video   // размер кадра не сбрасывается: его выбрали руками
         if (m.reminders !== undefined) reminders = m.reminders
         if (m.jobs !== undefined) jobs = m.jobs || []
         if (m.state !== undefined && m.state !== dstate) {

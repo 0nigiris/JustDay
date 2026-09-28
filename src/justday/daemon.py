@@ -1735,6 +1735,13 @@ class Daemon:
     async def play_video(self, query: str, where: str = "", random: bool = False) -> dict:
         loop = asyncio.get_running_loop()
         query = query.strip()
+        # «включи видео про котов в островке»: место названо в самой просьбе. Оно сильнее настройки —
+        # настройка говорит, что делать, когда не сказано ничего (запретить это можно video_where_strict).
+        asked = ""
+        if not query.startswith(("/", "~", "./")):
+            asked, rest = media.where_asked(query)
+            if asked and rest:
+                query = rest
         path = Path(query).expanduser()
         try:
             if query.startswith(("/", "~", "./")) and path.exists():
@@ -1749,6 +1756,8 @@ class Daemon:
                 e = secrets.choice(found) if random else found[0]
         except Exception as ex:
             return {"ok": False, "error": str(ex)}
+        if not where and asked and not self.cfg["media"].get("video_where_strict"):
+            where = asked
         where = where or self.cfg["media"]["video_where"]
         if where not in media.WHERE:
             where = await self._ask_where(e)
