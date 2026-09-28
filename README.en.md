@@ -308,7 +308,7 @@ justday logs -f                          # what it hears and does
 
 **Will it send or delete something on its own?** Messages and mail only after your “yes”. Deleting files, `sudo`, removing software and other dangerous actions need a confirmation too.
 
-**Other desktops (GNOME, X11, Plasma 5)?** In full, only KDE Plasma 6 on Wayland: the island is drawn with `wlr-layer-shell` and clicks inside other windows go through KWin 6. On X11 and Plasma 5 the installer notices and skips what cannot work: voice, speech recognition, hotkeys (Plasma 5 too), instant commands, timers, mail, the players and the studio all run, and answers arrive as speech and ordinary notifications instead of the island.
+**Other desktops (GNOME, X11, Plasma 5)?** It works — the island is replaced by a fallback strip at the top of the screen (`justday-panel`, written in Tk): state, answers, and a right-click menu with “Type…”, “Stop” and the player buttons. Windows are handled by `wmctrl` and `xdotool`, screenshots by whichever tool is installed, the selected text through `xclip`, and GNOME shortcuts by `scripts/setup-hotkey-gnome.sh`. The installer works all of this out by itself. KDE Plasma 6 on Wayland keeps the island itself (player, video in frame, mail cards) and the exact clicks inside other windows.
 
 **No admin rights (`sudo`)?** The install runs to the end: everything but the system packages lives in your home folder. The installer sets up `uv`, Claude Code, the Python environment and the models, and picks up `yt-dlp` for music through `uv tool`. At the end it lists what is missing, what stops working because of it, and the exact command for an admin. You can also skip the question entirely: `JUSTDAY_NO_SUDO=1 ./install.sh`.
 

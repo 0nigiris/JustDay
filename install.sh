@@ -135,6 +135,14 @@ done
 # clipboard: wl-clipboard on Wayland, xclip on X11
 if [[ $WAYLAND == 1 ]]; then command -v wl-copy >/dev/null || need+=(wl-clipboard)
 else command -v xclip >/dev/null || need+=(xclip); fi
+# вне KWin 6 окнами управляют обычные утилиты иксов, а экран снимает что найдётся
+if [[ $DESKTOP_CONTROL == 0 && -n "${DISPLAY:-}" ]]; then
+  command -v wmctrl >/dev/null || need+=(wmctrl)
+  command -v xdotool >/dev/null || need+=(xdotool)
+  command -v xprop >/dev/null || need+=(xorg-x11-utils)
+  command -v spectacle >/dev/null || command -v gnome-screenshot >/dev/null || command -v maim >/dev/null \
+    || command -v scrot >/dev/null || need+=(maim)
+fi
 # the island's typeface
 fc-list : family 2>/dev/null | grep -qx Inter || need+=(rsms-inter-fonts)
 # the island itself (Fedora ships it in a COPR, Arch in its own repos) — Wayland only
@@ -160,12 +168,14 @@ if ((${#need[@]})); then
     need=("${need[@]/gobject-introspection-devel/libgirepository-2.0-dev}"); need=("${need[@]/at-spi2-core-devel/libatspi2.0-dev}")
     need=("${need[@]/pipewire-utils/pipewire-bin}"); need=("${need[@]/gtk3/libgtk-3-bin}"); need=("${need[@]/libnotify/libnotify-bin}"); need=("${need[@]/ImageMagick/imagemagick}")
     need=("${need[@]/libsecret/libsecret-tools}"); need=("${need[@]/rsms-inter-fonts/fonts-inter}")
+    need=("${need[@]/xorg-x11-utils/x11-utils}")
     need=("${need[@]/quickshell/}")   # not packaged for Debian/Ubuntu yet: see the note at the end
   elif command -v pacman >/dev/null; then PM=(sudo pacman -S --needed --noconfirm)
     need=("${need[@]/pipewire-utils/pipewire}"); need=("${need[@]/fd-find/fd}"); need=("${need[@]/ImageMagick/imagemagick}"); need=("${need[@]/libnotify/libnotify}")
     need=("${need[@]/qt6-qttools/qt6-tools}"); need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
     need=("${need[@]/glib2-devel/glib2}"); need=("${need[@]/cairo-gobject-devel/cairo}"); need=("${need[@]/cairo-devel/cairo}"); need=("${need[@]/gobject-introspection-devel/gobject-introspection}")
     need=("${need[@]/at-spi2-core-devel/at-spi2-core}"); need=("${need[@]/dbus-tools/dbus}"); need=("${need[@]/rsms-inter-fonts/inter-font}")
+    need=("${need[@]/xorg-x11-utils/xorg-xprop}")
   else
     PM=()
   fi
@@ -290,6 +300,17 @@ if ! systemctl --user show-environment >/dev/null 2>&1; then
   exit 0
 fi
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+# Там, где острова не будет, его место занимает полоска на Tk — она есть всегда и ничего не требует.
+fallback_panel() {
+  if ! "$APP_DIR/.venv/bin/python" -c "import tkinter" 2>/dev/null; then
+    warn "$(t 'Запасной панели нужен tkinter: python3-tkinter (Fedora) или python3-tk (Debian).' 'The fallback panel needs tkinter: python3-tkinter (Fedora) or python3-tk (Debian).')"
+    return 0
+  fi
+  sed "s|@JUSTDAY@|$HOME/.local/bin/justday|" "$APP_DIR/systemd/justday-panel.service" > "$UNIT_DIR/justday-panel.service"
+  systemctl --user daemon-reload
+  systemctl --user enable justday-panel.service
+  systemctl --user restart justday-panel.service
+}
 services() {
   mkdir -p "$UNIT_DIR"
   sed "s|@JUSTDAY@|$HOME/.local/bin/justday|; s|@PATH@|$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin|" \
@@ -304,14 +325,17 @@ services() {
     systemctl --user daemon-reload
     systemctl --user enable justday-island.service
     systemctl --user restart justday-island.service
+    systemctl --user disable --now justday-panel.service 2>/dev/null || true
     note "$(t 'ассистент · остров' 'assistant · island')"
   elif [[ $ISLAND == 0 ]]; then
-    # На X11 остров не запускается — служба не включается, чтобы не падать по кругу.
+    # На X11 остров не запускается — вместо него встаёт запасная панель на Tk.
     systemctl --user disable --now justday-island.service 2>/dev/null || true
-    note "$(t 'ассистент · без острова (X11)' 'assistant · no island (X11)')"
-    warn "$(t 'Остров рисуется через wlr-layer-shell, а он есть только на Wayland. Ответы будут приходить голосом и обычными уведомлениями.' 'The island is drawn with wlr-layer-shell, which only exists on Wayland. Answers come as speech and ordinary notifications.')"
+    fallback_panel
+    note "$(t 'ассистент · запасная панель' 'assistant · fallback panel')"
+    warn "$(t 'Остров рисуется через wlr-layer-shell, который есть только на Wayland. Вместо него — полоска сверху экрана: состояние, ответы, меню правой кнопкой.' 'The island is drawn with wlr-layer-shell, which only exists on Wayland. Its place is taken by a strip at the top of the screen: state, answers, a right-click menu.')"
   else
-    note "$(t 'ассистент · без острова' 'assistant · no island')"
+    fallback_panel
+    note "$(t 'ассистент · запасная панель' 'assistant · fallback panel')"
     warn "$(t 'Острову нужен Quickshell — поставьте его и запустите установку ещё раз' 'The island needs Quickshell — install it and run the installer again'): https://quickshell.org/docs/guide/install-setup/"
   fi
   if systemctl --user cat justday-voice.service >/dev/null 2>&1; then
@@ -333,7 +357,14 @@ if [[ "${JUSTDAY_VOICE:-}" == 1 ]]; then
 fi
 
 # ───────────── hotkeys (KDE) ─────────────
-if command -v kwriteconfig6 >/dev/null || command -v kwriteconfig5 >/dev/null; then
+if ! command -v kwriteconfig6 >/dev/null && ! command -v kwriteconfig5 >/dev/null && command -v gsettings >/dev/null \
+   && [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]]; then
+  gnome_hotkeys() {
+    "$APP_DIR/scripts/setup-hotkey-gnome.sh" --talk "<Super>j"
+    note "Super+J $(t 'говорить' 'talk') · Super+K $(t 'написать' 'type')"
+  }
+  step "$(t 'Горячие клавиши' 'Hotkeys')" gnome_hotkeys
+elif command -v kwriteconfig6 >/dev/null || command -v kwriteconfig5 >/dev/null; then
   hotkeys() {
     local current
     local kread; kread=$(command -v kreadconfig6 || command -v kreadconfig5)
@@ -370,6 +401,8 @@ why_missing() {
     libsecret*) t 'пароли в связке ключей' 'passwords in the keyring' ;;
     plocate|fd|fd-find|ripgrep) t 'быстрый поиск файлов' 'fast file search' ;;
     libnotify*) t 'уведомления' 'notifications' ;;
+    wmctrl|xdotool|x11-utils|xorg-x11-utils|xorg-xprop) t 'переключение и закрытие окон' 'switching and closing windows' ;;
+    maim|scrot) t 'снимки экрана' 'screenshots' ;;
     *) printf '' ;;
   esac
 }

@@ -34,4 +34,14 @@ $repos
 ## Полезные места
 - Логи и журнал JustDay: ~/.local/state/justday/
 - Конфиг JustDay: ~/.config/justday/config.toml
+$(if [[ "${XDG_SESSION_TYPE:-}" != wayland || "${XDG_CURRENT_DESKTOP:-}" != *KDE* ]]; then cat <<'X11'
+
+## Этот стол — не KDE 6 на Wayland
+- Инструмента kwin (`look`, клики по разметке окна) здесь нет.
+- Окна: `wmctrl -l -x` (список), `wmctrl -i -a ID` (переключиться), `wmctrl -i -c ID` (закрыть).
+- Мышь и клавиатура: `xdotool mousemove X Y click 1`, `xdotool type "текст"`, `xdotool key Return`.
+- Экран: `justday screenshot` (сам выберет spectacle / gnome-screenshot / maim / scrot) и потом Read по пути.
+- Выделённый текст: `xclip -o -selection primary`.
+X11
+fi)
 EOF

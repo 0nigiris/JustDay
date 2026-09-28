@@ -302,12 +302,80 @@ console.warn(tag + "END " + n);
 """
 
 
+def backend() -> str:
+    """Чем управлять окнами: "kwin" (скрипты KWin 6), "x11" (wmctrl/xdotool) или "" — нечем.
+
+    Одна проверка на всё: на Plasma 6 работает родной путь, на X11 и Plasma 5 — стандартные
+    утилиты иксов, и тогда «закрой дискорд», сцены и «я ушёл» тоже работают."""
+    global _BACKEND
+    if _BACKEND is None:
+        kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "")
+        if kde and shutil.which("qdbus-qt6"):
+            _BACKEND = "kwin"
+        elif os.environ.get("DISPLAY") and shutil.which("wmctrl"):
+            _BACKEND = "x11"
+        else:
+            _BACKEND = ""
+    return _BACKEND
+
+
+_BACKEND: str | None = None
+
+
+def _x11_active_id() -> int:
+    """Какое окно сейчас активно (_NET_ACTIVE_WINDOW)."""
+    try:
+        out = subprocess.run(["xprop", "-root", "_NET_ACTIVE_WINDOW"], capture_output=True, text=True, timeout=3).stdout
+        m = re.search(r"(0x[0-9a-fA-F]+)", out)
+        return int(m.group(1), 16) if m else 0
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0
+
+
+def _x11_windows(action: str, query: str) -> list[dict]:
+    """То же, что KWin-путь, но через wmctrl: список, фокус, закрытие, сворачивание."""
+    try:
+        raw = subprocess.run(["wmctrl", "-l", "-x", "-p", "-G"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    active = _x11_active_id()
+    out: list[dict] = []
+    for line in raw.splitlines():
+        parts = line.split(None, 9)
+        if len(parts) < 10:
+            continue
+        wid, desk, pid, x, y, w, h, cls, _host, title = parts
+        if desk == "-1":          # панели, док, рабочий стол — не окна программ
+            continue
+        app = cls.split(".")[-1] or cls
+        if action == "active" and int(wid, 16) != active:
+            continue
+        if query and query.lower() not in f"{cls} {title}".lower():
+            continue
+        if action == "close":
+            subprocess.run(["wmctrl", "-i", "-c", wid], timeout=5, check=False)
+        elif action == "focus":
+            subprocess.run(["wmctrl", "-i", "-a", wid], timeout=5, check=False)
+        elif action == "minimize" and shutil.which("xdotool"):
+            subprocess.run(["xdotool", "windowminimize", wid], timeout=5, check=False)
+        out.append({"app": app, "title": title, "pid": int(pid) if pid.isdigit() else 0,
+                    "active": int(wid, 16) == active, "minimized": False,
+                    "x": int(x), "y": int(y), "w": int(w), "h": int(h)})
+        if action == "focus":
+            break
+    return out
+
+
 def windows(action: str = "list", query: str = "") -> list[dict]:
     """List/focus/close/minimize top-level windows through a throw-away KWin script.
 
-    close = the same as clicking the window's close button (apps can save / ask), unlike pkill."""
+    close = the same as clicking the window's close button (apps can save / ask), unlike pkill.
+    Вне KWin 6 то же самое делается утилитами иксов (wmctrl/xdotool)."""
     import tempfile
     import uuid
+
+    if backend() != "kwin":
+        return _x11_windows(action, query) if backend() == "x11" else []
 
     tag = f"JustDayWIN{uuid.uuid4().hex[:8]} "
     js = _KWIN_JS % {"query": json.dumps(query.lower()), "action": json.dumps(action), "tag": json.dumps(tag)}

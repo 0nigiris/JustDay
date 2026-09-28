@@ -126,13 +126,32 @@ def t_mcp():
 
 
 def t_desktop():
-    if not shutil.which("kwin-mcp"):
-        raise RuntimeError("kwin-mcp not installed (uv tool install git+https://github.com/VibeProgramm/kwin-mcp)")
-    wins = subprocess.run(["qdbus-qt6", "org.kde.KWin", "/KWin", "org.kde.KWin.supportInformation"],
-                          capture_output=True, text=True, timeout=10)
-    if wins.returncode:
-        raise RuntimeError("KWin D-Bus not reachable")
-    return f"kwin-mcp ok, KWin D-Bus ok, session={os.environ.get('XDG_SESSION_TYPE')}"
+    """Чем управляем окнами и что рисует состояние — на каждом рабочем столе это разное."""
+    from . import desktop
+
+    session = os.environ.get("XDG_SESSION_TYPE", "?")
+    if desktop.backend() == "kwin":
+        if not shutil.which("kwin-mcp"):
+            raise RuntimeError("kwin-mcp not installed (uv tool install git+https://github.com/VibeProgramm/kwin-mcp)")
+        wins = subprocess.run(["qdbus-qt6", "org.kde.KWin", "/KWin", "org.kde.KWin.supportInformation"],
+                              capture_output=True, text=True, timeout=10)
+        if wins.returncode:
+            raise RuntimeError("KWin D-Bus not reachable")
+        face = "остров" if _unit_active("justday-island") else "панель" if _unit_active("justday-panel") else "нет"
+        return f"kwin-mcp ok, KWin D-Bus ok, session={session}, окна: {len(desktop.windows('list'))}, экран: {face}"
+    if desktop.backend() == "x11":
+        shot = next((x for x in ("spectacle", "gnome-screenshot", "maim", "scrot", "import") if shutil.which(x)), "")
+        if not shot:
+            raise RuntimeError("нечем снять экран: поставьте maim или scrot")
+        face = "панель" if _unit_active("justday-panel") else "нет (justday panel)"
+        return (f"окна: wmctrl ({len(desktop.windows('list'))}), снимки: {shot}, session={session}, экран: {face}"
+                + ("" if shutil.which("xdotool") else ", без xdotool не свернуть окно"))
+    raise RuntimeError("окнами управлять нечем: нужен KWin 6 (Wayland) или wmctrl на X11")
+
+
+def _unit_active(name: str) -> bool:
+    return subprocess.run(["systemctl", "--user", "is-active", "--quiet", name],
+                          capture_output=True).returncode == 0
 
 
 def t_files():
@@ -204,8 +223,16 @@ def t_daemon():
 
 def t_hotkey():
     from .manage import hotkeys
+    if not shutil.which("kreadconfig6") and not shutil.which("kreadconfig5"):
+        # не KDE: сочетания живут в GNOME или в настройках самого окружения
+        got = subprocess.run(["gsettings", "get", "org.gnome.settings-daemon.plugins.media-keys",
+                              "custom-keybindings"], capture_output=True, text=True).stdout
+        if "justday" in got:
+            return "GNOME: настроены (scripts/setup-hotkey-gnome.sh)"
+        raise RuntimeError("сочетания не настроены: scripts/setup-hotkey-gnome.sh или вручную в настройках стола")
     keys = hotkeys()
-    mouse = subprocess.run(["kreadconfig6", "--file", "kcminputrc", "--group", "ButtonRebinds", "--group", "Mouse",
+    mouse = subprocess.run([shutil.which("kreadconfig6") or "kreadconfig5", "--file", "kcminputrc",
+                            "--group", "ButtonRebinds", "--group", "Mouse",
                             "--key", "ExtraButton1"], capture_output=True, text=True).stdout.strip()
     if not keys["talk"]:
         raise RuntimeError("global shortcut not registered (run install.sh)")
@@ -213,12 +240,33 @@ def t_hotkey():
         (f", mouse ExtraButton1→{mouse}" if mouse else "")
 
 
+def _capture(png: str) -> None:
+    """Снять весь экран тем, что есть в системе: KDE, GNOME, wlroots или голый X11."""
+    tools = [("spectacle", ["spectacle", "-b", "-n", "-f", "-o", png]),
+             ("grim", ["grim", png]),
+             ("gnome-screenshot", ["gnome-screenshot", "-f", png]),
+             ("maim", ["maim", png]),
+             ("scrot", ["scrot", "-o", png]),
+             ("import", ["import", "-window", "root", png])]
+    errors = []
+    for exe, cmd in tools:
+        if not shutil.which(exe):
+            continue
+        try:
+            subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL, timeout=20)
+            if os.path.exists(png) and os.path.getsize(png) > 0:
+                return
+        except (OSError, subprocess.SubprocessError) as e:
+            errors.append(f"{exe}: {e}")
+    raise RuntimeError("нечем снять экран: поставьте spectacle, grim, maim или scrot" + (f" ({'; '.join(errors)})" if errors else ""))
+
+
 def screenshot(all_screens: bool = False, full: bool = False) -> dict:
     """Active window (default) or all monitors → small JPEG + the mapping back to screen coordinates."""
     from . import desktop
 
     png, jpg = "/tmp/justday-screen.png", f"/tmp/justday-screen-{int(time.time() * 1000)}.jpg"
-    subprocess.run(["spectacle", "-b", "-n", "-f", "-o", png], check=True, stderr=subprocess.DEVNULL, timeout=20)
+    _capture(png)
     crop, ox, oy, title, app, ww, wh = [], 0, 0, "all monitors", "", 0, 0
     if not all_screens:
         win = desktop.windows("active")
@@ -228,6 +276,10 @@ def screenshot(all_screens: bool = False, full: bool = False) -> dict:
             ww, wh = w["w"], w["h"]
             crop = ["-crop", f"{w['w']}x{w['h']}+{ox}+{oy}", "+repage"]
     limit = 10000 if full else (1600 if not all_screens else 1800)
+    if not shutil.which("magick"):   # без ImageMagick отдаём снимок как есть: лучше так, чем никак
+        return {"path": png, "window": title, "app": app, "width": ww, "height": wh,
+                "origin_x": ox, "origin_y": oy, "scale": 1.0,
+                "to_screen": "screen_x = origin_x + image_x; screen_y = origin_y + image_y"}
     ident = subprocess.run(["magick", png, *crop, "-format", "%w", "info:"], capture_output=True, text=True).stdout
     width = int(ident.strip() or limit)
     scale = min(1.0, limit / width)
@@ -273,6 +325,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("logs", help="show recent events")
     sp.add_argument("-f", "--follow", action="store_true")
     sp.add_argument("-n", type=int, default=40)
+    sub.add_parser("panel", help="the fallback panel for desktops without the island (X11, Plasma 5, GNOME)")
     sp = sub.add_parser("doctor", help="check every component")
     sp.add_argument("--quick", action="store_true", help="skip checks that call the model")
     sp.add_argument("--json", action="store_true", help="machine-readable results (fast checks only)")
@@ -529,6 +582,9 @@ def main(argv: list[str] | None = None) -> None:
         from . import desktop
 
         _print(desktop.windows(a.action, " ".join(a.query)))
+    elif a.cmd == "panel":
+        from . import panel
+        sys.exit(panel.main())
     elif a.cmd == "screenshot":
         _print(screenshot(a.all, a.full))
     elif a.cmd == "scene":
