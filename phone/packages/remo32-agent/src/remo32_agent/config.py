@@ -28,6 +28,7 @@ from pydantic_settings import (
 )
 
 from remo32_agent.actions.models import ActionConfig
+from remo32_agent.files import RootSpec
 from remo32_core.errors import ConfigurationError
 
 DEFAULT_CONFIG_PATHS = (
@@ -203,6 +204,47 @@ class ActionsSettings(BaseSettings):
     )
 
 
+class FilesSettings(BaseSettings):
+    """Файлы компьютера на телефоне.
+
+    Включено по умолчанию и только на чтение. Открыты стандартные папки
+    пользователя (изображения, загрузки, документы, видео, музыка, рабочий
+    стол) — то, за чем к компьютеру и тянутся с телефона: посмотреть фото,
+    забрать скачанный файл, переслать документ.
+
+    Границы выбраны так, чтобы «доступ к файлам» не означал «доступ ко
+    всему». Домашний каталог целиком не открыт: там ключи ssh, история
+    оболочки и переписка программ. Записи нет вовсе — ни удаления, ни
+    переименования, ни загрузки, — поэтому потерянный телефон означает
+    «посмотрели фотографии», а не «стёрли архив». Скрытые файлы не
+    показываются: точка перед именем в домашнем каталоге почти всегда
+    значит «это не для чтения человеком».
+
+    Чтобы открыть другие папки, опишите их сами в ``[[files.roots]]``:
+    заданный список заменяет стандартный целиком.
+    """
+
+    enabled: bool = True
+    roots: list[RootSpec] = Field(
+        default_factory=list,
+        description="Свои папки вместо стандартных; пусто — стандартные",
+    )
+    show_hidden: bool = Field(False, description="Показывать файлы, начинающиеся с точки")
+    max_entries: int = Field(
+        2000, ge=16, le=20_000, description="Сколько строк отдавать из одной папки"
+    )
+    max_download_mb: int = Field(
+        4096, ge=1, le=131_072, description="Предел на размер одного файла"
+    )
+    notify: bool = Field(
+        True,
+        description=(
+            "Показывать уведомление на компьютере, когда файл или снимок экрана "
+            "уходит на телефон. Это и есть способ заметить чужой доступ."
+        ),
+    )
+
+
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="REMO32_AGENT_",
@@ -223,6 +265,7 @@ class AgentSettings(BaseSettings):
     terminal: TerminalSettings = Field(default_factory=TerminalSettings)
     actions_editor: ActionsSettings = Field(default_factory=ActionsSettings)
     approvals: ApprovalSettings = Field(default_factory=ApprovalSettings)
+    files: FilesSettings = Field(default_factory=FilesSettings)
     actions: list[ActionConfig] = Field(default_factory=list)
 
     @field_validator("actions")

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from remo32_controller.auth.dependencies import Session
@@ -19,6 +21,7 @@ from remo32_core.models import (
     ApiResponse,
     ApprovalInfo,
     ApprovalList,
+    FileListing,
     PcSummary,
     SystemStats,
 )
@@ -218,6 +221,93 @@ async def screen(
     png, kind = await _registry(request).get(pc_id).client.screen()
     log.info("снимок экрана", pc_id=pc_id, bytes=len(png))
     return Response(png, media_type=kind, headers={"Cache-Control": "no-store"})
+
+
+# Файлы компьютера на телефоне. Контроллер здесь — труба: он не разбирает
+# адреса, не знает настоящих путей и ничего не кэширует. Всё, что решает, что
+# показать и чего не показывать, решает агент на той машине.
+#
+# Заголовки, которые обязаны дойти до телефона как есть. Размер и «часть от
+# такой-то до такой-то» — это то, чем браузер мотает видео; имя файла — то,
+# под чем он сохранится; тип — то, чем он откроется.
+STREAM_HEADERS = frozenset(
+    {
+        "content-type",
+        "content-length",
+        "content-range",
+        "accept-ranges",
+        "content-disposition",
+        "content-encoding",
+        "cache-control",
+        "last-modified",
+        "etag",
+    }
+)
+
+
+async def _pipe(
+    request: Request, pc_id: str, path: str, where: str, params: dict[str, str]
+) -> StreamingResponse:
+    """Файл от агента — к телефону, кусками и не задерживаясь в памяти."""
+    client = _registry(request).get(pc_id).client
+    # Запрос части передаём агенту как есть: без этого телефон, открывая
+    # видео, скачивал бы его целиком, прежде чем показать первую секунду.
+    forward = {"Range": request.headers["range"]} if "range" in request.headers else {}
+    upstream = await client.open_stream(where, params=params, headers=forward)
+
+    async def body() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        finally:
+            await upstream.aclose()
+
+    log.info("файл с компьютера", pc_id=pc_id, path=path, status=upstream.status_code)
+    return StreamingResponse(
+        body(),
+        status_code=upstream.status_code,
+        headers={k: v for k, v in upstream.headers.items() if k.lower() in STREAM_HEADERS},
+    )
+
+
+@router.get("/{pc_id}/files", response_model=ApiResponse[FileListing], tags=["Файлы"])
+async def files_list(
+    pc_id: str,
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+    path: Annotated[str, Query(max_length=1024)] = "",
+) -> ApiResponse[FileListing]:
+    """Что лежит в папке на этом компьютере. Пустой путь — список открытых папок."""
+    got = await _registry(request).get(pc_id).client.files(path)
+    return ApiResponse[FileListing].success(FileListing.model_validate(got), request_id)
+
+
+@router.get("/{pc_id}/files/read", response_class=StreamingResponse, tags=["Файлы"])
+async def files_read(
+    pc_id: str,
+    request: Request,
+    _session: Session,
+    _request_id: RequestId,
+    path: Annotated[str, Query(max_length=1024)],
+) -> StreamingResponse:
+    """Сам файл: посмотреть на телефоне, сохранить, переслать."""
+    return await _pipe(request, pc_id, path, "/api/files/read", {"path": path})
+
+
+@router.get("/{pc_id}/files/thumb", response_class=StreamingResponse, tags=["Файлы"])
+async def files_thumb(
+    pc_id: str,
+    request: Request,
+    _session: Session,
+    _request_id: RequestId,
+    path: Annotated[str, Query(max_length=1024)],
+    size: Annotated[int, Query(ge=64, le=1024)] = 480,
+) -> StreamingResponse:
+    """Маленькая картинка для списка — чтобы галерею было видно, а не читать имена."""
+    return await _pipe(
+        request, pc_id, path, "/api/files/thumb", {"path": path, "size": str(size)}
+    )
 
 
 @router.get("/{pc_id}/justday/art", response_class=Response, tags=["JustDay"])

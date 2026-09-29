@@ -1384,6 +1384,94 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   border-radius: var(--radius);
 }
 
+/* Видео в шторке — теми же правилами, что картинка: во всю ширину, чёрным
+   фоном по краям, без обрезки. Управление рисует сам браузер. */
+.sheet-media video {
+  display: block;
+  width: 100%;
+  max-height: 62dvh;
+  background: #000;
+  border-radius: var(--radius);
+}
+
+/* ------------------------------------------------------------- файлы ---
+
+   Фотографии — плитками: имя вида IMG_20260714_183205.jpg не говорит
+   ничего, а картинка говорит всё. Три в ряд на телефоне, больше — на
+   широком экране; сетка считает сама, чтобы не заводить второй набор
+   правил под каждую ширину. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: none;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tile:active { transform: scale(0.97); }
+/* Имя — поверх нижней части плитки, на затемнении: под плиткой оно съело бы
+   половину высоты сетки, а знать его иногда нужно. */
+.tile-name {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 14px 6px 5px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #fff;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+}
+.tile-play {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.tile-play .i { width: 16px; height: 16px; }
+/* Вес фильма — до нажатия: по мобильной связи это решает, смотреть сейчас
+   или подождать домашней сети. */
+.tile-size {
+  position: absolute;
+  inset: 5px 5px auto auto;
+  padding: 2px 5px;
+  border-radius: 6px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* Где мы в дереве папок. Не ссылки: назад ведёт кнопка, а это подпись. */
+.crumbs {
+  padding: 2px 2px 8px;
+  font-size: 13px;
+  color: var(--text-faint);
+  word-break: break-word;
+}
+
 /* Спокойный значок — там, где шторка ничего не подтверждает. */
 .sheet-icon.calm { background: var(--accent-soft); color: var(--accent); }
 

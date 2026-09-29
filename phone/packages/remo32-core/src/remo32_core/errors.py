@@ -114,6 +114,17 @@ class ApprovalsDisabledError(Remo32Error):
     http_status = 403
 
 
+class FilesDisabledError(Remo32Error):
+    """Чтение файлов с телефона выключено в конфигурации.
+
+    Как терминал и правка кнопок, это отдельная возможность: она открывает
+    телефону содержимое папок, а значит и всё, что человек туда положил.
+    """
+
+    code = "files_disabled"
+    http_status = 403
+
+
 class ActionInvalidError(Remo32Error):
     """Описание кнопки не прошло проверку.
 

@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import Header
 
-from remo32_agent import __version__
+from remo32_agent import __version__, files
 from remo32_agent.actions.runner import ActionExecutor, ActionRegistry
 from remo32_agent.actions.store import ActionStore
 from remo32_agent.approvals import ApprovalStore
@@ -74,6 +74,18 @@ class AgentContext:
                 dry_run=settings.power.dry_run,
                 delay_seconds=settings.power.delay_seconds,
             ),
+        )
+        # Папки читаем при сборке контекста, а не при каждом запросе: список
+        # корней меняется правкой конфигурации, то есть перезапуском службы.
+        self.browser = (
+            files.Browser(
+                files.roots_from_config(settings.files.roots) or files.default_roots(),
+                show_hidden=settings.files.show_hidden,
+                max_entries=settings.files.max_entries,
+                max_bytes=settings.files.max_download_mb * 1024 * 1024,
+            )
+            if settings.files.enabled
+            else None
         )
         self.audit = TerminalAudit(
             settings.terminal.audit_log,

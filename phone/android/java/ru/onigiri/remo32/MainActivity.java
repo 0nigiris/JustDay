@@ -3,17 +3,22 @@ package ru.onigiri.remo32;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
+import android.webkit.URLUtil;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -25,6 +30,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * Оболочка вокруг веб-интерфейса JustDay.
@@ -128,6 +134,14 @@ public class MainActivity extends Activity {
             }
         });
 
+        // Файл с компьютера — в «Загрузки» телефона.
+        //
+        // WebView сам ничего не скачивает: ссылка с download просто ничего не
+        // делала, и «Сохранить» в приложении выглядело сломанным, работая в
+        // браузере. Отдаём системному загрузчику — с уведомлением о ходе и
+        // готовым файлом в «Загрузках», как у любого другого приложения.
+        web.setDownloadListener(this::download);
+
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -169,6 +183,43 @@ public class MainActivity extends Activity {
         }
 
         web.loadUrl(url());
+    }
+
+    /**
+     * Скачать то, на что нажали в интерфейсе.
+     *
+     * Печенье сессии добавляем руками: системный загрузчик — отдельный от
+     * WebView процесс, своих печений у него нет, и без этого контроллер
+     * ответил бы ему «требуется вход», а в «Загрузках» оказалась бы страница
+     * входа вместо фотографии.
+     */
+    private void download(String url, String userAgent, String disposition,
+                          String mimeType, long length) {
+        try {
+            DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null) request.addRequestHeader("Cookie", cookie);
+            request.addRequestHeader("User-Agent", userAgent);
+            String name = URLUtil.guessFileName(url, disposition, mimeType);
+            request.setTitle(name);
+            request.setMimeType(mimeType);
+            request.setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            // Именно в общие «Загрузки», а не в папку приложения: файл нужен
+            // галерее и «поделиться», а не самому приложению.
+            request.setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS, name);
+            DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (manager == null) throw new IllegalStateException("нет службы загрузок");
+            manager.enqueue(request);
+            toast("Сохраняется: " + name);
+        } catch (RuntimeException error) {
+            toast("Не удалось сохранить: " + error.getMessage());
+        }
+    }
+
+    private void toast(final String text) {
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
     }
 
     @Override

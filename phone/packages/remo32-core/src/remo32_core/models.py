@@ -430,6 +430,53 @@ class PcSummary(BaseModel):
 
 
 # --------------------------------------------------------------------------
+# Файлы
+# --------------------------------------------------------------------------
+
+
+class FileEntry(BaseModel):
+    """Одна строка в списке файлов.
+
+    Путь здесь — не путь в файловой системе, а адрес внутри разрешённой папки:
+    ``photos/2026/лето.jpg``. Телефон настоящих путей не знает и не должен:
+    иначе любая его просьба стала бы просьбой прочитать что угодно.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(description="Адрес внутри корня: ``<корень>/<путь>``")
+    name: str
+    dir: bool = Field(False, description="Папка, в неё можно зайти")
+    size: int = Field(0, ge=0, description="Размер в байтах; у папок 0")
+    modified: datetime | None = None
+    kind: Literal["image", "video", "audio", "text", "pdf", "other", "dir"] = "other"
+    preview: bool = Field(False, description="Для этого можно запросить картинку-миниатюру")
+
+
+class FileRoot(BaseModel):
+    """Папка, которую владелец открыл телефону."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="Короткое имя в адресе: ``pictures``")
+    name: str = Field(description="Как называть на экране: «Изображения»")
+    writable: bool = Field(False, description="Разрешена ли загрузка с телефона в эту папку")
+
+
+class FileListing(BaseModel):
+    """Содержимое одной папки."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field("", description="Адрес этой папки; пустой — список корней")
+    name: str = ""
+    parent: str | None = Field(None, description="Куда ведёт «назад»; None на самом верху")
+    roots: list[FileRoot] = Field(default_factory=list)
+    entries: list[FileEntry] = Field(default_factory=list)
+    truncated: bool = Field(False, description="Папка больше предела — показана не целиком")
+
+
+# --------------------------------------------------------------------------
 # ESP32
 # --------------------------------------------------------------------------
 

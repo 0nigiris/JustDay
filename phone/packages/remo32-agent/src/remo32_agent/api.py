@@ -7,15 +7,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from remo32_agent import __version__, justday, screen
+from remo32_agent import __version__, files, justday, notify, screen
 from remo32_agent.actions.models import ActionConfig
 from remo32_agent.context import AgentContext
 from remo32_agent.stats.collector import collect_stats
@@ -24,6 +25,7 @@ from remo32_core.errors import (
     ActionInvalidError,
     ActionsNotEditableError,
     ApprovalsDisabledError,
+    FilesDisabledError,
     NotFoundError,
     TerminalDisabledError,
 )
@@ -38,6 +40,7 @@ from remo32_core.models import (
     ApiResponse,
     ApprovalInfo,
     ApprovalList,
+    FileListing,
     SystemStats,
 )
 from remo32_core.protocol import TerminalClientMessage, TerminalServerMessage
@@ -506,9 +509,99 @@ def build_router(ctx: AgentContext) -> APIRouter:
         и без DISPLAY/WAYLAND_DISPLAY ни одна утилита ничего не увидит.
         """
         png = await screen.capture(ctx.adapter.graphical_session_env())
+        await told("Снимок экрана ушёл на телефон")
         # no-store, а не просто no-cache: содержимое экрана — не то, чему
         # стоит лежать в кэше браузера.
         return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+    # --- файлы -------------------------------------------------------------
+    #
+    # Только чтение: список папки, файл целиком, миниатюра. Ни одной ручки,
+    # которая что-то меняет на диске, здесь нет и по замыслу не будет —
+    # см. files.py.
+
+    def browser() -> files.Browser:
+        if ctx.browser is None:
+            raise FilesDisabledError("чтение файлов с телефона выключено в agent.toml")
+        return ctx.browser
+
+    async def told(what: str) -> None:
+        """Сказать хозяину машины, что отсюда кое-что ушло."""
+        if ctx.settings.files.notify:
+            await notify.show(what, env=ctx.adapter.graphical_session_env())
+
+    @router.get(
+        "/api/files",
+        response_model=ApiResponse[FileListing],
+        tags=["файлы"],
+        dependencies=[auth],
+    )
+    async def files_list(
+        request_id: RequestId,
+        path: Annotated[str, Query(max_length=1024, description="Адрес папки; пусто — корни")] = "",
+    ) -> ApiResponse[FileListing]:
+        """Что лежит в папке. Пустой путь — список папок, открытых телефону.
+
+        Диск читаем в отдельном потоке: в каталоге с тысячей файлов scandir
+        занимает десятки миллисекунд, и всё это время агент не отвечал бы
+        ни на что другое.
+        """
+        listing = await asyncio.to_thread(browser().listing, path)
+        return ApiResponse[FileListing].success(listing, request_id)
+
+    @router.get(
+        "/api/files/read",
+        tags=["файлы"],
+        dependencies=[auth],
+        response_class=FileResponse,
+        responses={200: {"content": {"*/*": {}}, "description": "Файл как он лежит на диске"}},
+    )
+    async def files_read(
+        path: Annotated[str, Query(max_length=1024)],
+    ) -> FileResponse:
+        """Файл целиком. Отдаём потоком с диска: видео на телефоне может быть
+        гигабайтом, и в память его класть нельзя.
+
+        ``FileResponse`` сам отвечает на запрос части (Range), поэтому видео
+        мотается в браузере, а не скачивается целиком, чтобы начать играть.
+        """
+        real, kind = await asyncio.to_thread(browser().file, path)
+        await told(f"Файл ушёл на телефон: {real.name}")
+        log.info("файл отдан на телефон", path=path, bytes=real.stat().st_size)
+        # inline для того, что телефон умеет показать сам: открытая в новой
+        # вкладке фотография должна показаться, а не скачаться. Остальное —
+        # вложением, потому что показать его всё равно нечем.
+        show = files.kind_of(real) in ("image", "video", "audio", "pdf", "text")
+        return FileResponse(
+            real,
+            media_type=kind,
+            filename=real.name,
+            content_disposition_type="inline" if show else "attachment",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get(
+        "/api/files/thumb",
+        tags=["файлы"],
+        dependencies=[auth],
+        response_class=Response,
+        responses={200: {"content": {"image/jpeg": {}}, "description": "Миниатюра"}},
+    )
+    async def files_thumb(
+        path: Annotated[str, Query(max_length=1024)],
+        size: Annotated[int, Query(ge=64, le=1024)] = files.THUMB_SIZE,
+    ) -> Response:
+        """Маленькая картинка для списка. Уведомления здесь нет: миниатюр за
+        одно пролистывание галереи десятки, и сказать о каждой — значит
+        завалить экран компьютера и научить человека не смотреть туда.
+        """
+        real, _ = await asyncio.to_thread(browser().file, path)
+        data = await files.thumbnail(real, files.kind_of(real))
+        # Кэш разрешаем, но только браузеру телефона (private): миниатюры
+        # нужны при каждом пролистывании, а меняются вместе с файлом.
+        return Response(
+            data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"}
+        )
 
     @router.get(
         "/api/justday/art",

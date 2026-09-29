@@ -155,6 +155,7 @@ const state = {
   online: true,          // отвечает ли контроллер
   syncedAt: 0,           // когда в последний раз получили настоящие данные
   plans: null,           // планы из Obsidian на активном ПК
+  files: { path: "", listing: null, error: "" },   // где мы в файлах компьютера
 };
 
 /* ================================================= жизнь без сети ======= */
@@ -353,11 +354,18 @@ function openSheet({
   textBox.textContent = text;
   textBox.hidden = !text;
 
+  // Картинка или видео. Вставляем заново каждый раз: снимок экрана не должен
+  // браться из кэша браузера, иначе на нём будет прошлое состояние компьютера.
   const mediaBox = el("sheet-media");
-  mediaBox.hidden = !media;
-  // Картинку вставляем заново каждый раз: снимок экрана не должен браться
-  // из кэша браузера, иначе на нём будет прошлое состояние компьютера.
-  mediaBox.innerHTML = media ? `<img src="${esc(media)}" alt="">` : "";
+  const src = typeof media === "string" ? media : media?.src || "";
+  mediaBox.hidden = !src;
+  mediaBox.innerHTML = !src
+    ? ""
+    : media?.video
+      // preload="metadata": фильм не качается целиком ради первого кадра —
+      // браузер берёт начало файла запросом части, и это уже умеет агент.
+      ? `<video src="${esc(src)}" controls playsinline preload="metadata"></video>`
+      : `<img src="${esc(src)}" alt="">`;
 
   const menuBox = el("sheet-menu");
   menuBox.hidden = !menu;
@@ -597,6 +605,7 @@ const ROUTES = {
   more: { title: "Ещё", view: () => viewMore() },
   help: { title: "Справка", view: () => viewHelp(), parent: "more" },
   buttons: { title: "Свои кнопки", view: () => viewButtons(), parent: "more" },
+  files: { title: "Файлы", view: () => viewFiles(), parent: "more" },
 };
 const DEFAULT_ROUTE = "deck";
 
@@ -789,6 +798,8 @@ const PC_KEYS = [
   { id: "pc:lock", name: "Заблокировать", icon: "lucide:lock", group: "Компьютер" },
   { id: "pc:terminal", name: "Терминал", icon: "lucide:terminal", group: "Компьютер",
     description: "Веб-терминал: та же сессия, что и на компьютере" },
+  { id: "pc:files", name: "Файлы", icon: "lucide:folder-open", group: "Компьютер",
+    description: "Фотографии и документы с этого компьютера" },
 ];
 
 /* Кнопка плеера показывает то, что сделает нажатие, а не то, что сейчас
@@ -2362,16 +2373,248 @@ async function showScreen(pcId, button) {
       toast(`Снимок не вышел: ${message}`, "err");
       return;
     }
-    const blob = URL.createObjectURL(await response.blob());
-    await openSheet({
+    const png = await response.blob();
+    const shot = URL.createObjectURL(png);
+    const name = `экран-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.png`;
+    const shareable = Boolean(navigator.share && navigator.canShare);
+    const picked = await openSheet({
       title: "Экран компьютера",
-      media: blob,
+      media: { src: shot },
+      menu: [
+        shareable ? { id: "share", name: "Отправить", icon: "share-2" } : null,
+        { id: "save", name: "Сохранить в телефон", icon: "download" },
+      ].filter(Boolean),
       yes: "",
       cancel: "Закрыть",
       danger: false,
     });
-    URL.revokeObjectURL(blob);
+    // Снимок уже в руках — второй раз у компьютера его не просим: отправляем
+    // и сохраняем ту самую картинку, которую человек только что видел.
+    if (picked === "share") {
+      const file = new File([png], name, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] }).catch(() => {});
+      } else {
+        saveShot(url, shot, name);
+      }
+    } else if (picked === "save") {
+      saveShot(url, shot, name);
+    }
+    // Ссылку на снимок держим до конца работы с ним: отозвать её раньше —
+    // значит отдать «поделиться» пустой файл.
+    URL.revokeObjectURL(shot);
   });
+}
+
+/* ========================================================== файлы =======
+
+   Зачем это здесь. Посмотреть на телефоне фотографию, которая лежит на
+   домашнем компьютере, или переслать другу документ — это то, за чем к
+   компьютеру тянутся чаще всего, и то, чего нельзя было сделать никак.
+
+   Только чтение. Удалить, переименовать или положить файл отсюда нельзя —
+   ни кнопкой, ни запросом: таких ручек у агента нет вовсе. Телефон теряют,
+   и пока это только чтение, потерянный телефон означает «посмотрели
+   фотографии», а не «стёрли архив».
+
+   Настоящих путей телефон не знает: адрес выглядит как
+   ``pictures/2026/лето.jpg``, где первое слово — папка, которую владелец
+   машины открыл в настройках агента. Что показывать, решает агент. */
+
+const FILE_ICONS = {
+  dir: "folder-open",
+  image: "image",
+  video: "video",
+  audio: "music",
+  text: "file-text",
+  pdf: "file-text",
+  other: "package",
+};
+
+/* Отправка идёт через память телефона: файл читается целиком, чтобы отдать
+   его системному «поделиться». Для фотографии это мгновенно, для фильма —
+   нет, поэтому большое предлагаем сохранить, а не отправить. */
+const SHARE_LIMIT = 150 * 1024 * 1024;
+
+const fileUrl = (pcId, entry, what = "read", extra = "") =>
+  `/api/pcs/${encodeURIComponent(pcId)}/files/${what}`
+  + `?path=${encodeURIComponent(entry.path)}${extra}`;
+
+/* Когда файл сделали. Сегодняшнее — временем, прошлогоднее — датой: на
+   фотографии важно «вчера вечером» или «в июле», а не полный штамп. */
+function fileWhen(iso) {
+  if (!iso) return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const today = new Date().toDateString() === at.toDateString();
+  return at.toLocaleString("ru", today
+    ? { hour: "2-digit", minute: "2-digit" }
+    : { day: "numeric", month: "long", year: "numeric" });
+}
+
+function fileSize(bytes) {
+  if (!bytes) return "";
+  const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value < 10 && unit ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+async function loadFiles() {
+  const pc = activePc();
+  state.files.error = "";
+  if (!pc || pc.state !== "online") {
+    state.files.listing = null;
+    return;
+  }
+  try {
+    state.files.listing = await api(
+      `/api/pcs/${encodeURIComponent(pc.id)}/files?path=${encodeURIComponent(state.files.path)}`);
+  } catch (error) {
+    state.files.listing = null;
+    state.files.error = error.message;
+  }
+}
+
+function goFiles(path) {
+  state.files.path = path;
+  state.files.listing = null;
+  return render(true);
+}
+
+function viewFiles() {
+  const pc = activePc();
+  if (!pc) return `<div class="empty">Компьютеры не настроены</div>`;
+  if (pc.state !== "online") {
+    return `<div class="empty">${esc(pc.name)} не на связи.<br>
+      Файлы читаются с самого компьютера — выключенный он их не отдаст.</div>`;
+  }
+  if (state.files.error) {
+    return `<div class="empty">Не получилось: ${esc(state.files.error)}<br>
+      <span class="meta">Чтение файлов включается в настройках агента: files.enabled</span></div>`;
+  }
+  const listing = state.files.listing;
+  if (!listing) return `<div class="empty">Смотрим…</div>`;
+
+  const up = listing.parent === null || listing.parent === undefined
+    ? ""
+    : `<button class="btn" data-files-go="${esc(listing.parent)}">${icon("arrow-left")} Назад</button>`;
+  const here = listing.path
+    ? `<div class="crumbs">${esc(listing.path.split("/").join(" / "))}</div>`
+    : "";
+
+  const folders = listing.entries.filter((e) => e.dir);
+  const gallery = listing.entries.filter((e) => !e.dir && e.preview);
+  const rest = listing.entries.filter((e) => !e.dir && !e.preview);
+
+  const row = (entry) => `<button class="list-row" data-files-open="${esc(entry.path)}">
+    <span class="ico">${icon(FILE_ICONS[entry.kind] || FILE_ICONS.other)}</span>
+    <span class="body"><span class="title">${esc(entry.name)}</span>
+      ${entry.dir ? "" : `<span class="sub">${esc(fileSize(entry.size))}</span>`}</span>
+    ${entry.dir ? icon("chevron-right", "dim") : ""}
+  </button>`;
+
+  // Плитка вместо строки — потому что фотографию узнают по картинке, а не по
+  // имени вида IMG_20260714_183205.jpg.
+  const tile = (entry) => `<button class="tile" data-files-open="${esc(entry.path)}">
+    <img loading="lazy" decoding="async" src="${esc(fileUrl(pc.id, entry, "thumb", "&size=320"))}" alt="">
+    <span class="tile-name">${esc(entry.name)}</span>
+    ${entry.kind === "video" ? `<span class="tile-play">${icon("play")}</span>
+      <span class="tile-size">${esc(fileSize(entry.size))}</span>` : ""}
+  </button>`;
+
+  const empty = !listing.entries.length
+    ? `<div class="empty">Здесь пусто</div>`
+    : "";
+
+  return `
+  <section class="card">
+    <div class="card-head"><h2>${esc(listing.name || "Файлы")}</h2>
+      <span class="meta">${listing.entries.length ? `${listing.entries.length} шт.` : ""}</span></div>
+    ${here}
+    ${up ? `<div class="row">${up}</div>` : ""}
+    ${listing.truncated ? `<div class="meta">Показаны первые ${listing.entries.length} —
+      папка больше. Откройте вложенную папку или сузьте выбор на компьютере.</div>` : ""}
+  </section>
+  ${empty}
+  ${folders.length ? `<section class="card list">${folders.map(row).join("")}</section>` : ""}
+  ${gallery.length ? `<div class="tiles">${gallery.map(tile).join("")}</div>` : ""}
+  ${rest.length ? `<section class="card list">${rest.map(row).join("")}</section>` : ""}`;
+}
+
+/* Один файл: показать, отправить, сохранить. Картинку и видео телефон
+   показывает сам — прямо из ответа контроллера, без промежуточной копии. */
+async function openFile(pcId, entry) {
+  const url = fileUrl(pcId, entry);
+  const shareable = Boolean(navigator.share && navigator.canShare) && entry.size <= SHARE_LIMIT;
+  const menu = [
+    shareable
+      ? { id: "share", name: "Отправить", sub: "в чат, другу, куда угодно", icon: "share-2" }
+      : null,
+    { id: "save", name: "Сохранить в телефон", icon: "download" },
+  ].filter(Boolean);
+
+  const media = entry.kind === "image"
+    ? { src: url }
+    : entry.kind === "video" ? { src: url, video: true } : "";
+
+  const picked = await openSheet({
+    icon: media ? "" : `lucide:${FILE_ICONS[entry.kind] || FILE_ICONS.other}`,
+    title: entry.name,
+    text: [fileSize(entry.size), fileWhen(entry.modified)].filter(Boolean).join(" · "),
+    media,
+    menu,
+    yes: "",
+    cancel: "Закрыть",
+    danger: false,
+  });
+  if (picked === "share") return shareFile(url, entry);
+  if (picked === "save") return saveFile(url, entry.name);
+}
+
+/* «Отправить» — системное окно телефона: оттуда файл уходит в мессенджер,
+   в почту, куда угодно. Браузер даёт это только на защищённом соединении и
+   не даёт внутри WebView, поэтому здесь всегда есть путь назад: не вышло —
+   сохраняем в «Загрузки», а не показываем ошибку. */
+async function shareFile(url, entry) {
+  try {
+    const response = await fetch(url, { credentials: "same-origin" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const file = new File([blob], entry.name, { type: blob.type || "application/octet-stream" });
+    if (!navigator.canShare?.({ files: [file] })) return saveFile(url, entry.name);
+    await navigator.share({ files: [file] });
+  } catch (error) {
+    if (error.name === "AbortError") return;      // человек сам закрыл окно
+    toast(`Отправить не вышло: ${error.message}`, "err");
+    saveFile(url, entry.name);
+  }
+}
+
+/* Снимок сохраняется из того, что уже показано, — но не в приложении:
+   системный загрузчик Android умеет качать только по настоящему адресу, а
+   blob-ссылку не понимает. Там просим у компьютера ещё один снимок: он
+   делается за секунду и от показанного не отличается. */
+function saveShot(url, blob, name) {
+  saveFile(shell().app ? url : blob, name);
+}
+
+/* «Сохранить» — обычная ссылка со download. В браузере это загрузка, в
+   приложении её перехватывает оболочка и отдаёт системному загрузчику:
+   файл оказывается в «Загрузках», с уведомлением, как любой другой. */
+function saveFile(url, name) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.rel = "noopener";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  toast("Сохраняется в «Загрузки»", "ok");
 }
 
 function openTerminal(pcId, session = "") {
@@ -2445,6 +2688,13 @@ function viewMore() {
     <div class="card-head"><h2>Свои кнопки</h2></div>
     <div class="row"><button class="btn" data-go="buttons">${icon("layout-grid")} Настроить кнопки пульта</button></div>
     <div class="meta">Добавить свою кнопку: запуск приложения, службы или команды в tmux.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Файлы компьютера</h2></div>
+    <div class="row"><button class="btn" data-go="files">${icon("folder-open")} Открыть файлы</button></div>
+    <div class="meta">Фотографии, загрузки и документы — посмотреть на телефоне,
+      сохранить или отправить. Только чтение: изменить или удалить отсюда нельзя.</div>
   </section>
 
   <section class="card">
@@ -2561,6 +2811,7 @@ async function render(force = false) {
       state.approvals = [];
     }
     if (current === "buttons") await loadEditor(force);
+    if (current === "files") await loadFiles();
     if (current === "jarvis" || current === "deck") {
       const jpc = activePc();
       state.justday = jpc && jpc.state === "online"
@@ -2894,6 +3145,19 @@ document.addEventListener("click", async (event) => {
     return jarvisAsk(text, { aloud: true });
   }
 
+  /* --- файлы --- */
+  if (d.filesGo !== undefined) {
+    return goFiles(d.filesGo);
+  }
+  if (d.filesOpen) {
+    const pc = activePc();
+    const entry = (state.files.listing?.entries || []).find((e) => e.path === d.filesOpen);
+    if (!pc || !entry) return;
+    buzz(8);
+    if (entry.dir) return goFiles(entry.path);
+    return withBusy(button, () => openFile(pc.id, entry));
+  }
+
   /* --- кнопка пульта --- */
   if (d.keyAction) {
     if (d.longpress) {
@@ -2934,6 +3198,11 @@ document.addEventListener("click", async (event) => {
         (result) => toast(result.message || "экран заблокирован", result.success ? "ok" : "err"));
     }
     if (id === "pc:terminal") return openTerminal(pcId);
+    if (id === "pc:files") {
+      state.files = { path: "", listing: null, error: "" };
+      location.hash = "#/files";
+      return;
+    }
     if (id === "power:wake") {
       return run(button, () => api(`/api/pcs/${encodeURIComponent(pcId)}/wake`, { method: "POST" }),
         (result) => {

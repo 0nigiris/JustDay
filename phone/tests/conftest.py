@@ -30,12 +30,14 @@ from remo32_agent.actions.models import (
 from remo32_agent.config import (
     ActionsSettings,
     AgentSettings,
+    FilesSettings,
     PowerSettings,
     SecuritySettings,
     ServerSettings,
     TerminalSettings,
 )
 from remo32_agent.execution import RecordingRunner
+from remo32_agent.files import RootSpec
 from remo32_controller.auth.passwords import hash_password
 from remo32_controller.config import (
     AuthSettings,
@@ -90,7 +92,25 @@ def sample_actions() -> list[object]:
 
 
 @pytest.fixture
-def agent_settings(tmp_path: Path, sample_actions: list[object]) -> AgentSettings:
+def sandbox(tmp_path: Path) -> Path:
+    """Дерево файлов, которое агенту разрешено показывать телефону.
+
+    Ровно то, что нужно для проверок: папка, файл, картинка, скрытый файл и
+    ссылка наружу — и ни одного настоящего файла человека.
+    """
+    box = tmp_path / "box"
+    (box / "вложенная").mkdir(parents=True)
+    (box / "заметка.txt").write_text("привет", encoding="utf-8")
+    (box / "вложенная" / "снимок.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (box / ".скрытое").write_text("не показывать", encoding="utf-8")
+    (box / "наружу").symlink_to(tmp_path / "секрет")
+    (tmp_path / "секрет").mkdir()
+    (tmp_path / "секрет" / "пароли.txt").write_text("ключи", encoding="utf-8")
+    return box
+
+
+@pytest.fixture
+def agent_settings(tmp_path: Path, sandbox: Path, sample_actions: list[object]) -> AgentSettings:
     return AgentSettings(
         agent_id="testpc",
         display_name="Тестовый ПК",
@@ -104,6 +124,10 @@ def agent_settings(tmp_path: Path, sample_actions: list[object]) -> AgentSetting
         # умолчанию тест писал бы в ~/.config/remo32/actions.toml и стирал
         # настоящие кнопки того, кто запустил pytest.
         actions_editor=ActionsSettings(store_path=tmp_path / "actions.toml"),
+        # Папки для телефона — тоже в tmp_path, и по той же причине, только
+        # серьёзнее: со значением по умолчанию тест листал бы настоящие
+        # «Изображения» и «Документы» того, кто запустил pytest.
+        files=FilesSettings(roots=[RootSpec(path=sandbox, id="box", name="Песочница")]),
         actions=sample_actions,
     )
 

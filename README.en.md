@@ -128,7 +128,7 @@ Qwen3-TTS on your GPU: “Jarvis”, a voice from a description or from a record
 <td valign="top">
 
 **📱 And from the phone**<br>
-The same request, the same player, the same “I'm leaving” — from your phone, through the [phone half](phone/README.md): wake a machine that is off, watch its load, open a terminal.
+The same request, the same player, the same “I'm leaving” — from your phone, through the [phone half](phone/README.md): wake a machine that is off, watch its load, open a terminal, grab a screenshot, and pull a photo off the disk to look at or send on.
 
 </td>
 <td valign="top">

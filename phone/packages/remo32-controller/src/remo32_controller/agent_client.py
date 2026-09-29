@@ -265,6 +265,49 @@ class AgentClient:
     async def screen(self) -> tuple[bytes, str]:
         return await self.binary("/api/screen", timeout=40.0)
 
+    async def open_stream(
+        self,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float = 120.0,
+    ) -> httpx.Response:
+        """Ответ агента, ещё не прочитанный в память.
+
+        Для файлов: видео на диске бывает гигабайтом, и `binary` с ним убил
+        бы контроллер. Здесь прочитаны только заголовки — тело потечёт через
+        контроллер к телефону кусками, и закрыть ответ обязан вызывающий.
+
+        Ошибку агент возвращает обычным конвертом JSON, и она маленькая:
+        такой ответ дочитываем сразу и поднимаем как всегда.
+        """
+        url = f"{self._base_url}{path}"
+        request = self._client.build_request(
+            "GET",
+            url,
+            headers={**self._headers(), **(headers or {})},
+            params=params,
+            timeout=timeout,
+        )
+        try:
+            response = await self._client.send(request, stream=True)
+        except httpx.TimeoutException as exc:
+            raise DeviceTimeoutError(f"агент не ответил за {timeout:.0f} с", url=url) from exc
+        except httpx.HTTPError as exc:
+            raise DeviceUnreachableError(f"агент недоступен: {exc}", url=url) from exc
+        if response.status_code >= 400:
+            await response.aread()
+            await response.aclose()
+            self._parse(response, url)  # поднимет ошибку агента как свою
+        return response
+
+    async def files(self, path: str = "") -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "GET", "/api/files", params={"path": path}, timeout=25.0
+        )
+        return got
+
     async def justday_inbox_add(self, text: str, created: float = 0.0) -> dict[str, Any]:
         got: dict[str, Any] = await self._request(
             "POST", "/api/justday/inbox", json={"text": text, "created": created}, timeout=20.0
