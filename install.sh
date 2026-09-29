@@ -74,6 +74,22 @@ flush_warns() {
   while IFS= read -r w; do [[ -n "$w" ]] && printf '     %s!%s %s\n' "$Y" "$N" "$w"; done < "$WARNS"
   : > "$WARNS"
 }
+WIDTH=${COLUMNS:-0}; ((WIDTH > 0)) || WIDTH=$(tput cols 2>/dev/null || echo 80); ((WIDTH > 64)) && WIDTH=64; ((WIDTH < 40)) && WIDTH=40
+line() { local n=$((WIDTH - 2)) i s=''; for ((i = 0; i < n; i++)); do s+='─'; done; printf '%s' "$s"; }
+plate() { # plate "первая строка" ["вторая, приглушённая"] — рамка вокруг заголовка
+  # Ширина считается в символах, а не в байтах: иначе русские строки уезжают за рамку.
+  local w=$((WIDTH - 4))
+  printf '\n  %s╭%s╮%s\n' "$D" "$(line)" "$N"
+  printf '  %s│%s  %s%s%s%s│%s\n' "$D" "$N" "$B" "$(pad "$1" "$w")" "$N" "$D" "$N"
+  [[ -n "${2:-}" ]] && printf '  %s│%s  %s%s%s%s│%s\n' "$D" "$N" "$D" "$(pad "$2" "$w")" "$N" "$D" "$N"
+  printf '  %s╰%s╯%s\n\n' "$D" "$(line)" "$N"
+}
+section() { # section "Ставим" — тонкий заголовок группы шагов
+  local left="  $B$1$N " rest=$((WIDTH - ${#1} - 1)) i s=''
+  ((rest < 3)) && rest=3
+  for ((i = 0; i < rest; i++)); do s+='─'; done
+  printf '\n%s%s%s%s\n' "$left" "$D" "$s" "$N"
+}
 hsize() { # hsize 1400 → «1.4 ГБ» / «320 МБ»
   local m=$1
   if ((m >= 1024)); then printf '%d.%d %s' $((m / 1024)) $(((m % 1024) * 10 / 1024)) "$(t ГБ GB)"
@@ -159,9 +175,10 @@ step() {
   fi
 }
 
-printf '\n  %sJustDay%s\n  %s%s%s\n\n' "$B" "$N" "$D" "$(t 'Голосовой ассистент для KDE Plasma · установка' 'A voice assistant for KDE Plasma · install')" "$N"
+plate "JustDay" "$(t 'голосовой ассистент · установка' 'a voice assistant · install')"
 
 # ───────────── the computer ─────────────
+section "$(t 'Этот компьютер' 'This computer')"
 desktop="${XDG_CURRENT_DESKTOP:-?}"
 PLASMA=0
 if [[ "$desktop" == *KDE* ]]; then
@@ -287,6 +304,7 @@ if ((free_mb > 0)); then
 fi
 
 # ───────────── system packages (only what is missing) ─────────────
+section "$(t 'Ставим' 'Installing')"
 MISSING=()   # то, что не удалось поставить: сводка в конце, а установка идёт дальше
 need=()
 for pair in playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
@@ -458,6 +476,7 @@ else
 fi
 
 # ───────────── config ─────────────
+section "$(t 'Настраиваем' 'Setting up')"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/justday"
 BRAIN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/justday/brain"
 FIRST_RUN=0; [[ -f "$CONF_DIR/config.toml" ]] || FIRST_RUN=1
@@ -610,7 +629,7 @@ fi
 kread=$(command -v kreadconfig6 || command -v kreadconfig5 || echo true)
 talk=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null | cut -d, -f1 | cut -f1 || true)
 talk=${talk:-$HOTKEY}
-printf '\n  %s%s%s  %s%s%s\n\n' "$B$G" "$(t 'Готово' 'Done')" "$N" "$D" "$(t 'за' 'in') $(clock $((SECONDS - STARTED)))" "$N"
+plate "$(t 'Готово' 'Done') · $(clock $((SECONDS - STARTED)))" "$chosen · $(mib "$APP_DIR/.venv")"
 if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true'; then
   printf '  %s%s%s\n  %s\n\n' "$B" "$(t 'Остался один шаг: войдите в Claude.' 'One step left: sign in to Claude.')" "$N" \
     "$(t 'Наберите' 'Type') ${B}claude${N} $(t 'и в нём' 'and in it') ${B}/login${N}."

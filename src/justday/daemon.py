@@ -2253,7 +2253,7 @@ class Daemon:
         elif self.cfg["audio"].get("microphone", True) and not parts.have("speech"):
             # Микрофон в настройках есть, а распознавания в окружении нет: молча превращаться
             # в «кнопка ничего не делает» нельзя — так и выглядела бы поломка.
-            log.warning("распознавание речи не установлено: %s", parts.missing_note("speech"))
+            log.warning("%s", parts.missing_note("speech"))
             self.notify(parts.missing_note("speech"), icon="audio-input-microphone")
         loop.run_in_executor(None, self.tts.load)
         await self.brain.start()

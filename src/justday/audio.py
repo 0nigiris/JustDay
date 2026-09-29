@@ -115,14 +115,23 @@ def voice_activity_model():
 
 
 class UtteranceRecorder:
-    """Record one utterance: wait for speech, stop after trailing silence (Silero VAD)."""
+    """Record one utterance: wait for speech, stop after trailing silence (Silero VAD).
+
+    Модель пауз грузится при первой записи, а не в конструкторе: в наборе без распознавания речи
+    её в окружении нет вовсе, и демон должен запускаться — он просто никогда не начнёт запись."""
 
     def __init__(self, mic: Microphone, silence_s: float, no_speech_timeout_s: float, max_s: float):
         self.mic = mic
-        self.vad = voice_activity_model()
+        self._vad = None
         self.silence_s = silence_s
         self.no_speech_timeout_s = no_speech_timeout_s
         self.max_s = max_s
+
+    @property
+    def vad(self):
+        if self._vad is None:
+            self._vad = voice_activity_model()
+        return self._vad
 
     async def record(self, cancel: asyncio.Event, prefill=None) -> np.ndarray | None:
         """`prefill()` → (mic seq, frame) pairs already heard (speech in progress, e.g. after the assistant's name)."""
