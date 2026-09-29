@@ -69,14 +69,14 @@ ShellRoot {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "justday-island"
-        readonly property bool big: ["expanded", "settings", "compose", "player"].includes(island.mode)
+        readonly property bool big: ["expanded", "settings", "compose", "player", "tools"].includes(island.mode)
         // Мышь перехватывается на весь экран только там, где это нужно для закрытия щелчком мимо:
         // меню, настройки, поле ввода. Плеер и видео живут поверх окон, не отнимая ни панель, ни рабочий стол.
-        readonly property bool modal: ["expanded", "settings", "compose"].includes(island.mode)
+        readonly property bool modal: ["expanded", "settings", "compose", "tools"].includes(island.mode)
         Binding { target: JD; property: "screenWidth"; value: win.screen ? win.screen.width : 1920 }
         Binding { target: JD; property: "screenHeight"; value: win.screen ? win.screen.height : 1080 }
         // the text field takes the keyboard at once (it was opened by a shortcut); menus only on click
-        WlrLayershell.keyboardFocus: island.mode === "compose" ? WlrKeyboardFocus.Exclusive
+        WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" ? WlrKeyboardFocus.Exclusive
                                    : big || island.mode === "video" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         // окно шире самого острова: видео растягивают почти во весь экран, а щелчки всё равно
         // проходят везде, кроме него самого — маска ниже отвечает за это
@@ -139,7 +139,7 @@ ShellRoot {
                 expanded: expandedView, settings: settingsHolder, compose: composeView, approval: approvalView, card: cardView, listening: listeningView,
                 notification: notificationView, alarm: alarmView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
                 peek: peekView, hidden: peekView, music: musicView, player: playerView, video: videoView,
-                videopill: videoPillView })[mode]
+                videopill: videoPillView, tools: toolsHolder })[mode]
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen
 
             width: mode === "hidden" ? 140 : Math.max(120, content.implicitWidth)
@@ -251,6 +251,19 @@ ShellRoot {
                         anchors.fill: parent
                         active: settingsHolder.shown || settingsHolder.opacity > 0.01
                         sourceComponent: SettingsView {}
+                    }
+                }
+                // Панель инструментов: эмодзи, буфер обмена, нагрузка. Грузится по открытию —
+                // сетка на 1900 клеток не должна лежать в памяти, пока её не просили.
+                View {
+                    id: toolsHolder
+                    shown: island.mode === "tools"
+                    implicitWidth: 860
+                    implicitHeight: 560
+                    Loader {
+                        anchors.fill: parent
+                        active: toolsHolder.shown || toolsHolder.opacity > 0.01
+                        sourceComponent: ToolsView {}
                     }
                 }
             }
@@ -1812,6 +1825,9 @@ ShellRoot {
             { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
             { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: "audio-input-microphone",
               run: () => JD.run(["config", "set", "audio.microphone", String(!JD.micOn)]) },
+            { cmd: "/emoji", title: JD.tr("Эмодзи"), icon: "smile", run: () => JD.openTools("emoji") },
+            { cmd: "/clip", title: JD.tr("Буфер обмена"), icon: "clipboard", run: () => JD.openTools("clip") },
+            { cmd: "/load", title: JD.tr("Нагрузка машины"), icon: "activity", run: () => JD.openTools("load") },
             { cmd: "/menu", title: JD.tr("Меню"), icon: "view-grid", run: () => { JD.expanded = true } },
             { cmd: "/settings", title: JD.tr("Настройки"), icon: "configure", run: () => JD.openSettings("general") },
             { cmd: "/keys", title: JD.tr("Сочетания клавиш"), icon: "input-keyboard", run: () => JD.openSettings("buttons") },
@@ -2215,6 +2231,7 @@ ShellRoot {
                     label: JD.tr("Стоп"); tint: JD.accentRed
                     onClicked: JD.send({ cmd: "stop" })
                 }
+                IconButton { icon: "gauge"; size: 32; onClicked: JD.openTools("emoji") }
                 IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
                 IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
             }

@@ -25,10 +25,12 @@ from . import (
     audio,
     briefing,
     calendar_lane,
+    clipboard,
     config,
     desktop,
     events,
     fastpath,
+    glyphs,
     inbox,
     island,
     jobs,
@@ -42,6 +44,7 @@ from . import (
     parts,
     reminders,
     scenes,
+    sysload,
     voiceprint,
     workers,
 )
@@ -109,6 +112,13 @@ class Daemon:
         self._inbox_timer: asyncio.Task | None = None
         self._wake_strict_until = 0.0  # после ложного срабатывания слушаем строже
         self._loop: asyncio.AbstractEventLoop | None = None
+        # Нагрузка машины: один взгляд, помнящий предыдущий. Опрашивается, только когда кто-то
+        # смотрит — островок с открытым монитором или спросивший ассистент; в покое демон не
+        # тратит ничего.
+        self.load = sysload.Load()
+        self.load_watchers = 0
+        self._clip_seen: dict = {}       # что видели в буфере на X11, где нет наблюдателя
+        self._clip_procs: list = []      # запущенные wl-paste --watch
         self._spoken = 0
         self._discard_recording = False
         self._last_toggle = 0.0
@@ -1891,6 +1901,60 @@ class Daemon:
         self._save_later("audio", "volume", v)
         return v
 
+    # ---------------- нагрузка машины и буфер обмена ----------------
+
+    async def load_snapshot(self) -> dict:
+        """Взгляд на машину. Чтение /proc и nvidia-smi — в отдельном потоке: обход /proc стоит
+        десятки миллисекунд, и в цикле событий это слышно в голосе."""
+        return await asyncio.get_running_loop().run_in_executor(None, self.load.snapshot)
+
+    async def _load_loop(self) -> None:
+        """Пока островок показывает монитор — раз в секунду присылать новые цифры.
+
+        Ровно раз в секунду и ровно пока смотрят: графики требуют равного шага, а в покое опрашивать
+        машину незачем. Первый взгляд после долгого перерыва сравнивать не с чем, поэтому счётчик
+        обновляется дважды, и наружу идёт второй."""
+        while True:
+            if self.load_watchers <= 0:
+                await asyncio.sleep(1.0)
+                continue
+            try:
+                self.publish(load=await self.load_snapshot())
+            except Exception:
+                log.debug("не смог прочитать нагрузку", exc_info=True)
+            await asyncio.sleep(1.0)
+
+    async def _clip_watch(self) -> None:
+        """Следить за буфером обмена.
+
+        На Wayland работу делает `wl-paste --watch`: он запускает `justday clip store` на каждое
+        изменение. Процессы переживают демон не дольше самого демона — при остановке они гасятся
+        вместе с ним.
+
+        На X11 постоянного наблюдателя не существует, поэтому там демон сам заглядывает в буфер
+        раз в секунду. Это дешевле, чем звучит: `xclip -o` не читает ничего, кроме самого буфера."""
+        if not self.cfg.get("clipboard", {}).get("history", True):
+            log.info("история буфера обмена выключена (clipboard.history)")
+            return
+        argv = clipboard.watch_argv()
+        if argv:
+            for cmd in argv:
+                try:
+                    self._clip_procs.append(await asyncio.create_subprocess_exec(
+                        *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL))
+                except OSError as e:
+                    log.warning("не удалось следить за буфером: %s", e)
+            log.info("история буфера обмена: wl-paste, %d наблюдателя", len(self._clip_procs))
+            return
+        log.info("история буфера обмена: опрос xclip")
+        loop = asyncio.get_running_loop()
+        while True:
+            await asyncio.sleep(1.0)
+            try:
+                await loop.run_in_executor(None, clipboard.poll_once, self._clip_seen)
+            except Exception:
+                log.debug("опрос буфера не вышел", exc_info=True)
+
     async def media_control(self, action: str, value=None) -> dict:
         """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | color NAME | status"""
         m = self.music
@@ -2219,6 +2283,41 @@ class Daemon:
                 self.island_video = None
                 self.publish(video=None, video_last=self.last_video)
                 resp = {"ok": True}
+            # ─── панель управления на островке: эмодзи, буфер, нагрузка ───
+            elif cmd == "emoji":  # сетка и поиск; ассистент ищет в том же наборе
+                found = glyphs.search(req.get("query", ""), int(req.get("limit") or 400),
+                                      req.get("group", ""))
+                resp = {"ok": True, "items": found, "groups": glyphs.load()["groups"],
+                        "recent": glyphs.recents()}
+            elif cmd == "emoji_use":  # выбрали символ: в буфер и в то окно, где курсор
+                resp = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: glyphs.use(req.get("char", ""), paste=req.get("paste", True)))
+            elif cmd == "clip_list":
+                resp = {"ok": True, "items": clipboard.items(int(req.get("limit") or 60),
+                                                             req.get("query", "")),
+                        "paused": clipboard.paused()}
+            elif cmd == "clip_use":
+                resp = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: clipboard.put_back(str(req.get("which", "")),
+                                                     paste=req.get("paste", True)))
+            elif cmd == "clip_forget":
+                resp = {"ok": clipboard.forget(str(req.get("which", "")))}
+            elif cmd == "clip_wipe":
+                resp = {"ok": True, "forgotten": clipboard.wipe()}
+            elif cmd == "clip_pause":
+                resp = {"ok": True, "paused": clipboard.pause(bool(req.get("on", True)))}
+            elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
+                which = str(req.get("which", ""))
+                if which not in ("emoji", "clip", "load", ""):
+                    resp = {"ok": False, "error": f"нет такой панели: {which}"}
+                else:
+                    self.publish(panel=which)
+                    resp = {"ok": True, "panel": which}
+            elif cmd == "load":  # нагрузка машины одним взглядом
+                resp = {"ok": True, "load": await self.load_snapshot(), }
+            elif cmd == "load_watch":  # островок открыл монитор: присылать раз в секунду
+                self.load_watchers = max(0, self.load_watchers + (1 if req.get("on", True) else -1))
+                resp = {"ok": True, "watching": self.load_watchers > 0}
             elif cmd == "reload_settings":  # after `justday config set`: hot-apply what can be
                 resp = {"ok": True, "restart_needed": self.reload_settings()}
             else:
@@ -2262,6 +2361,8 @@ class Daemon:
         self._reschedule()  # alarms survive a restart
         self._setup_wakeword()
         spawn(self._housekeeping())
+        spawn(self._load_loop())
+        spawn(self._clip_watch())
         if shutil.which("dbus-monitor"):
             spawn(self._watch_notifications())
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
@@ -2276,6 +2377,9 @@ class Daemon:
             w.close()
         if self._notify_proc and self._notify_proc.returncode is None:
             self._notify_proc.kill()
+        for watcher in self._clip_procs:      # наблюдатели буфера живут ровно столько, сколько демон
+            if watcher.returncode is None:
+                watcher.kill()
         self.mic.stop()
         try:
             await asyncio.wait_for(self.brain.stop(), 5)

@@ -170,10 +170,64 @@ Singleton {
         return Qt.hsla(q.hslHue, Math.max(0.55, q.hslSaturation), Math.min(0.68, Math.max(0.52, q.hslLightness)), 1)
     }
 
+    // ───────────── панель инструментов: эмодзи, буфер обмена, нагрузка ─────────────
+    //
+    // Островок — не только лицо ассистента. То, за чем в оболочках для Hyprland держат по отдельной
+    // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
+    // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
+    // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
+    property string toolsPage: ""          // "" — закрыта; emoji | clip | load
+    property string toolsQuery: ""
+    property var toolsItems: []           // что нашлось: эмодзи или записи буфера
+    property var emojiGroups: []
+    property string emojiGroup: ""
+    property var load: null               // последний взгляд на машину
+    property var loadHistory: ({ cpu: [], mem: [], gpu: [] })   // для графиков: последние 60 секунд
+    property bool clipPaused: false
+    property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
+
+    function openTools(page) {
+        toolsPage = page || "emoji"
+        toolsQuery = ""
+        emojiGroup = ""
+        settingsOpen = false
+        expanded = false
+        composeOpen = false
+        playerOpen = false
+        toolsSerial++
+        refreshTools()
+        send({ cmd: "load_watch", on: toolsPage === "load" })
+    }
+    function closeTools() {
+        if (toolsPage === "load") send({ cmd: "load_watch", on: false })
+        toolsPage = ""
+        toolsItems = []
+    }
+    function setToolsPage(page) {
+        if (page === toolsPage) return
+        const wasLoad = toolsPage === "load"
+        toolsPage = page
+        toolsQuery = ""
+        toolsItems = []
+        if (wasLoad !== (page === "load")) send({ cmd: "load_watch", on: page === "load" })
+        refreshTools()
+    }
+    // Ищет демон, а не островок: набор эмодзи лежит там, история буфера тоже, и второй такой же
+    // поиск на QML разошёлся бы с первым в тот же день.
+    function refreshTools() {
+        if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
+        else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
+        else if (toolsPage === "load") send({ cmd: "load" })
+    }
+    function useEmoji(ch) { send({ cmd: "emoji_use", char: ch }); closeTools() }
+    function useClip(which) { send({ cmd: "clip_use", which: String(which) }); closeTools() }
+    function forgetClip(which) { send({ cmd: "clip_forget", which: String(which) }); refreshTools() }
+    function pauseClip(on) { send({ cmd: "clip_pause", on: on }) }
+
     property bool settingsOpen: false
     property string settingsPage: "general"
     function openSettings(page) { settingsPage = page || "general"; settingsOpen = true; expanded = false }
-    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false; playerOpen = false }
+    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false; playerOpen = false; closeTools() }
     function openManual() { Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md"]); closeAll() }
 
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off
@@ -195,6 +249,7 @@ Singleton {
         if (expanded && !approvalText && !settingsOpen) return "expanded"
         if (approvalText) return "approval"
         if (settingsOpen) return "settings"
+        if (toolsPage) return "tools"
         if (card) return "card"
         // видео выше слушания: оно не исчезает, когда заговорили с ассистентом — слушание,
         // «думаю…» и ответ идут строкой поверх кадра, как субтитры
@@ -272,7 +327,11 @@ Singleton {
         "monitor", "moon", "mouse-pointer-click", "music", "package", "palette", "panel-top", "pause", "play", "plus", "power",
         "refresh-cw", "repeat", "repeat-1", "rotate-ccw", "search", "settings", "shield", "shuffle", "skip-back",
         "skip-forward", "sparkles", "square", "sun", "terminal", "text-cursor", "trash", "user-round", "users",
-        "video", "volume-2", "volume-x", "wand-sparkles", "x", "zap"
+        "video", "volume-2", "volume-x", "wand-sparkles", "x", "zap",
+        // значки панели инструментов
+        "smile", "clipboard", "memory-stick", "hard-drive", "thermometer", "network", "gauge",
+        "trash-2", "grip-vertical", "camera", "minus", "star", "wifi-off", "list-plus",
+        "mic-off", "sliders-horizontal", "volume-1", "lock", "star"
     ]
     // "" when the island has no glyph of its own for this name
     function glyph(name) { return name ? (glyphs[name] || (localIcons.indexOf(name) >= 0 ? name : "")) : "" }
@@ -368,6 +427,25 @@ Singleton {
         if (m.video_last !== undefined) videoLast = m.video_last
         if (m.reminders !== undefined) reminders = m.reminders
         if (m.jobs !== undefined) jobs = m.jobs || []
+        // ── панель инструментов ──
+        if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
+        if (m.groups !== undefined) emojiGroups = m.groups
+        if (m.items !== undefined && toolsPage) toolsItems = m.items
+        if (m.paused !== undefined) clipPaused = m.paused
+        if (m.load !== undefined) {
+            load = m.load
+            // Графики держат минуту: дольше — уже не «что происходит сейчас», а история, которой
+            // место не в островке. Массивы пересобираем целиком — QML замечает только это.
+            if (m.load) {
+                const keep = 60
+                const push = (arr, v) => (arr.length >= keep ? arr.slice(arr.length - keep + 1) : arr).concat([v])
+                loadHistory = {
+                    cpu: push(loadHistory.cpu, m.load.cpu ? m.load.cpu.percent : 0),
+                    mem: push(loadHistory.mem, m.load.memory ? m.load.memory.percent : 0),
+                    gpu: push(loadHistory.gpu, m.load.gpu ? m.load.gpu.percent : 0),
+                }
+            }
+        }
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
             dstate = m.state

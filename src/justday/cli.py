@@ -524,6 +524,23 @@ def main(argv: list[str] | None = None) -> None:
                                      "`justday parts` показывает, что стоит; add/remove доставляет и убирает")
     sp.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove"])
     sp.add_argument("names", nargs="*", help="speech | voice | cuda")
+    # ─── панель управления: эмодзи, буфер обмена, нагрузка ───
+    sp = sub.add_parser("emoji", help="выбиралка эмодзи: поиск по-русски, вставка в то окно, где курсор "
+                                     "(без запроса открывает сетку на островке)")
+    sp.add_argument("query", nargs="*", help="что искать: кот, сердце, флаг россия")
+    sp.add_argument("--list", action="store_true", help="показать найденное, ничего не вставляя")
+    sp.add_argument("--copy", action="store_true", help="только в буфер обмена, не печатать")
+    sp = sub.add_parser("clip", help="история буфера обмена; пароли в неё не попадают")
+    sp.add_argument("action", nargs="?", default="list",
+                    choices=["list", "use", "forget", "wipe", "pause", "resume", "store"])
+    sp.add_argument("which", nargs="?", default="", help="номер в списке или id записи")
+    sp.add_argument("--search", default="", help="искать по содержимому")
+    sp.add_argument("--image", action="store_true", help="для store: на входе картинка, а не текст")
+    sp.add_argument("--copy", action="store_true", help="только в буфер, не печатать")
+    sp = sub.add_parser("load", help="нагрузка машины: процессор, память, диск, сеть, температуры, "
+                                    "тяжёлые программы")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("--watch", action="store_true", help="обновлять на месте, пока не остановят")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -582,6 +599,12 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0 if r.get("ok") else 1)
     elif a.cmd == "parts":
         sys.exit(_parts_cmd(a.action, a.names))
+    elif a.cmd == "emoji":
+        sys.exit(_emoji_cmd(" ".join(a.query), show=a.list, copy_only=a.copy))
+    elif a.cmd == "clip":
+        sys.exit(_clip_cmd(a.action, a.which, search=a.search, image=a.image, copy_only=a.copy))
+    elif a.cmd == "load":
+        sys.exit(_load_cmd(as_json=a.json, watch=a.watch))
     elif a.cmd == "memory":
         from .brain import BRAIN_DIR
 
@@ -1181,6 +1204,115 @@ def _persona_cmd(args: list[str]) -> None:
     p = config.load()["persona"]
     _print({"character": p["character"], "swearing": p["swearing"], "live_speech": p["live_speech"],
             "address_as": config.load()["user"]["address_as"]})
+
+
+def _emoji_cmd(query: str, *, show: bool = False, copy_only: bool = False) -> int:
+    """`justday emoji кот` — первый подходящий сразу в то окно, где курсор."""
+    from . import glyphs
+
+    if not query:
+        # Без запроса открывает сетку на островке: это его работа, а не терминала.
+        got = control("panel", which="emoji", timeout=5)
+        if got.get("ok"):
+            return 0
+        print("островок не отвечает; так тоже можно: justday emoji кот")
+        return 1
+    found = glyphs.search(query, limit=20 if show else 1)
+    if not found:
+        print(f"ничего не нашлось на «{query}»")
+        return 1
+    if show:
+        for item in found:
+            words = ", ".join(item.get("k", [])[:4])
+            print(f"{item['c']}  {item['n']}" + (f"  ·  {words}" if words else ""))
+        return 0
+    got = glyphs.use(found[0]["c"], paste=not copy_only)
+    print(glyphs.note_for(found[0]["c"]) + (f"  ({got['note']})" if got["note"] else "  вставлено"))
+    return 0 if got["ok"] else 1
+
+
+def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
+              copy_only: bool = False) -> int:
+    """История буфера обмена. `store` вызывает не человек, а наблюдатель за буфером."""
+    from . import clipboard
+
+    if action == "store":
+        # Содержимое приходит на вход, как его отдаёт `wl-paste --watch`. Перед тем как запоминать,
+        # спрашиваем сам буфер, не помечен ли он как секрет: так просят менеджеры паролей.
+        if not image and clipboard.is_secret_hint():
+            return 0
+        data = sys.stdin.buffer.read()
+        got = (clipboard.store(image=data) if image
+               else clipboard.store(data.decode("utf-8", errors="replace")))
+        return 0 if got.get("ok") or got.get("why") else 1
+    if action == "wipe":
+        print(f"забыто записей: {clipboard.wipe()}")
+        return 0
+    if action in ("pause", "resume"):
+        on = action == "pause"
+        print("история буфера на паузе" if clipboard.pause(on) else "история буфера снова пишется")
+        return 0
+    if action == "forget":
+        if not which:
+            print("что забыть? justday clip forget 3")
+            return 1
+        ok = clipboard.forget(which)
+        print("забыто" if ok else "такой записи нет")
+        return 0 if ok else 1
+    if action == "use":
+        got = clipboard.put_back(which or "1", paste=not copy_only)
+        print(got.get("note") or got.get("error") or "вставлено")
+        return 0 if got.get("ok") else 1
+
+    items = clipboard.items(int(os.environ.get("JUSTDAY_CLIP_LIMIT", "25")), search)
+    if not items:
+        print("история пуста" + (f" — по «{search}» ничего" if search else ""))
+        return 0
+    now = time.time()
+    for n, item in enumerate(items, 1):
+        ago = now - item["at"]
+        when = (f"{int(ago)}с" if ago < 60 else f"{int(ago // 60)}м" if ago < 3600
+                else f"{int(ago // 3600)}ч" if ago < 86400 else f"{int(ago // 86400)}д")
+        mark = "🖼" if item["kind"] == "image" else " "
+        print(f"{n:>3} {when:>4} {mark} {item['preview']}")
+    if clipboard.paused():
+        print("\n(на паузе: новое не запоминается — justday clip resume)")
+    return 0
+
+
+def _load_cmd(*, as_json: bool = False, watch: bool = False) -> int:
+    """Нагрузка машины. Без --json — то, что читается глазами."""
+    from . import sysload
+
+    load = sysload.Load()
+    load.snapshot()          # первый взгляд не с чем сравнивать
+    while True:
+        time.sleep(1.0)
+        snap = load.snapshot()
+        if as_json:
+            print(json.dumps(snap, ensure_ascii=False))
+        else:
+            cpu, mem, gpu = snap["cpu"], snap["memory"], snap["gpu"]
+            if watch:
+                print("\033[2J\033[H", end="")
+            print(f"процессор  {cpu['percent']:>5.1f}%   ({cpu['count']} ядер, "
+                  f"средняя {', '.join(f'{x:.2f}' for x in snap['load'])})")
+            print(f"память     {mem['percent']:>5.1f}%   {mem['used'] / 1024:.1f} из {mem['total'] / 1024:.1f} ГБ"
+                  + (f", подкачка {mem['swap_used']} МБ" if mem["swap_used"] > 64 else ""))
+            if gpu:
+                print(f"видеокарта {gpu['percent']:>5.1f}%   {gpu['name']}, "
+                      f"{gpu['mem_used']} из {gpu['mem_total']} МБ, {gpu['c']:.0f}°")
+            if snap["hot"]:
+                print(f"температура      {snap['hot']['c']:.0f}°  ({snap['hot']['label']})")
+            print(f"сеть         ↓{snap['net']['rx_kb']:.0f} ↑{snap['net']['tx_kb']:.0f} КБ/с"
+                  f"   диск ↓{snap['io']['read_mb']:.1f} ↑{snap['io']['write_mb']:.1f} МБ/с")
+            for disk in snap["disks"]:
+                print(f"  {disk['where']:<12} {disk['percent']:>5.1f}%  свободно {disk['free_gb']:.0f} ГБ")
+            print("тяжелее всех:")
+            for proc in snap["top"]:
+                print(f"  {proc['cpu']:>5.1f}%  {proc['mem_mb']:>5} МБ  {proc['name']}")
+        if not watch:
+            return 0
 
 
 def _parts_cmd(action: str, names: list[str]) -> int:

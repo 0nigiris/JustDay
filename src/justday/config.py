@@ -163,6 +163,10 @@ DEFAULTS: dict = {
     "ui": {"notifications": True, "face": "auto"},
     # «Я ушёл» closes the open applications and remembers them; «я вернулся» opens them again.
     # keep: what is never closed (a substring of the window class or the application name).
+    # История буфера обмена для панели на островке. Пароли в неё не попадают: то, что программа
+    # пометила как секрет, и то, что похоже на ключ, не запоминается вовсе — см. clipboard.py.
+    # history = false выключает её целиком, и наблюдатель за буфером даже не запускается.
+    "clipboard": {"history": True},
     "session": {"keep": ["kitty"]},
     "updates": {"check": True, "interval_hours": 6},
     # personal voice profile (Settings → Голос и звук → «Настроить под мой голос»)
