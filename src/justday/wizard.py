@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 
-from . import config, manage, providers
+from . import config, manage, parts, providers
 
 B, D, G, Y, C, R = "\033[1m", "\033[2m", "\033[32m", "\033[33m", "\033[36m", "\033[0m"
 
@@ -49,6 +49,11 @@ WIZ_EN = {
         "The text field opens with Meta+K or a click on the island. The microphone is not used.",
     "Видеокарты NVIDIA нет — распознавание речи будет на процессоре (модель small).":
         "No NVIDIA card — speech recognition will run on the CPU (small model).",
+    "Распознавание речи не установлено — это ~550 МБ.": "Speech recognition is not installed — that is ~550 MB.",
+    "Скачать его сейчас?": "Download it now?",
+    "Не получилось — попробуйте позже: justday parts add speech": "It did not work — try later: justday parts add speech",
+    "Пока остаётся текст: Meta+K открывает поле ввода. Потом — justday parts add speech.":
+        "Text for now: Meta+K opens the field. Later: justday parts add speech.",
     "Отвечать голосом (иначе только текст на острове)": "Speak the replies (otherwise text on the island only)",
     "Кнопки": "Shortcuts", "Главное сочетание (открывает поле ввода)": "Main shortcut (opens the text field)",
     "Написать текстом (выделенный текст прикрепится)": "Type a request (selected text is attached)",
@@ -217,6 +222,19 @@ def step_mic() -> None:
     if mode == "text":
         print(f"  {D}" + W("Поле ввода открывается сочетанием Meta+K или кликом по острову. Микрофон не используется.") + R)
         return
+    # Голосом — значит нужно распознавание речи, а его могли не ставить (набор «только текст»).
+    # Молча оставить включённый микрофон нельзя: кнопка разговора просто не сработала бы.
+    if not parts.have("speech"):
+        print(f"  {Y}" + W("Распознавание речи не установлено — это ~550 МБ.") + R)
+        if yes(W("Скачать его сейчас?"), True):
+            add = ("speech", "cuda") if vram_mb() else ("speech",)
+            ok, _ = parts.sync(add=add, show=True)
+            if not ok:
+                print(f"  {Y}" + W("Не получилось — попробуйте позже: justday parts add speech") + R)
+        if not parts.have("speech"):
+            config.set_value("audio", "microphone", False)
+            print(f"  {D}" + W("Пока остаётся текст: Meta+K открывает поле ввода. Потом — justday parts add speech.") + R)
+            return
     if not vram_mb():  # no NVIDIA card: a smaller recognizer keeps up on the CPU
         print(f"  {D}" + W("Видеокарты NVIDIA нет — распознавание речи будет на процессоре (модель small).") + R)
         config.set_value("stt", "device", "cpu")

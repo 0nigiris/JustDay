@@ -73,21 +73,36 @@ def t_mic(seconds: float = 3.0):
 def t_tts(text: str = "Все системы в норме, сэр."):
     import asyncio
 
-    from . import audio
+    from . import audio, parts
     from .tts import TTS, normalize
 
     tts = TTS(config.load()["tts"])
     pcm = tts.synth(normalize(text))
     asyncio.run(audio.Player(config.load()["audio"]["output"]).play(pcm, tts.rate))
-    return f"engine={tts.cfg['engine']} speaker={tts.cfg['speaker']} {len(pcm) / tts.rate:.1f}s audio"
+    fell_back = " (нейросетевого голоса нет, звучит espeak-ng — justday parts add voice)" \
+        if tts.cfg["engine"] == "silero" and not parts.have("voice") else ""
+    return f"engine={tts.cfg['engine']} speaker={tts.cfg['speaker']} {len(pcm) / tts.rate:.1f}s audio{fell_back}"
+
+
+def t_parts():
+    """Что из необязательного стоит. Отсутствие части — это выбор пользователя, а не поломка."""
+    from . import parts
+
+    have = parts.installed()
+    rest = [n for n in parts.suggested() if n not in have]
+    words = ", ".join(have) if have else "только ядро"
+    return words + (f" · не ставили: {', '.join(rest)} (justday parts add {' '.join(rest)})" if rest else "")
 
 
 def t_stt():
     import numpy as np
 
+    from . import parts
     from .stt import STT
     from .tts import TTS, normalize
 
+    if not parts.have("speech"):
+        return "не ставили — justday parts add speech"
     cfg = config.load()
     tts = TTS(cfg["tts"])
     phrase = "Джарвис, открой браузер и найди видео про раст."
@@ -289,7 +304,7 @@ def screenshot(all_screens: bool = False, full: bool = False) -> dict:
             "to_screen": "screen_x = origin_x + image_x / scale; screen_y = origin_y + image_y / scale"}
 
 
-TESTS = {"daemon": t_daemon, "mic": t_mic, "tts": t_tts, "stt": t_stt, "llm": t_llm, "mcp": t_mcp,
+TESTS = {"daemon": t_daemon, "parts": t_parts, "mic": t_mic, "tts": t_tts, "stt": t_stt, "llm": t_llm, "mcp": t_mcp,
          "desktop": t_desktop, "browser": t_browser, "files": t_files, "claude": t_claude, "memory": t_memory,
          "hotkey": t_hotkey, "local_llm": t_local_llm, "mail": t_mail, "software": t_software}
 
@@ -481,6 +496,10 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("voiceprint", help="personal voice profile: status | enroll | record KIND INDEX SECONDS | finish | reset | mode off|wake|always")
     sp.add_argument("action", choices=["status", "enroll", "record", "finish", "reset", "mode"])
     sp.add_argument("args", nargs="*")
+    sp = sub.add_parser("parts", help="необязательные части окружения (речь, голос, CUDA): "
+                                     "`justday parts` показывает, что стоит; add/remove доставляет и убирает")
+    sp.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove"])
+    sp.add_argument("names", nargs="*", help="speech | voice | cuda")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -525,6 +544,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0 if ok else 1)
     elif a.cmd == "test":
         sys.exit(0 if _check(a.component, TESTS[a.component]) else 1)
+    elif a.cmd == "parts":
+        sys.exit(_parts_cmd(a.action, a.names))
     elif a.cmd == "memory":
         from .brain import BRAIN_DIR
 
@@ -805,7 +826,12 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Обновляю: {st['behind']} изменений\n  " + "\n  ".join(st["changes"]))
         if subprocess.run(["git", "-C", str(config.REPO_DIR), "pull", "--ff-only", "--quiet"]).returncode != 0:
             sys.exit("git pull не удался")
-        env = {**os.environ, "JUSTDAY_SETUP": "0"}
+        from . import parts
+
+        # Набор частей при обновлении не меняется и вопросов не задаёт: иначе обновление
+        # молча снесло бы распознавание речи или, наоборот, докачало гигабайты без спроса.
+        env = {**os.environ, "JUSTDAY_SETUP": "0", "JUSTDAY_YES": "1",
+               "JUSTDAY_PARTS": ",".join(parts.installed()) or "-"}
         sys.exit(subprocess.run([str(config.REPO_DIR / "install.sh")], env=env).returncode)
     elif a.cmd == "calendar":
         from . import calendar_lane
@@ -1116,6 +1142,42 @@ def _persona_cmd(args: list[str]) -> None:
     p = config.load()["persona"]
     _print({"character": p["character"], "swearing": p["swearing"], "live_speech": p["live_speech"],
             "address_as": config.load()["user"]["address_as"]})
+
+
+def _parts_cmd(action: str, names: list[str]) -> int:
+    """Необязательные части окружения: посмотреть, доставить, убрать."""
+    from . import parts
+
+    if action == "list":
+        print("Части JustDay\n")
+        for name, part in parts.PARTS.items():
+            here = parts.have(name)
+            mark = "✓" if here else "·"
+            print(f"  {mark} {name:<8} {part.size:>8}  {part.what}")
+            if not here:
+                print(f"    {'':<8} {'':>8}  без неё: {part.without}")
+        rest = [n for n in parts.suggested() if not parts.have(n)]
+        print()
+        if rest:
+            print(f"  Доставить: justday parts add {' '.join(rest)}")
+        if not parts.gpu() and parts.have("cuda"):
+            print("  Видеокарты NVIDIA тут нет — часть cuda занимает место впустую: justday parts remove cuda")
+        return 0
+
+    if not names:
+        print(f"что именно {action}? {' | '.join(parts.PARTS)}")
+        return 2
+    add_, drop = (tuple(names), ()) if action == "add" else ((), tuple(names))
+    ok, cmd = parts.sync(add_, drop, dry=True)
+    if not ok:
+        print(cmd)
+        return 2
+    print(f"{cmd}\n  скачивание может занять минуты — размер частей смотрите в `justday parts`")
+    ok, out = parts.sync(add_, drop, show=True)      # шкалу uv лучше видеть своими глазами
+    print(out or ("готово" if ok else "не получилось"))
+    if ok:
+        subprocess.run(["systemctl", "--user", "restart", "justday.service"], capture_output=True)
+    return 0 if ok else 1
 
 
 def _config_cmd(a) -> None:

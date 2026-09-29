@@ -31,7 +31,9 @@
 curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | bash
 ```
 
-The installer shows one line per step, installs what is missing (asking for your password once, after showing what it is for) and then runs a short setup: language, name, model (it helps you sign in to Claude or pick a free one), **voice or text only**, the voice, the keys, mail and weather. Everything can be changed later in the island's settings.
+The installer asks what to install, shows one line per step, installs what is missing (asking for your password once, after showing what it is for) and then runs a short setup: language, name, model (it helps you sign in to Claude or pick a free one), **voice or text only**, the voice, the keys, mail and weather. Everything can be changed later in the island's settings.
+
+**Only what you need gets installed.** Speech recognition (550 MB), the neural voice (750 MB) and NVIDIA acceleration (2.2 GB) are a choice: with no microphone and no headphones the 250 MB core is enough and commands are typed. Without questions: `./install.sh --text-only`, `--no-gpu`, `--everything`, `--parts speech`. Add a part later with `justday parts add speech`, see what is there with `justday parts`. Long steps show how much has been downloaded so far, `--debug` prints everything the tools do, and Ctrl+C breaks nothing: the next run continues from the same place.
 
 | You need | For |
 |---|---|

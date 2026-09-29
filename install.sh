@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
-# JustDay installer — KDE Plasma 6 (Wayland) + Claude Code.
-# Usage:  ./install.sh              (from a clone)
+# JustDay installer — KDE Plasma 6 (Wayland) + Claude Code, and as much as possible everywhere else.
+# Usage:  ./install.sh [options]        (from a clone)
 #         curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | bash
-# Re-running is safe (idempotent). Everything is user-level except missing system packages, for which
-# sudo is asked once, with the list shown first.
 #
-# One line per step. What the tools themselves print goes to ~/.local/state/justday/install.log and is
-# shown only when a step fails.
+# Options (all optional — without them the installer asks):
+#   --everything        speech recognition, the neural voice and NVIDIA acceleration
+#   --no-gpu            the same without the 2.2 GB of CUDA libraries
+#   --text-only         no microphone, no voice: 250 MB, commands typed
+#   --parts a,b,c       exactly these: speech, voice, cuda
+#   --yes               do not ask anything, take what fits this computer
+#   --debug             show what every tool prints, as it prints it
+#   --no-sudo           never ask for the admin password
+#   --help
+# Environment: JUSTDAY_PARTS, JUSTDAY_DEBUG=1, JUSTDAY_NO_SUDO=1, JUSTDAY_YES=1, JUSTDAY_HOTKEY.
+#
+# Re-running is safe (idempotent) and picks up where an interrupted run stopped. Everything is
+# user-level except missing system packages, for which sudo is asked once, with the list shown first.
+#
+# One line per step, with what it is doing now next to it. The full output of every tool goes to
+# ~/.local/state/justday/install.log, and with --debug also to the screen.
 set -euo pipefail
 
 REPO_URL="${JUSTDAY_REPO_URL:-https://github.com/0nigiris/JustDay.git}"
@@ -16,8 +28,28 @@ mkdir -p "$STATE_DIR"
 LOG="$STATE_DIR/install.log"
 : > "$LOG"
 NOTE=$(mktemp) WARNS=$(mktemp)
-trap 'rm -f "$NOTE" "$WARNS"; if [[ -t 1 ]]; then printf "\e[?25h"; fi' EXIT
 STARTED=$SECONDS
+
+# ───────────── what was asked for ─────────────
+DEBUG=${JUSTDAY_DEBUG:-0}
+ASK=1; [[ "${JUSTDAY_YES:-}" == 1 ]] && ASK=0
+WANT="${JUSTDAY_PARTS-}"       # пусто = ещё не выбрано; "-" = ничего необязательного
+usage() { sed -n '2,20p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'; exit 0; }
+while (($#)); do
+  case "$1" in
+    --everything|--all|--full) WANT="speech,voice,cuda"; ASK=0 ;;
+    --no-gpu|--cpu)           WANT="speech,voice"; ASK=0 ;;
+    --text-only|--minimal)    WANT="-"; ASK=0 ;;
+    --parts)                  WANT="${2:-}"; ASK=0; shift ;;
+    --parts=*)                WANT="${1#*=}"; ASK=0 ;;
+    --yes|-y)                 ASK=0 ;;
+    --debug|-d)               DEBUG=1 ;;
+    --no-sudo)                JUSTDAY_NO_SUDO=1 ;;
+    --help|-h)                usage ;;
+    *) printf 'unknown option: %s (--help)\n' "$1" >&2; exit 2 ;;
+  esac
+  shift
+done
 
 # ───────────── how it looks ─────────────
 TTY=0; [[ -t 1 ]] && TTY=1
@@ -42,28 +74,76 @@ flush_warns() {
   while IFS= read -r w; do [[ -n "$w" ]] && printf '     %s!%s %s\n' "$Y" "$N" "$w"; done < "$WARNS"
   : > "$WARNS"
 }
+hsize() { # hsize 1400 → «1.4 ГБ» / «320 МБ»
+  local m=$1
+  if ((m >= 1024)); then printf '%d.%d %s' $((m / 1024)) $(((m % 1024) * 10 / 1024)) "$(t ГБ GB)"
+  else printf '%d %s' "$m" "$(t МБ MB)"; fi
+}
+mib() { hsize "$(du -sm "$1" 2>/dev/null | awk '{print $1+0}')"; }   # сколько уже лежит на диске
 
-# step "Title" function args… — the function's output goes to the log; a spinner (and, after a few
-# seconds, the time) meanwhile; ✓ with its note, or ✗ with the end of the log and where the rest is.
+# Пока шаг идёт, рядом с ним пишется, чем он занят: сначала PROGRESS (если шаг её задал),
+# иначе последняя строка журнала. Молчащий спиннер на двадцать минут — это и была та жалоба,
+# после которой человек нажал Ctrl+C, решив, что всё повисло.
+PROGRESS=""     # имя функции, печатающей одну короткую строку
+SIZE_HINT=""    # «~1.5 ГБ» — чтобы долгое скачивание не выглядело зависанием
+last_log_line() { tail -n 60 "$LOG" 2>/dev/null | tr -d '\r' | grep -v '^[[:space:]]*$' | grep -v '^── ' | tail -n 1; }
+status_line() {
+  local line=''
+  [[ -n "$PROGRESS" ]] && line=$("$PROGRESS" 2>/dev/null || true)
+  [[ -z "$line" ]] && line=$(last_log_line)
+  line=${line//$'\t'/ }
+  printf '%s' "${line:0:56}"
+}
+
+# Прервали на полпути — надо сказать, что уже сделанное никуда не пропало.
+JOB=""
+on_int() {
+  trap - INT TERM
+  [[ -n "$JOB" ]] && kill "$JOB" 2>/dev/null || true
+  [[ $TTY == 1 ]] && printf '\e[?25h\r\e[K'
+  printf '\n  %s%s%s\n' "$Y" "$(t 'Прервано.' 'Interrupted.')" "$N"
+  printf '  %s%s%s\n' "$D" "$(t 'Скачанное сохранено: запустите установку ещё раз — она продолжит с этого места.' \
+    'What was downloaded is kept: run the installer again and it continues from here.')" "$N"
+  printf '  %s%s %s%s\n\n' "$D" "$(t 'Журнал:' 'Log:')" "$LOG" "$N"
+  exit 130
+}
+trap on_int INT TERM
+trap 'rm -f "$NOTE" "$WARNS"; if [[ -t 1 ]]; then printf "\e[?25h"; fi' EXIT
+
+# step "Title" function args… — the function's output goes to the log (and, with --debug, to the screen);
+# meanwhile the line shows a spinner, the elapsed time and what the step is doing right now.
+# ✓ with its note, or ✗ with the end of the log and where the rest is.
 # It runs as a background job even without a terminal: that is what keeps `set -e` alive inside it.
 step() {
   local title=$1; shift
   : > "$NOTE"
   printf '\n── %s\n' "$title" >> "$LOG"
   local rc=0 start=$SECONDS i=0
-  "$@" >> "$LOG" 2>&1 &
-  local pid=$!
-  if [[ $TTY == 1 ]]; then
-    printf '\e[?25l'
-    while kill -0 "$pid" 2>/dev/null; do
-      local el=$((SECONDS - start)) extra=''
-      ((el >= 4)) && extra="  $(clock "$el")"
-      printf '\r\e[K  %s%s%s  %s%s%s%s' "$C" "${SPIN[i++ % 10]}" "$N" "$title" "$D" "$extra" "$N"
-      sleep 0.08
-    done
-    printf '\e[?25h'
+  if [[ $DEBUG == 1 ]]; then
+    printf '  %s·%s  %s%s%s\n' "$C" "$N" "$(pad "$title" 28)" "$D" "${SIZE_HINT:-}$N"
+    "$@" > >(tee -a "$LOG" | sed -u "s/^/       ${D}/; s/\$/${N}/") 2>&1 || rc=$?
+    wait 2>/dev/null || true      # дать tee дописать, иначе строки шага перемешаются со следующим
+  else
+    "$@" >> "$LOG" 2>&1 &
+    JOB=$!
+    if [[ $TTY == 1 ]]; then
+      printf '\e[?25l'
+      local live=''
+      while kill -0 "$JOB" 2>/dev/null; do
+        ((i % 12 == 0)) && live=$(status_line)          # раз в секунду: du и tail не бесплатны
+        local el=$((SECONDS - start)) tail_bits=''
+        ((el >= 3)) && tail_bits="$(clock "$el")"
+        [[ -n "$live" ]] && tail_bits="${live}${tail_bits:+  ·  $tail_bits}"
+        [[ -z "$tail_bits" && -n "$SIZE_HINT" ]] && tail_bits="$SIZE_HINT"
+        printf '\r\e[K  %s%s%s  %s%s%s%s' "$C" "${SPIN[i++ % 10]}" "$N" "$(pad "$title" 28)" "$D" "$tail_bits" "$N"
+        sleep 0.08
+      done
+      printf '\e[?25h'
+    fi
+    wait "$JOB" || rc=$?
+    JOB=""
   fi
-  wait "$pid" || rc=$?
+  PROGRESS=""; SIZE_HINT=""
   if ((rc == 0)); then
     row '✓' "$G" "$title" "$(cat "$NOTE")"
     flush_warns
@@ -72,8 +152,9 @@ step() {
     flush_warns
     printf '\n'
     tail -n 12 "$LOG" | sed "s/^/     ${D}/; s/\$/${N}/"
-    printf '\n  %s %s\n  %s %s\n\n' "$(t 'Весь журнал:' 'Full log:')" "$LOG" \
-      "$(t 'Установку можно запустить ещё раз — она продолжит с того же места.' 'Running the installer again picks up where it stopped.')" ''
+    printf '\n  %s %s\n  %s\n  %s\n\n' "$(t 'Весь журнал:' 'Full log:')" "$LOG" \
+      "$(t 'Установку можно запустить ещё раз — она продолжит с того же места.' 'Running the installer again picks up where it stopped.')" \
+      "$(t 'Подробный разбор:' 'To see everything as it happens:') ${B}./install.sh --debug${N}"
     exit 1
   fi
 }
@@ -123,15 +204,100 @@ get_code() {
 }
 step "$(t 'Программа' 'Program')" get_code
 
+# ───────────── what to install ─────────────
+# Полный набор — около 3.5 ГБ, и почти всё это распознавание речи, нейросетевой голос и библиотеки
+# CUDA. Человеку без микрофона и наушников они не нужны вовсе, без видеокарты NVIDIA — половина.
+# Поэтому спрашиваем один раз, а доставить остальное можно потом: justday parts add speech.
+SITE="$APP_DIR/.venv/lib/python3.12/site-packages"
+have_part() {
+  case $1 in
+    speech) [[ -d "$SITE/faster_whisper" ]] ;;
+    voice)  [[ -d "$SITE/torch" ]] ;;
+    cuda)   [[ -d "$SITE/nvidia" ]] ;;
+    *) false ;;
+  esac
+}
+here=()
+for part in speech voice cuda; do have_part "$part" && here+=("$part"); done
+
+if [[ -z "$WANT" ]]; then                       # ни флага, ни переменной: спросить или решить самим
+  guess="speech,voice"; [[ -n "$gpu" ]] && guess="speech,voice,cuda"
+  ((${#here[@]})) && guess=$(IFS=,; printf '%s' "${here[*]}")   # уже что-то стоит — не отбирать
+  if ((ASK == 1)) && { : </dev/tty; } 2>/dev/null; then
+    printf '\n  %s%s%s\n\n' "$B" "$(t 'Что установить' 'What to install')" "$N"
+    def=1; [[ -n "$gpu" ]] || def=2
+    printf '   %s1%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Всё' 'Everything')" 22)" "$D" "$(t '~3.5 ГБ · речь, голос, ускорение на видеокарте' '~3.5 GB · speech, voice, GPU acceleration')$N"
+    printf '   %s2%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Без видеокарты' 'Without the GPU')" 22)" "$D" "$(t '~1.3 ГБ · речь и голос, распознавание на процессоре' '~1.3 GB · speech and voice, recognition on the CPU')$N"
+    printf '   %s3%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Только текст' 'Text only')" 22)" "$D" "$(t '~250 МБ · без микрофона и голоса, команды с клавиатуры' '~250 MB · no microphone, no voice: commands are typed')$N"
+    printf '   %s4%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Речь без голоса' 'Speech, no voice')" 22)" "$D" "$(t '~550 МБ · слышит вас, отвечает текстом и espeak-ng' '~550 MB · hears you, answers in text and espeak-ng')$N"
+    if ((${#here[@]})); then
+      printf '\n  %s%s %s%s\n' "$D" "$(t 'Уже стоит:' 'Already installed:')" "${here[*]}" "$N"
+    fi
+    printf '  %s%s%s\n' "$D" "$(t "Enter — вариант $def · доставить потом: justday parts add speech" "Enter — option $def · add later with: justday parts add speech")" "$N"
+    printf '  %s›%s ' "$C" "$N"
+    read -r pick </dev/tty || pick=""
+    printf '\e[1A\e[K'
+    case "${pick:-$def}" in
+      1) WANT="speech,voice,cuda" ;;
+      2) WANT="speech,voice" ;;
+      3) WANT="-" ;;
+      4) WANT="speech" ;;
+      *) WANT="$guess" ;;
+    esac
+  else
+    WANT="$guess"
+  fi
+fi
+
+SPEECH=0 VOICE=0 CUDA=0
+[[ ",$WANT," == *,speech,* ]] && SPEECH=1
+[[ ",$WANT," == *,voice,* ]] && VOICE=1
+[[ ",$WANT," == *,cuda,* ]] && CUDA=1
+EXTRAS=()
+((SPEECH)) && EXTRAS+=(--extra speech)
+((VOICE)) && EXTRAS+=(--extra voice)
+((CUDA)) && EXTRAS+=(--extra cuda)
+PY_MB=$((250 + SPEECH * 550 + VOICE * 750 + CUDA * 2200))
+chosen=$(t 'ядро' 'core')
+((SPEECH)) && chosen="$chosen · $(t 'речь' 'speech')"
+((VOICE)) && chosen="$chosen · $(t 'голос' 'voice')"
+((CUDA)) && chosen="$chosen · $(t 'видеокарта' 'GPU')"
+if ((CUDA)) && [[ -z "$gpu" ]]; then
+  warn "$(t 'Видеокарты NVIDIA не видно, а библиотеки CUDA выбраны: 2.2 ГБ пролежат без дела.' 'No NVIDIA GPU here, but the CUDA libraries are selected: 2.2 GB will sit unused.')"
+fi
+row '✓' "$G" "$(t 'Набор' 'Selection')" "$chosen · ~$(hsize $PY_MB)"
+flush_warns
+
+# Места должно хватить до начала скачивания, а не после половины: гигабайты торча и CUDA
+# кончаются на диске именно в середине длинного шага.
+free_mb=$(df -Pm "$HOME" 2>/dev/null | awk 'NR==2{print $4+0}')
+if ((free_mb > 0)); then
+  if ((free_mb < PY_MB + 300)); then
+    row '!' "$Y" "$(t 'Место на диске' 'Disk space')" "$(t 'свободно' 'free') $(hsize "$free_mb") · $(t 'нужно около' 'about') $(hsize $((PY_MB + 300)))"
+    hint=$(t 'Меньший набор: ./install.sh --no-gpu (без CUDA) или --text-only (250 МБ).' \
+             'A smaller selection: ./install.sh --no-gpu (no CUDA) or --text-only (250 MB).')
+    if ((free_mb < 400)); then
+      printf '     %s%s%s\n\n' "$R" "$(t 'Столько не поместится — установка остановлена, чтобы не оборваться на середине.' \
+        'That will not fit — stopping now instead of breaking halfway.')" "$N"
+      printf '  %s%s%s\n\n' "$D" "$hint" "$N"
+      exit 1
+    fi
+    printf '     %s%s%s\n' "$D" "$hint" "$N"
+  fi
+fi
+
 # ───────────── system packages (only what is missing) ─────────────
 MISSING=()   # то, что не удалось поставить: сводка в конце, а установка идёт дальше
 need=()
-for pair in pw-record:pipewire-utils playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
+for pair in playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
             fd:fd-find rg:ripgrep jq:jq spectacle:spectacle gtk-launch:gtk3 notify-send:libnotify \
-            espeak-ng:espeak-ng git:git kitty:kitty magick:ImageMagick zstd:zstd secret-tool:libsecret qdbus-qt6:qt6-qttools \
+            git:git kitty:kitty magick:ImageMagick zstd:zstd secret-tool:libsecret qdbus-qt6:qt6-qttools \
             ffmpeg:ffmpeg; do
   command -v "${pair%%:*}" >/dev/null || need+=("${pair#*:}")
 done
+# Микрофон и голос — только если их выбрали: в текстовом наборе просить пароль за espeak-ng незачем.
+((SPEECH)) && { command -v pw-record >/dev/null || need+=(pipewire-utils); }
+((SPEECH || VOICE)) && { command -v espeak-ng >/dev/null || need+=(espeak-ng); }
 # clipboard: wl-clipboard on Wayland, xclip on X11
 if [[ $WAYLAND == 1 ]]; then command -v wl-copy >/dev/null || need+=(wl-clipboard)
 else command -v xclip >/dev/null || need+=(xclip); fi
@@ -260,20 +426,36 @@ else
 fi
 
 # ───────────── python env and models ─────────────
+# Самый долгий шаг во всей установке, и раньше он выглядел как зависший спиннер: рядом с ним
+# теперь видно, сколько уже скачано и сколько всего ожидается.
+venv_grew() {
+  local m; m=$(du -sm "$APP_DIR/.venv" 2>/dev/null | awk '{print $1+0}')
+  ((m > 0)) || return 0
+  printf '%s %s ~%s' "$(hsize "$m")" "$(t из of)" "$(hsize $PY_MB)"
+}
 python_env() {
   local s=$SECONDS
-  (cd "$APP_DIR" && uv sync --python 3.12)
+  (cd "$APP_DIR" && uv sync --python 3.12 "${EXTRAS[@]}")
   mkdir -p "$HOME/.local/bin"
   ln -sf "$APP_DIR/.venv/bin/justday" "$HOME/.local/bin/justday"
-  if ((SECONDS - s < 3)); then note "$(t 'уже на месте' 'up to date')"; else note "$(t 'за' 'in') $(clock $((SECONDS - s)))"; fi
+  local where; where=$(mib "$APP_DIR/.venv")
+  if ((SECONDS - s < 3)); then note "$(t 'уже на месте' 'up to date') · $where"
+  else note "$(t 'за' 'in') $(clock $((SECONDS - s))) · $where"; fi
 }
-step "$(t 'Распознавание и голос' 'Speech and voice')" python_env
+PROGRESS=venv_grew
+SIZE_HINT="~$(hsize $PY_MB), $(t 'на медленном интернете это минуты' 'minutes on a slow connection')"
+if ((SPEECH || VOICE)); then env_title=$(t 'Распознавание и голос' 'Speech and voice'); else env_title=$(t 'Ассистент' 'The assistant'); fi
+step "$env_title" python_env
 
-models() {
-  "$APP_DIR/.venv/bin/python" -c 'from justday.audio import voice_activity_model; voice_activity_model()'
-  note "$(t 'паузы в речи и имя ассистента' 'pauses in speech, the assistant name')"
-}
-step "$(t 'Модели' 'Models')" models
+if ((SPEECH)); then
+  models() {
+    "$APP_DIR/.venv/bin/python" -c 'from justday.audio import voice_activity_model; voice_activity_model()'
+    note "$(t 'паузы в речи и имя ассистента' 'pauses in speech, the assistant name')"
+  }
+  step "$(t 'Модели' 'Models')" models
+else
+  row '•' "$C" "$(t 'Модели' 'Models')" "$(t 'не нужны: распознавание речи не ставили' 'not needed: speech recognition was not installed')"
+fi
 
 # ───────────── config ─────────────
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/justday"
@@ -285,6 +467,13 @@ settings() {
     local mic
     mic=$(pactl list short sources 2>/dev/null | awk '{print $2}' | grep -v monitor | grep -viE 'virtual|pwsp|easyeffects' | grep -i usb | head -1 || true)
     sed "s|^input = \"\"|input = \"${mic}\"|" "$APP_DIR/config.example.toml" > "$CONF_DIR/config.toml"
+    # Настройки под выбранный набор: без распознавания речи кнопка открывает поле ввода,
+    # а не запись; без нейросетевого голоса отвечает espeak-ng, а в текстовом наборе — молча.
+    ((SPEECH)) || sed -i 's/^microphone = true/microphone = false/' "$CONF_DIR/config.toml"
+    if ((VOICE == 0)); then
+      if ((SPEECH)); then sed -i 's/^engine = "silero"/engine = "espeak"/' "$CONF_DIR/config.toml"
+      else sed -i 's/^engine = "silero"/engine = "none"/' "$CONF_DIR/config.toml"; fi
+    fi
     note "$(t 'созданы' 'created')${mic:+ · $(t 'микрофон' 'microphone') USB}"
   else
     note "$(t 'ваши, без изменений' 'yours, unchanged')"
@@ -426,7 +615,13 @@ if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true'; then
   printf '  %s%s%s\n  %s\n\n' "$B" "$(t 'Остался один шаг: войдите в Claude.' 'One step left: sign in to Claude.')" "$N" \
     "$(t 'Наберите' 'Type') ${B}claude${N} $(t 'и в нём' 'and in it') ${B}/login${N}."
 fi
-printf '  %s %s%s%s %s\n\n' "$(t 'Нажмите' 'Press')" "$B" "$talk" "$N" "$(t 'и скажите «Привет».' 'and say "Hi".')"
+if ((SPEECH)); then
+  printf '  %s %s%s%s %s\n\n' "$(t 'Нажмите' 'Press')" "$B" "$talk" "$N" "$(t 'и скажите «Привет».' 'and say "Hi".')"
+else
+  printf '  %s %s%s%s %s\n\n' "$(t 'Нажмите' 'Press')" "$B" "Meta+K" "$N" \
+    "$(t 'и напишите «Привет» — распознавания речи в этом наборе нет.' 'and type "Hi" — this selection has no speech recognition.')"
+fi
 printf '  %s%s%s\n' "$C" "$(pad 'justday setup' 18)" "$N$D$(t 'модель, голос, микрофон, почта' 'model, voice, microphone, mail')$N"
+printf '  %s%s%s\n' "$C" "$(pad 'justday parts' 18)" "$N$D$(t 'доставить речь, голос, ускорение NVIDIA' 'add speech, voice, NVIDIA acceleration')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday doctor' 18)" "$N$D$(t 'проверить, что всё работает' 'check that everything works')$N"
 printf '  %s%s%s\n\n' "$C" "$(pad "$(t 'Руководство' 'Manual')" 18)" "$N${D}https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md$N"

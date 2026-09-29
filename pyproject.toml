@@ -5,18 +5,29 @@ description = "JustDay — voice front-end that turns Claude Code into a persona
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "GPL-3.0-or-later"
+# Ядро: мозг, календарь, счёт. ~250 МБ — столько ставится всегда.
 dependencies = [
     "claude-agent-sdk>=0.2.150",
-    "faster-whisper>=1.2.1",
-    "sounddevice>=0.5",
     "numpy>=2.0",
-    "onnxruntime>=1.20",
-    "openwakeword>=0.6.0",
-    "torch>=2.8",
-    "nvidia-cublas-cu12",
-    "nvidia-cudnn-cu12>=9,<10",
     "icalendar>=6",
     "recurring-ical-events>=3",
+]
+
+# Необязательное. Речь и голос — это гигабайты, и они нужны не всем: без микрофона
+# ассистенту диктовать нечего, а без наушников незачем говорить вслух. Установщик
+# спрашивает, что ставить, и `justday parts add speech` доносит остальное потом.
+[project.optional-dependencies]
+speech = [           # распознавание речи и имя ассистента — ~550 МБ
+    "faster-whisper>=1.2.1",
+    "onnxruntime>=1.20",
+    "openwakeword>=0.6.0",
+]
+voice = [            # нейросетевой голос Silero — ~750 МБ (без него говорит espeak-ng)
+    "torch>=2.8",
+]
+cuda = [             # распознавание речи на видеокарте NVIDIA — ~2.2 ГБ
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12>=9,<10",
 ]
 
 [project.scripts]

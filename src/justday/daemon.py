@@ -39,6 +39,7 @@ from . import (
     numerals,
     offline,
     palette,
+    parts,
     reminders,
     scenes,
     voiceprint,
@@ -473,7 +474,10 @@ class Daemon:
                     self._listen_cancel.set()
 
     def mic_on(self) -> bool:
-        return self.cfg["audio"].get("microphone", True)
+        """Есть ли с чего слушать. Без установленного распознавания речи микрофон бесполезен:
+        кнопка «говорить» открывает поле ввода, а не запись, — иначе первое же слово упало бы
+        в ImportError. Доставить: justday parts add speech."""
+        return self.cfg["audio"].get("microphone", True) and parts.have("speech")
 
     def listen(self, followup: bool = False, prefill=None) -> bool:
         if not self.mic_on():  # no microphone: typed answers only (the island shows a reply field)
@@ -2246,6 +2250,11 @@ class Daemon:
         # Warm up models in the background so the first command is fast.
         if self.mic_on():  # keyboard-only setups never load speech recognition
             loop.run_in_executor(None, self.stt.load)
+        elif self.cfg["audio"].get("microphone", True) and not parts.have("speech"):
+            # Микрофон в настройках есть, а распознавания в окружении нет: молча превращаться
+            # в «кнопка ничего не делает» нельзя — так и выглядела бы поломка.
+            log.warning("распознавание речи не установлено: %s", parts.missing_note("speech"))
+            self.notify(parts.missing_note("speech"), icon="audio-input-microphone")
         loop.run_in_executor(None, self.tts.load)
         await self.brain.start()
         if await self.music.attach():  # music that kept playing through a daemon restart

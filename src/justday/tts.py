@@ -106,6 +106,7 @@ class TTS:
         self.cfg = cfg
         self.rate = int(cfg["sample_rate"])
         self._model = None
+        self._silero_gone = False   # выяснилось, что нейросетевого голоса в окружении нет
         self._lock = threading.Lock()
 
     @property
@@ -127,7 +128,11 @@ class TTS:
 
     def load(self) -> None:
         if self.cfg["engine"] == "silero":
-            self._silero()
+            try:
+                self._silero()
+            except ImportError:   # часть «voice» не установлена — говорить будет espeak-ng
+                log.warning("нейросетевой голос не установлен, отвечаю голосом espeak-ng "
+                            "(доставить: justday parts add voice)")
 
     NEURAL_RATE = 24000
     SOCKET = config.RUNTIME_DIR / "justday-voice.sock"
@@ -247,13 +252,16 @@ class TTS:
         """Return int16 PCM at self.rate for one already-normalized sentence."""
         engine = self.cfg["engine"]
         lang = self.cfg.get("lang", "ru")
-        if engine == "silero" and lang == "ru":  # Silero voices here are Russian-only
+        if engine == "silero" and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
             try:
                 with self._lock:
                     wave = self._silero().apply_tts(
                         text=sentence, speaker=self.cfg["speaker"], sample_rate=self.rate, put_accent=True, put_yo=True
                     )
                 return timestretch((wave.numpy() * 32767).astype(np.int16), self.speed, self.rate)
+            except ImportError:   # часть «voice» не установлена: спрашивать об этом каждую фразу незачем
+                self._silero_gone = True
+                log.warning("нейросетевого голоса нет, говорю espeak-ng (justday parts add voice)")
             except Exception:
                 log.exception("silero failed on %r, using espeak", sentence)
         if engine == "none":
