@@ -11,7 +11,9 @@
 import QtQuick
 import QtQuick.Layouts
 
-View {
+// Корень — Item, а не View: показом и растворением заведует держатель в shell.qml, а у View своя
+// прозрачность, завязанная на его собственный `shown`. Вложенный View остался бы невидимым.
+Item {
     id: tv
     implicitWidth: 860
     implicitHeight: 560
