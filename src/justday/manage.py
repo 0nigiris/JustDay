@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
@@ -214,6 +215,107 @@ def _hotkey_id(name: str) -> str:
     return "net.local.justday.desktop" if name == "talk" else f"net.local.justday-{name}.desktop"
 
 
+# ───────────────────── клавиша, которую уже кто-то занял ─────────────────────
+#
+# Записать сочетание в kglobalshortcutsrc мало. Клавишу держит живой KWin, и если она уже за кем-то
+# числится — за KRunner (Alt+Space), за выбиралкой эмодзи (Meta+.), за Klipper (Meta+V), — нажатие
+# уходит ему, а наша запись лежит мёртвой. Хуже того, часть этих привязок вообще не описана в
+# файле: они встроены в сами программы, и искать их в настройках бесполезно.
+#
+# Поэтому спрашиваем не файл, а KWin: кто держит вот эту клавишу. И у него же просим отдать —
+# убирая из его списка ровно одну клавишу, не трогая остальные (у KRunner их три, и Alt+F2 должен
+# остаться). Прежнее значение KDE помнит как «по умолчанию», так что вернуть его можно кнопкой
+# «По умолчанию» в системных настройках.
+
+QT_MODS = {"meta": 0x10000000, "super": 0x10000000, "win": 0x10000000,
+           "ctrl": 0x04000000, "control": 0x04000000, "alt": 0x08000000, "shift": 0x02000000}
+QT_KEYS = {"space": 0x20, "tab": 0x01000001, "backspace": 0x01000003, "return": 0x01000004,
+           "enter": 0x01000005, "esc": 0x01000000, "escape": 0x01000000, "insert": 0x01000006,
+           "delete": 0x01000007, "home": 0x01000010, "end": 0x01000011, "pageup": 0x01000016,
+           "pagedown": 0x01000017, "left": 0x01000012, "up": 0x01000013, "right": 0x01000014,
+           "down": 0x01000015, "print": 0x01000009, "menu": 0x01000055}
+
+
+def key_code(combo: str) -> int | None:
+    """«Meta+Shift+J» → число, каким эту клавишу знает Qt. Непонятное сочетание — None."""
+    code = 0
+    parts = [p for p in str(combo or "").replace(" ", "").split("+") if p or combo.endswith("+")]
+    # «Meta++» — это Meta и знак «плюс»: пустая часть в конце значит именно его.
+    if combo.endswith("+") and len(parts) < len(combo.split("+")):
+        parts.append("+")
+    if not parts:
+        return None
+    *mods, key = parts
+    for mod in mods:
+        if (bit := QT_MODS.get(mod.lower())) is None:
+            return None
+        code |= bit
+    key = key.lower()
+    if key in QT_KEYS:
+        return code | QT_KEYS[key]
+    if len(key) == 1:
+        return code | ord(key.upper())
+    if key.startswith("f") and key[1:].isdigit() and 1 <= int(key[1:]) <= 35:
+        return code | (0x01000030 + int(key[1:]) - 1)
+    return None
+
+
+def _accel(method: str, *args: str) -> str:
+    """Вызов к kglobalaccel. Его держит KWin, и разговаривать с ним можно только по шине."""
+    cmd = ["gdbus", "call", "--session", "--dest", "org.kde.kglobalaccel",
+           "--object-path", "/kglobalaccel", "--method", f"org.kde.KGlobalAccel.{method}", *args]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+def shortcut_owners(code: int) -> list[tuple]:
+    """Кто сейчас держит эту клавишу: список (action, friendly, component, …, keys, defaults)."""
+    import ast
+
+    out = _accel("getGlobalShortcutsByKey", str(code))
+    try:
+        got = ast.literal_eval(out)
+    except (ValueError, SyntaxError):
+        return []
+    return list(got[0]) if got and isinstance(got[0], list) else []
+
+
+def free_key(combo: str, keep: str) -> list[str]:
+    """Отобрать клавишу у всех, кроме `keep`. Возвращает, у кого отобрали."""
+    code = key_code(combo)
+    if code is None:
+        return []
+    taken = []
+    for owner in shortcut_owners(code):
+        action, friendly, component = owner[0], owner[1], owner[2]
+        if component == keep:
+            continue
+        rest = [k for k in owner[6] if k != code]
+        # Убираем одну клавишу, остальные оставляем: у KRunner их три, и Alt+F2 должен остаться.
+        keys = "@ai [" + ", ".join(str(k) for k in rest) + "]"
+        _accel("setShortcut", f"['{component}','{action}','{friendly}','{owner[3]}']", keys, "4")
+        taken.append(friendly or component)
+    return taken
+
+
+def claim_key(combo: str, component: str, friendly: str) -> None:
+    """Повесить клавишу на нашу запись живьём — иначе она сработает только после перезахода."""
+    code = key_code(combo)
+    if code is not None:
+        _accel("setShortcut", f"['{component}','_launch','{friendly}','{friendly}']",
+               f"@ai [{code}]", "4")
+
+
+def key_is_ours(combo: str, component: str) -> bool:
+    """Держим ли мы эту клавишу на самом деле. Единственная проверка, которой стоит верить:
+    записи в файле хватает ровно до первого соседа, который занял ту же клавишу."""
+    code = key_code(combo)
+    return code is not None and any(o[2] == component for o in shortcut_owners(code))
+
+
 def hotkeys() -> dict:
     """Что сейчас назначено. `extra` — вторая клавиша «говорить» (кнопка мыши)."""
     out = {}
@@ -226,10 +328,17 @@ def hotkeys() -> dict:
 
 
 def hotkey_list() -> list[dict]:
-    """Таблица для настроек: имя, подпись, что назначено, что было бы по умолчанию."""
+    """Таблица для настроек: имя, подпись, что назначено, что было бы по умолчанию и — главное —
+    держим ли мы эту клавишу на самом деле. Запись в файле ничего не значит, если её занял сосед."""
     now = hotkeys()
-    return [{"name": name, "label": label, "key": now.get(name, ""), "default": default}
-            for name, label, default in HOTKEYS]
+    out = []
+    for name, label, default in HOTKEYS:
+        key = now.get(name, "")
+        out.append({"name": name, "label": label, "key": key, "default": default,
+                    "live": bool(key) and key_is_ours(key, _hotkey_id(name)),
+                    "taken_by": [o[1] for o in shortcut_owners(key_code(key) or 0)
+                                 if o[2] != _hotkey_id(name)] if key else []})
+    return out
 
 
 def set_hotkeys(*args: str | None, **named: str | None) -> dict:
@@ -248,7 +357,37 @@ def set_hotkeys(*args: str | None, **named: str | None) -> dict:
     argv += ["--extra", given.get("extra", now.get("extra", ""))]
     script = config.REPO_DIR / "scripts" / "setup-hotkey.sh"
     p = subprocess.run([str(script), *argv], capture_output=True, text=True)
-    return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(), **hotkeys()}
+
+    # Скрипт написал файлы и создал записи. Теперь самое важное: убедиться, что клавиша
+    # действительно наша. Занята кем-то — отобрать и повесить заново, иначе привязка есть только
+    # на бумаге, а нажатие уходит соседу.
+    # Клавиша, которая уже наша, — не трогается вовсе. Это не экономия: у «говорить» их две
+    # (Meta+J и F19 с кнопки мыши), и переустановка одной стёрла бы вторую.
+    taken: dict[str, list[str]] = {}
+    live: dict[str, bool] = {}
+    # Скрипт снимает и вешает записи заново, и пока KWin это переваривает, он честно отвечает
+    # «клавиша ничья». Ждём, пока уляжется, а не спрашиваем сразу: иначе проверка соврёт про всё.
+    first = next(((n, given.get(n, now.get(n) or d), _hotkey_id(n))
+                  for n, _, d in HOTKEYS if given.get(n, now.get(n) or d)), None)
+    for _ in range(20):
+        if first is None or key_is_ours(first[1], first[2]):
+            break
+        time.sleep(0.25)
+
+    for name, label, default in HOTKEYS:
+        key = given.get(name, now.get(name) or default)
+        if not key:
+            continue
+        component = _hotkey_id(name)
+        if key_is_ours(key, component):
+            live[name] = True
+            continue
+        if (was := free_key(key, component)):
+            taken[key] = was
+        claim_key(key, component, f"JustDay: {label.lower()}")
+        live[name] = key_is_ours(key, component)
+    return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(),
+            "taken_from": taken, "live": live, **hotkeys()}
 
 
 def models() -> dict:

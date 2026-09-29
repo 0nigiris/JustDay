@@ -885,10 +885,20 @@ def main(argv: list[str] | None = None) -> None:
         from . import manage
 
         if a.action == "get":
-            _print(manage.hotkey_list())
+            for row in manage.hotkey_list():
+                mark = "✔" if row["live"] else ("·" if not row["key"] else "✘")
+                taken = f"  ← занято: {', '.join(row['taken_by'])}" if row["taken_by"] else ""
+                print(f"  {mark} {row['label']:<20} {row['key'] or '—'}{taken}")
         else:
             named = {name: getattr(a, f"key_{name}") for name, _, _ in manage.HOTKEYS}
-            _print(manage.set_hotkeys(extra=a.extra, **named))
+            got = manage.set_hotkeys(extra=a.extra, **named)
+            for key, was in got.get("taken_from", {}).items():
+                print(f"  отобрал {key} у: {', '.join(was)}")
+            for row in manage.hotkey_list():
+                if row["key"]:
+                    print(f"  {'✔' if row['live'] else '✘'} {row['label']:<20} {row['key']}")
+            if not all(r["live"] for r in manage.hotkey_list() if r["key"]):
+                print("\n  ✘ — клавишу держит кто-то другой; покажет кто: justday hotkey get")
             control("reload_settings", timeout=5)  # the island shows the keys in its hints
     elif a.cmd == "autostart":
         from . import manage
