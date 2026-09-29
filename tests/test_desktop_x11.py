@@ -53,6 +53,7 @@ def test_click_uses_xdotool_with_sync_and_button(monkeypatch):
 
     monkeypatch.setattr(desktop.subprocess, "run", run)
     monkeypatch.setattr(desktop, "_BACKEND", "x11")
+    monkeypatch.setattr("justday.face.session", lambda: "x11")
     monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/" + name)
     assert desktop.pointer(300, 420, button=3)["ok"]
     assert seen[0] == ["xdotool", "mousemove", "--sync", "300", "420", "click", "3"]
@@ -65,6 +66,7 @@ def test_keys_clears_modifiers(monkeypatch):
     monkeypatch.setattr(desktop.subprocess, "run",
                         lambda cmd, *a, **kw: (seen.append(cmd), subprocess.CompletedProcess(cmd, 0, stdout="", stderr=""))[1])
     monkeypatch.setattr(desktop, "_BACKEND", "x11")
+    monkeypatch.setattr("justday.face.session", lambda: "x11")
     monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/" + name)
     assert desktop.keys("ctrl+s")["ok"]
     assert seen[0] == ["xdotool", "key", "--clearmodifiers", "ctrl+s"]
@@ -72,10 +74,26 @@ def test_keys_clears_modifiers(monkeypatch):
 
 def test_on_wayland_the_click_explains_where_it_lives(monkeypatch):
     monkeypatch.setattr(desktop, "_BACKEND", "kwin")
+    monkeypatch.setattr("justday.face.session", lambda: "wayland")
     r = desktop.pointer(1, 1)
     assert not r["ok"] and "kwin-mcp" in r["error"]
 
 
 def test_with_nothing_available_it_says_so(monkeypatch):
     monkeypatch.setattr(desktop, "_BACKEND", "")
+    monkeypatch.setattr("justday.face.session", lambda: "")
     assert "xdotool" in desktop.keys("Return")["error"]
+
+
+def test_kde_on_x11_clicks_with_xdotool_not_a_refusal(monkeypatch):
+    """KDE бывает и на X11: там backend() отвечает «kwin» (скрипты KWin работают и в иксах), но
+    щёлкать надо через xdotool. Раньше эта команда отвечала «на Wayland щелчки идут через kwin-mcp»
+    — на машине, где никакого Wayland в этом сеансе и нет."""
+    seen = []
+    monkeypatch.setattr(desktop.subprocess, "run",
+                        lambda cmd, *a, **kw: (seen.append(cmd), subprocess.CompletedProcess(cmd, 0, stdout="", stderr=""))[1])
+    monkeypatch.setattr(desktop, "_BACKEND", "kwin")
+    monkeypatch.setattr("justday.face.session", lambda: "x11")
+    monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert desktop.pointer(5, 6)["ok"]
+    assert seen[0][0] == "xdotool"

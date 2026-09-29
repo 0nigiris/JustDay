@@ -1,0 +1,16 @@
+[Unit]
+# Лицо ассистента на экране: остров на Wayland, запасная полоска там, где острову нечем рисоваться.
+# Что именно — решает `justday ui` при каждом запуске, то есть при каждом входе в систему. Поэтому
+# на компьютере с двумя сеансами не нужно ничего переустанавливать, переключившись на другой.
+Description=JustDay on screen (island on Wayland, fallback panel elsewhere)
+PartOf=graphical-session.target
+After=graphical-session.target justday.service
+
+[Service]
+Type=simple
+ExecStart=@JUSTDAY@ ui
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

@@ -190,12 +190,12 @@ session="${XDG_SESSION_TYPE:-?}"; session="${session^}"
 gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | sed 's/^NVIDIA //' || true)
 # Что эта машина потянет. Остальное просто не ставится — вместо ошибки на пол-установки.
 WAYLAND=0; [[ "${XDG_SESSION_TYPE:-}" == wayland ]] && WAYLAND=1
-ISLAND=$WAYLAND                       # остров рисуется через wlr-layer-shell: только Wayland
+ISLAND=$WAYLAND                       # что увидим в ЭТОМ сеансе: остров рисуется только на Wayland
 DESKTOP_CONTROL=0                     # нажимать кнопки в чужих окнах умеет только KWin 6 на Wayland
 [[ $WAYLAND == 1 && "${XDG_CURRENT_DESKTOP:-}" == *KDE* && ${PLASMA:-0} -ge 6 ]] && DESKTOP_CONTROL=1
 row '✓' "$G" "$(t 'Компьютер' 'Computer')" "$desktop · $session${gpu:+ · $gpu}"
 if [[ $WAYLAND == 0 ]]; then
-  warn "$(t 'X11: голос, горячие клавиши и уведомления работают; остров сверху экрана — нет, ему нужен Wayland.' 'X11: voice, hotkeys and notifications work; the island at the top of the screen does not — it needs Wayland.')"
+  warn "$(t 'X11: голос, горячие клавиши и уведомления работают; вместо острова — полоска сверху, ему нужен Wayland. Войдёте через Wayland — остров появится сам, переустанавливать не нужно.' 'X11: voice, hotkeys and notifications work; instead of the island there is a strip along the top, the island needs Wayland. Log in through Wayland and it appears by itself — no reinstall.')"
 fi
 if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* && ${PLASMA:-0} -gt 0 && ${PLASMA:-0} -lt 6 ]]; then
   warn "$(t "Plasma $PLASMA: горячие клавиши настроятся, а нажимать кнопки в чужих окнах ассистент не сможет — для этого нужен KWin 6." "Plasma $PLASMA: hotkeys are set up, but the assistant cannot press buttons inside other windows — that needs KWin 6.")"
@@ -319,8 +319,10 @@ done
 # clipboard: wl-clipboard on Wayland, xclip on X11
 if [[ $WAYLAND == 1 ]]; then command -v wl-copy >/dev/null || need+=(wl-clipboard)
 else command -v xclip >/dev/null || need+=(xclip); fi
-# вне KWin 6 окнами управляют обычные утилиты иксов, а экран снимает что найдётся
-if [[ $DESKTOP_CONTROL == 0 && -n "${DISPLAY:-}" ]]; then
+# Обычные утилиты иксов: ими управляются окна везде, кроме KWin 6 на Wayland. Ставим их и на
+# Wayland, если иксы вообще есть (Xwayland считается): это цена одного мегабайта за то, что вход
+# через X11 на той же машине не окажется без «закрой дискорд» и без снимка экрана.
+if [[ -n "${DISPLAY:-}" ]]; then
   command -v wmctrl >/dev/null || need+=(wmctrl)
   command -v xdotool >/dev/null || need+=(xdotool)
   command -v xprop >/dev/null || need+=(xorg-x11-utils)
@@ -329,8 +331,11 @@ if [[ $DESKTOP_CONTROL == 0 && -n "${DISPLAY:-}" ]]; then
 fi
 # the island's typeface
 fc-list : family 2>/dev/null | grep -qx Inter || need+=(rsms-inter-fonts)
-# the island itself (Fedora ships it in a COPR, Arch in its own repos) — Wayland only
-if [[ $ISLAND == 1 ]]; then command -v qs >/dev/null || need+=(quickshell); fi
+# Остров (в Fedora он в COPR, в Arch в своих репозиториях) и tkinter для запасной полоски — оба,
+# независимо от сеанса, из которого ставят. На машине, где на экране входа есть и Wayland, и X11,
+# нужное выбирается при каждом входе; поставить только половину значит оставить второй сеанс без лица.
+command -v qs >/dev/null || command -v quickshell >/dev/null || need+=(quickshell)
+python3 -c "import tkinter" 2>/dev/null || need+=(python3-tkinter)
 # kwin-mcp builds dbus-python, pygobject and pycairo from source: compiler + headers + AT-SPI typelib.
 # On X11 or Plasma 5 it is not installed at all, so none of this is asked for either.
 if [[ $DESKTOP_CONTROL == 1 ]]; then
@@ -352,14 +357,14 @@ if ((${#need[@]})); then
     need=("${need[@]/gobject-introspection-devel/libgirepository-2.0-dev}"); need=("${need[@]/at-spi2-core-devel/libatspi2.0-dev}")
     need=("${need[@]/pipewire-utils/pipewire-bin}"); need=("${need[@]/gtk3/libgtk-3-bin}"); need=("${need[@]/libnotify/libnotify-bin}"); need=("${need[@]/ImageMagick/imagemagick}")
     need=("${need[@]/libsecret/libsecret-tools}"); need=("${need[@]/rsms-inter-fonts/fonts-inter}")
-    need=("${need[@]/xorg-x11-utils/x11-utils}")
+    need=("${need[@]/xorg-x11-utils/x11-utils}"); need=("${need[@]/python3-tkinter/python3-tk}")
     need=("${need[@]/quickshell/}")   # not packaged for Debian/Ubuntu yet: see the note at the end
   elif command -v pacman >/dev/null; then PM=(sudo pacman -S --needed --noconfirm)
     need=("${need[@]/pipewire-utils/pipewire}"); need=("${need[@]/fd-find/fd}"); need=("${need[@]/ImageMagick/imagemagick}"); need=("${need[@]/libnotify/libnotify}")
     need=("${need[@]/qt6-qttools/qt6-tools}"); need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
     need=("${need[@]/glib2-devel/glib2}"); need=("${need[@]/cairo-gobject-devel/cairo}"); need=("${need[@]/cairo-devel/cairo}"); need=("${need[@]/gobject-introspection-devel/gobject-introspection}")
     need=("${need[@]/at-spi2-core-devel/at-spi2-core}"); need=("${need[@]/dbus-tools/dbus}"); need=("${need[@]/rsms-inter-fonts/inter-font}")
-    need=("${need[@]/xorg-x11-utils/xorg-xprop}")
+    need=("${need[@]/xorg-x11-utils/xorg-xprop}"); need=("${need[@]/python3-tkinter/tk}")
   else
     PM=()
   fi
@@ -508,16 +513,23 @@ if ! systemctl --user show-environment >/dev/null 2>&1; then
   exit 0
 fi
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-# Там, где острова не будет, его место занимает полоска на Tk — она есть всегда и ничего не требует.
-fallback_panel() {
-  if ! "$APP_DIR/.venv/bin/python" -c "import tkinter" 2>/dev/null; then
-    warn "$(t 'Запасной панели нужен tkinter: python3-tkinter (Fedora) или python3-tk (Debian).' 'The fallback panel needs tkinter: python3-tkinter (Fedora) or python3-tk (Debian).')"
-    return 0
-  fi
-  sed "s|@JUSTDAY@|$HOME/.local/bin/justday|" "$APP_DIR/systemd/justday-panel.service" > "$UNIT_DIR/justday-panel.service"
+# Лицо ассистента — одна служба на оба сеанса.
+#
+# Раньше выбор делали здесь, при установке: на Wayland включали остров и выключали полоску, на X11
+# наоборот. На машине, где на экране входа есть и то и другое, выбор оказывался неверным ровно в
+# половине входов — и переустановка была единственным способом это исправить. Теперь `justday ui`
+# смотрит на сеанс при каждом запуске службы, то есть при каждом входе.
+face_service() {
+  sed "s|@JUSTDAY@|$HOME/.local/bin/justday|" "$APP_DIR/systemd/justday-ui.service" > "$UNIT_DIR/justday-ui.service"
+  # Прежние службы по отдельности больше не нужны: их место заняла одна. Убираем и файлы, иначе
+  # на следующем входе поднялись бы обе и нарисовали два лица.
+  for old in justday-island justday-panel justday-overlay; do
+    systemctl --user disable --now "$old.service" 2>/dev/null || true
+    rm -f "${UNIT_DIR:?}/${old:?}.service"
+  done
   systemctl --user daemon-reload
-  systemctl --user enable justday-panel.service
-  systemctl --user restart justday-panel.service
+  systemctl --user enable justday-ui.service
+  systemctl --user restart justday-ui.service
 }
 services() {
   mkdir -p "$UNIT_DIR"
@@ -526,25 +538,20 @@ services() {
   systemctl --user daemon-reload
   systemctl --user enable justday.service
   systemctl --user restart justday.service
-  if [[ $ISLAND == 1 ]] && command -v qs >/dev/null; then
-    sed "s|@REPO@|$APP_DIR|; s|@QS@|$(command -v qs)|" "$APP_DIR/systemd/justday-island.service" > "$UNIT_DIR/justday-island.service"
-    systemctl --user disable --now justday-overlay.service 2>/dev/null || true   # the old GTK pill, now gone
-    rm -f "$UNIT_DIR/justday-overlay.service"
-    systemctl --user daemon-reload
-    systemctl --user enable justday-island.service
-    systemctl --user restart justday-island.service
-    systemctl --user disable --now justday-panel.service 2>/dev/null || true
+  face_service
+  # Что именно поднялось — спрашиваем у той же программы, которая это и решает: два ответа на один
+  # вопрос расходятся, один — нет.
+  face=$("$APP_DIR/.venv/bin/python" -c 'from justday import face; w, y = face.pick(); print(w, y, sep="|")' 2>/dev/null || echo 'panel|')
+  if [[ "${face%%|*}" == island ]]; then
     note "$(t 'ассистент · остров' 'assistant · island')"
-  elif [[ $ISLAND == 0 ]]; then
-    # На X11 остров не запускается — вместо него встаёт запасная панель на Tk.
-    systemctl --user disable --now justday-island.service 2>/dev/null || true
-    fallback_panel
-    note "$(t 'ассистент · запасная панель' 'assistant · fallback panel')"
-    warn "$(t 'Остров рисуется через wlr-layer-shell, который есть только на Wayland. Вместо него — полоска сверху экрана: состояние, ответы, меню правой кнопкой.' 'The island is drawn with wlr-layer-shell, which only exists on Wayland. Its place is taken by a strip at the top of the screen: state, answers, a right-click menu.')"
   else
-    fallback_panel
-    note "$(t 'ассистент · запасная панель' 'assistant · fallback panel')"
-    warn "$(t 'Острову нужен Quickshell — поставьте его и запустите установку ещё раз' 'The island needs Quickshell — install it and run the installer again'): https://quickshell.org/docs/guide/install-setup/"
+    note "$(t 'ассистент · полоска сверху' 'assistant · strip along the top')"
+    printf '     %s\n' "${face#*|}"
+    if ! "$APP_DIR/.venv/bin/python" -c "import tkinter" 2>/dev/null; then
+      warn "$(t 'Полоске нужен tkinter: python3-tkinter (Fedora), python3-tk (Debian), tk (Arch).' 'The strip needs tkinter: python3-tkinter (Fedora), python3-tk (Debian), tk (Arch).')"
+    elif ! command -v qs >/dev/null && ! command -v quickshell >/dev/null; then
+      warn "$(t 'Острову нужен Quickshell; поставьте его, и на следующем входе в Wayland он появится сам' 'The island needs Quickshell; install it and it appears by itself at the next Wayland login'): https://quickshell.org/docs/guide/install-setup/"
+    fi
   fi
   if systemctl --user cat justday-voice.service >/dev/null 2>&1; then
     sed "s|@REPO@|$APP_DIR|" "$APP_DIR/systemd/justday-voice.service" > "$UNIT_DIR/justday-voice.service"

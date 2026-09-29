@@ -152,16 +152,29 @@ def t_desktop():
                               capture_output=True, text=True, timeout=10)
         if wins.returncode:
             raise RuntimeError("KWin D-Bus not reachable")
-        face = "остров" if _unit_active("justday-island") else "панель" if _unit_active("justday-panel") else "нет"
-        return f"kwin-mcp ok, KWin D-Bus ok, session={session}, окна: {len(desktop.windows('list'))}, экран: {face}"
+        return f"kwin-mcp ok, KWin D-Bus ok, session={session}, окна: {len(desktop.windows('list'))}, экран: {_face()}"
     if desktop.backend() == "x11":
         shot = next((x for x in ("spectacle", "gnome-screenshot", "maim", "scrot", "import") if shutil.which(x)), "")
         if not shot:
             raise RuntimeError("нечем снять экран: поставьте maim или scrot")
-        face = "панель" if _unit_active("justday-panel") else "нет (justday panel)"
-        return (f"окна: wmctrl ({len(desktop.windows('list'))}), снимки: {shot}, session={session}, экран: {face}"
+        return (f"окна: wmctrl ({len(desktop.windows('list'))}), снимки: {shot}, session={session}, экран: {_face()}"
                 + ("" if shutil.which("xdotool") else ", без xdotool не свернуть окно"))
     raise RuntimeError("окнами управлять нечем: нужен KWin 6 (Wayland) или wmctrl на X11")
+
+
+def _face() -> str:
+    """Что сейчас на экране и почему именно оно. «Почему у меня полоска вместо острова» — первый
+    вопрос на машине с двумя сеансами, и отвечать на него должна сама программа, а не человек."""
+    from . import face
+
+    what, why = face.pick()
+    word = "остров" if what == "island" else "полоска"
+    if _unit_active("justday-ui"):
+        return f"{word} ({why})"
+    for old, name in (("justday-island", "остров"), ("justday-panel", "полоска")):
+        if _unit_active(old):
+            return f"{name} — старая служба {old}; переустановите, чтобы выбор шёл по сеансу"
+    return f"ничего не запущено: нужен {word} ({why}) — systemctl --user enable --now justday-ui"
 
 
 def _unit_active(name: str) -> bool:
@@ -341,6 +354,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("-f", "--follow", action="store_true")
     sp.add_argument("-n", type=int, default=40)
     sub.add_parser("panel", help="the fallback panel for desktops without the island (X11, Plasma 5, GNOME)")
+    sub.add_parser("ui", help="show the assistant on screen: the island on Wayland, the fallback panel elsewhere "
+                             "(decided at every login; ui.face pins it)")
     sp = sub.add_parser("doctor", help="check every component")
     sp.add_argument("--quick", action="store_true", help="skip checks that call the model")
     sp.add_argument("--json", action="store_true", help="machine-readable results (fast checks only)")
@@ -625,6 +640,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "panel":
         from . import panel
         sys.exit(panel.main())
+    elif a.cmd == "ui":
+        from . import face
+        sys.exit(face.run())
     elif a.cmd == "screenshot":
         _print(screenshot(a.all, a.full))
     elif a.cmd == "scene":

@@ -328,8 +328,13 @@ def pointer(x: int, y: int, button: int = 1, double: bool = False) -> dict:
     На X11 щелчок делает `xdotool`: ассистент умеет нажимать кнопки в чужих окнах и без KWin,
     лишь бы знал координаты (их даёт `justday screenshot` активного окна). На Wayland синтетические
     события запрещены самим протоколом: там щелчки идут только через композитор, то есть через
-    kwin-mcp на KWin 6."""
-    if backend() == "x11" and shutil.which("xdotool"):
+    kwin-mcp на KWin 6.
+
+    Решает тип сеанса, а не рабочий стол: KDE бывает и на X11, и там backend() отвечает «kwin»
+    (скрипты KWin работают и в иксах) — а вот щёлкать надо всё равно через xdotool."""
+    from . import face
+
+    if face.session() == "x11" and shutil.which("xdotool"):
         cmd = ["xdotool", "mousemove", "--sync", str(int(x)), str(int(y)), "click"]
         if double:
             cmd += ["--repeat", "2", "--delay", "80"]
@@ -344,8 +349,12 @@ def pointer(x: int, y: int, button: int = 1, double: bool = False) -> dict:
 
 
 def keys(combo: str) -> dict:
-    """Нажать сочетание клавиш: «ctrl+s», «Return», «alt+Tab». X11 — xdotool, иначе нечем."""
-    if backend() == "x11" and shutil.which("xdotool"):
+    """Нажать сочетание клавиш: «ctrl+s», «Return», «alt+Tab». X11 — xdotool, иначе нечем.
+
+    Как и щелчок, решается типом сеанса: KDE на X11 — это иксы, чем бы ни управлялись окна."""
+    from . import face
+
+    if face.session() == "x11" and shutil.which("xdotool"):
         p = subprocess.run(["xdotool", "key", "--clearmodifiers", combo], capture_output=True, text=True, timeout=10)
         return {"ok": p.returncode == 0, "keys": combo, "how": "xdotool", "error": (p.stderr or "").strip()[:200]}
     if backend() == "kwin":
