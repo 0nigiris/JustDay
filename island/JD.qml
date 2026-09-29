@@ -184,6 +184,7 @@ Singleton {
     property var load: null               // последний взгляд на машину
     property var loadHistory: ({ cpu: [], mem: [], gpu: [] })   // для графиков: последние 60 секунд
     property bool clipPaused: false
+    property int clipSkipped: 0           // сколько не запомнили как похожее на пароль
     property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
 
     function openTools(page) {
@@ -438,7 +439,7 @@ Singleton {
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
-        if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused }
+        if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
         if (m.load !== undefined) {
             load = m.load
             // Графики держат минуту: дольше — уже не «что происходит сейчас», а история, которой

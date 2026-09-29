@@ -1277,6 +1277,8 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
         print(f"{n:>3} {when:>4} {mark} {item['preview']}")
     if clipboard.paused():
         print("\n(на паузе: новое не запоминается — justday clip resume)")
+    elif (missed := clipboard.skipped()["count"]):
+        print(f"\n(пропущено как похожее на пароль или ключ: {missed})")
     return 0
 
 

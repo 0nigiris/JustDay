@@ -81,10 +81,39 @@ def pause(on: bool = True) -> bool:
     return paused()
 
 
+# Похожее на пароль. Не «угадать пароль», а «не запоминать то, что на него похоже»: в истории
+# буфера цена ошибки несимметрична. Не запомнили лишнее — человек скопирует ещё раз, это секунда.
+# Запомнили пароль — он лежит на диске, и однажды попадёт в глаза модели вместе с остальной историей.
+PASSWORD_MIN, PASSWORD_MAX = 8, 64
+HEX = re.compile(r"^[0-9a-fA-F]+$")                       # хеш коммита, UUID — это не секреты
+STRUCTURED = re.compile(r"^[\w.-]+@|^[a-z]+://|^[~/.]|\.(com|ru|org|net|io|dev)(/|$)|^v?\d+\.\d+")
+
+
+def _classes(body: str) -> int:
+    """Сколько разных родов знаков в строке: строчные, прописные, цифры, всё остальное."""
+    return sum((any(c.islower() for c in body), any(c.isupper() for c in body),
+                any(c.isdigit() for c in body),
+                any(not c.isalnum() for c in body)))
+
+
+def looks_like_password(body: str) -> bool:
+    """Строка без пробелов подходящей длины, в которой смешаны разные знаки.
+
+    Адрес, путь, почта, номер версии и шестнадцатеричная строка (хеш коммита, UUID) исключены:
+    их копируют постоянно и секретами они не являются."""
+    if " " in body or "\n" in body or not (PASSWORD_MIN <= len(body) <= PASSWORD_MAX):
+        return False
+    if HEX.match(body) or STRUCTURED.search(body):
+        return False
+    return _classes(body) >= 2
+
+
 def looks_secret(text: str) -> bool:
     """Похоже ли это на ключ или пароль, который не стоит держать на диске."""
     body = text.strip()
-    return bool(SECRETS.match(body)) or ("-----BEGIN" in body[:400] and "PRIVATE KEY" in body[:400])
+    if SECRETS.match(body) or ("-----BEGIN" in body[:400] and "PRIVATE KEY" in body[:400]):
+        return True
+    return looks_like_password(body)
 
 
 def _read() -> list[dict]:
@@ -136,7 +165,8 @@ def store(text: str = "", *, image: bytes = b"", kind: str = "") -> dict:
         if len(body) > MAX_TEXT:
             return {"ok": False, "why": "слишком длинно"}
         if looks_secret(body):
-            return {"ok": False, "why": "похоже на ключ — не запоминаем"}
+            _count_skipped()
+            return {"ok": False, "why": "похоже на пароль или ключ — не запоминаем"}
         digest = hashlib.sha256(body.encode()).hexdigest()[:16]
         entry = {"id": digest, "at": time.time(), "kind": kind or "text", "size": len(body),
                  "text": body}
@@ -147,6 +177,32 @@ def store(text: str = "", *, image: bytes = b"", kind: str = "") -> dict:
         _forget_blob(extra)
     _write(items[:MAX_ENTRIES])
     return {"ok": True, "id": digest, "kind": entry["kind"]}
+
+
+SKIPPED = config.STATE_DIR / "clipboard-skipped.json"
+
+
+def _count_skipped() -> None:
+    """Счётчик пропущенного. Нужен не для статистики: без него «я скопировал, а в истории пусто»
+    выглядит поломкой, а не защитой."""
+    try:
+        was = json.loads(SKIPPED.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        was = {}
+    config.STATE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        SKIPPED.write_text(json.dumps({"count": int(was.get("count", 0)) + 1, "at": time.time()}),
+                           encoding="utf-8")
+    except OSError:
+        pass
+
+
+def skipped() -> dict:
+    try:
+        got = json.loads(SKIPPED.read_text(encoding="utf-8"))
+        return {"count": int(got.get("count", 0)), "at": float(got.get("at", 0))}
+    except (OSError, ValueError):
+        return {"count": 0, "at": 0.0}
 
 
 def preview(item: dict) -> str:
@@ -198,6 +254,7 @@ def wipe() -> int:
     if BLOBS.is_dir():
         shutil.rmtree(BLOBS, ignore_errors=True)
     STORE.unlink(missing_ok=True)
+    SKIPPED.unlink(missing_ok=True)
     return count
 
 
@@ -309,6 +366,6 @@ def stats() -> dict:
     """Что в истории — для `justday test clip` и настроек."""
     all_items = _read()
     images = sum(1 for i in all_items if i.get("kind") == "image")
-    return {"entries": len(all_items), "images": images, "paused": paused(),
+    return {"entries": len(all_items), "images": images, "paused": paused(), "skipped": skipped()["count"],
             "store": str(STORE), "watch": "wl-paste" if watch_argv() else "опрос xclip",
             "size_kb": (STORE.stat().st_size // 1024 if STORE.is_file() else 0)}

@@ -2296,7 +2296,7 @@ class Daemon:
             elif cmd == "clip_list":
                 resp = {"ok": True, "clip": clipboard.items(int(req.get("limit") or 60),
                                                             req.get("query", "")),
-                        "paused": clipboard.paused()}
+                        "paused": clipboard.paused(), "skipped": clipboard.skipped()["count"]}
             elif cmd == "clip_use":
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: clipboard.put_back(str(req.get("which", "")),
