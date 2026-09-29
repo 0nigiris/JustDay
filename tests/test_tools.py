@@ -201,3 +201,57 @@ def test_disks_are_listed_once_each() -> None:
     """На btrfs `/` и `/home` живут на одном устройстве — показывать место дважды нельзя."""
     got = sysload.disks()
     assert len({(d["total_gb"], d["free_gb"], d["percent"]) for d in got}) == len(got)
+
+
+# ──────────────────────────── лаунчер ────────────────────────────
+
+
+@pytest.fixture
+def apps(monkeypatch, tmp_path):
+    """Выдуманный набор программ: настоящий зависит от машины, на которой запустили проверку."""
+    from justday import launcher
+
+    monkeypatch.setattr(launcher, "RECENT_FILE", tmp_path / "recent.json")
+    monkeypatch.setattr(launcher.config, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(launcher.desktop, "list_apps", lambda: [
+        {"id": "discord", "name": "Discord", "name_ru": "", "generic": "Messenger",
+         "keywords": "chat;vencord;", "icon": "discord"},
+        {"id": "org.kde.konsole", "name": "Konsole", "name_ru": "Консоль", "generic": "Терминал",
+         "keywords": "shell;terminal;", "icon": "utilities-terminal"},
+        {"id": "code", "name": "Visual Studio Code", "name_ru": "", "generic": "Редактор",
+         "keywords": "editor;", "icon": "code"},
+    ])
+    monkeypatch.setattr(launcher.desktop, "list_games", lambda: [
+        {"source": "steam", "id": "570", "name": "Dota 2"},
+    ])
+    monkeypatch.setattr(launcher.desktop, "windows", lambda *a, **k: [])
+    return launcher
+
+
+def test_the_launcher_finds_by_name_and_by_russian_name(apps) -> None:
+    assert apps.items("disc")[0]["name"] == "Discord"
+    assert apps.items("консоль")[0]["name"] == "Консоль"
+    assert apps.items("терминал")[0]["name"] == "Консоль"     # по описанию тоже
+
+
+def test_games_are_in_the_same_list(apps) -> None:
+    got = apps.items("dota")
+    assert got and got[0]["kind"] == "game" and got[0]["id"] == "570"
+
+
+def test_the_wrong_keyboard_layout_still_finds_it(apps) -> None:
+    """«Вшысщкв» — это Discord, набранный не глядя на строку."""
+    assert apps.items("Вшысщкв")[0]["name"] == "Discord"
+    assert apps.swap_layout("Вшысщкв") == "Discord"
+    assert apps.swap_layout("Discord") == "Вшысщкв"
+
+
+def test_recently_launched_come_first(apps) -> None:
+    assert apps.items("")[0]["name"] != "Visual Studio Code"   # по алфавиту первым не он
+    apps.remember("app", "code")
+    assert apps.items("")[0]["name"] == "Visual Studio Code"
+
+
+def test_nothing_matches_means_nothing_and_not_noise(apps) -> None:
+    """Пустой ответ — это сигнал островку предложить спросить ассистента, а не показать мусор."""
+    assert apps.items("поставь таймер на десять минут") == []
