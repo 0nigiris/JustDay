@@ -218,7 +218,7 @@ def hotkeys() -> dict:
     """Что сейчас назначено. `extra` — вторая клавиша «говорить» (кнопка мыши)."""
     out = {}
     for name, _, _ in HOTKEYS:
-        keys = _shortcut(_hotkey_id("stop" if name == "cancel" else name)) or [""]
+        keys = _shortcut(_hotkey_id(name)) or [""]
         out[name] = keys[0]
         if name == "talk":
             out["extra"] = keys[1] if len(keys) > 1 else ""

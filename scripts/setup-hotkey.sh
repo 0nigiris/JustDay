@@ -65,6 +65,41 @@ fi
 
 id_of() { [[ "$1" == talk ]] && echo "net.local.justday.desktop" || echo "net.local.justday-$1.desktop"; }
 
+# Имена, под которыми клавиши жили раньше: их файлы нужно убрать, иначе две составляющие спорят за
+# одно сочетание и выигрывает старая.
+LEGACY=(net.local.justday-stop.desktop net.local.justday-overlay.desktop)
+
+SHORTCUTS="${XDG_CONFIG_HOME:-$HOME/.config}/kglobalshortcutsrc"
+
+# Отобрать клавишу у того, кто её уже занял.
+#
+# Без этого привязка молча не работает: `Meta+V` в KDE занят «показать буфер обмена у курсора», и
+# наша запись в файле есть, а нажатие уходит Klipper'у. Файл править бесполезно — сочетание держит
+# живая служба, поэтому просим её отдать через ту же шину, на которой она его и получила.
+# Прежнее значение остаётся в файле вторым полем, так что «По умолчанию» в системных настройках
+# вернёт его на место.
+free_key() {  # $1 — сочетание, $2 — наш desktop id (его не трогаем)
+  local key="$1" mine="$2"
+  [[ -z "$key" || ! -f "$SHORTCUTS" ]] && return 0
+  awk -v key="$key" -v mine="$mine" '
+    /^\[/ { line = $0; gsub(/^\[|\]$/, "", line); gsub(/\]\[/, "|", line); group = line; next }
+    /=/ {
+      eq = index($0, "=");  action = substr($0, 1, eq - 1);  rest = substr($0, eq + 1)
+      split(rest, f, ",");  current = f[1]
+      if (group ~ mine) next
+      n = split(current, alts, "\t")
+      for (i = 1; i <= n; i++) if (alts[i] == key) { print group "|" action "|" f[3]; next }
+    }' "$SHORTCUTS" | while IFS='|' read -r group action friendly; do
+    # Составляющая — первая часть группы: «plasmashell» или «services|net.local.x.desktop».
+    local component="${group%%|*}"
+    [[ "$component" == services ]] && component="${group#*|}"
+    gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel \
+      --method org.kde.KGlobalAccel.setShortcut \
+      "['$component','$action','$component','${friendly//\'/}']" "@ai []" 4 >/dev/null 2>&1 || true
+    echo "  освободил $key: было у «${friendly:-$component/$action}»"
+  done
+}
+
 unregister() {  # $1 desktop id
   gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel \
     --method org.kde.KGlobalAccel.unregister "$1" "_launch" >/dev/null 2>&1 || true
@@ -101,11 +136,14 @@ if ((REMOVE)); then
     IFS='|' read -r name _ _ _ <<<"$row"
     forget "$(id_of "$name")"
   done
+  for old_id in "${LEGACY[@]}"; do forget "$old_id"; done
   { [[ -n "$MOUSE" ]] && "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --delete --notify; } || true
   { [[ -n "$KBUILD" ]] && "$KBUILD" >/dev/null 2>&1; } || true
   echo "сочетания JustDay убраны"
   exit 0
 fi
+
+for old_id in "${LEGACY[@]}"; do forget "$old_id"; done
 
 for row in "${KEYS[@]}"; do
   IFS='|' read -r name label cmd _ <<<"$row"
@@ -114,6 +152,7 @@ for row in "${KEYS[@]}"; do
   # У «говорить» бывает вторая клавиша: кнопка мыши, перенастроенная на F19.
   [[ "$name" == talk && -n "$EXTRA" ]] && keys+=("$EXTRA")
   if [[ -n "${KEY[$name]}" ]]; then
+    for k in "${keys[@]}"; do free_key "$k" "$id"; done
     register "$id" "$label" "$HOME/.local/bin/justday $cmd" "${keys[@]}"
   else
     forget "$id"

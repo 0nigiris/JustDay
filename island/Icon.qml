@@ -11,7 +11,11 @@ Item {
     property string fallback: "system-run"
     property real implicitSize: 18
     property color tint: JD.text1
-    readonly property string glyph: JD.glyph(name) || JD.glyph(fallback)
+    // Значок самой программы, а не наш штриховой. Для списка программ важно именно это: у нас есть
+    // «app-window», и без этого признака все приложения выглядели одинаковым окошком, потому что
+    // запасное имя application-x-executable само есть в нашем наборе и перебивало настоящий значок.
+    property bool theme: false
+    readonly property string glyph: theme ? "" : (JD.glyph(name) || JD.glyph(fallback))
     implicitWidth: implicitSize
     implicitHeight: implicitSize
     Image {

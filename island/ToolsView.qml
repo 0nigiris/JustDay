@@ -261,7 +261,7 @@ Item {
                     anchors.leftMargin: 12
                     anchors.rightMargin: 12
                     spacing: 11
-                    Icon { name: modelData.icon; fallback: "application-x-executable"; implicitSize: 22 }
+                    Icon { name: modelData.icon; fallback: "application-x-executable"; implicitSize: 24; theme: true }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
