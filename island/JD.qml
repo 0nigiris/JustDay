@@ -398,7 +398,15 @@ Singleton {
         Socket {
             property string payload
             path: jd.socketPath
-            parser: SplitParser { onRead: _ => destroy() }
+            // Ответ на команду разбираем, а не выбрасываем. Раньше сокет умирал на первой строке,
+            // и всё, что демон отвечает (сетка эмодзи, история буфера, нагрузка), не доходило вовсе:
+            // островок узнавал только то, что демон присылает сам.
+            parser: SplitParser {
+                onRead: line => {
+                    try { jd.handle(JSON.parse(line)) } catch (e) { console.warn("island reply:", e, line) }
+                    destroy()
+                }
+            }
             onConnectedChanged: if (connected) { write(payload + "\n"); flush() }
             Component.onCompleted: connected = true
         }
@@ -429,9 +437,8 @@ Singleton {
         if (m.jobs !== undefined) jobs = m.jobs || []
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
-        if (m.groups !== undefined) emojiGroups = m.groups
-        if (m.items !== undefined && toolsPage) toolsItems = m.items
-        if (m.paused !== undefined) clipPaused = m.paused
+        if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
+        if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused }
         if (m.load !== undefined) {
             load = m.load
             // Графики держат минуту: дольше — уже не «что происходит сейчас», а история, которой

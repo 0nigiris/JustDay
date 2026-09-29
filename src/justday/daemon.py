@@ -2287,14 +2287,15 @@ class Daemon:
             elif cmd == "emoji":  # сетка и поиск; ассистент ищет в том же наборе
                 found = glyphs.search(req.get("query", ""), int(req.get("limit") or 400),
                                       req.get("group", ""))
-                resp = {"ok": True, "items": found, "groups": glyphs.load()["groups"],
-                        "recent": glyphs.recents()}
+                # Ключ «emoji», а не «items»: ответы приходят островку тем же путём, что и всё
+                # остальное, и общее имя столкнулось бы со списком входящих.
+                resp = {"ok": True, "emoji": found, "groups": glyphs.load()["groups"]}
             elif cmd == "emoji_use":  # выбрали символ: в буфер и в то окно, где курсор
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: glyphs.use(req.get("char", ""), paste=req.get("paste", True)))
             elif cmd == "clip_list":
-                resp = {"ok": True, "items": clipboard.items(int(req.get("limit") or 60),
-                                                             req.get("query", "")),
+                resp = {"ok": True, "clip": clipboard.items(int(req.get("limit") or 60),
+                                                            req.get("query", "")),
                         "paused": clipboard.paused()}
             elif cmd == "clip_use":
                 resp = await asyncio.get_running_loop().run_in_executor(
