@@ -1,0 +1,203 @@
+"""Панель инструментов: эмодзи, буфер обмена, нагрузка.
+
+Главное здесь — не «список показался», а две вещи, которые ломаются молча: поиск по-русски (склонение
+и ё) и то, что пароли в историю буфера не попадают.
+"""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from justday import clipboard, glyphs, sysload
+
+# ──────────────────────────────── эмодзи ────────────────────────────────
+
+
+def test_the_set_is_there_and_grouped() -> None:
+    got = glyphs.load()
+    assert len(got["items"]) > 1500                       # 1923 на Unicode 18
+    assert "Лица" in got["groups"] and "Флаги" in got["groups"]
+    assert all({"c", "n", "g"} <= set(i) for i in got["items"][:50])
+
+
+@pytest.mark.parametrize(
+    ("query", "expect"),
+    [("кот", "🐱"), ("кошка", "🐈"), ("огонь", "🔥"), ("ракета", "🚀"), ("rocket", "🚀"),
+     ("украина", "🇺🇦"), ("галочка", "✔️"), ("думаю", "🤔")],
+)
+def test_search_finds_the_obvious_thing(query: str, expect: str) -> None:
+    assert expect in [i["c"] for i in glyphs.search(query, limit=8)]
+
+
+def test_russian_declension_does_not_break_the_search() -> None:
+    """CLDR пишет «Российская Федерация», а человек ищет «россия» — и это должно находиться."""
+    assert "🇷🇺" in [i["c"] for i in glyphs.search("россия", limit=8)]
+    assert "😻" in [i["c"] for i in glyphs.search("кот сердце", limit=8)]     # оба слова, не одно
+
+
+def test_e_and_yo_are_one_letter() -> None:
+    assert glyphs.search("самолёт", limit=3)[0]["c"] == glyphs.search("самолет", limit=3)[0]["c"]
+
+
+def test_an_exact_name_beats_a_mention_in_the_keywords() -> None:
+    """«rocket» — это ракета, а не космонавт, у которого это слово в описании."""
+    assert glyphs.search("rocket", limit=1)[0]["c"] == "🚀"
+
+
+def test_every_word_of_the_query_must_match() -> None:
+    assert glyphs.search("кот вертолёт", limit=5) == []
+
+
+def test_recents_come_first_and_survive(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(glyphs, "RECENT_FILE", tmp_path / "recent.json")
+    monkeypatch.setattr(glyphs.config, "STATE_DIR", tmp_path)
+    glyphs.remember("🦀")
+    glyphs.remember("🐱")
+    assert glyphs.recents()[:2] == ["🐱", "🦀"]           # последний взятый — первым
+    assert [i["c"] for i in glyphs.search(limit=2)] == ["🐱", "🦀"]
+    glyphs.remember("🦀")                                  # повтор поднимает, а не задваивает
+    assert glyphs.recents()[:2] == ["🦀", "🐱"]
+
+
+# ─────────────────────────── буфер обмена ───────────────────────────
+
+
+@pytest.fixture
+def store(tmp_path, monkeypatch):
+    """История в отдельном каталоге: тест не должен трогать настоящую."""
+    monkeypatch.setattr(clipboard.config, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(clipboard, "STORE", tmp_path / "clipboard.jsonl")
+    monkeypatch.setattr(clipboard, "BLOBS", tmp_path / "clipboard")
+    monkeypatch.setattr(clipboard, "PAUSE_FLAG", tmp_path / "paused")
+    monkeypatch.setattr(clipboard, "SKIPPED", tmp_path / "skipped.json")
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "secret",
+    ["sk-ant-api03-AbCdEf1234567890xyzAbCdEf1234567890", "ghp_1234567890abcdefghij",
+     "AKIAIOSFODNN7EXAMPLE", "xoxb-123456789012-abcdefghijkl",
+     "-----BEGIN OPENSSH PRIVATE KEY-----\nabc",
+     "l0v3m3htem3", "Tr0ub4dor&3"],
+)
+def test_secrets_never_reach_the_disk(store, secret: str) -> None:
+    assert clipboard.store(secret)["ok"] is False
+    assert clipboard.items() == []
+    assert not clipboard.STORE.exists() or secret not in clipboard.STORE.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "ordinary",
+    ["обычный текст на русском", "https://github.com/0nigiris/JustDay", "fixkraftmine@gmail.com",
+     "~/.config/justday/config.toml", "v2.14.3", "justday clip wipe",
+     "8c41a38f2b1e4d6c9a0b3e5f7d8c1a2b3c4d5e6f"],
+)
+def test_ordinary_things_are_remembered(store, ordinary: str) -> None:
+    """Хеш коммита, путь и ссылку копируют постоянно — забывать их было бы вредительством."""
+    assert clipboard.store(ordinary)["ok"] is True
+    assert clipboard.items()[0]["preview"].startswith(ordinary[:40])
+
+
+def test_skipped_ones_are_counted_so_the_gap_is_explainable(store) -> None:
+    assert clipboard.skipped()["count"] == 0
+    clipboard.store("Tr0ub4dor&3")
+    clipboard.store("ghp_1234567890abcdefghij")
+    assert clipboard.skipped()["count"] == 2
+
+
+def test_the_same_text_rises_instead_of_piling_up(store) -> None:
+    clipboard.store("первое")
+    clipboard.store("второе")
+    clipboard.store("первое")
+    assert [i["preview"] for i in clipboard.items()] == ["первое", "второе"]
+
+
+def test_pause_stops_remembering(store) -> None:
+    clipboard.pause(True)
+    assert clipboard.store("пока на паузе")["why"] == "пауза"
+    clipboard.pause(False)
+    assert clipboard.store("а теперь пишем")["ok"] is True
+
+
+def test_forget_and_wipe(store) -> None:
+    clipboard.store("один")
+    clipboard.store("два")
+    assert clipboard.forget("1") is True                 # по номеру в списке
+    assert [i["preview"] for i in clipboard.items()] == ["один"]
+    assert clipboard.wipe() == 1
+    assert clipboard.items() == []
+
+
+def test_search_in_the_history(store) -> None:
+    clipboard.store("письмо про отпуск")
+    clipboard.store("совсем другое")
+    assert [i["preview"] for i in clipboard.items(query="отпуск")] == ["письмо про отпуск"]
+
+
+def test_the_file_is_readable_only_by_its_owner(store) -> None:
+    clipboard.store("что-то своё")
+    assert clipboard.STORE.stat().st_mode & 0o077 == 0
+
+
+def test_the_list_carries_previews_not_whole_texts(store) -> None:
+    """Список рисуется строкой-предпросмотром: целиком текст нужен только в момент вставки, и
+    незачем разносить его по журналам и по памяти островка."""
+    clipboard.store("ы" * 5000)
+    row = clipboard.items()[0]
+    assert len(row["preview"]) <= clipboard.PREVIEW + 1
+    assert "text" not in row and row["size"] == 5000
+
+
+def test_the_watcher_knows_what_to_run() -> None:
+    """На Wayland следит wl-paste, на X11 демон опрашивает сам."""
+    argv = clipboard.watch_argv()
+    assert argv == [] or all(cmd[0] == "wl-paste" and "--watch" in cmd for cmd in argv)
+
+
+# ──────────────────────────── нагрузка ────────────────────────────
+
+
+def test_memory_reads_like_the_system_reports_it() -> None:
+    mem = sysload.memory()
+    assert mem["total"] > 0 and 0 <= mem["percent"] <= 100
+    assert mem["used"] + mem["avail"] <= mem["total"] + 1     # округление до мегабайта
+
+
+def test_the_first_look_admits_it_has_nothing_to_compare_with() -> None:
+    """Процент процессора — разность двух взглядов. Первый честно отдаёт нули, а не выдумывает."""
+    load = sysload.Load()
+    first = load.cpu()
+    assert first["percent"] == 0.0 and first["count"] >= 1
+    assert all(c == 0.0 for c in first["cores"])
+
+
+def test_a_second_look_gives_real_numbers() -> None:
+    load = sysload.Load()
+    load.snapshot()
+    busy = sum(i * i for i in range(400_000))                  # чем-то занять процессор
+    snap = load.snapshot()
+    assert busy > 0
+    assert 0 <= snap["cpu"]["percent"] <= 100
+    assert len(snap["cpu"]["cores"]) == snap["cpu"]["count"]
+    assert snap["top"] and all({"pid", "name", "cpu", "mem_mb"} <= set(p) for p in snap["top"])
+
+
+def test_one_line_for_voice_and_journal() -> None:
+    load = sysload.Load()
+    load.snapshot()
+    line = sysload.human_summary(load.snapshot())
+    assert "процессор" in line and "память" in line
+
+
+def test_the_snapshot_is_json_and_nothing_more() -> None:
+    """Снимок уходит островку и ассистенту по сокету: всё в нём должно быть простыми значениями."""
+    load = sysload.Load()
+    load.snapshot()
+    assert json.loads(json.dumps(load.snapshot()))
+
+
+def test_disks_are_listed_once_each() -> None:
+    """На btrfs `/` и `/home` живут на одном устройстве — показывать место дважды нельзя."""
+    got = sysload.disks()
+    assert len({(d["total_gb"], d["free_gb"], d["percent"]) for d in got}) == len(got)

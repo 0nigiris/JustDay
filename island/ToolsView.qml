@@ -25,7 +25,12 @@ Item {
     // Поле поиска нужно двум страницам из трёх: у нагрузки искать нечего.
     readonly property bool searchable: page === "emoji" || page === "clip"
 
-    function fmtSize(kb) { return kb >= 1024 ? (kb / 1024).toFixed(1) + " МБ" : kb + " КБ" }
+    // Байты — байтами: скопированная строка в 25 знаков не «1 КБ».
+    function fmtSize(bytes) {
+        if (bytes < 1024) return bytes + " Б"
+        if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " КБ"
+        return (bytes / 1024 / 1024).toFixed(1) + " МБ"
+    }
     function ago(at) {
         const s = Math.max(0, JD.tick - at)
         if (s < 60) return Math.round(s) + " с"
@@ -249,7 +254,7 @@ Item {
                             color: JD.text3
                             text: tv.ago(modelData.at)
                                   + (modelData.lines > 1 ? " · " + modelData.lines + " строк" : "")
-                                  + (modelData.kind === "image" ? "" : " · " + tv.fmtSize(Math.max(1, Math.round(modelData.size / 1024))))
+                                  + (modelData.kind === "image" ? "" : " · " + tv.fmtSize(modelData.size))
                         }
                     }
                     IconButton {
