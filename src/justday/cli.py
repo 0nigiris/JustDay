@@ -148,7 +148,9 @@ def t_desktop():
     if desktop.backend() == "kwin":
         if not shutil.which("kwin-mcp"):
             raise RuntimeError("kwin-mcp not installed (uv tool install git+https://github.com/VibeProgramm/kwin-mcp)")
-        wins = subprocess.run(["qdbus-qt6", "org.kde.KWin", "/KWin", "org.kde.KWin.supportInformation"],
+        # Дешёвый вопрос вместо supportInformation: тот выгружает килобайты текста о всей системе,
+        # а нам нужно ровно «KWin на шине и отвечает».
+        wins = subprocess.run(["qdbus-qt6", "org.kde.KWin", "/KWin", "org.kde.KWin.currentDesktop"],
                               capture_output=True, text=True, timeout=10)
         if wins.returncode:
             raise RuntimeError("KWin D-Bus not reachable")
