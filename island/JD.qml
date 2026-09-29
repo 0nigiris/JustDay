@@ -176,7 +176,8 @@ Singleton {
     // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
     // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
     // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
-    property string toolsPage: ""          // "" — закрыта; emoji | clip | load
+    property string toolsPage: ""          // "" — закрыта; apps | emoji | clip | load
+    property int toolsPick: 0             // выбранная строка в списке: стрелками и Enter
     property string toolsQuery: ""
     property var toolsItems: []           // что нашлось: эмодзи или записи буфера
     property var emojiGroups: []
@@ -188,8 +189,9 @@ Singleton {
     property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
 
     function openTools(page) {
-        toolsPage = page || "emoji"
+        toolsPage = page || "apps"
         toolsQuery = ""
+        toolsPick = 0
         emojiGroup = ""
         settingsOpen = false
         expanded = false
@@ -209,6 +211,7 @@ Singleton {
         const wasLoad = toolsPage === "load"
         toolsPage = page
         toolsQuery = ""
+        toolsPick = 0
         toolsItems = []
         if (wasLoad !== (page === "load")) send({ cmd: "load_watch", on: page === "load" })
         refreshTools()
@@ -216,10 +219,15 @@ Singleton {
     // Ищет демон, а не островок: набор эмодзи лежит там, история буфера тоже, и второй такой же
     // поиск на QML разошёлся бы с первым в тот же день.
     function refreshTools() {
-        if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
+        if (toolsPage === "apps") send({ cmd: "apps", query: toolsQuery, limit: 40 })
+        else if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
     }
+    // Запустить или, если ничего не нашлось, спросить ассистента. Это и есть разница между этим
+    // лаунчером и всеми остальными: поле не обязано быть командой.
+    function runApp(item) { send({ cmd: "apps_run", kind: item.kind, id: item.id }); closeTools() }
+    function askFromLauncher(text) { closeTools(); send({ cmd: "type", text: text }) }
     function useEmoji(ch) { send({ cmd: "emoji_use", char: ch }); closeTools() }
     function useClip(which) { send({ cmd: "clip_use", which: String(which) }); closeTools() }
     function forgetClip(which) { send({ cmd: "clip_forget", which: String(which) }); refreshTools() }
@@ -438,6 +446,7 @@ Singleton {
         if (m.jobs !== undefined) jobs = m.jobs || []
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
+        if (m.apps !== undefined) { toolsItems = m.apps; toolsPick = 0 }
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
         if (m.load !== undefined) {

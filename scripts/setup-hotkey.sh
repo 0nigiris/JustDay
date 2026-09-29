@@ -1,31 +1,56 @@
 #!/usr/bin/env bash
-# Registers KDE Plasma 6 global shortcuts for JustDay:
-#   talk   (default Meta+J, plus F19 for a remapped mouse button; F13 is XF86Tools = System Settings in KDE) → `justday toggle`
-#   cancel (default Meta+Shift+J)                                 → `justday stop`
-#   type   (default Meta+K)  → `justday compose`  (text field, takes the selected text along)
-#   yes / no (Meta+Y / Meta+N) → `justday approve` / `justday deny`  (answer the island's question from the keyboard)
-# Usage: setup-hotkey.sh [--talk "Meta+J"] [--extra F19] [--cancel "Meta+Shift+J"] [--type Meta+K] [--yes Meta+Y]
-#                        [--no Meta+N] [--mouse ExtraButton1] [--remove]      (an empty key = don't register it)
+# Глобальные сочетания клавиш KDE Plasma для JustDay.
 #
-# kglobalacceld only activates command shortcuts for *service* components, which it creates from
-# desktop files carrying X-KDE-Shortcuts (found through the KSycoca cache). A plain D-Bus doRegister()
-# yields an inactive action that ignores key presses — hence desktop files + kbuildsycoca6.
+# Все клавиши описаны одной таблицей ниже: имя, подпись, команда, значение по умолчанию. Добавить
+# ещё одну — одна строка здесь и одна в src/justday/manage.py. Раньше каждая клавиша была прописана
+# в четырёх местах, и пятая по счёту забывалась ровно в одном из них.
+#
+#   setup-hotkey.sh [--talk "Meta+J"] [--extra F19] [--cancel "Meta+Shift+J"] [--type Meta+K]
+#                   [--yes Meta+Y] [--no Meta+N] [--apps "Alt+Space"] [--clip "Meta+V"]
+#                   [--emoji "Meta+."] [--load ""] [--mouse ExtraButton1] [--remove]
+# Пустое значение — не регистрировать вовсе.
+#
+# kglobalacceld включает командные сочетания только для «служебных» составляющих, а те создаются из
+# desktop-файлов с X-KDE-Shortcuts (через кэш KSycoca). Простой doRegister() по D-Bus даёт действие,
+# которое не реагирует на нажатия, — отсюда desktop-файлы и kbuildsycoca6.
 set -euo pipefail
-TALK="Meta+J"; CANCEL="Meta+Shift+J"; EXTRA="F19"; TYPE="Meta+K"; YES="Meta+Y"; NO="Meta+N"; MOUSE=""; REMOVE=0
+
+# имя|подпись|команда|по умолчанию
+KEYS=(
+  "talk|говорить|toggle|Meta+J"
+  "cancel|отмена|stop|Meta+Shift+J"
+  "type|написать|compose|Meta+K"
+  "yes|да / разрешить|approve|Meta+Y"
+  "no|нет / отклонить|deny|Meta+N"
+  "apps|поиск программ|tools apps|Alt+Space"
+  "clip|буфер обмена|tools clip|Meta+V"
+  "emoji|эмодзи|tools emoji|Meta+."
+  "load|нагрузка машины|tools load|"
+)
+
+declare -A KEY
+for row in "${KEYS[@]}"; do
+  IFS='|' read -r name _ _ def <<<"$row"
+  KEY[$name]="$def"
+done
+EXTRA="F19"      # вторая клавиша «говорить»: например то, что шлёт кнопка мыши ("" — нет)
+MOUSE=""
+REMOVE=0
+
 while (($#)); do
   case "$1" in
-    --talk) TALK="$2"; shift ;;
-    --extra) EXTRA="$2"; shift ;;   # second talk key, e.g. what a gaming mouse button sends ("" = none)
-    --cancel) CANCEL="$2"; shift ;;
-    --type) TYPE="$2"; shift ;;
-    --yes) YES="$2"; shift ;;
-    --no) NO="$2"; shift ;;
+    --extra) EXTRA="$2"; shift ;;
     --mouse) MOUSE="$2"; shift ;;
     --remove) REMOVE=1 ;;
-    *) TALK="$1" ;;  # backwards compatible: first positional = talk key
+    --*)
+      name="${1#--}"
+      if [[ -v KEY[$name] ]]; then KEY[$name]="$2"; shift
+      else echo "неизвестный ключ: $1" >&2; exit 2; fi ;;
+    *) KEY[talk]="$1" ;;   # для совместимости: первый позиционный — клавиша «говорить»
   esac
   shift
 done
+
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$APPS"
 
@@ -38,20 +63,28 @@ if [[ -z "$KWRITE" ]]; then
   exit 1
 fi
 
+id_of() { [[ "$1" == talk ]] && echo "net.local.justday.desktop" || echo "net.local.justday-$1.desktop"; }
+
 unregister() {  # $1 desktop id
   gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel \
     --method org.kde.KGlobalAccel.unregister "$1" "_launch" >/dev/null 2>&1 || true
   [[ -n "$QDBUS" ]] && "$QDBUS" org.kde.kglobalaccel "/component/${1//[.-]/_}" org.kde.kglobalaccel.Component.cleanUp >/dev/null 2>&1 || true
 }
 
-register() {  # $1 desktop id, $2 name, $3 command, $4.. keys
+forget() {  # $1 desktop id — убрать и сочетание, и сам файл
+  unregister "$1"
+  "$KWRITE" --file kglobalshortcutsrc --group services --group "$1" --key _launch --delete
+  rm -f "${APPS:?}/${1:?}"
+}
+
+register() {  # $1 desktop id, $2 подпись, $3 команда, $4.. клавиши
   local id="$1" name="$2" cmd="$3"; shift 3
   local keys_csv keys_tab
   keys_csv=$(IFS=,; echo "$*"); keys_tab=$(printf '%s\t' "$@"); keys_tab="${keys_tab%$'\t'}"
   cat > "$APPS/$id" <<EOF
 [Desktop Entry]
 Type=Application
-Name=$name
+Name=JustDay: $name
 Exec=$cmd
 Icon=audio-input-microphone
 NoDisplay=true
@@ -60,43 +93,35 @@ X-KDE-Shortcuts=$keys_csv
 EOF
   unregister "$id"
   "$KWRITE" --file kglobalshortcutsrc --group services --group "$id" --key _launch "$keys_tab"
-  echo "shortcut ${keys_csv} → $cmd"
+  echo "сочетание ${keys_csv} → $cmd"
 }
 
 if ((REMOVE)); then
-  for id in net.local.justday.desktop net.local.justday-stop.desktop net.local.justday-type.desktop \
-            net.local.justday-yes.desktop net.local.justday-no.desktop; do
-    unregister "$id"
-    "$KWRITE" --file kglobalshortcutsrc --group services --group "$id" --key _launch --delete
-    rm -f "$APPS/$id"
+  for row in "${KEYS[@]}"; do
+    IFS='|' read -r name _ _ _ <<<"$row"
+    forget "$(id_of "$name")"
   done
   { [[ -n "$MOUSE" ]] && "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --delete --notify; } || true
   { [[ -n "$KBUILD" ]] && "$KBUILD" >/dev/null 2>&1; } || true
-  echo "JustDay shortcuts removed"
+  echo "сочетания JustDay убраны"
   exit 0
 fi
 
-if [[ -n "$EXTRA" ]]; then
-  register net.local.justday.desktop "JustDay: говорить" "$HOME/.local/bin/justday toggle" "$TALK" "$EXTRA"
-else
-  register net.local.justday.desktop "JustDay: говорить" "$HOME/.local/bin/justday toggle" "$TALK"
-fi
-register net.local.justday-stop.desktop "JustDay: отмена" "$HOME/.local/bin/justday stop" "$CANCEL"
-optional() {  # $1 desktop id, $2 name, $3 command, $4 key ("" = remove)
-  if [[ -n "$4" ]]; then
-    register "$1" "$2" "$3" "$4"
+for row in "${KEYS[@]}"; do
+  IFS='|' read -r name label cmd _ <<<"$row"
+  id="$(id_of "$name")"
+  keys=("${KEY[$name]}")
+  # У «говорить» бывает вторая клавиша: кнопка мыши, перенастроенная на F19.
+  [[ "$name" == talk && -n "$EXTRA" ]] && keys+=("$EXTRA")
+  if [[ -n "${KEY[$name]}" ]]; then
+    register "$id" "$label" "$HOME/.local/bin/justday $cmd" "${keys[@]}"
   else
-    unregister "$1"
-    "$KWRITE" --file kglobalshortcutsrc --group services --group "$1" --key _launch --delete
-    rm -f "$APPS/$1"
+    forget "$id"
   fi
-}
-optional net.local.justday-type.desktop "JustDay: написать" "$HOME/.local/bin/justday compose" "$TYPE"
-optional net.local.justday-yes.desktop "JustDay: да / разрешить" "$HOME/.local/bin/justday approve" "$YES"
-optional net.local.justday-no.desktop "JustDay: нет / отклонить" "$HOME/.local/bin/justday deny" "$NO"
+done
 { [[ -n "$KBUILD" ]] && "$KBUILD" >/dev/null 2>&1; } || true
 
 if [[ -n "$MOUSE" ]]; then
-  "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --notify "Key,$TALK"
-  echo "mouse $MOUSE → $TALK"
+  "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --notify "Key,${KEY[talk]}"
+  echo "мышь $MOUSE → ${KEY[talk]}"
 fi

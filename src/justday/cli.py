@@ -20,6 +20,13 @@ def _print(obj) -> None:
     print(obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False, indent=2))
 
 
+def manage_hotkeys():
+    """Таблица клавиш из manage — единственное место, где они описаны."""
+    from .manage import HOTKEYS
+
+    return HOTKEYS
+
+
 def control(cmd: str, timeout: float | None = 10, **kw) -> dict:
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(timeout)
@@ -504,14 +511,14 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("reminders", help="what is waiting: list | cancel [timer|alarm|ID]")
     sp.add_argument("action", nargs="?", default="list", choices=["list", "cancel"])
     sp.add_argument("args", nargs="*")
-    sp = sub.add_parser("hotkey", help="talk/cancel shortcuts: get | set --talk Meta+J --extra F19 --cancel Meta+Shift+J")
+    sp = sub.add_parser("hotkey", help="глобальные сочетания: get показывает все, "
+                                      "set --clip Meta+V --apps 'Alt+Space' меняет названные "
+                                      "(пустая строка снимает клавишу, остальные не трогаются)")
     sp.add_argument("action", choices=["get", "set"])
-    sp.add_argument("--talk", default="Meta+J")
-    sp.add_argument("--extra", default="F19")
-    sp.add_argument("--cancel", default="Meta+Shift+J")
-    sp.add_argument("--type", dest="type_", default=None, help="open the text field (default Meta+K)")
-    sp.add_argument("--yes", default=None, help="answer yes / allow (default Meta+Y)")
-    sp.add_argument("--no", default=None, help="answer no / deny (default Meta+N)")
+    sp.add_argument("--extra", default=None, help="вторая клавиша «говорить» (кнопка мыши, F19)")
+    for _name, _label, _default in manage_hotkeys():
+        sp.add_argument(f"--{_name}", default=None, dest=f"key_{_name}",
+                        help=f"{_label}" + (f" (по умолчанию {_default})" if _default else ""))
     sp = sub.add_parser("autostart", help="start JustDay with the session: on | off | status")
     sp.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
@@ -537,6 +544,13 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--search", default="", help="искать по содержимому")
     sp.add_argument("--image", action="store_true", help="для store: на входе картинка, а не текст")
     sp.add_argument("--copy", action="store_true", help="только в буфер, не печатать")
+    # Имя не «panel»: так уже зовётся запасная полоска на Tk для машин без острова.
+    sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps | emoji | clip | load")
+    sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "load"])
+    sp = sub.add_parser("launch", help="поиск программ: без запроса открывает лаунчер в островке, "
+                                      "с запросом запускает первое подходящее")
+    sp.add_argument("query", nargs="*")
+    sp.add_argument("--list", action="store_true", help="показать найденное, ничего не запуская")
     sp = sub.add_parser("load", help="нагрузка машины: процессор, память, диск, сеть, температуры, "
                                     "тяжёлые программы")
     sp.add_argument("--json", action="store_true")
@@ -603,6 +617,12 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_emoji_cmd(" ".join(a.query), show=a.list, copy_only=a.copy))
     elif a.cmd == "clip":
         sys.exit(_clip_cmd(a.action, a.which, search=a.search, image=a.image, copy_only=a.copy))
+    elif a.cmd == "tools":
+        got = control("panel", which=a.which, timeout=5)
+        if not got.get("ok"):
+            sys.exit(got.get("error") or "островок не отвечает")
+    elif a.cmd == "launch":
+        sys.exit(_launch_cmd(" ".join(a.query), show=a.list))
     elif a.cmd == "load":
         sys.exit(_load_cmd(as_json=a.json, watch=a.watch))
     elif a.cmd == "memory":
@@ -865,9 +885,10 @@ def main(argv: list[str] | None = None) -> None:
         from . import manage
 
         if a.action == "get":
-            _print(manage.hotkeys())
+            _print(manage.hotkey_list())
         else:
-            _print(manage.set_hotkeys(a.talk, a.extra, a.cancel, a.type_, a.yes, a.no))
+            named = {name: getattr(a, f"key_{name}") for name, _, _ in manage.HOTKEYS}
+            _print(manage.set_hotkeys(extra=a.extra, **named))
             control("reload_settings", timeout=5)  # the island shows the keys in its hints
     elif a.cmd == "autostart":
         from . import manage
@@ -1280,6 +1301,30 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
     elif (missed := clipboard.skipped()["count"]):
         print(f"\n(пропущено как похожее на пароль или ключ: {missed})")
     return 0
+
+
+def _launch_cmd(query: str, *, show: bool = False) -> int:
+    """`justday launch` — лаунчер в островке; с запросом запускает первое подходящее."""
+    from . import launcher
+
+    if not query:
+        got = control("panel", which="apps", timeout=5)
+        if got.get("ok"):
+            return 0
+        print("островок не отвечает; так тоже можно: justday launch дискорд")
+        return 1
+    found = launcher.items(query, limit=12 if show else 1)
+    if not found:
+        print(f"ничего не нашлось на «{query}»")
+        return 1
+    if show:
+        for item in found:
+            kind = {"app": "программа", "game": "игра", "window": "окно"}.get(item["kind"], item["kind"])
+            print(f"{item['name']}  ·  {kind}" + (f"  ·  {item['sub']}" if item["sub"] else ""))
+        return 0
+    got = launcher.run(found[0]["kind"], found[0]["id"])
+    print(found[0]["name"] if got.get("ok") else f"не вышло: {got.get('error')}")
+    return 0 if got.get("ok") else 1
 
 
 def _load_cmd(*, as_json: bool = False, watch: bool = False) -> int:

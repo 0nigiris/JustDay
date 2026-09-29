@@ -193,21 +193,61 @@ def _shortcut(desktop_id: str) -> list[str]:
     return [k.strip() for k in m.group(1).split(",") if k.strip()] if m else []
 
 
+# Клавиши описаны здесь и в scripts/setup-hotkey.sh — по одной строке на каждую: имя, подпись для
+# настроек, значение по умолчанию. Всё остальное (островок, настройки, `justday hotkey`) читает эту
+# таблицу, поэтому новая клавиша не требует правок в четырёх местах.
+HOTKEYS: tuple[tuple[str, str, str], ...] = (
+    ("talk", "Говорить", "Meta+J"),
+    ("cancel", "Отменить всё", "Meta+Shift+J"),
+    ("type", "Написать текстом", "Meta+K"),
+    ("yes", "Да / разрешить", "Meta+Y"),
+    ("no", "Нет / отклонить", "Meta+N"),
+    ("apps", "Поиск программ", "Alt+Space"),
+    ("clip", "Буфер обмена", "Meta+V"),
+    ("emoji", "Эмодзи", "Meta+."),
+    ("load", "Нагрузка машины", ""),
+)
+HOTKEY_DEFAULTS = {name: default for name, _, default in HOTKEYS}
+
+
+def _hotkey_id(name: str) -> str:
+    return "net.local.justday.desktop" if name == "talk" else f"net.local.justday-{name}.desktop"
+
+
 def hotkeys() -> dict:
-    talk = _shortcut("net.local.justday.desktop")
-    first = lambda name: (_shortcut(f"net.local.justday-{name}.desktop") or [""])[0]  # noqa: E731
-    return {"talk": talk[0] if talk else "", "extra": talk[1] if len(talk) > 1 else "", "cancel": first("stop"),
-            "type": first("type"), "yes": first("yes"), "no": first("no")}
+    """Что сейчас назначено. `extra` — вторая клавиша «говорить» (кнопка мыши)."""
+    out = {}
+    for name, _, _ in HOTKEYS:
+        keys = _shortcut(_hotkey_id("stop" if name == "cancel" else name)) or [""]
+        out[name] = keys[0]
+        if name == "talk":
+            out["extra"] = keys[1] if len(keys) > 1 else ""
+    return out
 
 
-def set_hotkeys(talk: str, extra: str, cancel: str, type_: str | None = None, yes: str | None = None,
-                no: str | None = None) -> dict:
+def hotkey_list() -> list[dict]:
+    """Таблица для настроек: имя, подпись, что назначено, что было бы по умолчанию."""
+    now = hotkeys()
+    return [{"name": name, "label": label, "key": now.get(name, ""), "default": default}
+            for name, label, default in HOTKEYS]
+
+
+def set_hotkeys(*args: str | None, **named: str | None) -> dict:
+    """Назначить клавиши. Не названное остаётся как было, пустая строка — снять клавишу.
+
+    Позиционные аргументы приняты ради старого порядка (talk, extra, cancel, type, yes, no):
+    его ждут `justday hotkey` и настройки островка."""
+    order = ("talk", "extra", "cancel", "type", "yes", "no")
+    given = {name: value for name, value in zip(order, args) if value is not None}
+    given.update({k: v for k, v in named.items() if v is not None})
+    now = hotkeys()
+    argv: list[str] = []
+    for name, _, default in HOTKEYS:
+        value = given.get(name, now.get(name) or default)
+        argv += [f"--{name}", value]
+    argv += ["--extra", given.get("extra", now.get("extra", ""))]
     script = config.REPO_DIR / "scripts" / "setup-hotkey.sh"
-    cur = hotkeys()
-    pick = lambda given, name, default: cur[name] or default if given is None else given  # noqa: E731
-    args = ["--talk", talk, "--extra", extra, "--cancel", cancel, "--type", pick(type_, "type", "Meta+K"),
-            "--yes", pick(yes, "yes", "Meta+Y"), "--no", pick(no, "no", "Meta+N")]
-    p = subprocess.run([str(script), *args], capture_output=True, text=True)
+    p = subprocess.run([str(script), *argv], capture_output=True, text=True)
     return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(), **hotkeys()}
 
 

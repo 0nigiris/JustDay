@@ -23,7 +23,10 @@ Item {
     readonly property var load: JD.load
 
     // Поле поиска нужно двум страницам из трёх: у нагрузки искать нечего.
-    readonly property bool searchable: page === "emoji" || page === "clip"
+    readonly property bool searchable: page === "apps" || page === "emoji" || page === "clip"
+    // Ничего не нашлось, а что-то напечатано — предложим спросить ассистента. Ради этого лаунчер
+    // и живёт в островке: поле не обязано быть командой.
+    readonly property bool askInstead: page === "apps" && JD.toolsQuery.trim() !== "" && items.length === 0
 
     // Байты — байтами: скопированная строка в 25 знаков не «1 КБ».
     function fmtSize(bytes) {
@@ -51,6 +54,7 @@ Item {
 
             Repeater {
                 model: [
+                    { id: "apps", name: "Программы", icon: "layout-grid" },
                     { id: "emoji", name: "Эмодзи", icon: "smile" },
                     { id: "clip", name: "Буфер", icon: "clipboard" },
                     { id: "load", name: "Машина", icon: "activity" },
@@ -107,13 +111,22 @@ Item {
                         text: JD.toolsQuery
                         onTextChanged: if (text !== JD.toolsQuery) { JD.toolsQuery = text; searchDelay.restart() }
                         Keys.onPressed: (e) => {
-                            if (e.key === Qt.Key_Escape) { JD.closeTools(); e.accepted = true }
-                            // Enter берёт первое найденное: в девяти случаях из десяти оно и нужно.
-                            else if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && tv.items.length) {
-                                if (tv.page === "emoji") JD.useEmoji(tv.items[0].c)
-                                else JD.useClip(tv.items[0].id)
+                            if (e.key === Qt.Key_Escape) { JD.closeTools(); e.accepted = true; return }
+                            if (e.key === Qt.Key_Down || e.key === Qt.Key_Up) {
+                                const step = e.key === Qt.Key_Down ? 1 : -1
+                                JD.toolsPick = Math.max(0, Math.min(tv.items.length - 1, JD.toolsPick + step))
                                 e.accepted = true
+                                return
                             }
+                            if (e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter) return
+                            e.accepted = true
+                            // Enter берёт выбранное; ничего не выбирали — первое найденное.
+                            if (tv.askInstead) { JD.askFromLauncher(JD.toolsQuery); return }
+                            const item = tv.items[JD.toolsPick] || tv.items[0]
+                            if (!item) return
+                            if (tv.page === "apps") JD.runApp(item)
+                            else if (tv.page === "emoji") JD.useEmoji(item.c)
+                            else JD.useClip(item.id)
                         }
                         Text {
                             anchors.fill: parent
@@ -121,7 +134,8 @@ Item {
                             visible: !field.text
                             font: field.font
                             color: JD.text3
-                            text: tv.page === "emoji" ? "кот, сердце, флаг…" : "искать в истории…"
+                            text: tv.page === "apps" ? "программа, игра, окно — или просьба…"
+                            : tv.page === "emoji" ? "кот, сердце, флаг…" : "искать в истории…"
                         }
                     }
                 }
@@ -219,6 +233,90 @@ Item {
             text: {
                 const item = tv.items[grid.currentIndex] || tv.items[0]
                 return item ? item.c + "   " + item.n : ""
+            }
+        }
+
+        // ───────────── программы, игры, окна ─────────────
+        ListView {
+            id: appList
+            visible: tv.page === "apps" && !tv.askInstead
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            spacing: 2
+            model: tv.page === "apps" ? tv.items : []
+            currentIndex: JD.toolsPick
+            highlightMoveDuration: 90
+            // Выбранное стрелками не должно уезжать за край списка.
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+            delegate: Rectangle {
+                required property var modelData
+                required property int index
+                width: ListView.view.width
+                implicitHeight: 44
+                radius: 10
+                color: index === JD.toolsPick ? JD.fill2 : (appHover.hovered ? JD.fill1 : "transparent")
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    spacing: 11
+                    Icon { name: modelData.icon; fallback: "application-x-executable"; implicitSize: 22 }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        Label1 { Layout.fillWidth: true; text: modelData.name }
+                        Label2 { visible: !!modelData.sub; color: JD.text3; text: modelData.sub }
+                    }
+                    Label2 {
+                        color: JD.text3
+                        text: ({ app: "", game: "игра", window: "открыто" })[modelData.kind] || ""
+                    }
+                }
+                HoverHandler { id: appHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: JD.runApp(modelData)
+                }
+            }
+        }
+
+        // Ничего не нашлось — не тупик, а вопрос ассистенту.
+        Item {
+            visible: tv.askInstead
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 520)
+                spacing: 12
+                Icon {
+                    Layout.alignment: Qt.AlignHCenter
+                    name: "sparkles"
+                    implicitSize: 26
+                    tint: JD.accentBlue
+                }
+                Label1 {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideNone
+                    text: "Такой программы нет. Спросить " + JD.assistantName + "?"
+                }
+                Label2 {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    color: JD.text3
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideNone
+                    text: "«" + JD.toolsQuery + "»"
+                }
+                PillButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    label: "Спросить  ⏎"
+                    tint: JD.accentBlue
+                    onClicked: JD.askFromLauncher(JD.toolsQuery)
+                }
             }
         }
 

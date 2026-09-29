@@ -34,6 +34,7 @@ from . import (
     inbox,
     island,
     jobs,
+    launcher,
     mail,
     media,
     namespot,
@@ -2293,6 +2294,13 @@ class Daemon:
             elif cmd == "emoji_use":  # выбрали символ: в буфер и в то окно, где курсор
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: glyphs.use(req.get("char", ""), paste=req.get("paste", True)))
+            elif cmd == "apps":  # лаунчер: программы, игры, открытые окна
+                found = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: launcher.items(req.get("query", ""), int(req.get("limit") or 40)))
+                resp = {"ok": True, "apps": found}
+            elif cmd == "apps_run":
+                resp = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", ""))))
             elif cmd == "clip_list":
                 resp = {"ok": True, "clip": clipboard.items(int(req.get("limit") or 60),
                                                             req.get("query", "")),
@@ -2309,7 +2317,7 @@ class Daemon:
                 resp = {"ok": True, "paused": clipboard.pause(bool(req.get("on", True)))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))
-                if which not in ("emoji", "clip", "load", ""):
+                if which not in ("emoji", "clip", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
                 else:
                     self.publish(panel=which)

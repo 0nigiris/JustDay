@@ -1252,13 +1252,29 @@ Item {
                 Row { title: JD.tr("Написать"); subtitle: JD.tr("Поле ввода на острове; выделенный на экране текст прикрепляется сам"); Field { id: typeKey; text: win.d.hotkeys ? win.d.hotkeys.type : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Да / разрешить"); subtitle: JD.tr("Ответить на вопрос острова, не отрываясь от клавиатуры"); Field { id: yesKey; text: win.d.hotkeys ? win.d.hotkeys.yes : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Нет / отклонить"); Field { id: noKey; text: win.d.hotkeys ? win.d.hotkeys.no : ""; implicitWidth: 180 } }
+            }
+
+            // Панель инструментов: те же глобальные сочетания, только открывают они окна внутри
+            // острова, а не отдельные программы.
+            PageTitle { title: JD.tr("Панель инструментов"); subtitle: JD.tr("Открывают окна прямо в острове") }
+            Group {
+                Row { title: JD.tr("Поиск программ"); subtitle: JD.tr("Программы, игры и открытые окна; не нашлось — уходит ассистенту");
+                      Field { id: appsKey; text: win.d.hotkeys ? win.d.hotkeys.apps : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Буфер обмена"); subtitle: JD.tr("История скопированного; пароли в неё не попадают");
+                      Field { id: clipKey; text: win.d.hotkeys ? win.d.hotkeys.clip : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Эмодзи"); subtitle: JD.tr("Поиск по-русски, вставка в то окно, где курсор");
+                      Field { id: emojiKey; text: win.d.hotkeys ? win.d.hotkeys.emoji : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Нагрузка машины"); subtitle: JD.tr("Процессор, память, видеокарта, тяжёлые программы");
+                      Field { id: loadKey; text: win.d.hotkeys ? win.d.hotkeys.load : ""; implicitWidth: 180 } }
                 Row {
                     title: ""
                     Btn {
                         text: JD.tr("Применить")
                         primary: true
                         onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text,
-                                            "--type", typeKey.text, "--yes", yesKey.text, "--no", noKey.text],
+                                            "--type", typeKey.text, "--yes", yesKey.text, "--no", noKey.text,
+                                            "--apps", appsKey.text, "--clip", clipKey.text, "--emoji", emojiKey.text,
+                                            "--load", loadKey.text],
                                            r => win.notify(r.ok ? JD.tr("Сочетания обновлены") : JD.tr("Не получилось")))
                     }
                 }
@@ -1266,6 +1282,7 @@ Item {
             Note {
                 text: JD.tr("<b>Кнопка на мыши Logitech (G502 и др.)</b>: назначьте ей клавишу F19 через libratbag, например<br>") +
                       JD.tr("<tt>ratbagctl &lt;мышь&gt; profile 0 button 5 action set key KEY_F19</tt>. F13 не подходит: в KDE она открывает Системные настройки.<br><br>") +
+                      JD.tr("<b>Пустое поле</b> снимает сочетание совсем.<br><br>") +
                       JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».<br><br>") +
                       JD.tr("<b>В поле ввода</b>: Enter — отправить, Shift+Enter — новая строка, ↑/↓ — прошлые просьбы, Tab — подсказка команды, Esc — закрыть. Начните с <tt>/</tt>, чтобы увидеть быстрые команды. Пустое поле убрать выделенный текст: Backspace.")
             }
