@@ -322,6 +322,37 @@ def backend() -> str:
 _BACKEND: str | None = None
 
 
+def pointer(x: int, y: int, button: int = 1, double: bool = False) -> dict:
+    """Щёлкнуть в точке экрана — там, где это в принципе возможно.
+
+    На X11 щелчок делает `xdotool`: ассистент умеет нажимать кнопки в чужих окнах и без KWin,
+    лишь бы знал координаты (их даёт `justday screenshot` активного окна). На Wayland синтетические
+    события запрещены самим протоколом: там щелчки идут только через композитор, то есть через
+    kwin-mcp на KWin 6."""
+    if backend() == "x11" and shutil.which("xdotool"):
+        cmd = ["xdotool", "mousemove", "--sync", str(int(x)), str(int(y)), "click"]
+        if double:
+            cmd += ["--repeat", "2", "--delay", "80"]
+        cmd.append(str(int(button)))
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return {"ok": p.returncode == 0, "x": int(x), "y": int(y), "button": int(button),
+                "double": double, "how": "xdotool", "error": (p.stderr or "").strip()[:200]}
+    if backend() == "kwin":
+        return {"ok": False, "error": "на Wayland щелчки идут через kwin-mcp: инструменты look/act, "
+                                      "а не эта команда"}
+    return {"ok": False, "error": "щёлкать нечем: нужен xdotool на X11 или KWin 6 на Wayland"}
+
+
+def keys(combo: str) -> dict:
+    """Нажать сочетание клавиш: «ctrl+s», «Return», «alt+Tab». X11 — xdotool, иначе нечем."""
+    if backend() == "x11" and shutil.which("xdotool"):
+        p = subprocess.run(["xdotool", "key", "--clearmodifiers", combo], capture_output=True, text=True, timeout=10)
+        return {"ok": p.returncode == 0, "keys": combo, "how": "xdotool", "error": (p.stderr or "").strip()[:200]}
+    if backend() == "kwin":
+        return {"ok": False, "error": "на Wayland нажатия идут через kwin-mcp (инструмент act)"}
+    return {"ok": False, "error": "нажимать нечем: нужен xdotool на X11 или KWin 6 на Wayland"}
+
+
 def _x11_active_id() -> int:
     """Какое окно сейчас активно (_NET_ACTIVE_WINDOW)."""
     try:

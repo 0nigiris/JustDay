@@ -39,7 +39,7 @@ $(if [[ "${XDG_SESSION_TYPE:-}" != wayland || "${XDG_CURRENT_DESKTOP:-}" != *KDE
 ## Этот стол — не KDE 6 на Wayland
 - Инструмента kwin (`look`, клики по разметке окна) здесь нет.
 - Окна: `wmctrl -l -x` (список), `wmctrl -i -a ID` (переключиться), `wmctrl -i -c ID` (закрыть).
-- Мышь и клавиатура: `xdotool mousemove X Y click 1`, `xdotool type "текст"`, `xdotool key Return`.
+- Щёлкнуть и нажать: `justday click X Y` (`--button 3`, `--double`), `justday keys ctrl+s`. Напрямую то же — `xdotool mousemove X Y click 1`, `xdotool type "текст"`.
 - Экран: `justday screenshot` (сам выберет spectacle / gnome-screenshot / maim / scrot) и потом Read по пути.
 - Выделённый текст: `xclip -o -selection primary`.
 X11

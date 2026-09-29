@@ -933,6 +933,8 @@ justday tokens --days 30
 ```bash
 justday doctor                # все компоненты (--quick без обращений к модели)
 justday test parts|mic|stt|tts|llm|mcp|desktop|browser|files|claude|memory|hotkey|daemon|local_llm|mail
+justday click 940 512         # щёлкнуть в точке экрана (X11: xdotool; на Wayland — через kwin-mcp)
+justday keys ctrl+s           # нажать сочетание клавиш (X11: xdotool)
 justday parts                 # какие части окружения стоят: speech, voice, cuda
 justday parts add speech      # доставить распознавание речи (или voice, cuda) и перезапустить демона
 justday parts remove cuda     # освободить 2,2 ГБ, если видеокарты NVIDIA нет

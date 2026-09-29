@@ -42,3 +42,40 @@ def test_active_returns_only_the_focused_window(monkeypatch):
     _fake_run(monkeypatch, active="0x03400003")
     got = desktop.windows("active")
     assert len(got) == 1 and got[0]["app"] == "discord"
+
+
+def test_click_uses_xdotool_with_sync_and_button(monkeypatch):
+    seen = []
+
+    def run(cmd, *a, **kw):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(desktop.subprocess, "run", run)
+    monkeypatch.setattr(desktop, "_BACKEND", "x11")
+    monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert desktop.pointer(300, 420, button=3)["ok"]
+    assert seen[0] == ["xdotool", "mousemove", "--sync", "300", "420", "click", "3"]
+    assert desktop.pointer(10, 20, double=True)["ok"]
+    assert "--repeat" in seen[1] and seen[1][-1] == "1"
+
+
+def test_keys_clears_modifiers(monkeypatch):
+    seen = []
+    monkeypatch.setattr(desktop.subprocess, "run",
+                        lambda cmd, *a, **kw: (seen.append(cmd), subprocess.CompletedProcess(cmd, 0, stdout="", stderr=""))[1])
+    monkeypatch.setattr(desktop, "_BACKEND", "x11")
+    monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert desktop.keys("ctrl+s")["ok"]
+    assert seen[0] == ["xdotool", "key", "--clearmodifiers", "ctrl+s"]
+
+
+def test_on_wayland_the_click_explains_where_it_lives(monkeypatch):
+    monkeypatch.setattr(desktop, "_BACKEND", "kwin")
+    r = desktop.pointer(1, 1)
+    assert not r["ok"] and "kwin-mcp" in r["error"]
+
+
+def test_with_nothing_available_it_says_so(monkeypatch):
+    monkeypatch.setattr(desktop, "_BACKEND", "")
+    assert "xdotool" in desktop.keys("Return")["error"]

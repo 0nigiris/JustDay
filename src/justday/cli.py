@@ -361,6 +361,13 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("windows", help="list/focus/close/minimize windows (KWin)")
     sp.add_argument("action", choices=["list", "focus", "close", "minimize"])
     sp.add_argument("query", nargs="*")
+    sp = sub.add_parser("click", help="щёлкнуть в точке экрана (X11: xdotool; на Wayland щелчки идут через kwin-mcp)")
+    sp.add_argument("x", type=int)
+    sp.add_argument("y", type=int)
+    sp.add_argument("--button", type=int, default=1, help="1 левая, 2 средняя, 3 правая")
+    sp.add_argument("--double", action="store_true")
+    sp = sub.add_parser("keys", help="нажать сочетание клавиш: justday keys ctrl+s (X11: xdotool)")
+    sp.add_argument("combo")
     sp = sub.add_parser("screenshot", help="capture the screen as a small JPEG and print its path")
     sp.add_argument("--all", action="store_true", help="all monitors instead of the active window")
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
@@ -544,6 +551,18 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0 if ok else 1)
     elif a.cmd == "test":
         sys.exit(0 if _check(a.component, TESTS[a.component]) else 1)
+    elif a.cmd == "click":
+        from . import desktop
+
+        r = desktop.pointer(a.x, a.y, a.button, a.double)
+        _print(r)
+        sys.exit(0 if r.get("ok") else 1)
+    elif a.cmd == "keys":
+        from . import desktop
+
+        r = desktop.keys(a.combo)
+        _print(r)
+        sys.exit(0 if r.get("ok") else 1)
     elif a.cmd == "parts":
         sys.exit(_parts_cmd(a.action, a.names))
     elif a.cmd == "memory":
