@@ -40,8 +40,11 @@ Item {
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var source: Pipewire.defaultAudioSource
 
-    // Без этого свойства узлов мертвы: PipeWire отдаёт их по подписке, а не по запросу.
-    PwObjectTracker { objects: [...mx.streams, ...mx.inputs, mx.sink, mx.source].filter(n => !!n) }
+    // Подписываемся на все узлы, а не на отобранные. Иначе выходит круг: отобрать ручьи можно
+    // только по их свойствам, свойства приходят по подписке, а подписываемся мы на отобранное —
+    // и половина ручьёв не появляется никогда. Панель живёт, только пока её смотрят, так что
+    // подписка на всё стоит ровно столько, сколько на неё смотрят.
+    PwObjectTracker { objects: Pipewire.nodes.values }
 
     function nameOf(node) {
         if (!node) return ""
