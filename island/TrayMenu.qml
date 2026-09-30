@@ -37,6 +37,14 @@ Item {
     onHandleChanged: { sub1 = null; sub2 = null }
     function finish() { sub1 = null; sub2 = null; tm.dismissed() }
 
+    // Раскрыть подменю у строки под номером — тоже для проверки руками. Открывает только то, что
+    // раскрывается: нажимать чужие пункты («Выйти из Telegram») проверка не должна.
+    function poke(n) {
+        const e = s0.rows[n]
+        if (e && e.hasChildren) { tm.sub2 = null; tm.sub1 = e; tm.sub1Y = 400 }
+        return report()
+    }
+
     // Проверка руками: `qs -p island ipc call island trayRows`. Правую кнопку на вейланде
     // синтетически не нажать, а «меню не открылось» здесь однажды уже случилось молча.
     function report() {
@@ -93,6 +101,11 @@ Item {
             return out
         }
         readonly property bool anyDeeper: rows.some(e => e && e.hasChildren)
+        // Колея под значок и галочку нужна не всякому меню. Там, где ни значков, ни переключателей
+        // нет, пустая колея — просто сдвинутый вправо текст: имена стоят не у края, а непонятно
+        // отчего в отступе.
+        readonly property bool anyMark: rows.some(e => e && (!!e.icon || e.buttonType !== QsMenuButtonType.None))
+        readonly property real gutter: anyMark ? 20 : 0
 
         // Ширина — по самому длинному имени, а не «на глаз»: меню, обрезающее «Выйти из Steam»,
         // выглядит поломкой, а меню шириной во весь экран — небрежностью.
@@ -113,7 +126,7 @@ Item {
             return w
         }
         readonly property real cardW: Math.max(176, Math.min(360,
-            Math.ceil(textW) + 12 + 20 + 9 + 12 + (anyDeeper ? 14 : 0) + 12))
+            Math.ceil(textW) + 12 + gutter + (anyMark ? 9 : 0) + 12 + (anyDeeper ? 14 + 9 : 0) + 12))
         readonly property real contentH: {
             let h = 0
             for (let i = 0; i < rows.length; i++) h += rows[i] && rows[i].isSeparator ? 9 : 30
@@ -197,7 +210,8 @@ Item {
                                 // съезжают строка от строки.
                                 Item {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 20
+                                    visible: sh.anyMark
+                                    width: sh.gutter
                                     height: 20
                                     Icon {
                                         anchors.centerIn: parent
@@ -221,7 +235,8 @@ Item {
 
                                 Label1 {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - 20 - 9 - (row.deeper ? 14 + 9 : 0) - 12
+                                    width: parent.width - (sh.anyMark ? sh.gutter + 9 : 0)
+                                           - (row.deeper ? 14 + 9 : 0) - 12
                                     color: row.live ? JD.text1 : JD.text3
                                     text: row.modelData ? (row.modelData.text || "") : ""
                                 }

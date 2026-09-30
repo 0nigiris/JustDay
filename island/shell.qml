@@ -62,6 +62,7 @@ ShellRoot {
         }
         // Что в открытом меню видно: имена пунктов, галочки и подменю.
         function trayRows(): string { return trayMenu.report() }
+        function traySub(n: int): string { return trayMenu.poke(n) }
     }
 
     // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1 or a picture path): a "wallpaper" so the black island is visible in headless sessions
