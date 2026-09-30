@@ -636,9 +636,15 @@ def main(argv: list[str] | None = None) -> None:
         mark = lambda on: "держит" if on else "отпущено"          # noqa: E731
         print(f"  слух   {mark(stt['loaded']):8} · молчит {stt['idle_minutes']:g} мин "
               f"· отпускать после {stt['unload_after']} мин")
-        print(f"  голос  {mark(tts.get('loaded')):8} · молчит {tts.get('idle', 0)} мин "
-              f"· отпускать после {tts.get('idle_unload_minutes', '?')} мин"
-              if tts.get("ok") else f"  голос  недоступен ({tts.get('error', '')})")
+        if not tts.get("ok"):
+            print(f"  голос  недоступен ({tts.get('error', '')})")
+        elif tts.get("stopped"):
+            # Служба вышла совсем и поднимется сама при первой же просьбе. Спрашивать её о том,
+            # сколько она молчит, некого — писать «None мин» вместо этого нельзя.
+            print("  голос  служба спит · поднимется при первой просьбе")
+        else:
+            print(f"  голос  {mark(tts.get('loaded')):8} · молчит {tts.get('idle', 0)} мин "
+                  f"· отпускать после {tts.get('idle_unload_minutes', '?')} мин")
         mem = got.get("memory") or {}
         print(f"  память машины {mem.get('used', 0)} / {mem.get('total', 0)} МБ"
               + (f" · видеопамять {gpu['mem_used']} / {gpu['mem_total']} МБ" if gpu.get("mem_total") else ""))
