@@ -100,6 +100,20 @@ def load_base():
     return model
 
 
+def _trim_heap() -> None:
+    """Вернуть системе то, что уже свободно внутри процесса.
+
+    Питон отдал память своему распределителю, а тот держит страницы за собой — в `ps` ничего не
+    меняется, и «отпустили» выглядит неправдой. malloc_trim возвращает их ядру.
+    """
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 def unload() -> bool:
     """Отпустить модель и видеопамять. Возвращает True, если было что отпускать."""
     global model
@@ -109,6 +123,7 @@ def unload() -> bool:
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    _trim_heap()
     return True
 
 
@@ -234,7 +249,7 @@ def handle(conn: socket.socket) -> None:
                 with lock:
                     resp = {"ok": True, "freed": unload()}
             elif cmd == "ping":
-                resp = {"ok": True, "loaded": model is not None, "idle": round(time.time() - last_use, 1),
+                resp = {"ok": True, "loaded": model is not None, "idle": round((time.time() - last_use) / 60, 1),
                         "idle_unload_minutes": _idle_minutes()}
             else:
                 resp = {"ok": False, "error": f"unknown command {cmd}"}

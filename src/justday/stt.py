@@ -58,6 +58,7 @@ class STT:
         секунд, и демон прячет их: модель поднимается, как только нажали «говорить», — то есть
         пока человек ещё договаривает фразу.
         """
+        import ctypes
         import gc
 
         with self._lock:
@@ -65,6 +66,12 @@ class STT:
                 return False
             self._model = None
         gc.collect()
+        # Питон отдал память распределителю, а тот держит страницы за собой: в `ps` без этого
+        # ничего не меняется, и «отпустили» выглядит неправдой.
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except (OSError, AttributeError):
+            pass
         return True
 
     def idle_unload(self, minutes: float) -> bool:
