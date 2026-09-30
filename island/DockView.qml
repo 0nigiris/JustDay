@@ -566,9 +566,10 @@ Item {
                     font.family: JD.fontFamily
                     font.pixelSize: 10
                     color: slot.running ? JD.text1 : JD.text2
+                    // Значок меню подписывать нечем: «Программы» в ячейку не влезает и обрезается
+                    // в «Програм…», а яблоко и так понятно.
                     text: slot.e.t === "app" ? (slot.e.name || "")
-                        : slot.e.t === "trash" ? "Корзина"
-                        : slot.e.t === "launcher" ? "Программы" : ""
+                        : slot.e.t === "trash" ? "Корзина" : ""
                 }
 
                 // Колесо по значку перебирает окна этой программы — так же, как в доке макоси и в
