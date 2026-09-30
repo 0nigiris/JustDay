@@ -6,8 +6,9 @@
 // выдержан до конца. Полоса же — просто полоса: она уважает то, что в ней лежит.
 //
 // Левая кнопка — то, что программа считает главным действием (activate). Правая — её собственное
-// меню (display): DBusMenu рисует система, и подделывать его мы не берёмся — там бывают и галочки,
-// и подменю, и они обязаны работать.
+// меню: пункты берутся у программы по DBusMenu, а рисуем их мы (TrayMenu). Системное меню
+// Quickshell умеет показывать только в режиме QApplication, а мы работаем без QtWidgets — и раньше
+// правая кнопка просто молчала.
 import QtQuick
 import Quickshell
 import Quickshell.Widgets
@@ -16,7 +17,6 @@ import Quickshell.Services.SystemTray
 Item {
     id: tv
 
-    required property var host          // окно, которому принадлежит меню значка
     readonly property real icon: JD.trayIconSize
     readonly property real pad: 8
     readonly property real cell: icon + 14
@@ -129,10 +129,14 @@ Item {
     }
 
     property string hint: ""
+    // Меню растёт от того края полосы, у которого она стоит, и от середины значка: так видно, чьё
+    // оно. Точка — в координатах экрана: меню живёт в отдельном окне во весь экран.
     function showMenu(item, at) {
         if (!item || !item.hasMenu) return
         const p = at.mapToItem(null, tv.atRight ? 0 : at.width, at.height / 2)
-        item.display(tv.host, Math.round(p.x), Math.round(p.y))
+        const left = tv.atRight ? JD.screenWidth - tv.width - 10 : tv.x + tv.width
+        JD.openTrayMenu(item, Math.round(tv.atRight ? left : left + 8), Math.round(p.y))
+        tv.hint = ""
     }
 
     // Подпись рядом с полосой, а не поверх неё: полоса узкая, имя в неё не влезает.

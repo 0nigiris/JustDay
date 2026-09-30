@@ -336,6 +336,18 @@ Singleton {
         return !names.some(n => trayHidden.indexOf(n) >= 0)
     }
     function trayHide(ident, on) { if (ident) send({ cmd: "tray_hide", id: String(ident), on: on === undefined ? null : on }) }
+    // Чьё меню лотка открыто и от какой точки оно растёт. Меню живёт в своём окне во весь экран —
+    // иначе его нечем закрыть щелчком мимо, — а окно узнаёт о нажатии отсюда.
+    property var trayMenu: null           // сам значок (SystemTrayItem): у него спрашиваем item.menu
+    property real trayMenuX: 0
+    property real trayMenuY: 0
+    function openTrayMenu(item, x, y) {
+        if (!item || !item.hasMenu) return
+        trayMenuX = x
+        trayMenuY = y
+        trayMenu = item
+    }
+    function closeTrayMenu() { trayMenu = null }
     // Насколько занят процессор — для кошки в доке. Демон присылает сам, раз в две секунды и
     // только когда есть кому смотреть.
     property real cpu: 0
@@ -388,7 +400,7 @@ Singleton {
     property bool settingsOpen: false
     property string settingsPage: "general"
     function openSettings(page) { settingsPage = page || "general"; settingsOpen = true; expanded = false }
-    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false; playerOpen = false; closeTools() }
+    function closeAll() { settingsOpen = false; expanded = false; composeOpen = false; playerOpen = false; trayMenu = null; closeTools() }
     function openManual() { Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md"]); closeAll() }
 
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off

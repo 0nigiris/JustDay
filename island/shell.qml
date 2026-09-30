@@ -12,6 +12,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
+import Quickshell.Services.SystemTray
 import QtMultimedia
 
 ShellRoot {
@@ -49,6 +50,18 @@ ShellRoot {
                                     menu: [menuWin.x, menuWin.y, menuWin.width, menuWin.height],
                                     card: [menuCard.x, menuCard.y, menuCard.width, menuCard.height] })
         }
+        // Меню лотка без мыши: открыть меню значка под номером и сказать, что в нём получилось.
+        // Правая кнопка на вейланде синтетически не воспроизводится, а «меню не открывается» —
+        // именно то, что здесь уже один раз сломалось молча.
+        function trayOpen(n: int): string {
+            const items = SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
+            const it = items[Math.max(0, Math.min(items.length - 1, n))]
+            if (!it) return JSON.stringify({ items: items.length })
+            JD.openTrayMenu(it, 60, 400)
+            return JSON.stringify({ items: items.length, id: it.id, title: it.title, hasMenu: it.hasMenu })
+        }
+        // Что в открытом меню видно: имена пунктов, галочки и подменю.
+        function trayRows(): string { return trayMenu.report() }
     }
 
     // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1 or a picture path): a "wallpaper" so the black island is visible in headless sessions
@@ -2903,7 +2916,6 @@ ShellRoot {
 
             TrayView {
                 id: tray
-                host: trayWin
                 x: {
                     const rest = trayWin.atRight ? parent.width - width - 10 : 10
                     const away = trayWin.atRight ? width + 16 : -width - 16
@@ -2920,6 +2932,49 @@ ShellRoot {
                 }
                 Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
             }
+        }
+    }
+
+    // ───────────── меню значка лотка ─────────────
+    //
+    // Своё окно во весь экран, а не часть полосы: меню обязано закрываться щелчком мимо, а «мимо» —
+    // это весь остальной экран. Пункты приходят от самой программы (DBusMenu), рисуем их мы:
+    // системное меню Quickshell показывает только в режиме QApplication, и раньше правая кнопка в
+    // лотке молчала именно поэтому.
+    PanelWindow {
+        id: trayMenuWin
+        readonly property bool open: !!JD.trayMenu
+        visible: open
+        screen: win.screen
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "justday-traymenu"
+        // Меню забирает клавиатуру, пока открыто: Escape должен его закрывать, как закрывает любое
+        // меню, а без фокуса до нас не доходит ни одна клавиша.
+        WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        color: "transparent"
+
+        MouseArea {
+            id: trayMenuBackdrop
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: JD.closeTrayMenu()
+        }
+        Shortcut { sequence: "Escape"; enabled: trayMenuWin.open; onActivated: JD.closeTrayMenu() }
+        mask: Region { item: trayMenuWin.open ? trayMenuBackdrop : null }
+
+        // Размытия под карточкой нет намеренно: она почти непрозрачная — как меню дока, — и
+        // размывать под ней нечего. Лишний слой на каждый щелчок правой кнопкой того не стоит.
+        TrayMenu {
+            id: trayMenu
+            anchors.fill: parent
+            handle: JD.trayMenu ? JD.trayMenu.menu : null
+            atX: JD.trayMenuX
+            atY: JD.trayMenuY
+            toLeft: JD.trayPlace === "right"
+            onDismissed: JD.closeTrayMenu()
         }
     }
 
