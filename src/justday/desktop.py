@@ -321,11 +321,18 @@ function snap() {
   for (const w of workspace.windowList()) {
     if (!w.normalWindow || w.skipTaskbar) continue;
     out.push({id: String(w.internalId), app: w.resourceClass, title: w.caption, pid: w.pid,
-              active: workspace.activeWindow === w, minimized: w.minimized});
+              active: workspace.activeWindow === w, minimized: w.minimized,
+              full: !!w.fullScreen && !w.minimized});
   }
   console.warn(tag + JSON.stringify(out));
 }
-function hook(w) { if (w && w.minimizedChanged) w.minimizedChanged.connect(snap); }
+function hook(w) {
+  if (!w) return;
+  if (w.minimizedChanged) w.minimizedChanged.connect(snap);
+  // Игра вошла в полный экран — док обязан уйти с дороги, и узнать об этом надо сразу, а не
+  // когда в следующий раз кто-нибудь откроет окно.
+  if (w.fullScreenChanged) w.fullScreenChanged.connect(snap);
+}
 workspace.windowAdded.connect(function (w) { hook(w); snap(); });
 workspace.windowRemoved.connect(snap);
 workspace.windowActivated.connect(snap);

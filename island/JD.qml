@@ -356,6 +356,9 @@ Singleton {
     // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
     // демона, которому о нём рассказывает скрипт, живущий внутри самого KWin.
     property var windows: []
+    // Есть ли впереди окно во весь экран. Считается здесь, а не в доке: то же самое пригодится
+    // и островку, и уведомлениям — поверх игры им тоже не место.
+    readonly property bool fullscreen: windows.some(w => w && w.full === true && !w.minimized)
     readonly property var dockItems: dockData.items || []
     readonly property var dockMatch: dockData.match || ({})
     readonly property var dockSkip: dockData.skip || []

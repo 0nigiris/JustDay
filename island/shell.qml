@@ -2749,7 +2749,12 @@ ShellRoot {
             id: dockWin
             screen: win.screen
             readonly property bool atTop: JD.dockPlace === "top"
+            // Полный экран прячет док, даже если прятаться его не просили: игра и кино на то и
+            // полный экран, что поверх них не должно лежать ничего. Позвать док обратно
+            // по-прежнему можно кромкой — как и любой прячущийся док.
             readonly property bool autohide: JD.dockCfg.autohide === true
+                                             || (JD.dockCfg.hide_on_fullscreen !== false && JD.fullscreen)
+            onAutohideChanged: hovering = !autohide
             // Меню держит док на виду. Иначе клавиша Windows открывает меню, растущее из значка,
             // которого на экране нет, — и оно появляется ниоткуда и не там.
             property bool hovering: !autohide
