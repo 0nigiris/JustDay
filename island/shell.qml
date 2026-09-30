@@ -3115,9 +3115,15 @@ ShellRoot {
         // Ради точного размера приходилось возить курсор через пол-экрана, и это плохая сделка.
         property real cardW: 760
         property real cardH: 620
+        // Мерить по окну можно, только когда окно уже настоящего размера. Закрытое меню живёт в
+        // окне сто на сто — layer shell схлопывает невидимое, — и «не больше окна» превращалось в
+        // «не больше семидесяти шести»: карточка садилась на нижний предел. А если в этот миг её
+        // размер сохранить, урезанным он и останется навсегда.
         function fitCard() {
-            cardW = Math.max(520, Math.min(width - 24, JD.menuWidth))
-            cardH = Math.max(360, Math.min(height - 24, JD.menuHeight))
+            const roomW = (width > 200 ? width : JD.screenWidth) - 24
+            const roomH = (height > 200 ? height : JD.screenHeight) - 24
+            cardW = Math.max(520, Math.min(roomW, JD.menuWidth))
+            cardH = Math.max(360, Math.min(roomH, JD.menuHeight))
         }
         // Пересчитывать надо и когда окно узнало свой размер. При запуске его ширина ещё ноль,
         // и «не больше экрана» превращается в «не больше минус двадцати четырёх»: карточка
