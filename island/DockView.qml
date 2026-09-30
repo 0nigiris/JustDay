@@ -38,7 +38,21 @@ Item {
     readonly property real pad: Math.round(icon * 0.18)
     readonly property real dotRoom: 9
     readonly property bool magnify: JD.dockCfg.magnify !== false
-    readonly property bool labels: JD.dockCfg.labels !== false
+    // Подписи: нет совсем, под курсором или всегда. Раньше было только «да/нет», а «всегда» — это
+    // другой док: имена под всеми значками сразу, как в Dockish и в старых доках.
+    readonly property string labelMode: {
+        const raw = JD.dockCfg.labels
+        if (raw === false) return "off"
+        if (raw === true || raw === undefined) return "hover"
+        const word = String(raw).trim().toLowerCase()
+        return ["off", "hover", "always"].indexOf(word) >= 0 ? word : "hover"
+    }
+    readonly property bool labels: labelMode !== "off"
+    // Чем отмечено открытое: точка, чёрточка, полоса, свечение — или ничем.
+    readonly property string mark: {
+        const word = String(JD.dockCfg.indicator || "dot").trim().toLowerCase()
+        return ["dot", "line", "bar", "glow", "none"].indexOf(word) >= 0 ? word : "dot"
+    }
     // Заголовки открытых окон под подписью. Настоящих картинок-предпросмотров KWin обычным
     // клиентам не отдаёт, и обещать их было бы враньём.
     readonly property bool preview: JD.dockCfg.preview !== false
@@ -63,7 +77,10 @@ Item {
     // Сколько места оставить под увеличенный значок и подпись: они выходят за карточку, и им нужна
     // своя высота в окне, иначе верхушка срезается.
     readonly property real headroom: Math.round(icon * 0.55) + 30
-    readonly property real cardHeight: icon + pad * 2 + dotRoom
+    // Место под имя под значком — только в режиме «всегда»: в остальных подпись живёт в плашке
+    // под курсором и высоты карточке не добавляет.
+    readonly property real labelRoom: labelMode === "always" ? 14 : 0
+    readonly property real cardHeight: icon + pad * 2 + dotRoom + labelRoom
 
     implicitWidth: laneLength
     implicitHeight: cardHeight + headroom
@@ -484,16 +501,24 @@ Item {
                     }
                 }
 
-                // Открыто — точка. Оно же и подсказка, что значок не запустит второе окно.
+                // Открыто — отметка под значком. Оно же и подсказка, что значок не запустит
+                // второе окно. Вид отметки — на вкус: точка, чёрточка, полоса или свечение.
                 Rectangle {
-                    width: slot.wins.length > 1 ? 10 : 4
-                    height: 4
-                    radius: 2
+                    visible: dv.mark !== "none"
+                    width: dv.mark === "dot" ? (slot.wins.length > 1 ? 10 : 4)
+                         : dv.mark === "line" ? Math.round(dv.icon * 0.42)
+                         : dv.mark === "bar" ? Math.round(dv.icon * 0.66)
+                         : Math.round(dv.icon * 0.8)
+                    height: dv.mark === "bar" ? 3 : dv.mark === "glow" ? Math.round(dv.icon * 0.8) : 4
+                    radius: height / 2
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: dv.atTop ? dv.pad * 0.5 : card.height - dv.pad * 0.5 - height
+                    y: dv.mark === "glow"
+                       ? (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + (dv.icon - height) / 2
+                       : dv.atTop ? dv.pad * 0.5 : card.height - dv.labelRoom - dv.pad * 0.5 - height
+                    z: dv.mark === "glow" ? -1 : 0
                     color: slot.active ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.55)
-                    // Появляется и исчезает, а не мигает: окно закрыли — точка уходит, уменьшаясь.
-                    opacity: slot.running ? 1 : 0
+                    // Появляется и исчезает, а не мигает: окно закрыли — отметка уходит, уменьшаясь.
+                    opacity: !slot.running ? 0 : dv.mark === "glow" ? 0.28 : 1
                     scale: slot.running ? 1 : 0.7
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 150 } }
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
@@ -526,6 +551,35 @@ Item {
                         else dv.endDrag()
                     }
                     onCentroidChanged: if (active) dv.moveDrag(centroid.scenePosition.x)
+                }
+
+                // Имя под значком — режим «всегда». Оно обрезается по ячейке, а не раздвигает её:
+                // док, у которого ширина ячейки зависит от длины имени, перестаёт быть ровным рядом.
+                Text {
+                    visible: dv.labelMode === "always" && slot.e.t !== "sep" && !!text
+                    width: parent.width - 4
+                    x: 2
+                    y: card.height - dv.labelRoom
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    textFormat: Text.PlainText
+                    font.family: JD.fontFamily
+                    font.pixelSize: 10
+                    color: slot.running ? JD.text1 : JD.text2
+                    text: slot.e.t === "app" ? (slot.e.name || "")
+                        : slot.e.t === "trash" ? "Корзина"
+                        : slot.e.t === "launcher" ? "Программы" : ""
+                }
+
+                // Колесо по значку перебирает окна этой программы — так же, как в доке макоси и в
+                // Dockish. Программе с одним окном перебирать нечего, и колесо там молчит.
+                WheelHandler {
+                    enabled: slot.wins.length > 1
+                    onWheel: event => {
+                        if (Math.abs(event.angleDelta.y) < 30) return
+                        dv.cycle(slot.wins, event.angleDelta.y < 0 ? 1 : -1)
+                        event.accepted = true
+                    }
                 }
 
                 HoverHandler { enabled: slot.e.t !== "sep"; cursorShape: Qt.PointingHandCursor }
@@ -562,7 +616,7 @@ Item {
 
     Rectangle {
         id: tip
-        readonly property bool want: dv.labels && dv.tipShown && !!dv.focused && !ctx.visible
+        readonly property bool want: dv.labelMode === "hover" && dv.tipShown && !!dv.focused && !ctx.visible
         readonly property string text: !dv.focused ? ""
             : dv.focused.t === "launcher" ? "Программы"
             : dv.focused.t === "trash" ? (JD.trashFull ? "Корзина — не пуста" : "Корзина пуста")
@@ -940,6 +994,20 @@ Item {
         // Порядок остаётся местным, пока демон не подтвердит его своим ответом: иначе значок на
         // миг отскакивает туда, откуда его унесли.
         JD.dockArrange(pinOverride)
+    }
+
+    // Следующее окно этой же программы. Считаем от того, что сейчас наверху: «следующее» имеет
+    // смысл только относительно текущего, а не относительно порядка, в котором окна открывали.
+    property real lastCycle: 0
+    function cycle(wins, step) {
+        if (!wins || wins.length < 2) return
+        const now = Date.now()
+        if (now - lastCycle < 180) return      // одно движение колеса — одно окно, а не пять
+        lastCycle = now
+        let at = wins.findIndex(w => w.active && !w.minimized)
+        if (at < 0) at = 0
+        const next = wins[(at + step + wins.length) % wins.length]
+        if (next) JD.windowDo("focus", next.id)
     }
 
     // Нажатие: не запущено — запустить; запущено и не наверху — поднять; наверху — свернуть.

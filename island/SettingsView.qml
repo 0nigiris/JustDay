@@ -892,7 +892,25 @@ Item {
                     subtitle: JD.tr("Сколько соседей подхватывает увеличение")
                     SSlider { key: "dock.magnify_spread"; from: 80; to: 500; step: 20; decimals: 0; unit: JD.tr("%") }
                 }
-                Row { title: JD.tr("Подпись под курсором"); Toggle { checked: win.get("dock.labels") !== false; onToggled: v => win.set("dock.labels", v) } }
+                Row {
+                    title: JD.tr("Имена программ")
+                    subtitle: JD.tr("«Всегда» пишет имя под каждым значком и делает полосу выше")
+                    Choice {
+                        key: "dock.labels"
+                        options: [{ value: "hover", label: JD.tr("Под курсором") },
+                                 { value: "always", label: JD.tr("Всегда") },
+                                 { value: "off", label: JD.tr("Не показывать") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Чем отмечено открытое")
+                    Choice {
+                        key: "dock.indicator"
+                        options: [{ value: "dot", label: JD.tr("Точка") }, { value: "line", label: JD.tr("Чёрточка") },
+                                 { value: "bar", label: JD.tr("Полоса") }, { value: "glow", label: JD.tr("Свечение") },
+                                 { value: "none", label: JD.tr("Ничем") }]
+                    }
+                }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
                 Row { title: JD.tr("Порядок значков перетаскиванием"); subtitle: JD.tr("Потянуть закреплённый значок вдоль дока и отпустить на новом месте"); Toggle { checked: win.get("dock.reorder") !== false; onToggled: v => win.set("dock.reorder", v) } }
