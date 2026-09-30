@@ -795,11 +795,31 @@ Item {
                         onPicked: v => win.set("island.animations", v)
                     }
                 }
+                Row {
+                    title: JD.tr("Где висит остров")
+                    subtitle: JD.tr("Пилюля горизонтальная, поэтому «слева» и «справа» — это край по горизонтали")
+                    Choice {
+                        key: "island.position"
+                        options: [{ value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
+                                 { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
+                                 { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
+                    }
+                }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
                     title: JD.tr("Отступ сверху")
                     subtitle: JD.tr("Если панель стоит у верхнего края — опустите остров под неё, и панель останется под курсором")
                     SSlider { key: "island.top_margin"; from: 0; to: 120; step: 2; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row {
+                    title: JD.tr("Где открывается меню приложений")
+                    subtitle: JD.tr("Клавиша Windows; по умолчанию — от левого нижнего угла, как привычнее")
+                    Choice {
+                        key: "island.menu_position"
+                        options: [{ value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
+                                 { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
+                                 { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
+                    }
                 }
                 Row {
                     title: JD.tr("Монитор")
@@ -1258,7 +1278,9 @@ Item {
             // острова, а не отдельные программы.
             PageTitle { title: JD.tr("Панель инструментов"); subtitle: JD.tr("Открывают окна прямо в острове") }
             Group {
-                Row { title: JD.tr("Поиск программ"); subtitle: JD.tr("Программы, игры и открытые окна; не нашлось — уходит ассистенту");
+                Row { title: JD.tr("Меню приложений"); subtitle: JD.tr("Разделы, значки, поиск и кнопка питания — вместо меню KDE");
+                      Field { id: menuKey; text: win.d.hotkeys ? win.d.hotkeys.menu : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("То же меню, вторая клавиша"); subtitle: JD.tr("Программы, игры и открытые окна; не нашлось — уходит ассистенту");
                       Field { id: appsKey; text: win.d.hotkeys ? win.d.hotkeys.apps : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Буфер обмена"); subtitle: JD.tr("История скопированного; пароли в неё не попадают");
                       Field { id: clipKey; text: win.d.hotkeys ? win.d.hotkeys.clip : ""; implicitWidth: 180 } }
@@ -1274,7 +1296,7 @@ Item {
                         onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text,
                                             "--type", typeKey.text, "--yes", yesKey.text, "--no", noKey.text,
                                             "--apps", appsKey.text, "--clip", clipKey.text, "--emoji", emojiKey.text,
-                                            "--load", loadKey.text],
+                                            "--load", loadKey.text, "--menu", menuKey.text],
                                            r => win.notify(r.ok ? JD.tr("Сочетания обновлены") : JD.tr("Не получилось")))
                     }
                 }
@@ -1283,6 +1305,8 @@ Item {
                 text: JD.tr("<b>Кнопка на мыши Logitech (G502 и др.)</b>: назначьте ей клавишу F19 через libratbag, например<br>") +
                       JD.tr("<tt>ratbagctl &lt;мышь&gt; profile 0 button 5 action set key KEY_F19</tt>. F13 не подходит: в KDE она открывает Системные настройки.<br><br>") +
                       JD.tr("<b>Пустое поле</b> снимает сочетание совсем.<br><br>") +
+                      JD.tr("<b>Клавиша Windows</b> одна, без букв, — это тоже сочетание: впишите <tt>Meta</tt>. Её держит меню KDE, ") +
+                      JD.tr("и JustDay забирает её у него; вернуть — кнопкой «По умолчанию» в Параметрах системы → Комбинации клавиш.<br><br>") +
                       JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».<br><br>") +
                       JD.tr("<b>В поле ввода</b>: Enter — отправить, Shift+Enter — новая строка, ↑/↓ — прошлые просьбы, Tab — подсказка команды, Esc — закрыть. Начните с <tt>/</tt>, чтобы увидеть быстрые команды. Пустое поле убрать выделенный текст: Backspace.")
             }

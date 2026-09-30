@@ -65,7 +65,9 @@ ShellRoot {
         id: win
         screen: Quickshell.screens.find(s => s.name === (JD.island.screen || Quickshell.env("JUSTDAY_ISLAND_SCREEN")))
                 || Quickshell.screens.find(s => s.x === 0 && s.y === 0) || Quickshell.screens[0]
-        anchors.top: true
+        // Окно во всю ширину и прижато к тому краю, где живёт остров: край задаёт и точку отсчёта,
+        // и сторону роста — сверху карточка разворачивается вниз, снизу вверх, сама собой.
+        anchors { left: true; right: true; top: JD.atTop; bottom: !JD.atTop }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "justday-island"
@@ -102,7 +104,10 @@ ShellRoot {
             id: hotZone
             width: 420
             height: island.mode === "hidden" && JD.island.hover_reveal !== false ? 3 : 0
-            anchors.horizontalCenter: parent.horizontalCenter
+            x: JD.side === "left" ? 0
+             : JD.side === "right" ? parent.width - width
+             : (parent.width - width) / 2
+            y: JD.atTop ? 0 : parent.height - height
             HoverHandler { onHoveredChanged: if (hovered) JD.peeking = true }
         }
 
@@ -149,8 +154,12 @@ ShellRoot {
             property real pill: compact ? 1 : 0
             Behavior on pill { enabled: JD.animOn; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
             radius: Math.min(height / 2, pill * height / 2 + (1 - pill) * (mode === "settings" ? 34 : 30))
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: mode === "hidden" ? JD.topMargin - 22 : JD.topMargin
+            x: JD.side === "left" ? JD.sideMargin
+             : JD.side === "right" ? parent.width - width - JD.sideMargin
+             : (parent.width - width) / 2
+            // Спрятанный остров уезжает за свой край — за тот же, у которого стоит.
+            y: JD.atTop ? (mode === "hidden" ? JD.topMargin - 22 : JD.topMargin)
+                        : parent.height - height - (mode === "hidden" ? JD.topMargin - 22 : JD.topMargin)
             opacity: mode === "hidden" ? 0 : 1
             scale: mode === "hidden" ? 0.7 : 1
             color: JD.ink

@@ -321,6 +321,13 @@ Singleton {
     readonly property real springDamping: animStyle === "smooth" ? 1.0 : 0.36
     function dur(ms) { return animOn ? ms : 0 }
     // сколько оставить сверху: панель KDE у верхнего края больше не уходит под остров
+    // Где висит остров и в какую сторону он растёт. Пилюля горизонтальная, поэтому «слева» и
+    // «справа» — это край по горизонтали, а не поворот на бок: повёрнутая пилюля не вмещает ни
+    // строки ответа, ни волны голоса, ни плеера.
+    readonly property string place: island.position || "top-center"
+    readonly property bool atTop: !place.startsWith("bottom")
+    readonly property string side: place.split("-")[1] || "center"
+    readonly property real sideMargin: 16
     readonly property real topMargin: island.top_margin === undefined ? 8 : Math.max(0, Math.min(400, island.top_margin))
     property bool peeking: false
     property bool detailOpen: false
