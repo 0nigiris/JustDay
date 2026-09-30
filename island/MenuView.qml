@@ -232,7 +232,7 @@ Item {
             // из ста штук глаз ищет картинку, а не слово.
             GridView {
                 id: grid
-                visible: !mv.askInstead
+                visible: !mv.askInstead && mv.shown.length > 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -325,6 +325,24 @@ Item {
                                    : JD.isPinned(modelData) ? "  ·  правой кнопкой — открепить"
                                    : "  ·  правой кнопкой — закрепить"))
                         }
+                    }
+                }
+            }
+
+            // Раздел пуст — так и скажем. Пустая площадь без слов читается как «не загрузилось».
+            Item {
+                visible: !mv.askInstead && mv.shown.length === 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    Icon { Layout.alignment: Qt.AlignHCenter; name: "star"; implicitSize: 22; tint: JD.text3 }
+                    Label2 {
+                        Layout.alignment: Qt.AlignHCenter
+                        color: JD.text3
+                        text: JD.menuGroup === "fav" ? "Здесь пусто. Правой кнопкой по программе — закрепить."
+                                                     : "В этом разделе ничего нет"
                     }
                 }
             }

@@ -521,7 +521,12 @@ Singleton {
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
         if (m.menu !== undefined) { m.menu === "toggle" ? toggleMenu() : (m.menu ? openMenu() : closeMenu()) }
-        if (m.catalog !== undefined) menuCatalog = m.catalog
+        if (m.catalog !== undefined) {
+            menuCatalog = m.catalog
+            // Пустое «Избранное» в первый день выглядит поломкой, а не подсказкой: пока в нём ничего
+            // нет, меню открывается на всех программах и молча ждёт, когда что-нибудь закрепят.
+            if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
+        }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
