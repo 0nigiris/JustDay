@@ -149,21 +149,33 @@ Item {
     onLaneChanged: resetPhysics()
     Component.onCompleted: resetPhysics()
 
-    // Ячейка под курсором и доля внутри неё — по НАРИСОВАННОЙ раскладке. Отсюда получаем точку в
-    // спокойных координатах: курсор стоит, полоса едет, и считать расстояния надо от этой точки.
+    // Куда курсор попадает в спокойных координатах полосы.
+    //
+    // Считать это по нарисованной раскладке — первое, что приходит в голову, и оно неверно: цель
+    // тогда зависит от того, докуда доехала анимация, а анимация едет к цели. Петля не сходится, и
+    // увеличение то недотягивает до нужного, то дёргается. Поэтому решаем честно: ищем такое
+    // спокойное место u, которое при своих же размерах рисуется ровно под курсором. Растяжение в
+    // любой точке от 1 до 1+amp, поэтому простая итерация сходится за три-четыре шага.
+    function solveRest(local) {
+        let u = local - pad
+        for (let step = 0; step < 6; step++) {
+            let x = pad
+            for (let i = 0; i < lane.length; i++) {
+                const k = targetSize(i, u)
+                if (u >= lane[i].at + lane[i].w) { x += lane[i].w * k; continue }
+                x += Math.max(0, u - lane[i].at) * k
+                break
+            }
+            const err = local - x
+            if (Math.abs(err) < 0.2) break
+            u += err / (1 + amp * 0.5)
+        }
+        return u
+    }
+
     function restUnderPointer() {
         if (!engaged) return -99999
-        const local = pointerScene - dv.x - card.x
-        let at = 0
-        for (let i = 0; i < lane.length; i++) {
-            const w = (sizes[i] || 1) * lane[i].w + (i === 0 ? pad : 0)
-            if (local < at + w || i === lane.length - 1) {
-                const frac = Math.max(0, Math.min(1, (local - at) / Math.max(1, w)))
-                return lane[i].at + frac * lane[i].w
-            }
-            at += w
-        }
-        return -99999
+        return solveRest(pointerScene - dv.x - card.x)
     }
 
     // Виджеты правилу не подчиняются: кошка и часы показывают цифру, а не ждут нажатия, и прыгать
