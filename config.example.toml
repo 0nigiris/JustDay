@@ -107,6 +107,10 @@ menu_position = "dock"      # dock = the app menu grows out of the dock icon; el
 enabled = true
 position = "bottom"         # bottom | top
 icon_size = 44
+spacing = 20                # points between icons
+magnify_scale = 60          # how much bigger the icon under the pointer gets, in percent
+magnify_spread = 120        # how wide the magnification wave is, in percent of a cell
+animation = "spring"        # spring (overshoots on the way, like macOS) | smooth | instant
 magnify = true              # icons grow outward under the pointer; their place in the strip does not move
 autohide = false
 reserve = false             # true stops maximised windows at the dock — but Plasma shrinks the wallpaper too

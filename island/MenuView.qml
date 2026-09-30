@@ -17,7 +17,7 @@ import QtQuick.Layouts
 Item {
     id: mv
     implicitWidth: 880
-    implicitHeight: 620
+    implicitHeight: 716
 
     // Меню — рабочая поверхность, а не украшение: на ней читают и целятся, поэтому карточка почти
     // непрозрачная, а заливки кнопок плотнее островных. На чёрном острове 8% белого видно; на
@@ -381,21 +381,22 @@ Item {
             // Нижний ряд уходит в прозрачность, а не режется чертой.
             Rectangle {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                height: 26
+                height: 20
                 visible: !grid.atYEnd
                 gradient: Gradient {
                     GradientStop { position: 0; color: "transparent" }
-                    GradientStop { position: 1; color: JD.menuSurface }
+                    GradientStop { position: 0.6; color: Qt.rgba(0.04, 0.04, 0.05, 0.7) }
+                    GradientStop { position: 1; color: Qt.rgba(0.04, 0.04, 0.05, 1) }
                 }
             }
 
             // Тонкая полоса прокрутки: без неё непонятно, что список длиннее окна.
             Rectangle {
                 visible: grid.contentHeight > grid.height
-                anchors { right: parent.right; rightMargin: 0 }
+                anchors { right: parent.right; rightMargin: 1 }
                 width: 4
                 radius: 2
-                color: Qt.rgba(1, 1, 1, 0.22)
+                color: Qt.rgba(1, 1, 1, 0.3)
                 height: Math.max(28, parent.height * grid.visibleArea.heightRatio)
                 y: parent.height * grid.visibleArea.yPosition
             }

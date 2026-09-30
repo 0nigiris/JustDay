@@ -2923,7 +2923,7 @@ ShellRoot {
             id: menuCard
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
             width: Math.min(880, menuWin.width - 24)
-            height: Math.min(620, menuWin.height - 24)
+            height: Math.min(716, menuWin.height - 24)
             // От значка: меню стоит над ним, но не левее края экрана и не правее его.
             x: menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
