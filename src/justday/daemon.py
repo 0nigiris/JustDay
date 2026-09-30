@@ -2315,6 +2315,9 @@ class Daemon:
                 resp = {"ok": True, "forgotten": clipboard.wipe()}
             elif cmd == "clip_pause":
                 resp = {"ok": True, "paused": clipboard.pause(bool(req.get("on", True)))}
+            elif cmd == "voice_mute":  # кнопка «молчи» на островке — то же, что `justday voice mute`
+                await self.set_voice(not bool(req.get("on", True)))
+                resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))
                 if which not in ("emoji", "clip", "load", "apps", ""):

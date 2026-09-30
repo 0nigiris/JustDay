@@ -68,6 +68,9 @@ def settings_snapshot(cfg: dict) -> dict:
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
             "microphone": cfg["audio"].get("microphone", True),
             "voice": cfg["tts"]["engine"] != "none" and not cfg["tts"].get("muted"),
+            # Отдельно от «voice»: молчит по просьбе («молчи») — это не то же, что «голоса нет
+            # вовсе». Первое включается обратно одной кнопкой, второе требует движка.
+            "muted": bool(cfg["tts"].get("muted")),
             "mute_in_games": cfg["tts"].get("mute_in_games", True),
             "volume": int(cfg["audio"].get("volume", 100)),
             "tts_engine": cfg["tts"]["engine"], "tts_previous": cfg["tts"].get("previous_engine", ""),

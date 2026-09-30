@@ -326,6 +326,26 @@ ShellRoot {
                     font.weight: Font.DemiBold; font.features: { "tnum": 1 }
                 }
             }
+            // Молчит по просьбе. Об этом нужно говорить вслух — вернее, показывать: иначе «он мне
+            // не отвечает» выглядит поломкой, хотя ассистент просто выполняет «молчи».
+            Rectangle { visible: JD.muted; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
+            Rectangle {
+                visible: JD.muted
+                implicitWidth: mutedRow.implicitWidth + 16
+                implicitHeight: 22
+                radius: 11
+                color: muteHover.hovered ? JD.fill2 : JD.fill1
+                RowLayout {
+                    id: mutedRow
+                    anchors.centerIn: parent
+                    spacing: 5
+                    Icon { name: "audio-volume-muted"; implicitSize: 13; tint: JD.accentOrange }
+                    Label2 { text: JD.tr("Молчит"); color: JD.accentOrange; font.weight: Font.DemiBold }
+                }
+                HoverHandler { id: muteHover; cursorShape: Qt.PointingHandCursor }
+                // Нажатие прямо здесь возвращает голос: пометка — она же и кнопка.
+                TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: JD.setMuted(false) }
+            }
             Rectangle { visible: !!JD.weather && JD.island.show_weather !== false; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
             RowLayout {
                 visible: !!JD.weather && JD.island.show_weather !== false
@@ -2164,7 +2184,11 @@ ShellRoot {
 
         function setting(key, value) { JD.run(["config", "set", key, String(value)]) }
         function ask(text) { JD.expanded = false; JD.send({ cmd: "type", text: text }) }
+        // Выключить голос можно двумя разными способами, и раньше плитка знала только один: она
+        // трогала движок, а «молчи» её не касалось — нажатие на выключенной молчанием плитке
+        // ничего не возвращало. Теперь сначала снимается то, чем голос выключили на самом деле.
         function toggleVoice() {
+            if (JD.muted) { JD.setMuted(false); return }
             if (JD.voiceOn) { setting("tts.previous_engine", JD.settings.tts_engine || "silero"); setting("tts.engine", "none") }
             else setting("tts.engine", JD.settings.tts_previous || "silero")
         }
@@ -2231,7 +2255,12 @@ ShellRoot {
                     label: JD.tr("Стоп"); tint: JD.accentRed
                     onClicked: JD.send({ cmd: "stop" })
                 }
-                IconButton { icon: "gauge"; size: 32; onClicked: JD.openTools("emoji") }
+                IconButton {
+                    icon: JD.muted ? "audio-volume-muted" : "audio-volume-high"
+                    size: 32
+                    onClicked: JD.setMuted(!JD.muted)
+                }
+                IconButton { icon: "gauge"; size: 32; onClicked: JD.openTools("apps") }
                 IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
                 IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
             }
@@ -2391,7 +2420,10 @@ ShellRoot {
                     columnSpacing: 12
                     Tile { icon: "audio-input-microphone"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
                            on: JD.micOn; tint: JD.accentCyan; onToggled: ev.setting("audio.microphone", !JD.micOn) }
-                    Tile { icon: "audio-speakers"; title: JD.tr("Голос"); onText: JD.tr("отвечает вслух"); offText: JD.tr("только текстом"); on: JD.voiceOn; tint: JD.accentBlue; onToggled: ev.toggleVoice() }
+                    Tile { icon: "audio-speakers"; title: JD.tr("Голос")
+                           onText: JD.tr("отвечает вслух")
+                           offText: JD.muted ? JD.tr("молчит по просьбе") : JD.tr("только текстом")
+                           on: JD.voiceOn; tint: JD.accentBlue; onToggled: ev.toggleVoice() }
                     Tile { icon: "audio-lines"; title: JD.tr("Звуки"); onText: JD.tr("сигналы"); offText: JD.tr("тишина")
                            on: !!JD.settings.earcons; tint: JD.accentOrange
                            onToggled: ev.setting("audio.earcons", !JD.settings.earcons) }

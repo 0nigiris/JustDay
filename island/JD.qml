@@ -77,6 +77,12 @@ Singleton {
     readonly property var hotkeys: settings.hotkeys || ({})
     readonly property bool micOn: settings.microphone !== false
     readonly property bool voiceOn: settings.voice !== false
+    // «Молчит по просьбе» — не то же, что «голоса нет вовсе»: первое снимается одной кнопкой.
+    readonly property bool muted: settings.muted === true
+    function setMuted(on) {
+        settings = Object.assign({}, settings, { muted: on, voice: !on })   // кнопка отзывается сразу
+        send({ cmd: "voice_mute", on: !on })
+    }
     // JustDay's own loudness (voice and signals), 0–100. The system volume belongs to the system.
     readonly property int volume: settings.volume === undefined ? 100 : settings.volume
     function setVolume(v) {
