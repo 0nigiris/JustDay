@@ -844,6 +844,9 @@ Item {
                 Row { title: JD.tr("Док"); subtitle: JD.tr("Закреплённое, открытое и значок, из которого достаётся меню"); Toggle { checked: win.get("dock.enabled") !== false; onToggled: v => win.set("dock.enabled", v) } }
                 Row {
                     title: JD.tr("У какого края")
+                    subtitle: win.get("dock.position") === "top" && (JD.island.position || "top-center").startsWith("top")
+                              ? JD.tr("Остров стоит у того же края — разведите их, иначе они встанут друг на друга")
+                              : ""
                     Choice {
                         key: "dock.position"
                         options: [{ value: "bottom", label: JD.tr("Снизу") }, { value: "top", label: JD.tr("Сверху") }]
