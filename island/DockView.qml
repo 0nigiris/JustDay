@@ -198,17 +198,22 @@ Item {
         return 1 + amp * Math.exp(-d * d)
     }
 
+    // Шаг пружины. Затухание здесь — доля от критического: 1 значит «дойти до размера и замереть»,
+    // 0,75 — с маленьким перелётом. Сначала оно было написано как «умножить скорость на что-нибудь
+    // каждый кадр», и такая запись значит совсем другое: при 0,75 скорость теряла половину за кадр,
+    // пружина ползла к размеру секундами, и увеличение выглядело вялым, хотя цель была верная.
     function stepPhysics(dt) {
         // После пропущенного кадра нельзя швырять пружину на всю задолженность — она взорвётся.
         dt = Math.max(0.001, Math.min(0.033, dt))
         const u = restUnderPointer()
         const n = lane.length
-        let moving = false
         const s = sizes, v = speeds
-        const decay = Math.pow(1 - springDamp, dt * 60)
+        const omega = Math.sqrt(springK)          // собственная частота
+        const c = 2 * springDamp * omega          // критическое затухание — при springDamp = 1
+        let moving = false
         for (let i = 0; i < n; i++) {
             const t = targetSize(i, u)
-            v[i] = (v[i] + (t - s[i]) * springK * dt) * decay
+            v[i] += (-(s[i] - t) * springK - c * v[i]) * dt
             s[i] += v[i] * dt
             if (Math.abs(t - s[i]) > 0.0015 || Math.abs(v[i]) > 0.0015) moving = true
         }
