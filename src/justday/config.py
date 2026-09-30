@@ -197,6 +197,11 @@ DEFAULTS: dict = {
         "menu_position": "dock",
         # How much room to leave above the island: a panel along the top edge stays reachable
         "top_margin": 8,
+        # Размер меню приложений. Он не считается по содержимому нарочно: тогда карточка меняла
+        # высоту на каждом разделе, и лента разделов уезжала из-под курсора. Меняется углом самой
+        # карточки, сюда записывается сам.
+        "menu_width": 760,
+        "menu_height": 620,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here
         "video_volume": 1.0,  # how loud that frame is, 0–1 (the wheel over it)
         # Как Qt крутит анимации. basic (его Qt выбирает сам) — таймером, шестьдесят шагов в

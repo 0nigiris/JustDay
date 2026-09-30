@@ -375,6 +375,15 @@ Singleton {
     // Где на экране лежат карточка дока и полоса лотка. Нужно меню: оно перекрывает весь экран,
     // чтобы закрываться щелчком мимо, и без дырок в этом перекрытии док под ним становится
     // картинкой — по значку видно, а нажать нельзя.
+    // Размер меню приложений: его задаёт человек, потянув карточку за угол, и он же запоминается.
+    // Считать размер по содержимому нельзя — тогда лента разделов уезжает после каждого нажатия.
+    readonly property real menuWidth: Math.max(520, island.menu_width || 760)
+    readonly property real menuHeight: Math.max(360, island.menu_height || 620)
+    function saveMenuSize(w, h) {
+        Quickshell.execDetached(["justday", "config", "set", "island.menu_width", String(Math.round(w))])
+        Quickshell.execDetached(["justday", "config", "set", "island.menu_height", String(Math.round(h))])
+    }
+
     property var dockRect: null
     property var trayRect: null
     // Чисто для проверки руками: `qs -p island ipc call island dock` показывает, где курсор и

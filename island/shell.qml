@@ -3109,15 +3109,28 @@ ShellRoot {
             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160 } }
         }
 
+        // Размер меню задаёт человек, углом карточки. Раньше его задавало содержимое — и лента
+        // разделов уезжала после каждого нажатия: «Избранные» и «Все программы» дают карточки
+        // разной высоты, а стоит она у нижнего края, и значит верх её каждый раз в новом месте.
+        // Ради точного размера приходилось возить курсор через пол-экрана, и это плохая сделка.
+        property real cardW: 760
+        property real cardH: 620
+        function fitCard() {
+            cardW = Math.max(520, Math.min(width - 24, JD.menuWidth))
+            cardH = Math.max(360, Math.min(height - 24, JD.menuHeight))
+        }
+        Component.onCompleted: fitCard()
+        Connections {
+            target: JD
+            function onMenuWidthChanged() { menuWin.fitCard() }
+            function onMenuHeightChanged() { menuWin.fitCard() }
+        }
+
         Rectangle {
             id: menuCard
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
-            width: Math.min(menuWin.width - 24, menuBody.item ? menuBody.item.implicitWidth : 760)
-            // Высоту задаёт содержимое: шесть закреплённых программ и сто пятьдесят семь всех —
-            // это разные меню, и окно одного размера на оба выглядит незаполненной формой.
-            height: Math.min(menuWin.height - 24, menuBody.item ? menuBody.item.implicitHeight : 620)
-            Behavior on height { enabled: JD.animOn
-                                 NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+            width: Math.min(menuWin.width - 24, menuWin.cardW)
+            height: Math.min(menuWin.height - 24, menuWin.cardH)
             // От значка: меню стоит над ним, но не левее края экрана и не правее его.
             x: menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
@@ -3152,7 +3165,75 @@ ShellRoot {
                                 SpringAnimation { spring: JD.springK; damping: Math.max(0.5, JD.springDamping); epsilon: 0.004 } }
 
             // Щелчок по самой карточке её не закрывает — только мимо.
-            MouseArea { anchors.fill: parent }
+            MouseArea { id: menuCardBody; anchors.fill: parent; hoverEnabled: true }
+
+            // ───────────── уголок ─────────────
+            //
+            // Тянут за тот угол, который свободен: карточка прижата к своему краю и к своему
+            // значку, и растёт она от них. Тянуть за прижатый угол значило бы двигать саму
+            // карточку, а она стоит там, откуда её открыли, и стоять обязана.
+            Item {
+                id: menuGrip
+                readonly property bool atLeft: menuWin.side === "right"
+                readonly property bool atTop: !menuWin.atTop
+                width: 22
+                height: 22
+                x: atLeft ? 0 : parent.width - width
+                y: atTop ? 0 : parent.height - height
+
+                Canvas {
+                    anchors.fill: parent
+                    anchors.margins: 5
+                    opacity: gripHover.hovered ? 0.75 : menuCardBody.containsMouse ? 0.3 : 0.18
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = "#ffffff"
+                        ctx.lineWidth = 1.5
+                        ctx.lineCap = "round"
+                        const w = width, h = height
+                        for (let i = 0; i < 2; i++) {
+                            const d = 4 + i * 5
+                            ctx.beginPath()
+                            ctx.moveTo(menuGrip.atLeft ? d : w - d, menuGrip.atTop ? 0 : h)
+                            ctx.lineTo(menuGrip.atLeft ? 0 : w, menuGrip.atTop ? d : h - d)
+                            ctx.stroke()
+                        }
+                    }
+                }
+
+                HoverHandler {
+                    id: gripHover
+                    cursorShape: menuGrip.atLeft === menuGrip.atTop ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
+                }
+                DragHandler {
+                    target: null
+                    property real fromW: 0
+                    property real fromH: 0
+                    property real fromX: 0
+                    property real fromY: 0
+                    onActiveChanged: {
+                        if (active) {
+                            fromW = menuWin.cardW
+                            fromH = menuWin.cardH
+                            fromX = centroid.scenePosition.x
+                            fromY = centroid.scenePosition.y
+                        } else {
+                            JD.saveMenuSize(menuWin.cardW, menuWin.cardH)
+                        }
+                    }
+                    onCentroidChanged: {
+                        if (!active) return
+                        const dx = centroid.scenePosition.x - fromX
+                        const dy = centroid.scenePosition.y - fromY
+                        menuWin.cardW = Math.max(520, Math.min(menuWin.width - 24,
+                                                 fromW + (menuGrip.atLeft ? -dx : dx)))
+                        menuWin.cardH = Math.max(360, Math.min(menuWin.height - 24,
+                                                 fromH + (menuGrip.atTop ? -dy : dy)))
+                    }
+                }
+            }
 
             // Живёт, только пока открыто: закрыли — освободили и сетку, и значки.
             Loader {

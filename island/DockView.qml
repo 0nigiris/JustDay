@@ -1043,7 +1043,10 @@ Item {
         moveDrag(pointerScene)
         for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
         const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key)
-        endDrag()
+        // Проверка не переставляет значки по-настоящему: она смотрит, что получилось бы, и
+        // кладёт всё обратно. Иначе каждый запуск проверки менял бы человеку док.
+        dragKey = ""
+        pinOverride = []
         engaged = false
         pointerScene = -99999
         wake()
