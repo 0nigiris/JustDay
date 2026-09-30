@@ -16,6 +16,7 @@ Item {
     property real size: 22
     // Ниже этого процента кошка спит. Ноль — не спит никогда, как в эталоне.
     property real sleepBelow: 0
+    property bool awake: true            // док на виду; уехавший за край док кошку останавливает
 
     readonly property var frames: JD.dockCat.run || []
     readonly property bool own: frames.length === 0
@@ -28,7 +29,7 @@ Item {
 
     Timer {
         interval: cat.period
-        running: cat.visible && JD.animOn && !cat.sleeping
+        running: cat.visible && cat.awake && JD.animOn && !cat.sleeping
         repeat: true
         onTriggered: cat.frame = (cat.frame + 1) % 5
     }

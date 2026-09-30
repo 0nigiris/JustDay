@@ -2796,6 +2796,7 @@ ShellRoot {
 
             DockView {
                 id: dock
+                awake: dockWin.shown
                 x: (parent.width - width) / 2
                 // Спрятанный док уезжает за край целиком, оставляя полоску: это и есть «его нет».
                 y: {

@@ -23,6 +23,9 @@ Item {
     readonly property bool labels: JD.dockCfg.labels !== false
     readonly property bool showRunning: JD.dockCfg.show_running !== false
     readonly property bool showTrash: JD.dockCfg.show_trash !== false
+    // Док уехал за край — кошке незачем перебирать лапами в пустоту: под нагрузкой это тридцать
+    // кадров в секунду, которых никто не видит.
+    property bool awake: true
     readonly property bool showCat: JD.dockCfg.cat !== false
     readonly property bool showClock: JD.dockCfg.clock === true
     // Значок меню: «apple» — то, что тема значков зовёт start-here (в макосных темах это яблоко),
@@ -244,12 +247,14 @@ Item {
                         anchors.centerIn: parent
                         visible: slot.e.t === "cat"
                         cpu: JD.cpu
+                        awake: dv.awake
                         sleepBelow: JD.dockCfg.cat_sleep_below || 0
                         size: dv.icon
                     }
                     DockClock {
                         anchors.centerIn: parent
                         visible: slot.e.t === "clock"
+                        awake: dv.awake
                         size: dv.icon
                     }
                 }

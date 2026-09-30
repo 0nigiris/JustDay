@@ -7,7 +7,8 @@ Item {
     property real size: 22
     property var now: new Date()
     // Свой счётчик: общий тик острова идёт, только пока что-то отсчитывают, и часы бы замирали.
-    Timer { interval: 15000; running: clock.visible; repeat: true; triggeredOnStart: true
+    property bool awake: true
+    Timer { interval: 15000; running: clock.visible && clock.awake; repeat: true; triggeredOnStart: true
             onTriggered: clock.now = new Date() }
 
     readonly property string time: Qt.formatTime(now, "HH:mm")

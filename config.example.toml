@@ -113,6 +113,10 @@ reserve = false             # true stops maximised windows at the dock — but P
 show_running = true         # windows of apps that are not pinned, behind a separator
 show_trash = true
 labels = true               # the name above the icon under the pointer
+launcher = "apple"          # apple = the icon theme's start-here (an Apple mark in macOS themes) | grid | any icon name
+cat = true                  # a running cat: the busier the CPU, the faster it runs (CatWalk's frames when installed)
+cat_sleep_below = 0         # below this CPU percentage the cat sleeps; 0 = never
+clock = false               # a clock in the dock (there is already one above)
 
 [tray]                      # other apps' status icons, as their own strip
 enabled = true
@@ -120,6 +124,8 @@ position = "left"           # left | right
 align = "center"            # center | start | end
 icon_size = 22
 reserve = false
+autohide = false
+hidden = ["xwayland video bridge"]   # tray icons to keep out of the strip, by id
 
 [updates]
 check = true                # look for a new version on GitHub (git fetch)
