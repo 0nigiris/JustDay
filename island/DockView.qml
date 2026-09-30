@@ -100,9 +100,26 @@ Item {
         return list.map(w => String(w).trim().toLowerCase()).filter(w => !!w)
     }
 
+    // ───────────── перетаскивание значков ─────────────
+    //
+    // Пока значок тащат, порядок живёт здесь, а не у демона: спрашивать демона на каждый пиксель
+    // — это разговор по сокету тридцать раз в секунду ради того, что и так видно. Наружу порядок
+    // уходит один раз, когда значок отпустили.
+    readonly property bool reorder: JD.dockCfg.reorder !== false
+    property string dragKey: ""          // что тащим
+    property real dragLocal: 0           // курсор в координатах карточки
+    property var pinOverride: []         // порядок закреплённого, пока тащим (и до ответа демона)
+
     readonly property var entries: {
         const out = [], by = grouped.by, taken = ({})
-        const pinnedItems = JD.dockItems
+        // Местный порядок годится, пока в нём ровно то же, что у демона. Закрепили новое или
+        // убрали лишнее — местный порядок устарел, и слушаем демона.
+        const known = JD.dockItems
+        let pinnedItems = known
+        if (dv.pinOverride.length === known.length && known.length) {
+            const mapped = dv.pinOverride.map(k => known.find(i => i.key === k)).filter(i => !!i)
+            if (mapped.length === known.length) pinnedItems = mapped
+        }
         for (const it of pinnedItems) taken[it.key] = true
         const extra = showRunning ? grouped.order.filter(k => !taken[k]) : []
 
@@ -175,9 +192,15 @@ Item {
     property var sizes: []               // текущий множитель размера каждой ячейки
     property var speeds: []              // и его скорость
 
+    // Полоса пересобирается часто: открылось окно, сменилась корзина, переставили значок. Если
+    // каждый раз сбрасывать размеры в единицу, увеличение под курсором схлопывается на ровном
+    // месте — и это было видно каждый раз, когда под курсором открывалось окно. Пока число ячеек
+    // то же, размеры и скорости остаются: их подтянет та же пружина.
     function resetPhysics() {
-        const n = lane.length, s = [], v = []
-        for (let i = 0; i < n; i++) { s.push(1); v.push(0) }
+        const n = lane.length
+        const s = sizes.length === n ? sizes.slice() : []
+        const v = speeds.length === n ? speeds.slice() : []
+        while (s.length < n) { s.push(1); v.push(0) }
         sizes = s; speeds = v; tick++
     }
     onLaneChanged: resetPhysics()
@@ -338,7 +361,13 @@ Item {
                 readonly property bool active: wins.some(w => w.activated && !w.minimized)
                 readonly property var g: dv.geom[index] || ({ x: e.at, w: e.w, k: 1 })
                 readonly property real k: g.k
-                x: g.x
+                // Тащимый значок идёт за курсором, а его место в полосе уже занято соседями:
+                // так видно, куда он встанет, ещё до того, как его отпустили.
+                readonly property bool dragged: dv.dragKey !== "" && dv.dragKey === e.key
+                x: dragged ? dv.dragLocal - g.w / 2 : g.x
+                z: dragged ? 2 : 0
+                Behavior on x { enabled: JD.animOn && !slot.dragged && dv.dragKey !== ""
+                                NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                 y: 0
                 width: g.w
                 height: card.height
@@ -365,9 +394,11 @@ Item {
                     y: (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + slot.bounce
                     // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
                     // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
-                    scale: slot.k
+                    scale: slot.k * (slot.dragged ? 1.08 : 1)
                     transformOrigin: dv.atTop ? Item.Top : Item.Bottom
-                    opacity: slotTap.pressed ? 0.7 : 1
+                    opacity: slot.dragged ? 0.86 : slotTap.pressed ? 0.7 : 1
+                    Behavior on scale { enabled: JD.animOn && slot.dragged
+                                        NumberAnimation { duration: 120 } }
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
@@ -475,6 +506,20 @@ Item {
                                       duration: 190; easing.type: Easing.OutQuad }
                     NumberAnimation { target: slot; property: "bounce"; to: 0
                                       duration: 240; easing.type: Easing.OutQuad }
+                }
+
+                // Порядок значков — рукой. Порог у DragHandler свой: обычное нажатие остаётся
+                // нажатием, перетаскивание начинается только после заметного движения.
+                DragHandler {
+                    enabled: dv.reorder && slot.e.t === "app" && slot.e.pinned
+                    target: null
+                    xAxis.enabled: true
+                    yAxis.enabled: false
+                    onActiveChanged: {
+                        if (active) dv.startDrag(slot.e.key)
+                        else dv.endDrag()
+                    }
+                    onCentroidChanged: if (active) dv.moveDrag(centroid.scenePosition.x)
                 }
 
                 HoverHandler { enabled: slot.e.t !== "sep"; cursorShape: Qt.PointingHandCursor }
@@ -589,6 +634,7 @@ Item {
 
     property var ctxEntry: null
     property var ctxWins: []
+    property string ctxConfirm: ""     // пункт, который ждёт второго щелчка
     property real ctxAt: 0
     // Ручьи звука той программы, по которой нажали правой кнопкой. Пересчитываются, когда меняется
     // и выбор, и сам список ручьёв: программа могла заиграть уже после открытия меню.
@@ -597,16 +643,16 @@ Item {
     readonly property bool ctxMuted: audio.mutedOf(ctxStreams)
     function openCtx(e, wins, at) {
         if (e.t === "sep") return
-        ctxEntry = e; ctxWins = wins || []; ctxAt = at
+        ctxEntry = e; ctxWins = wins || []; ctxAt = at; ctxConfirm = ""
         ctxClose.stop()
     }
-    function closeCtx() { ctxEntry = null; ctxWins = [] }
+    function closeCtx() { ctxEntry = null; ctxWins = []; ctxConfirm = "" }
     Timer { id: ctxClose; interval: 1400; onTriggered: dv.closeCtx() }
 
     Rectangle {
         id: ctx
         visible: !!dv.ctxEntry
-        width: dv.ctxStreams.length ? 272 : 210
+        width: Math.max(dv.ctxStreams.length ? 272 : 210, dv.ctxWins.length ? 264 : 0)
         height: ctxRows.implicitHeight + 12
         radius: 14
         color: Qt.rgba(0, 0, 0, 0.9)
@@ -700,32 +746,95 @@ Item {
 
             Repeater {
                 model: dv.ctxActions
-                delegate: Rectangle {
+                delegate: Item {
+                    id: ctxRow
                     required property var modelData
+                    readonly property bool sep: modelData.id === "sep"
+                    readonly property bool asking: dv.ctxConfirm === modelData.id
                     width: parent.width
-                    height: 32
-                    color: rowHover.hovered ? JD.fill1 : "transparent"
+                    height: sep ? 9 : 32
+
+                    Rectangle {
+                        visible: ctxRow.sep
+                        anchors.centerIn: parent
+                        width: parent.width - 24
+                        height: 1
+                        color: Qt.rgba(1, 1, 1, 0.08)
+                    }
+
+                    Rectangle {
+                        visible: !ctxRow.sep
+                        anchors.fill: parent
+                        color: ctxRow.asking ? Qt.rgba(1, 0.27, 0.23, 0.18)
+                             : rowHover.hovered ? JD.fill1 : "transparent"
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 110 } }
+                    }
                     Row {
+                        visible: !ctxRow.sep
                         anchors.fill: parent
                         anchors.leftMargin: 12
-                        anchors.rightMargin: 12
+                        anchors.rightMargin: ctxRow.modelData.closes ? 34 : 12
                         spacing: 9
                         Icon {
                             anchors.verticalCenter: parent.verticalCenter
-                            name: modelData.icon
+                            name: ctxRow.asking ? "circle-alert" : ctxRow.modelData.icon
                             implicitSize: 15
-                            tint: modelData.danger ? JD.accentRed : JD.text1
+                            tint: ctxRow.modelData.danger ? JD.accentRed
+                                : ctxRow.modelData.dim ? JD.text3 : JD.text1
                         }
                         Label1 {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.label
-                            color: modelData.danger ? JD.accentRed : JD.text1
+                            width: parent.width - 15 - 9
+                            text: ctxRow.asking ? ctxRow.modelData.confirm : ctxRow.modelData.label
+                            color: ctxRow.modelData.danger ? JD.accentRed
+                                 : ctxRow.modelData.dim ? JD.text3 : JD.text1
                         }
                     }
-                    HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
+
+                    // Крестик у окна закрывает именно его. Он появляется под курсором, а не висит
+                    // всегда: строка — это прежде всего «перейти к окну», и красный крестик у
+                    // каждой строки превратил бы список окон в список кнопок «уничтожить».
+                    Rectangle {
+                        visible: !!ctxRow.modelData.closes
+                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                        width: 22
+                        height: 22
+                        radius: 11
+                        color: killHover.hovered ? Qt.rgba(1, 0.27, 0.23, 0.30) : "transparent"
+                        opacity: rowHover.hovered || killHover.hovered ? 1 : 0
+                        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 110 } }
+                        Icon {
+                            anchors.centerIn: parent
+                            name: "x"
+                            implicitSize: 12
+                            tint: killHover.hovered ? JD.accentRed : JD.text2
+                        }
+                        HoverHandler { id: killHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler {
+                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                            onTapped: {
+                                JD.windowDo("close", String(ctxRow.modelData.closes))
+                                if (dv.ctxWins.length <= 1) dv.closeCtx()
+                            }
+                        }
+                    }
+
+                    HoverHandler { id: rowHover; enabled: !ctxRow.sep; cursorShape: Qt.PointingHandCursor }
                     TapHandler {
+                        enabled: !ctxRow.sep
                         gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: { dv.doCtx(modelData.id); dv.closeCtx() }
+                        onTapped: {
+                            // Необратимое ждёт второго щелчка по тому же пункту. Это не «вы
+                            // уверены?» перед каждым действием — только перед тем, что нельзя
+                            // отменить, и прямо на месте, без отдельного окна.
+                            if (ctxRow.modelData.confirm && !ctxRow.asking) {
+                                dv.ctxConfirm = ctxRow.modelData.id
+                                ctxClose.restart()
+                                return
+                            }
+                            dv.doCtx(ctxRow.modelData.id)
+                            dv.closeCtx()
+                        }
                     }
                 }
             }
@@ -737,15 +846,35 @@ Item {
         if (!e) return []
         if (e.t === "launcher") return [{ id: "menu", label: "Открыть меню", icon: "layout-grid" },
                                         { id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
-        if (e.t === "trash") return [{ id: "trash", label: "Открыть корзину", icon: "folder-open" }]
+        // Очистить корзину предлагается только тогда, когда в ней что-то есть: пункт, который
+        // ничего не делает, — обещание впустую. Он же и единственный необратимый в этом меню,
+        // поэтому ждёт второго щелчка.
+        if (e.t === "trash") {
+            const rows = [{ id: "trash", label: "Открыть корзину", icon: "folder-open" }]
+            if (JD.trashFull) rows.push({ id: "empty", label: "Очистить корзину", icon: "trash-2",
+                                          danger: true, confirm: "Точно очистить?" })
+            return rows
+        }
         if (e.t === "cat") return [{ id: "load", label: "Нагрузка машины", icon: "gauge" },
                                    { id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
         if (e.t === "clock") return [{ id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
         const out = [{ id: "open", label: "Открыть", icon: "external-link" }]
         if (e.id) out.push(e.pinned ? { id: "unpin", label: "Убрать из дока", icon: "minus" }
                                     : { id: "pin", label: "Оставить в доке", icon: "plus" })
-        if (ctxWins.length) out.push({ id: "close", label: ctxWins.length > 1 ? "Закрыть все окна" : "Закрыть окно",
-                                       icon: "x", danger: true })
+        // Окна перечислены поимённо. Раньше меню умело только «закрыть всё», и чтобы убрать одно
+        // лишнее окно из шести, приходилось искать его самому. Строка ведёт к окну, крестик в
+        // строке закрывает именно его.
+        if (ctxWins.length) {
+            out.push({ id: "sep" })
+            for (let i = 0; i < ctxWins.length; i++) {
+                const w = ctxWins[i]
+                out.push({ id: "focus:" + w.id, closes: w.id, dim: !!w.minimized,
+                           icon: w.minimized ? "chevron-down" : w.active ? "app-window" : "square",
+                           label: JD.flat(w.title || e.name || "Окно") })
+            }
+            if (ctxWins.length > 1) out.push({ id: "close", label: "Закрыть все окна", icon: "x", danger: true })
+            out.push({ id: "sep" })
+        }
         out.push({ id: "settings", label: "Настроить док", icon: "sliders-horizontal" })
         return out
     }
@@ -755,11 +884,56 @@ Item {
         if (what === "menu") JD.toggleMenu()
         else if (what === "settings") JD.openSettings("dock")
         else if (what === "trash") Quickshell.execDetached(["xdg-open", "trash:///"])
+        else if (what === "empty") JD.send({ cmd: "trash_empty" })
         else if (what === "load") JD.openTools("load")
         else if (what === "open") JD.dockRun(e)
         else if (what === "pin") JD.dockPin(e.kind, e.id, true)
         else if (what === "unpin") JD.dockPin(e.kind, e.id, false)
         else if (what === "close") for (const w of wins) JD.windowDo("close", w.id)
+        else if (what.startsWith("focus:")) JD.windowDo("focus", what.slice(6))
+    }
+
+    // Взяли значок. Порядок замораживаем сразу: дальше он меняется только этим перетаскиванием,
+    // и список из-под руки не поедет, если демон в этот момент пришлёт своё.
+    function startDrag(key) {
+        if (!reorder || !key) return
+        pinOverride = JD.dockItems.map(i => i.key)
+        dragKey = key
+    }
+
+    // Куда значок встаёт: не «перепрыгнул половину соседа», а «курсор оказался над чужой ячейкой».
+    // Ячейки под курсором увеличены, и мерить надо по нарисованному — по нему рука и целится.
+    function moveDrag(sceneX) {
+        dragLocal = sceneX - dv.x - card.x
+        if (dragKey === "") return
+        const spots = []
+        for (let i = 0; i < lane.length; i++)
+            if (lane[i].t === "app" && lane[i].pinned) spots.push({ key: lane[i].key, i: i })
+        const from = spots.findIndex(s => s.key === dragKey)
+        if (from < 0) return
+        let to = from
+        for (let n = 0; n < spots.length; n++) {
+            const g = geom[spots[n].i]
+            if (!g) continue
+            if (dragLocal >= g.x && dragLocal < g.x + g.w) { to = n; break }
+        }
+        if (to === from) return
+        const next = pinOverride.slice()
+        const at = next.indexOf(dragKey)
+        if (at < 0) return
+        next.splice(at, 1)
+        // Порядок в pinOverride и порядок закреплённых ячеек — одно и то же: и там и там только
+        // закреплённое, в одном и том же порядке.
+        next.splice(to, 0, dragKey)
+        pinOverride = next
+    }
+
+    function endDrag() {
+        if (dragKey === "") return
+        dragKey = ""
+        // Порядок остаётся местным, пока демон не подтвердит его своим ответом: иначе значок на
+        // миг отскакивает туда, откуда его унесли.
+        JD.dockArrange(pinOverride)
     }
 
     // Нажатие: не запущено — запустить; запущено и не наверху — поднять; наверху — свернуть.

@@ -2472,6 +2472,11 @@ class Daemon:
                     self.cfg = config.load()
                     self.publish(settings=island.settings_snapshot(self.cfg))
                 resp = got
+            elif cmd == "trash_empty":  # очистить корзину: подтверждение спрашивает тот, кто просит
+                got = await asyncio.get_running_loop().run_in_executor(None, dock.trash_empty)
+                self._trash_full = bool(got.get("trash_full"))
+                self.publish(trash_full=self._trash_full)
+                resp = got
             elif cmd == "dock_arrange":  # новый порядок после перетаскивания
                 keys = [str(k) for k in (req.get("keys") or [])]
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.arrange, keys)

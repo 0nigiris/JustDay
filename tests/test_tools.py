@@ -371,7 +371,18 @@ def test_pinning_keeps_the_order_things_were_pinned_in(docked) -> None:
 def test_dragging_cannot_smuggle_in_something_that_was_not_pinned(docked) -> None:
     docked.pin("app", "discord", True)
     docked.arrange(["app:steam", "app:discord"])
-    assert docked.pinned() == ["app:discord"]
+    assert "app:steam" not in docked.pinned()
+    assert "app:discord" in docked.pinned()
+
+
+def test_dragging_one_icon_does_not_lose_the_others(docked) -> None:
+    """Перестановка — это перестановка. Неполный список значит «остальные как были», а не
+    «остальных больше нет»: иначе одно перетаскивание вычищает док."""
+    docked.pin("app", "discord", True)
+    was = docked.pinned()
+    docked.arrange(["app:discord"])
+    assert docked.pinned()[0] == "app:discord"
+    assert sorted(docked.pinned()) == sorted(was)
 
 
 def test_the_menu_icon_is_repainted_before_it_is_used(tmp_path, monkeypatch) -> None:

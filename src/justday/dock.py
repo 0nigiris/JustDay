@@ -129,9 +129,18 @@ def pin(kind: str, ident: str, on: bool | None = None) -> dict:
 
 
 def arrange(keys: list[str]) -> dict:
-    """Новый порядок после перетаскивания. Чужие ключи отбрасываются молча."""
-    have = set(pinned())
-    save([str(k) for k in keys if str(k) in have])
+    """Новый порядок после перетаскивания.
+
+    Чужие ключи отбрасываются молча, а свои, которых в списке не оказалось, дописываются в конец в
+    прежнем порядке: перестановка — это перестановка, и потерять значок она права не имеет, чем бы
+    ни был неполон присланный список.
+    """
+    was = pinned()
+    have = set(was)
+    order = [str(k) for k in keys if str(k) in have]
+    seen = set(order)
+    order += [k for k in was if k not in seen]
+    save(order)
     return {"ok": True} | catalog()
 
 
@@ -268,6 +277,37 @@ def trash_full() -> bool:
         except OSError:
             continue
     return False
+
+
+# Очистить корзину. Действие необратимое, поэтому здесь оно нарочно тупое: ходим по двум каталогам
+# самой корзины и больше никуда. Ни поиска, ни обхода ссылок — иначе ссылка, брошенная в корзину,
+# уводит удаление в живой каталог, и «очистить корзину» стирает то, что там не лежало.
+#
+# Подтверждение — на стороне того, кто просит: в доке это второй щелчок по пункту, в командной
+# строке — сама команда. Спрашивать дважды в обоих местах некуда.
+def trash_empty() -> dict:
+    import shutil
+
+    base = config.HOME / ".local/share/Trash"
+    gone, failed = 0, 0
+    for part in ("files", "info"):
+        folder = base / part
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            continue
+        for item in entries:
+            try:
+                if item.is_symlink() or item.is_file():
+                    item.unlink()
+                else:
+                    shutil.rmtree(item)
+                if part == "files":
+                    gone += 1
+            except OSError:
+                if part == "files":
+                    failed += 1
+    return {"ok": failed == 0, "removed": gone, "failed": failed, "trash_full": trash_full()}
 
 
 def hidden_tray() -> list[str]:

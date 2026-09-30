@@ -895,6 +895,7 @@ Item {
                 Row { title: JD.tr("Подпись под курсором"); Toggle { checked: win.get("dock.labels") !== false; onToggled: v => win.set("dock.labels", v) } }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
+                Row { title: JD.tr("Порядок значков перетаскиванием"); subtitle: JD.tr("Потянуть закреплённый значок вдоль дока и отпустить на новом месте"); Toggle { checked: win.get("dock.reorder") !== false; onToggled: v => win.set("dock.reorder", v) } }
                 Row { title: JD.tr("Окна программы при наведении"); subtitle: JD.tr("Заголовки открытых окон под подписью. Картинок нет: снимать чужие окна на KWin умеет только композитор"); Toggle { checked: win.get("dock.preview") !== false; onToggled: v => win.set("dock.preview", v) } }
                 Row {
                     title: JD.tr("Состав полосы")
