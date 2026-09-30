@@ -32,6 +32,13 @@ ShellRoot {
                                     island: [island.x, island.y, island.width, island.height, island.opacity] })
         }
         function snapshot(path: string): void { island.grabToImage(r => r.saveToFile(path)) }
+        // Что док видит: открытые окна, закреплённое и точка, из которой вырастает меню.
+        // `qs -p island ipc call island dock` — этим и проверяется, что окно узнали.
+        function dock(): string {
+            return JSON.stringify({ tops: ToplevelManager.toplevels.values.map(t => ({ app: t.appId, min: t.minimized, on: t.activated })),
+                                    pinned: JD.dockItems.map(i => i.key), anchor: JD.dockAnchor,
+                                    known: Object.keys(JD.dockMatch).length })
+        }
     }
 
     // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1 or a picture path): a "wallpaper" so the black island is visible in headless sessions
