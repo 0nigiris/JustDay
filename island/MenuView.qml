@@ -37,11 +37,29 @@ Item {
         if (askInstead) { JD.askFromMenu(JD.menuQuery); return }
         JD.runFromMenu(shown[JD.menuPick] || shown[0])
     }
-    // Поле не теряет фокус никогда: меню открыли клавишей, значит можно печатать сразу.
-    onVisibleChanged: if (visible) field.forceActiveFocus()
+    // Меню открыли клавишей — значит, можно печатать сразу, не целясь мышью в строку.
+    //
+    // Три случая, и каждый нужен. Первое открытие: вида ещё нет, когда номер открытия растёт, —
+    // ловим при создании. Повторное, пока вид жив: ловим по номеру. И третий, из-за которого это
+    // вообще написано, — окно уже показано, а фокус слою выдали мгновением позже.
+    Component.onCompleted: grab.restart()
+    onVisibleChanged: if (visible) grab.restart()
     Connections {
         target: JD
-        function onMenuSerialChanged() { field.forceActiveFocus(); field.selectAll() }
+        function onMenuSerialChanged() { grab.restart() }
+    }
+    Timer {
+        id: grab
+        interval: 1
+        repeat: true
+        triggeredOnStart: true
+        property int tries: 0
+        onRunningChanged: if (running) tries = 0
+        onTriggered: {
+            field.forceActiveFocus()
+            field.selectAll()
+            if (field.activeFocus || ++tries > 30) { stop(); interval = 1 } else interval = 30
+        }
     }
 
     ColumnLayout {

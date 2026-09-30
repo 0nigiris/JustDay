@@ -2717,7 +2717,7 @@ ShellRoot {
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "justday-menu"
-        WlrLayershell.keyboardFocus: JD.menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: alive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         color: "transparent"
 
         readonly property string place: JD.island.menu_position || "bottom-left"

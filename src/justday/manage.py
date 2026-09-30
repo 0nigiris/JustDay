@@ -295,13 +295,17 @@ def free_key(combo: str, keep: str) -> list[str]:
         return []
     taken = []
     for owner in shortcut_owners(code):
-        action, friendly, component = owner[0], owner[1], owner[2]
+        action, friendly, component, comp_friendly = owner[0], owner[1], owner[2], owner[3]
         if component == keep:
             continue
         rest = [k for k in owner[6] if k != code]
         # Убираем одну клавишу, остальные оставляем: у KRunner их три, и Alt+F2 должен остаться.
+        #
+        # Порядок в actionId — [составляющая, действие, её подпись, его подпись], и он не
+        # украшение: с переставленными подписями kglobalaccel молча ничего не делает и отвечает
+        # успехом. Так голая Meta осталась за plasmashell при отчёте «клавиша наша».
         keys = "@ai [" + ", ".join(str(k) for k in rest) + "]"
-        _accel("setShortcut", f"['{component}','{action}','{friendly}','{owner[3]}']", keys, "4")
+        _accel("setShortcut", f"['{component}','{action}','{comp_friendly}','{friendly}']", keys, "4")
         taken.append(friendly or component)
     return taken
 
