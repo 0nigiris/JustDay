@@ -110,7 +110,9 @@ icon_size = 44
 spacing = 20                # points between icons
 magnify_scale = 60          # how much bigger the icon under the pointer gets, in percent
 magnify_spread = 120        # how wide the magnification wave is, in percent of a cell
-animation = "spring"        # spring (overshoots on the way, like macOS) | smooth | instant
+animation = "spring"        # spring (the icon overshoots its size, like macOS) | smooth | instant
+spring = 6.0                # stiffness: higher reaches the size sooner
+damping = 0.32              # lower overshoots more; 1.0 = no overshoot at all
 magnify = true              # icons grow outward under the pointer; their place in the strip does not move
 autohide = false
 reserve = false             # true stops maximised windows at the dock — but Plasma shrinks the wallpaper too

@@ -874,6 +874,16 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Жёсткость пружины")
+                    subtitle: JD.tr("Больше — быстрее доезжает до размера")
+                    SSlider { key: "dock.spring"; from: 1; to: 20; step: 0.5; decimals: 1 }
+                }
+                Row {
+                    title: JD.tr("Затухание")
+                    subtitle: JD.tr("Меньше — сильнее отскок. Единица — без отскока вовсе")
+                    SSlider { key: "dock.damping"; from: 0.1; to: 1.0; step: 0.02; decimals: 2 }
+                }
+                Row {
                     title: JD.tr("Насколько вырастает")
                     SSlider { key: "dock.magnify_scale"; from: 0; to: 120; step: 5; decimals: 0; unit: JD.tr("%") }
                 }

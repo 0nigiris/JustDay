@@ -2794,6 +2794,17 @@ ShellRoot {
                           top: dockWin.atTop, shown: dockWin.shown })
             }
 
+            // Где карточка лежит на экране — чтобы меню прорезало в своём перекрытии дырку ровно
+            // по ней и док под меню оставался живым, а не картинкой.
+            Binding {
+                target: JD
+                property: "dockRect"
+                value: ({ x: dock.x, w: dock.width, h: dock.cardHeight,
+                          y: dockWin.atTop ? dockWin.edgeMargin
+                                           : JD.screenHeight - dock.cardHeight - dockWin.edgeMargin,
+                          live: dockWin.shown })
+            }
+
             DockView {
                 id: dock
                 awake: dockWin.shown
@@ -2853,6 +2864,14 @@ ShellRoot {
 
             mask: Region { item: trayWin.shown ? tray : trayEdge }
             BackgroundEffect.blurRegion: Region { item: trayWin.shown ? tray.blurItem : null }
+
+            // То же, что у дока: меню прорежет по этому месту дырку в своём перекрытии.
+            Binding {
+                target: JD
+                property: "trayRect"
+                value: ({ x: trayWin.atRight ? JD.screenWidth - tray.width - 10 : tray.x,
+                          y: tray.y, w: tray.width, h: tray.height, live: trayWin.shown && !tray.empty })
+            }
 
             TrayView {
                 id: tray
@@ -2916,8 +2935,36 @@ ShellRoot {
         readonly property bool atTop: place.startsWith("top")
         readonly property string side: place.split("-")[1] || "left"
 
-        MouseArea { anchors.fill: parent; onClicked: JD.closeMenu() }
+        // Перекрытие во весь экран — чтобы закрываться щелчком мимо. Но с дырками по доку и полосе
+        // лотка: без них они под меню становятся картинкой — значки видно, а нажать нельзя, и
+        // единственное, что делает щелчок по ним, это закрывает меню.
+        MouseArea { id: menuBackdrop; anchors.fill: parent; onClicked: JD.closeMenu() }
         Shortcut { sequence: "Escape"; enabled: JD.menuOpen; onActivated: JD.closeMenu() }
+
+        Item {
+            id: dockHole
+            visible: false
+            readonly property var r: JD.dockRect
+            x: r && r.live ? r.x : 0
+            y: r && r.live ? r.y : 0
+            width: r && r.live ? r.w : 0
+            height: r && r.live ? r.h : 0
+        }
+        Item {
+            id: trayHole
+            visible: false
+            readonly property var r: JD.trayRect
+            x: r && r.live ? r.x : 0
+            y: r && r.live ? r.y : 0
+            width: r && r.live ? r.w : 0
+            height: r && r.live ? r.h : 0
+        }
+
+        mask: Region {
+            item: menuBackdrop
+            Region { item: dockHole; intersection: Intersection.Subtract }
+            Region { item: trayHole; intersection: Intersection.Subtract }
+        }
 
         Rectangle {
             id: menuCard

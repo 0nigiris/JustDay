@@ -109,33 +109,21 @@ Item {
 
     // ───────────── увеличение ─────────────
     //
-    // Волна не приклеена к курсору: курсор задаёт, куда ей хочется, а доходит она туда пружиной.
-    // Из-за этого при переходе с значка на значок она успевает проскочить дальше и вернуться — то
-    // самое ощущение, ради которого это и делают. Прямое следование за курсором остаётся
-    // отдельным стилем: кому-то отскок мешает попадать.
+    // Пружина живёт в каждом значке, а не в положении волны. Сначала было наоборот — волна
+    // догоняла курсор пружиной, — и на быстрой мыши это чувствовалось как задержка: увеличение
+    // ползло следом за курсором, а не под ним. Теперь центр волны приклеен к курсору намертво, а
+    // пружинит размер: значок разгоняется, проскакивает нужный размер и возвращается. Отскок на
+    // месте, задержки нет.
     readonly property string animStyle: JD.dockCfg.animation || "spring"
     readonly property real amp: Math.max(0, Math.min(2, (JD.dockCfg.magnify_scale === undefined ? 60 : JD.dockCfg.magnify_scale) / 100))
     readonly property real spread: Math.max(0.4, Math.min(4, (JD.dockCfg.magnify_spread === undefined ? 120 : JD.dockCfg.magnify_spread) / 100))
+    // Жёсткость и затухание — наружу: «пружинисто» у каждого своё, а на 185 герцах разница видна.
+    // Затухание 1 — это и есть «плавно»: критическое, без отскока вовсе.
+    readonly property real springK: Math.max(0.5, Math.min(30, JD.dockCfg.spring === undefined ? 6.0 : JD.dockCfg.spring))
+    readonly property real springDamp: animStyle === "smooth" ? 1.0
+        : Math.max(0.05, Math.min(1, JD.dockCfg.damping === undefined ? 0.32 : JD.dockCfg.damping))
 
-    property real pointerX: -9999        // где курсор
-    property real focusX: -9999          // куда доехала волна
-    Behavior on focusX {
-        id: focusEase
-        enabled: JD.animOn && dv.animStyle !== "instant"
-        SpringAnimation {
-            spring: dv.animStyle === "smooth" ? 9.0 : 5.0
-            damping: dv.animStyle === "smooth" ? 1.0 : 0.28
-            mass: 0.9
-            epsilon: 0.4
-        }
-    }
-    // Курсор вошёл в док — волна должна оказаться под ним сразу, а не приехать с другого конца
-    // полосы, где её оставили в прошлый раз.
-    function aimAt(x, jump) {
-        pointerX = x
-        if (jump) { focusEase.enabled = false; focusX = x; focusEase.enabled = Qt.binding(() => JD.animOn && dv.animStyle !== "instant") }
-        else focusX = x
-    }
+    property real focusX: -9999          // курсор; волна считается прямо по нему
 
     property real power: 0
     Behavior on power { enabled: JD.animOn; NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
@@ -147,11 +135,10 @@ Item {
         const d = (at + w / 2 - focusX) / (cell * spread)
         return 1 + amp * power * Math.exp(-d * d)
     }
-    // Подпись идёт за курсором, а не за волной: иначе она отстаёт от того, на что смотрят.
     readonly property var focused: {
         if (power <= 0.3) return null
         for (const s of lane)
-            if (s.t !== "sep" && pointerX >= s.at && pointerX < s.at + s.w) return s
+            if (s.t !== "sep" && focusX >= s.at && focusX < s.at + s.w) return s
         return null
     }
 
@@ -170,14 +157,13 @@ Item {
 
         HoverHandler {
             id: laneHover
-            onPointChanged: dv.aimAt(point.position.x, dv.power <= 0.001)
+            onPointChanged: dv.focusX = point.position.x
             onHoveredChanged: {
-                if (hovered) dv.aimAt(point.position.x, true)
+                if (hovered) dv.focusX = point.position.x
                 else ctxClose.restart()
-                // Уходя, волну не уводим: она просто гаснет на месте. Отъезд на минус десять тысяч
-                // пружиной выглядел бы как будто по доку кто-то провёл рукой.
+                // Уходя, волну не уводим: она просто гаснет на месте. Отъезд за край выглядел бы
+                // как будто по доку кто-то провёл рукой.
                 dv.power = hovered && dv.magnify ? 1 : 0
-                if (!hovered) dv.pointerX = -9999
             }
         }
 
@@ -214,6 +200,12 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: dv.atTop ? dv.pad + dv.dotRoom : dv.pad
                     scale: slot.k
+                    // Вот она, пружина: размер догоняет цель с отскоком, а цель считается прямо по
+                    // курсору. Затухание 1 («плавно») то же самое делает без отскока.
+                    Behavior on scale {
+                        enabled: JD.animOn && dv.animStyle !== "instant"
+                        SpringAnimation { spring: dv.springK; damping: dv.springDamp; mass: 0.5; epsilon: 0.003 }
+                    }
                     transformOrigin: dv.atTop ? Item.Top : Item.Bottom
                     opacity: slotTap.pressed ? 0.7 : 1
 
@@ -447,6 +439,8 @@ Item {
     function press(e, wins) {
         closeCtx()
         if (e.t === "launcher") { JD.toggleMenu(); return }
+        // Нажали в доке при открытом меню — меню своё дело сделало и уходит.
+        if (JD.menuOpen) JD.closeMenu()
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
         if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
         if (!wins || wins.length === 0) { JD.dockRun(e); return }
