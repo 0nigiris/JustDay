@@ -38,6 +38,7 @@ ShellRoot {
             return JSON.stringify({ windows: JD.windows.map(w => ({ app: w.app, min: w.minimized, on: w.active })),
                                     pinned: JD.dockItems.map(i => i.key), anchor: JD.dockAnchor,
                                     known: Object.keys(JD.dockMatch).length,
+                                    hover: JD.dockHover,
                                     menu: [menuWin.x, menuWin.y, menuWin.width, menuWin.height],
                                     card: [menuCard.x, menuCard.y, menuCard.width, menuCard.height] })
         }
@@ -2721,6 +2722,7 @@ ShellRoot {
     // это док, из-под которого их приходится вытаскивать. Прятать умеет тоже, и тогда зону не
     // отнимает, а оставляет полоску в два пикселя, чтобы его можно было позвать обратно.
     Loader {
+        id: dockLoader
         active: JD.dockOn
         sourceComponent: PanelWindow {
             id: dockWin
@@ -2773,6 +2775,12 @@ ShellRoot {
             // Откуда вырастает меню приложений. Считается здесь, потому что только это окно знает
             // и где стоит карточка, и где у окна край экрана: у самого дока в его координатах нет
             // ни того, ни другого.
+            Binding {
+                target: JD
+                property: "dockHover"
+                value: [Math.round(dock.focusX), Number(dock.power.toFixed(2)), dock.focused ? dock.focused.t : ""]
+            }
+
             Binding {
                 target: JD
                 property: "dockAnchor"
