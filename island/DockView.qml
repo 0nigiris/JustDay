@@ -387,10 +387,13 @@ Item {
                 // Тащимый значок идёт за курсором, а его место в полосе уже занято соседями:
                 // так видно, куда он встанет, ещё до того, как его отпустили.
                 readonly property bool dragged: dv.dragKey !== "" && dv.dragKey === e.key
+                // Своей анимации у места быть не должно. Она тут была — и ломала док: анимация
+                // включалась только на время перетаскивания, а выключалась ровно в тот миг, когда
+                // ещё летела. Qt в этом случае animation останавливает, значение оставляет на
+                // полпути, и привязка молчит, пока не поменяется то, от чего она зависит. Значки
+                // так и замирали внахлёст. Место значка считает физика полосы — и только она.
                 x: dragged ? dv.dragLocal - g.w / 2 : g.x
                 z: dragged ? 2 : 0
-                Behavior on x { enabled: JD.animOn && !slot.dragged && dv.dragKey !== ""
-                                NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                 y: 0
                 width: g.w
                 height: card.height
@@ -417,11 +420,12 @@ Item {
                     y: (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + slot.bounce
                     // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
                     // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
+                    // Та же история, что и с местом: размер под пальцем считает физика, а
+                    // взятый значок просто чуть крупнее. Анимации тут нет нарочно — ей было бы
+                    // где замереть на полпути.
                     scale: slot.k * (slot.dragged ? 1.08 : 1)
                     transformOrigin: dv.atTop ? Item.Top : Item.Bottom
                     opacity: slot.dragged ? 0.86 : slotTap.pressed ? 0.7 : 1
-                    Behavior on scale { enabled: JD.animOn && slot.dragged
-                                        NumberAnimation { duration: 120 } }
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
@@ -1025,6 +1029,29 @@ Item {
         if (front) { for (const w of wins) JD.windowDo("minimize", w.id); return }
         const up = wins.find(w => !w.minimized) || wins[0]
         JD.windowDo("focus", up.id)
+    }
+
+    // Перетаскивание без мыши: взять n-й закреплённый значок, отнести в точку x спокойной полосы
+    // и отпустить. Отдаёт получившийся порядок и места ячеек — по ним видно и наложение.
+    function dragProbe(n, x) {
+        const spots = lane.filter(s => s.t === "app" && s.pinned)
+        const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]
+        if (!pick) return JSON.stringify({ pinned: 0 })
+        engaged = true
+        pointerScene = anchorCentre - restLength / 2 + x
+        startDrag(pick.key)
+        moveDrag(pointerScene)
+        for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
+        const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key)
+        endDrag()
+        engaged = false
+        pointerScene = -99999
+        wake()
+        let overlap = 0
+        for (let i = 1; i < lane.length; i++)
+            if (geom[i].x + 0.5 < geom[i - 1].x + geom[i - 1].w) overlap++
+        return JSON.stringify({ took: pick.key, order: order, overlap: overlap,
+                                cells: lane.map((s, i) => [s.t, Math.round(geom[i].x), Math.round(geom[i].w)]) })
     }
 
     // Проверка движка без мыши: поставить курсор в точку полосы, дать физике сойтись и вернуть

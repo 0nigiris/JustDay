@@ -40,6 +40,10 @@ ShellRoot {
             const d = dockLoader.item ? dockLoader.item.probe(x) : null
             return JSON.stringify(d)
         }
+        // Перетаскивание значка без мыши: чей порядок вышел и не наехали ли ячейки друг на друга.
+        function dockDrag(n: int, x: real): string {
+            return dockLoader.item ? dockLoader.item.dragProbe(n, x) : "null"
+        }
         // Что док видит: открытые окна, закреплённое и точка, из которой вырастает меню.
         // `qs -p island ipc call island dock` — этим и проверяется, что окно узнали.
         function dock(): string {
