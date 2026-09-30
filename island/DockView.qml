@@ -582,6 +582,23 @@ Item {
         JD.windowDo("focus", up.id)
     }
 
+    // Проверка движка без мыши: поставить курсор в точку полосы, дать физике сойтись и вернуть
+    // получившуюся раскладку. Синтетическая мышь на вейланде врёт, а «значки расступаются» иначе
+    // никак не проверить числом. Состояние восстанавливается первым же настоящим движением мыши.
+    function probe(x) {
+        const wasEngaged = engaged, wasAt = pointerScene
+        engaged = true
+        pointerScene = dv.x + x
+        for (let n = 0; n < 400 && stepPhysics(1 / 120); n++) { /* до схождения */ }
+        const out = { at: x, length: Math.round(laneLength), rest: Math.round(restLength),
+                      cells: lane.map((s, i) => ({ t: s.t, x: Math.round(geom[i].x),
+                                                   w: Math.round(geom[i].w), k: Number(geom[i].k.toFixed(3)) })) }
+        engaged = wasEngaged
+        pointerScene = wasAt
+        wake()
+        return out
+    }
+
     // Какой значок сейчас подпрыгивает. Гасим сами через полторы секунды: ждать появления окна
     // нельзя — программа может и не открыться, а значок так и останется скакать.
     property string bouncing: ""

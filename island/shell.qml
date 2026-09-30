@@ -32,6 +32,13 @@ ShellRoot {
                                     island: [island.x, island.y, island.width, island.height, island.opacity] })
         }
         function snapshot(path: string): void { island.grabToImage(r => r.saveToFile(path)) }
+        // Проверка движка увеличения без мыши: ставим курсор в заданную точку полосы, даём физике
+        // сойтись и отдаём получившуюся раскладку. Синтетическая мышь на вейланде врёт (ускорение
+        // и вторые мониторы), а «значки расступаются» иначе никак не проверить числом.
+        function dockAt(x: real): string {
+            const d = dockLoader.item ? dockLoader.item.probe(x) : null
+            return JSON.stringify(d)
+        }
         // Что док видит: открытые окна, закреплённое и точка, из которой вырастает меню.
         // `qs -p island ipc call island dock` — этим и проверяется, что окно узнали.
         function dock(): string {
@@ -2805,6 +2812,8 @@ ShellRoot {
                                            : JD.screenHeight - dock.cardHeight - dockWin.edgeMargin,
                           live: dockWin.shown })
             }
+
+            function probe(x) { return dock.probe(x) }
 
             DockView {
                 id: dock
