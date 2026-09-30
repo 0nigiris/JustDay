@@ -435,6 +435,10 @@ Singleton {
     readonly property color text2: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.62)
     // 0.48 keeps captions at ~4.8:1 on the island's black; 0.34 measured 2.8:1, below the 4.5:1 floor
     readonly property color text3: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.48)
+    // Поверхность меню приложений. Она почти непрозрачная нарочно: на ней читают и целятся, а
+    // размытие под ней — только чтобы край карточки не выглядел вырезанным из картона. Док и лоток
+    // — наоборот, накладки поверх работы, и там прозрачность на месте.
+    readonly property color menuSurface: Qt.rgba(0.04, 0.04, 0.05, 0.93)
     readonly property color fill1: Qt.rgba(1, 1, 1, 0.08)
     readonly property color fill2: Qt.rgba(1, 1, 1, 0.14)
     readonly property color accentBlue: "#0a84ff"

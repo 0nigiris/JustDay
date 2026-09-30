@@ -2922,8 +2922,8 @@ ShellRoot {
         Rectangle {
             id: menuCard
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
-            width: Math.min(760, menuWin.width - 24)
-            height: Math.min(560, menuWin.height - 24)
+            width: Math.min(880, menuWin.width - 24)
+            height: Math.min(620, menuWin.height - 24)
             // От значка: меню стоит над ним, но не левее края экрана и не правее его.
             x: menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
@@ -2939,11 +2939,12 @@ ShellRoot {
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
             radius: 26
-            // Под карточкой размыто, поэтому она может быть не чёрной доской, а стеклом. Не светлее:
-            // белый текст на стекле поверх светлых обоев перестаёт читаться, а меню читают всегда.
-            color: Qt.rgba(0, 0, 0, 0.74)
+            // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
+            // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
+            // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
+            color: JD.menuSurface
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
+            border.color: Qt.rgba(1, 1, 1, 0.14)
             clip: true
 
             // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.

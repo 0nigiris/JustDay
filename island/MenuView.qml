@@ -16,8 +16,15 @@ import QtQuick.Layouts
 
 Item {
     id: mv
-    implicitWidth: 760
-    implicitHeight: 560
+    implicitWidth: 880
+    implicitHeight: 620
+
+    // Меню — рабочая поверхность, а не украшение: на ней читают и целятся, поэтому карточка почти
+    // непрозрачная, а заливки кнопок плотнее островных. На чёрном острове 8% белого видно; на
+    // карточке поверх размытых обоев — нет, и кнопки пропадали.
+    readonly property color fill1: Qt.rgba(1, 1, 1, 0.10)
+    readonly property color fill2: Qt.rgba(1, 1, 1, 0.18)
+    readonly property color fill3: Qt.rgba(1, 1, 1, 0.26)
 
     readonly property var shown: JD.menuShown
     readonly property var user: JD.menuUser
@@ -28,6 +35,25 @@ Item {
     // плитку ровно в тот момент, когда по ней целятся.
     property string hint: ""
     function hintFor(on, text) { if (on) hint = text; else if (hint === text) hint = "" }
+
+    // Кнопка-кружок внизу полосы. Своя, а не IconButton: тот берёт островные 8% белого, которых на
+    // этой карточке не видно, и подписи у него нет — а безымянный кружок не нажимают.
+    component ToolDot: Rectangle {
+        id: dot
+        property string icon: ""
+        property string note: ""
+        signal picked()
+        implicitWidth: 34
+        implicitHeight: 34
+        radius: 17
+        color: dotHover.hovered ? mv.fill3 : mv.fill1
+        Behavior on color { ColorAnimation { duration: 120 } }
+        scale: dotTap.pressed ? 0.92 : 1
+        Behavior on scale { NumberAnimation { duration: 110 } }
+        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 17 }
+        HoverHandler { id: dotHover; cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, dot.note) }
+        TapHandler { id: dotTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: dot.picked() }
+    }
 
     function move(step) {
         if (!shown.length) return
@@ -73,10 +99,10 @@ Item {
             spacing: 12
 
             Rectangle {
-                implicitWidth: 40
-                implicitHeight: 40
-                radius: 20
-                color: JD.fill1
+                implicitWidth: 42
+                implicitHeight: 42
+                radius: 21
+                color: mv.fill1
                 clip: true
                 Image {
                     anchors.fill: parent
@@ -109,17 +135,17 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     readonly property bool asking: JD.menuConfirm === modelData.id
-                    implicitWidth: asking ? askRow.implicitWidth + 24 : 34
-                    implicitHeight: 34
-                    radius: 17
-                    color: asking ? JD.accentRed : (powHover.hovered ? JD.fill2 : JD.fill1)
+                    implicitWidth: asking ? askRow.implicitWidth + 26 : 36
+                    implicitHeight: 36
+                    radius: 18
+                    color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : mv.fill1)
                     Behavior on implicitWidth { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                     Behavior on color { ColorAnimation { duration: 140 } }
                     RowLayout {
                         id: askRow
                         anchors.centerIn: parent
                         spacing: 6
-                        Icon { name: modelData.icon; implicitSize: 15 }
+                        Icon { name: modelData.icon; implicitSize: 16 }
                         Label1 { visible: parent.parent.asking; text: "точно?" }
                     }
                     HoverHandler {
@@ -139,11 +165,11 @@ Item {
         // ───────────── поиск ─────────────
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 42
-            radius: 21
-            color: JD.fill1
-            border.width: 1
-            border.color: field.activeFocus ? JD.accentBlue : "transparent"
+            implicitHeight: 44
+            radius: 22
+            color: mv.fill1
+            border.width: field.activeFocus ? 2 : 1
+            border.color: field.activeFocus ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.12)
             Behavior on border.color { ColorAnimation { duration: 140 } }
             RowLayout {
                 anchors.fill: parent
@@ -203,7 +229,7 @@ Item {
                 // Внутри RowLayout вложенная раскладка по умолчанию тянется во всю ширину и съедает
                 // preferredWidth вместе с сеткой. Здесь ширина задана нарочно — значит, не тянуть.
                 Layout.fillWidth: false
-                Layout.preferredWidth: 190
+                Layout.preferredWidth: 200
                 Layout.fillHeight: true
                 spacing: 2
                 opacity: JD.menuSearching ? 0.35 : 1
@@ -215,18 +241,18 @@ Item {
                         required property var modelData
                         readonly property bool on: !JD.menuSearching && JD.menuGroup === modelData.id
                         Layout.fillWidth: true
-                        implicitHeight: 34
+                        implicitHeight: 36
                         radius: 10
-                        color: on ? JD.accentBlue : (railHover.hovered ? JD.fill1 : "transparent")
+                        color: on ? JD.accentBlue : (railHover.hovered ? mv.fill2 : "transparent")
                         Behavior on color { ColorAnimation { duration: 130 } }
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 11
                             anchors.rightMargin: 11
                             spacing: 9
-                            Icon { name: modelData.icon; implicitSize: 15; tint: JD.text1 }
+                            Icon { name: modelData.icon; implicitSize: 16; tint: JD.text1 }
                             Label1 { Layout.fillWidth: true; text: modelData.name }
-                            Label2 { color: on ? JD.text2 : JD.text3; text: modelData.count || "" }
+                            Label2 { color: on ? JD.text1 : JD.text2; text: modelData.count || "" }
                         }
                         HoverHandler { id: railHover; cursorShape: Qt.PointingHandCursor }
                         TapHandler {
@@ -240,25 +266,32 @@ Item {
                 // человек уже привык открывать программы.
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 6
-                    IconButton { icon: "smile"; size: 30; onClicked: { JD.closeMenu(); JD.openTools("emoji") } }
-                    IconButton { icon: "clipboard"; size: 30; onClicked: { JD.closeMenu(); JD.openTools("clip") } }
-                    IconButton { icon: "gauge"; size: 30; onClicked: { JD.closeMenu(); JD.openTools("load") } }
+                    spacing: 8
+                    ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
+                    ToolDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
+                    ToolDot { icon: "gauge"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
                     Item { Layout.fillWidth: true }
-                    IconButton { icon: "settings"; size: 30; onClicked: { JD.closeMenu(); JD.openSettings("general") } }
+                    ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
                 }
             }
 
             // Сетка. Плитка, а не строка: значок программы — это то, по чему её узнают, и в списке
             // из ста штук глаз ищет картинку, а не слово.
-            GridView {
-                id: grid
+            // Обёртка нужна ради двух вещей, которых у самой сетки быть не может: полосы прокрутки
+            // и растворения у нижнего края. Ряд, обрезанный ровной чертой, читается как поломка
+            // вёрстки; тот же ряд, уходящий в прозрачность, читается как «дальше есть ещё».
+            Item {
                 visible: !mv.askInstead && mv.shown.length > 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+
+            GridView {
+                id: grid
+                anchors.fill: parent
+                anchors.rightMargin: 6
                 clip: true
                 cellWidth: Math.floor(width / mv.columns)
-                cellHeight: 96
+                cellHeight: 106
                 model: mv.shown
                 currentIndex: JD.menuPick
                 highlightMoveDuration: 90
@@ -272,25 +305,26 @@ Item {
                     height: grid.cellHeight
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: 3
-                        radius: 12
-                        color: index === JD.menuPick ? JD.fill2 : (tileHover.hovered ? JD.fill1 : "transparent")
+                        anchors.margins: 4
+                        radius: 13
+                        color: index === JD.menuPick ? mv.fill2 : (tileHover.hovered ? mv.fill1 : "transparent")
                         Behavior on color { ColorAnimation { duration: 120 } }
                         scale: tileTap.pressed ? 0.94 : 1
                         Behavior on scale { NumberAnimation { duration: 110 } }
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.topMargin: 12
-                            anchors.bottomMargin: 8
-                            anchors.leftMargin: 6
-                            anchors.rightMargin: 6
-                            spacing: 7
+                            anchors.topMargin: 13
+                            anchors.bottomMargin: 9
+                            anchors.leftMargin: 7
+                            anchors.rightMargin: 7
+                            spacing: 8
                             Icon {
                                 Layout.alignment: Qt.AlignHCenter
                                 name: modelData.icon
                                 fallback: "application-x-executable"
-                                implicitSize: 36
+                                implicitSize: 40
+                                renderSize: 96
                                 theme: true
                             }
                             Text {
@@ -310,7 +344,7 @@ Item {
                             anchors { top: parent.top; right: parent.right; topMargin: 6; rightMargin: 6 }
                             visible: JD.isPinned(modelData) && !JD.menuSearching
                             name: "star"
-                            implicitSize: 12
+                            implicitSize: 13
                             tint: JD.accentOrange
                         }
                         // Открытое окно — это переход к нему, а не второй запуск, и об этом надо сказать.
@@ -318,7 +352,7 @@ Item {
                             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: -2 }
                             visible: modelData.kind === "window"
                             color: JD.accentCyan
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             text: "открыто"
                         }
                         HoverHandler {
@@ -340,14 +374,31 @@ Item {
                             gesturePolicy: TapHandler.ReleaseWithinBounds
                             onTapped: JD.pinFromMenu(modelData)
                         }
-                        HoverHandler {
-                            onHoveredChanged: mv.hintFor(hovered, (modelData.sub ? modelData.name + "  ·  " + modelData.sub : modelData.name)
-                                + (modelData.kind === "window" ? "  ·  перейти к окну"
-                                   : JD.isPinned(modelData) ? "  ·  правой кнопкой — открепить"
-                                   : "  ·  правой кнопкой — закрепить"))
-                        }
                     }
                 }
+            }
+
+            // Нижний ряд уходит в прозрачность, а не режется чертой.
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 26
+                visible: !grid.atYEnd
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "transparent" }
+                    GradientStop { position: 1; color: JD.menuSurface }
+                }
+            }
+
+            // Тонкая полоса прокрутки: без неё непонятно, что список длиннее окна.
+            Rectangle {
+                visible: grid.contentHeight > grid.height
+                anchors { right: parent.right; rightMargin: 0 }
+                width: 4
+                radius: 2
+                color: Qt.rgba(1, 1, 1, 0.22)
+                height: Math.max(28, parent.height * grid.visibleArea.heightRatio)
+                y: parent.height * grid.visibleArea.yPosition
+            }
             }
 
             // Раздел пуст — так и скажем. Пустая площадь без слов читается как «не загрузилось».
@@ -407,9 +458,9 @@ Item {
         // Что делает то, на что навели. Пусто — значит ни на чём.
         Label2 {
             Layout.fillWidth: true
-            Layout.preferredHeight: 14
-            color: JD.text3
-            font.pixelSize: 11
+            Layout.preferredHeight: 16
+            color: JD.text2
+            font.pixelSize: 12
             text: mv.hint
             opacity: mv.hint ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 120 } }
