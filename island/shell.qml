@@ -2966,10 +2966,37 @@ ShellRoot {
             Region { item: trayHole; intersection: Intersection.Subtract }
         }
 
+        // Тень. Без неё карточка лежит на обоях, а не над ними, и никакая раскраска этого не
+        // заменит: «поверх» глаз читает по тени, а не по цвету. Рисуется по пустому прямоугольнику
+        // той же формы — саму карточку через эффект не пропустишь, она живая и принимает нажатия.
+        Rectangle {
+            id: menuShadowShape
+            visible: false
+            layer.enabled: true
+            x: menuCard.x
+            y: menuCard.y
+            width: menuCard.width
+            height: menuCard.height
+            radius: menuCard.radius
+            color: "#000000"
+        }
+        MultiEffect {
+            source: menuShadowShape
+            x: menuShadowShape.x
+            y: menuShadowShape.y + 8
+            width: menuShadowShape.width
+            height: menuShadowShape.height
+            blurEnabled: true
+            blur: 1.0
+            blurMax: 48
+            opacity: (JD.menuOpen ? 0.5 : 0) * menuCard.opacity
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160 } }
+        }
+
         Rectangle {
             id: menuCard
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
-            width: Math.min(880, menuWin.width - 24)
+            width: Math.min(menuWin.width - 24, menuBody.item ? menuBody.item.implicitWidth : 760)
             // Высоту задаёт содержимое: шесть закреплённых программ и сто пятьдесят семь всех —
             // это разные меню, и окно одного размера на оба выглядит незаполненной формой.
             height: Math.min(menuWin.height - 24, menuBody.item ? menuBody.item.implicitHeight : 620)
@@ -2989,7 +3016,7 @@ ShellRoot {
             y: menuWin.fromDock
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
-            radius: 26
+            radius: 22
             // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
             // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
             // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.

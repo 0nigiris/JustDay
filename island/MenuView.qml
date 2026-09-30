@@ -4,9 +4,11 @@
 // островок, и подружить их нельзя: это чужая программа со своей темой. Меню же открывают по
 // двадцать раз в день, и каждый раз оно объявляет, что здесь два разных интерфейса.
 //
-// Что отсюда следует для этого файла. Всё, что видно, берётся из тех же JD.text1 / JD.fill1 /
-// island/icons, что и остров: одна тема на всё, а не «похожая». Значки самих программ — из темы
-// системы (theme: true), потому что они принадлежат программам, а не нам.
+// Форма. Сначала здесь была колонка разделов слева и сетка справа — то есть «Пуск» из Windows,
+// перекрашенный в другие цвета. Колонка из одиннадцати пунктов держала окно растянутым при любом
+// числе программ, шапка с аватаром и пятью кнопками питания тянула взгляд на себя, а сетка жалась
+// в угол. Теперь порядок другой и он же порядок мысли: сначала строка поиска, потом разделы одной
+// лентой значков, потом сами программы. Всё мелкое — на одной полке внизу.
 //
 // Вид только рисует. Разделы, раскладка программ по ним, поиск и кнопки питания приходят готовыми
 // от демона: он же отвечает ассистенту, поэтому «открой дискорд» голосом и строка поиска находят
@@ -29,43 +31,40 @@ Item {
     // Ничего не нашлось, а что-то напечатано — это не тупик, а вопрос ассистенту.
     readonly property bool askInstead: JD.menuSearching && shown.length === 0
 
-    // Высота — по содержимому, а не константой. Шесть закреплённых программ в окне на 716 точек
-    // означают семьдесят процентов пустоты, и никакая раскраска этого не спасает: окно, которое не
-    // знает, сколько в нём лежит, выглядит чужим при любом наборе значков.
     // Колонок столько, чтобы получился прямоугольник, а не строка с хвостом. Шесть программ в пять
     // колонок — это пять в ряд и одна под ними, и выглядит это как недогруженный список; те же
     // шесть в три колонки — ровный блок, который видно целиком одним взглядом.
     readonly property int columns: shown.length <= 4 ? Math.max(1, shown.length)
                                  : shown.length <= 9 ? 3
                                  : shown.length <= 16 ? 4 : 5
-    readonly property real tile: 106
-    readonly property real railRow: 32
-    readonly property real railWants: JD.menuGroups.length * railRow + Math.max(0, JD.menuGroups.length - 1) * 2
+    readonly property real tile: 104
     readonly property real gridWants: Math.ceil(Math.max(1, shown.length) / columns) * tile
-    readonly property real bodyHeight: Math.max(220, Math.min(560, Math.max(railWants, gridWants)))
+    readonly property real bodyHeight: Math.max(tile, Math.min(520, gridWants))
 
-    implicitWidth: 880
-    implicitHeight: 20 + 44 + 12 + 40 + 12 + bodyHeight + 12 + 30 + 18
+    implicitWidth: 720
+    implicitHeight: 20 + 40 + 12 + 34 + 12 + bodyHeight + 12 + 30 + 18
+
     // Одна строка подсказки внизу вместо всплывающих плашек у курсора: плашка закрывает соседнюю
     // плитку ровно в тот момент, когда по ней целятся.
     property string hint: ""
     function hintFor(on, text) { if (on) hint = text; else if (hint === text) hint = "" }
 
-    // Кнопка-кружок внизу полосы. Своя, а не IconButton: тот берёт островные 8% белого, которых на
+    // Кнопка-кружок нижней полки. Своя, а не IconButton: тот берёт островные 8% белого, которых на
     // этой карточке не видно, и подписи у него нет — а безымянный кружок не нажимают.
     component ToolDot: Rectangle {
         id: dot
         property string icon: ""
         property string note: ""
+        property color accent: JD.text3
         signal picked()
         implicitWidth: 30
         implicitHeight: 30
         radius: 15
         color: dotHover.hovered ? mv.fill3 : "transparent"
         Behavior on color { ColorAnimation { duration: 120 } }
-        scale: dotTap.pressed ? 0.92 : 1
+        scale: dotTap.pressed ? 0.9 : 1
         Behavior on scale { NumberAnimation { duration: 110 } }
-        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dotHover.hovered ? JD.text1 : JD.text3 }
+        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dotHover.hovered ? JD.text1 : dot.accent }
         HoverHandler { id: dotHover; cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, dot.note) }
         TapHandler { id: dotTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: dot.picked() }
     }
@@ -109,83 +108,11 @@ Item {
         anchors.bottomMargin: 18
         spacing: 12
 
-        // ───────────── шапка: кто за машиной и кнопка питания ─────────────
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 44
-            spacing: 12
-
-            Rectangle {
-                implicitWidth: 42
-                implicitHeight: 42
-                radius: 21
-                color: mv.fill1
-                clip: true
-                Image {
-                    anchors.fill: parent
-                    visible: !!mv.user.avatar
-                    source: mv.user.avatar ? "file://" + mv.user.avatar : ""
-                    fillMode: Image.PreserveAspectCrop
-                    sourceSize: Qt.size(80, 80)
-                    smooth: true
-                }
-                Icon {
-                    anchors.centerIn: parent
-                    visible: !mv.user.avatar
-                    name: "user-round"
-                    implicitSize: 20
-                    tint: JD.text2
-                }
-            }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-                Label1 { Layout.fillWidth: true; font.pixelSize: 15; text: mv.user.name || "" }
-                Label2 { Layout.fillWidth: true; color: JD.text3; text: mv.user.host || "" }
-            }
-
-            // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
-            // краснеет и подписывается «точно?». Блокировка и сон не теряют ничего и спрашивать
-            // не должны — иначе защита превращается в помеху.
-            //
-            // В покое кружков нет — только значки. Пять одинаковых серых кругов в углу тянут на
-            // себя больше внимания, чем всё меню вместе, а нажимают из них дай бог один в неделю.
-            Repeater {
-                model: JD.sessionActions
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool asking: JD.menuConfirm === modelData.id
-                    implicitWidth: asking ? askRow.implicitWidth + 26 : 34
-                    implicitHeight: 34
-                    radius: 17
-                    color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : "transparent")
-                    Behavior on implicitWidth { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                    Behavior on color { ColorAnimation { duration: 140 } }
-                    RowLayout {
-                        id: askRow
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Icon { name: modelData.icon; implicitSize: 16; tint: parent.parent.asking ? JD.text1 : JD.text2 }
-                        Label1 { visible: parent.parent.asking; text: "точно?" }
-                    }
-                    HoverHandler {
-                        id: powHover
-                        cursorShape: Qt.PointingHandCursor
-                        onHoveredChanged: mv.hintFor(hovered, modelData.danger ? modelData.name + "  ·  нажать дважды"
-                                                                               : modelData.name)
-                    }
-                    TapHandler {
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: JD.sessionDo(modelData.id, modelData.danger)
-                    }
-                }
-            }
-        }
-
         // ───────────── поиск ─────────────
         //
-        // Поле и так под курсором с первой секунды — обводить его толстым синим кольцом незачем.
-        // Кольцо в два пикселя кричало на всё окно о том, что и без него очевидно.
+        // Первым, как в спотлайте: меню открывают клавишей, и первое, что человек делает, — печатает.
+        // Поле и так под курсором с первой секунды, поэтому обводить его толстым синим кольцом
+        // незачем — кольцо в два пикселя кричало на всё окно о том, что и без него очевидно.
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
@@ -205,7 +132,7 @@ Item {
                     id: field
                     Layout.fillWidth: true
                     font.family: JD.fontFamily
-                    font.pixelSize: 14
+                    font.pixelSize: 15
                     color: JD.text1
                     selectByMouse: true
                     selectionColor: JD.accentBlue
@@ -233,88 +160,94 @@ Item {
                         visible: !field.text
                         font: field.font
                         color: JD.text3
-                        text: "программа, игра, окно — или просьба к " + JD.assistantName + "…"
+                        text: "Программа, игра, окно — или просьба к " + JD.assistantName
                     }
                 }
                 // Поиск не на каждую букву: пока печатают быстро, спрашивать демона незачем.
                 Timer { id: searchDelay; interval: 110; onTriggered: JD.searchMenu() }
+                Icon {
+                    visible: !!field.text
+                    name: "x"
+                    implicitSize: 15
+                    tint: JD.text3
+                    TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: { JD.menuQuery = ""; JD.menuFound = [] } }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                }
             }
         }
 
-        // ───────────── разделы и сетка ─────────────
+        // ───────────── разделы ─────────────
+        //
+        // Лентой значков, а не колонкой в полкарточки. Названия у разделов длинные, и одиннадцать
+        // названий подряд занимали столько места, что программы — то, ради чего меню открывают, —
+        // оставались на вторых ролях. Значка хватает, чтобы узнать раздел; имя показывает тот, что
+        // выбран, и тот, на который навели.
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: mv.bodyHeight
-            spacing: 16
+            Layout.preferredHeight: 34
+            spacing: 6
+            opacity: JD.menuSearching ? 0.3 : 1
+            Behavior on opacity { NumberAnimation { duration: 160 } }
 
-            // Пока ищут, разделы не при чём: поиск идёт по всему сразу, и подсвеченный раздел
-            // только врал бы, что ищем в нём.
-            ColumnLayout {
-                // Внутри RowLayout вложенная раскладка по умолчанию тянется во всю ширину и съедает
-                // preferredWidth вместе с сеткой. Здесь ширина задана нарочно — значит, не тянуть.
-                Layout.fillWidth: false
-                Layout.preferredWidth: 196
-                Layout.fillHeight: true
-                Layout.alignment: Qt.AlignTop
-                spacing: 2
-                opacity: JD.menuSearching ? 0.35 : 1
-                Behavior on opacity { NumberAnimation { duration: 160 } }
-
-                Repeater {
-                    model: JD.menuGroups
-                    delegate: Rectangle {
-                        required property var modelData
-                        readonly property bool on: !JD.menuSearching && JD.menuGroup === modelData.id
-                        Layout.fillWidth: true
-                        implicitHeight: mv.railRow
-                        radius: 9
-                        // Выбранный раздел — приглушённая заливка, а синим горит только значок.
-                        // Сплошная синяя полоса во всю ширину была самым громким пятном на экране,
-                        // хотя говорит она всего лишь «вы здесь».
-                        color: on ? mv.fill3 : (railHover.hovered ? mv.fill1 : "transparent")
-                        Behavior on color { ColorAnimation { duration: 130 } }
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 9
-                            Icon { name: modelData.icon; implicitSize: 15; tint: on ? JD.accentBlue : JD.text2 }
-                            Label1 {
-                                Layout.fillWidth: true
-                                font.pixelSize: 13
-                                font.weight: on ? Font.DemiBold : Font.Medium
-                                color: on ? JD.text1 : JD.text2
-                                text: modelData.name
-                            }
-                            Label2 { font.pixelSize: 11; color: JD.text3; text: modelData.count || "" }
+            Repeater {
+                model: JD.menuGroups
+                delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool on: !JD.menuSearching && JD.menuGroup === modelData.id
+                    implicitWidth: on ? 34 + chipName.implicitWidth + 12 : 34
+                    implicitHeight: 34
+                    radius: 17
+                    color: on ? mv.fill3 : (chipHover.hovered ? mv.fill1 : "transparent")
+                    Behavior on implicitWidth { enabled: JD.animOn
+                                               NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 130 } }
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: 9
+                        spacing: 7
+                        Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: modelData.icon
+                            implicitSize: 16
+                            tint: parent.parent.on ? JD.accentBlue : JD.text2
                         }
-                        HoverHandler { id: railHover; cursorShape: Qt.PointingHandCursor }
-                        TapHandler {
-                            gesturePolicy: TapHandler.ReleaseWithinBounds
-                            onTapped: { JD.menuQuery = ""; JD.menuGroup = modelData.id; JD.menuPick = 0 }
+                        Label1 {
+                            id: chipName
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: parent.parent.on
+                            font.pixelSize: 13
+                            text: modelData.name
                         }
                     }
+                    HoverHandler {
+                        id: chipHover
+                        cursorShape: Qt.PointingHandCursor
+                        onHoveredChanged: mv.hintFor(hovered, modelData.name + "  ·  " + (modelData.count || 0))
+                    }
+                    TapHandler {
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: { JD.menuQuery = ""; JD.menuGroup = modelData.id; JD.menuPick = 0 }
+                    }
                 }
-                Item { Layout.fillHeight: true }
             }
+            Item { Layout.fillWidth: true }
+        }
 
-            // Сетка. Плитка, а не строка: значок программы — это то, по чему её узнают, и в списке
-            // из ста штук глаз ищет картинку, а не слово.
-            // Обёртка нужна ради двух вещей, которых у самой сетки быть не может: полосы прокрутки
-            // и растворения у нижнего края. Ряд, обрезанный ровной чертой, читается как поломка
-            // вёрстки; тот же ряд, уходящий в прозрачность, читается как «дальше есть ещё».
-            Item {
-                id: gridBox
-                visible: !mv.askInstead && mv.shown.length > 0
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+        // ───────────── программы ─────────────
+        Item {
+            id: gridBox
+            Layout.fillWidth: true
+            Layout.preferredHeight: mv.bodyHeight
 
+            // Плитка, а не строка: значок программы — это то, по чему её узнают, и в списке из ста
+            // штук глаз ищет картинку, а не слово.
             GridView {
                 id: grid
-                // Программ меньше, чем помещается, — сетка стоит посередине, а не жмётся к верху и
-                // левому краю, оставив вокруг себя дыру. Дыра поровну со всех сторон читается как
+                visible: !mv.askInstead && mv.shown.length > 0
+                // Программ меньше, чем помещается, — сетка стоит посередине, а не жмётся к левому
+                // верхнему углу, оставив вокруг себя дыру. Дыра поровну со всех сторон читается как
                 // замысел; дыра с двух — как незаполненная форма.
-                readonly property real cell: Math.min(Math.floor((parent.width - 6) / mv.columns), 142)
+                readonly property real cell: Math.min(Math.floor((parent.width - 6) / mv.columns), 140)
                 width: cell * mv.columns
                 height: Math.min(parent.height, contentHeight)
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -336,7 +269,7 @@ Item {
                     Rectangle {
                         anchors.fill: parent
                         anchors.margins: 4
-                        radius: 13
+                        radius: 12
                         color: index === JD.menuPick ? mv.fill2 : (tileHover.hovered ? mv.fill1 : "transparent")
                         Behavior on color { ColorAnimation { duration: 120 } }
                         scale: tileTap.pressed ? 0.94 : 1
@@ -344,8 +277,8 @@ Item {
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.topMargin: 13
-                            anchors.bottomMargin: 9
+                            anchors.topMargin: 12
+                            anchors.bottomMargin: 8
                             anchors.leftMargin: 7
                             anchors.rightMargin: 7
                             spacing: 8
@@ -412,7 +345,7 @@ Item {
             Rectangle {
                 anchors { left: grid.left; right: grid.right; bottom: grid.bottom }
                 height: 20
-                visible: !grid.atYEnd
+                visible: grid.visible && !grid.atYEnd
                 gradient: Gradient {
                     GradientStop { position: 0; color: "transparent" }
                     GradientStop { position: 0.6; color: Qt.rgba(0.04, 0.04, 0.05, 0.7) }
@@ -422,7 +355,7 @@ Item {
 
             // Тонкая полоса прокрутки: без неё непонятно, что список длиннее окна.
             Rectangle {
-                visible: grid.contentHeight > grid.height
+                visible: grid.visible && grid.contentHeight > grid.height
                 anchors { right: parent.right; rightMargin: 1 }
                 width: 4
                 radius: 2
@@ -430,67 +363,58 @@ Item {
                 height: Math.max(28, grid.height * grid.visibleArea.heightRatio)
                 y: grid.y + grid.height * grid.visibleArea.yPosition
             }
-            }
 
             // Раздел пуст — так и скажем. Пустая площадь без слов читается как «не загрузилось».
-            Item {
+            ColumnLayout {
                 visible: !mv.askInstead && mv.shown.length === 0
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
-                    Icon { Layout.alignment: Qt.AlignHCenter; name: "star"; implicitSize: 22; tint: JD.text3 }
-                    Label2 {
-                        Layout.alignment: Qt.AlignHCenter
-                        color: JD.text3
-                        text: JD.menuGroup === "fav" ? "Здесь пусто. Правой кнопкой по программе — закрепить."
-                                                     : "В этом разделе ничего нет"
-                    }
+                anchors.centerIn: parent
+                spacing: 8
+                Icon { Layout.alignment: Qt.AlignHCenter; name: "star"; implicitSize: 22; tint: JD.text3 }
+                Label2 {
+                    Layout.alignment: Qt.AlignHCenter
+                    color: JD.text3
+                    text: JD.menuGroup === "fav" ? "Здесь пусто. Правой кнопкой по программе — закрепить."
+                                                 : "В этом разделе ничего нет"
                 }
             }
 
             // Ничего не нашлось — спросим ассистента. Ради этого меню и своё: строка поиска здесь
             // не обязана быть именем программы.
-            Item {
+            ColumnLayout {
                 visible: mv.askInstead
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width - 40, 460)
-                    spacing: 12
-                    Icon { Layout.alignment: Qt.AlignHCenter; name: "sparkles"; implicitSize: 26; tint: JD.accentBlue }
-                    Label1 {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                        elide: Text.ElideNone
-                        text: "Такой программы нет. Спросить " + JD.assistantName + "?"
-                    }
-                    Label2 {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        color: JD.text3
-                        wrapMode: Text.Wrap
-                        elide: Text.ElideNone
-                        text: "«" + JD.menuQuery + "»"
-                    }
-                    PillButton {
-                        Layout.alignment: Qt.AlignHCenter
-                        label: "Спросить  ⏎"
-                        tint: JD.accentBlue
-                        onClicked: JD.askFromMenu(JD.menuQuery)
-                    }
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 460)
+                spacing: 12
+                Icon { Layout.alignment: Qt.AlignHCenter; name: "sparkles"; implicitSize: 26; tint: JD.accentBlue }
+                Label1 {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideNone
+                    text: "Такой программы нет. Спросить " + JD.assistantName + "?"
+                }
+                Label2 {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    color: JD.text3
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideNone
+                    text: "«" + JD.menuQuery + "»"
+                }
+                PillButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    label: "Спросить  ⏎"
+                    tint: JD.accentBlue
+                    onClicked: JD.askFromMenu(JD.menuQuery)
                 }
             }
         }
 
-        // ───────────── подвал ─────────────
+        // ───────────── нижняя полка ─────────────
         //
-        // Кнопки стоят под всей карточкой, а не под колонкой разделов. В колонке они держали её
-        // растянутой до самого низа независимо от того, сколько в меню программ, — и именно оттуда
-        // бралась половина пустоты. Здесь же живёт строка подсказки: одна полка на всё мелкое.
+        // Одна полка на всё мелкое: инструменты слева, подсказка посередине, выключение и настройки
+        // справа. Раньше кнопки питания стояли в шапке пятью серыми кругами и тянули на себя больше
+        // внимания, чем всё меню вместе, — а нажимают из них дай бог один раз в неделю.
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
@@ -504,23 +428,61 @@ Item {
             RowLayout {
                 anchors.fill: parent
                 anchors.topMargin: 6
-                spacing: 6
+                spacing: 4
                 ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
                 ToolDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
                 ToolDot { icon: "gauge"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
 
-                // Что делает то, на что навели. Пусто — значит ни на чём.
                 Label2 {
                     Layout.fillWidth: true
                     Layout.leftMargin: 8
                     color: JD.text3
                     font.pixelSize: 12
-                    text: mv.hint
-                    opacity: mv.hint ? 1 : 0
+                    elide: Text.ElideRight
+                    text: mv.hint || (mv.user.name ? mv.user.name + (mv.user.host ? "  ·  " + mv.user.host : "") : "")
+                    opacity: mv.hint ? 1 : 0.55
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
                 ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
+
+                // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
+                // краснеет и подписывается «точно?». Блокировка и сон не теряют ничего и спрашивать
+                // не должны — иначе защита превращается в помеху.
+                Repeater {
+                    model: JD.sessionActions
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool asking: JD.menuConfirm === modelData.id
+                        implicitWidth: asking ? askRow.implicitWidth + 22 : 30
+                        implicitHeight: 30
+                        radius: 15
+                        color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : "transparent")
+                        Behavior on implicitWidth { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 140 } }
+                        RowLayout {
+                            id: askRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Icon {
+                                name: modelData.icon
+                                implicitSize: 15
+                                tint: parent.parent.asking ? JD.text1 : (powHover.hovered ? JD.text1 : JD.text3)
+                            }
+                            Label1 { visible: parent.parent.asking; font.pixelSize: 12; text: "точно?" }
+                        }
+                        HoverHandler {
+                            id: powHover
+                            cursorShape: Qt.PointingHandCursor
+                            onHoveredChanged: mv.hintFor(hovered, modelData.danger ? modelData.name + "  ·  нажать дважды"
+                                                                                   : modelData.name)
+                        }
+                        TapHandler {
+                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                            onTapped: JD.sessionDo(modelData.id, modelData.danger)
+                        }
+                    }
+                }
             }
         }
     }
