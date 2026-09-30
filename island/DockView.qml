@@ -105,15 +105,17 @@ Item {
     }
 
     // ───────────── карточка ─────────────
+    readonly property Item blurItem: card
+
     Rectangle {
         id: card
         width: dv.laneLength
         height: dv.cardHeight
         y: dv.atTop ? 0 : dv.height - height
         radius: Math.round(dv.cardHeight * 0.3)
-        color: Qt.rgba(0, 0, 0, 0.55)
+        color: Qt.rgba(0, 0, 0, 0.4)
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.12)
+        border.color: Qt.rgba(1, 1, 1, 0.14)
 
         HoverHandler {
             id: laneHover

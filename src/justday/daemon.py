@@ -1232,7 +1232,7 @@ class Daemon:
         сутки; здесь в покое не тратится ничего.
         """
         loop = asyncio.get_running_loop()
-        if not await loop.run_in_executor(None, desktop.watch_start):
+        if desktop.backend() != "kwin":
             log.info("окна: KWin недоступен, док покажет только закреплённое")
             return
         while True:
@@ -1240,6 +1240,11 @@ class Daemon:
                 proc = self._windows_proc = await asyncio.create_subprocess_exec(
                     "journalctl", "-f", "-n", "0", "--no-pager", "-o", "cat", "-g", desktop.WATCH_TAG.strip(),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                # Скрипт селится после того, как журнал уже читают: он говорит первое слово сразу
+                # при загрузке, и сказанное до подписки не догнать ничем.
+                await asyncio.sleep(0.4)
+                if not await loop.run_in_executor(None, desktop.watch_start):
+                    log.warning("окна: KWin не принял скрипт")
                 async for raw in proc.stdout:
                     line = raw.decode("utf-8", "replace")
                     _, _, payload = line.partition(desktop.WATCH_TAG)
@@ -1255,9 +1260,8 @@ class Daemon:
                 await proc.wait()
             except (OSError, asyncio.CancelledError):
                 return
-            # KWin перезапустили — скрипт ушёл вместе с ним, и его надо поселить заново.
+            # KWin перезапустили — скрипт ушёл вместе с ним; следующий круг поселит его заново.
             await asyncio.sleep(5)
-            await loop.run_in_executor(None, desktop.watch_start)
 
     def _emit_notification(self, raw: str) -> None:
         if "member=Notify" not in raw or not self.cfg["island"].get("show_notifications", True):

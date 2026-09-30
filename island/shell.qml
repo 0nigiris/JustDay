@@ -2744,6 +2744,9 @@ ShellRoot {
                 item: dockWin.shown ? dock : edge
                 Region { item: dock.ctxEntry ? dockCtxZone : null }
             }
+            // Размытие под карточкой: без него полупрозрачная полоса поверх пёстрых обоев
+            // превращается в кашу, а значки в ней перестают читаться.
+            BackgroundEffect.blurRegion: Region { item: dockWin.shown ? dock.blurItem : null }
             // Полоска у самого края: ею прячущийся док зовут обратно.
             Item {
                 id: edge
@@ -2816,6 +2819,7 @@ ShellRoot {
             implicitHeight: JD.screenHeight
 
             mask: Region { item: tray }
+            BackgroundEffect.blurRegion: Region { item: tray.blurItem }
 
             TrayView {
                 id: tray
@@ -2858,6 +2862,7 @@ ShellRoot {
         WlrLayershell.namespace: "justday-menu"
         WlrLayershell.keyboardFocus: alive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         color: "transparent"
+        BackgroundEffect.blurRegion: Region { item: JD.menuOpen ? menuCard : null }
 
         // «dock» — меню вырастает из значка в доке и садится в него же. Иначе — свой угол экрана.
         // Нет дока — нет и значка: тогда меню ведёт себя как «снизу слева», а не исчезает.
@@ -2894,7 +2899,9 @@ ShellRoot {
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
             radius: 26
-            color: JD.ink
+            // Под карточкой размыто, поэтому она может быть не чёрной доской, а стеклом. Не светлее:
+            // белый текст на стекле поверх светлых обоев перестаёт читаться, а меню читают всегда.
+            color: Qt.rgba(0, 0, 0, 0.74)
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.10)
             clip: true

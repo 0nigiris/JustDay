@@ -31,10 +31,13 @@ Item {
     implicitWidth: icon + pad * 2
     implicitHeight: Math.max(cell, items.length * cell + pad * 2)
 
+    readonly property Item blurItem: strip
+
     Rectangle {
+        id: strip
         anchors.fill: parent
         radius: Math.round(tv.implicitWidth * 0.34)
-        color: Qt.rgba(0, 0, 0, 0.55)
+        color: Qt.rgba(0, 0, 0, 0.4)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.12)
 
