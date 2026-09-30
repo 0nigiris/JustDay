@@ -133,7 +133,7 @@ Item {
     // Жёсткость и затухание — наружу: «пружинисто» у каждого своё, а на 185 герцах разница видна.
     readonly property real springK: Math.max(10, Math.min(600, JD.dockCfg.spring === undefined ? 180 : JD.dockCfg.spring))
     readonly property real springDamp: animStyle === "smooth" ? 1.0
-        : Math.max(0.3, Math.min(1, JD.dockCfg.damping === undefined ? 0.75 : JD.dockCfg.damping))
+        : Math.max(0.3, Math.min(1, JD.dockCfg.damping === undefined ? 0.8 : JD.dockCfg.damping))
 
     property real pointerScene: -99999   // курсор в координатах окна: он-то на месте и стоит
     property bool engaged: false         // курсор в полосе
@@ -226,7 +226,12 @@ Item {
         running: false
         onTriggered: if (!dv.stepPhysics(frameTime)) running = false
     }
-    function wake() { if (JD.animOn) physics.running = true; else { instantly(); } }
+    // «Сразу» — это не «без пружины с прежними настройками», а вовсе без физики: размер равен цели
+    // в тот же кадр. Раньше этот стиль не делал ничего и молча оставался пружиной.
+    function wake() {
+        if (JD.animOn && animStyle !== "instant") physics.running = true
+        else { physics.running = false; instantly() }
+    }
     // Анимации выключены совсем — значит просто ставим целевые размеры без физики.
     function instantly() {
         const u = restUnderPointer()
