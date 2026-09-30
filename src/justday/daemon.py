@@ -96,6 +96,8 @@ class Daemon:
         self.jobs = jobs.Jobs(on_change=lambda: self.publish(jobs=self.jobs.state()), on_done=self._job_done)
         self._subs: set[asyncio.StreamWriter] = set()
         self._notify_proc: asyncio.subprocess.Process | None = None
+        self._windows_proc: asyncio.subprocess.Process | None = None
+        self._windows: list[dict] = []
         self._state = "idle"
         self._workers_active = 0
         self._listen_cancel: asyncio.Event | None = None
@@ -1219,6 +1221,43 @@ class Daemon:
             except (OSError, asyncio.CancelledError):
                 return
             await asyncio.sleep(5)
+
+    async def _watch_windows(self) -> None:
+        """Живой список окон — для дока.
+
+        KWin не отдаёт список окон обычным клиентам вовсе: в реестре вейланда нет ни
+        wlr-foreign-toplevel, ни org_kde_plasma_window_management — их видит одна плазма. Поэтому в
+        самом KWin живёт маленький скрипт, который просыпается на событиях окон и пишет строку в
+        журнал, а демон эту строку читает. Опрос раз в секунду стоил бы десятой доли ядра круглые
+        сутки; здесь в покое не тратится ничего.
+        """
+        loop = asyncio.get_running_loop()
+        if not await loop.run_in_executor(None, desktop.watch_start):
+            log.info("окна: KWin недоступен, док покажет только закреплённое")
+            return
+        while True:
+            try:
+                proc = self._windows_proc = await asyncio.create_subprocess_exec(
+                    "journalctl", "-f", "-n", "0", "--no-pager", "-o", "cat", "-g", desktop.WATCH_TAG.strip(),
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                async for raw in proc.stdout:
+                    line = raw.decode("utf-8", "replace")
+                    _, _, payload = line.partition(desktop.WATCH_TAG)
+                    if not payload.strip().startswith("["):
+                        continue
+                    try:
+                        got = json.loads(payload)
+                    except ValueError:
+                        continue
+                    if got != self._windows:
+                        self._windows = got
+                        self.publish(windows=got)
+                await proc.wait()
+            except (OSError, asyncio.CancelledError):
+                return
+            # KWin перезапустили — скрипт ушёл вместе с ним, и его надо поселить заново.
+            await asyncio.sleep(5)
+            await loop.run_in_executor(None, desktop.watch_start)
 
     def _emit_notification(self, raw: str) -> None:
         if "member=Notify" not in raw or not self.cfg["island"].get("show_notifications", True):
@@ -2379,7 +2418,14 @@ class Daemon:
                 resp = launcher.pin(str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
             elif cmd == "dock":  # что закреплено в доке и чем ловить открытые окна
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.catalog)
-                resp = {"ok": True, "dock": got}
+                resp = {"ok": True, "dock": got, "windows": self._windows}
+            elif cmd == "window_do":  # поднять, свернуть или закрыть окно по его номеру
+                what, wid = str(req.get("action", "focus")), str(req.get("id", ""))
+                if what not in ("focus", "minimize", "close"):
+                    resp = {"ok": False, "error": f"нет такого действия: {what}"}
+                else:
+                    await asyncio.get_running_loop().run_in_executor(None, desktop.windows, what, "", wid)
+                    resp = {"ok": True}
             elif cmd == "dock_pin":
                 got = await asyncio.get_running_loop().run_in_executor(
                     None, dock.pin, str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
@@ -2474,6 +2520,7 @@ class Daemon:
         spawn(self._clip_watch())
         if shutil.which("dbus-monitor"):
             spawn(self._watch_notifications())
+        spawn(self._watch_windows())
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()
@@ -2486,6 +2533,9 @@ class Daemon:
             w.close()
         if self._notify_proc and self._notify_proc.returncode is None:
             self._notify_proc.kill()
+        if self._windows_proc and self._windows_proc.returncode is None:
+            self._windows_proc.kill()
+        desktop.watch_stop()
         for watcher in self._clip_procs:      # наблюдатели буфера живут ровно столько, сколько демон
             if watcher.returncode is None:
                 watcher.kill()

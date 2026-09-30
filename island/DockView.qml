@@ -9,7 +9,6 @@
 // курсор попадает на соседа, тот увеличивается — и полоса начинает дрожать.
 import QtQuick
 import Quickshell
-import Quickshell.Wayland
 
 Item {
     id: dv
@@ -33,20 +32,19 @@ Item {
     implicitHeight: cardHeight + headroom
 
     // ───────────── что в полосе ─────────────
-    readonly property var tops: ToplevelManager.toplevels.values
-
-    // Окна, разложенные по программам. Незнакомый appId — не беда: значок всё равно будет, только
-    // подписанный тем, как окно назвало себя само.
+    //
+    // Окна, разложенные по программам. Незнакомая программа — не беда: значок всё равно будет,
+    // только подписанный тем, как окно назвало себя само.
     readonly property var grouped: {
         const skip = JD.dockSkip, byKey = ({}), order = []
-        for (const w of tops) {
-            const a = String(w.appId || "").toLowerCase()
+        for (const w of JD.windows) {
+            const a = String(w.app || "").toLowerCase()
             if (!a || skip.indexOf(a) >= 0) continue
             const hit = JD.dockLookup(a)
             const key = hit ? hit.key : "win:" + a
             if (!byKey[key]) {
                 byKey[key] = { key: key, kind: hit ? hit.kind : "", id: hit ? hit.id : "",
-                               name: hit ? hit.name : (w.appId || ""), icon: hit ? hit.icon : a, wins: [] }
+                               name: hit ? hit.name : (w.app || ""), icon: hit ? hit.icon : a, wins: [] }
                 order.push(key)
             }
             byKey[key].wins.push(w)
@@ -346,7 +344,7 @@ Item {
         else if (what === "open") JD.dockRun(e)
         else if (what === "pin") JD.dockPin(e.kind, e.id, true)
         else if (what === "unpin") JD.dockPin(e.kind, e.id, false)
-        else if (what === "close") for (const w of wins) w.close()
+        else if (what === "close") for (const w of wins) JD.windowDo("close", w.id)
     }
 
     // Нажатие: не запущено — запустить; запущено и не наверху — поднять; наверху — свернуть.
@@ -356,11 +354,10 @@ Item {
         if (e.t === "launcher") { JD.toggleMenu(); return }
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
         if (!wins || wins.length === 0) { JD.dockRun(e); return }
-        const front = wins.find(w => w.activated && !w.minimized)
-        if (front) { for (const w of wins) w.minimized = true; return }
+        const front = wins.find(w => w.active && !w.minimized)
+        if (front) { for (const w of wins) JD.windowDo("minimize", w.id); return }
         const up = wins.find(w => !w.minimized) || wins[0]
-        up.minimized = false
-        up.activate()
+        JD.windowDo("focus", up.id)
     }
 
     // Где на экране значок меню — считает shell.qml: только он видит и док, и его окно сразу.

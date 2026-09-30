@@ -35,7 +35,7 @@ ShellRoot {
         // Что док видит: открытые окна, закреплённое и точка, из которой вырастает меню.
         // `qs -p island ipc call island dock` — этим и проверяется, что окно узнали.
         function dock(): string {
-            return JSON.stringify({ tops: ToplevelManager.toplevels.values.map(t => ({ app: t.appId, min: t.minimized, on: t.activated })),
+            return JSON.stringify({ windows: JD.windows.map(w => ({ app: w.app, min: w.minimized, on: w.active })),
                                     pinned: JD.dockItems.map(i => i.key), anchor: JD.dockAnchor,
                                     known: Object.keys(JD.dockMatch).length })
         }

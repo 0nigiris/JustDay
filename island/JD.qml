@@ -326,6 +326,10 @@ Singleton {
     readonly property real dockIconSize: Math.max(24, Math.min(96, dockCfg.icon_size || 44))
     readonly property real trayIconSize: Math.max(14, Math.min(48, trayCfg.icon_size || 22))
     property var dockData: ({})           // {items, pinned, match, skip} — от демона
+    // Открытые окна. Спрашивать вейланд бесполезно: KWin не отдаёт список окон обычным клиентам —
+    // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
+    // демона, которому о нём рассказывает скрипт, живущий внутри самого KWin.
+    property var windows: []
     readonly property var dockItems: dockData.items || []
     readonly property var dockMatch: dockData.match || ({})
     readonly property var dockSkip: dockData.skip || []
@@ -347,6 +351,7 @@ Singleton {
         send({ cmd: "dock_pin", kind: kind || "app", id: ident, on: on === undefined ? null : on })
     }
     function dockArrange(keys) { send({ cmd: "dock_arrange", keys: keys }) }
+    function windowDo(action, id) { if (id) send({ cmd: "window_do", action: action, id: id }) }
     function dockIsPinned(key) { return (dockData.pinned || []).indexOf(key) >= 0 }
     onLinkedChanged: if (linked) dockRefresh()
 
@@ -579,6 +584,7 @@ Singleton {
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.dock !== undefined) dockData = m.dock
+        if (m.windows !== undefined) windows = m.windows || []
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
         if (m.load !== undefined) {

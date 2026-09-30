@@ -285,25 +285,83 @@ def recent(hours: float = 48, limit: int = 40) -> dict:
 
 # ---------------- windows (KWin scripting) ----------------
 _KWIN_JS = """
-const q = %(query)s, action = %(action)s, tag = %(tag)s;
+const q = %(query)s, action = %(action)s, tag = %(tag)s, wid = %(wid)s;
 let n = 0;
 for (const w of workspace.windowList()) {
   if (!w.normalWindow) continue;
   const hay = (w.resourceClass + " " + w.resourceName + " " + w.caption).toLowerCase();
   if (action === "active" && workspace.activeWindow !== w) continue;
+  if (wid && String(w.internalId) !== wid) continue;
   if (q && !hay.includes(q)) continue;
   n++;
   if (action === "close") w.closeWindow();
   else if (action === "focus") { w.minimized = false; workspace.activeWindow = w; }
   else if (action === "minimize") w.minimized = true;
   const g = w.frameGeometry;
-  console.warn(tag + JSON.stringify({app: w.resourceClass, title: w.caption, pid: w.pid,
+  console.warn(tag + JSON.stringify({id: String(w.internalId), app: w.resourceClass, title: w.caption, pid: w.pid,
                                      active: workspace.activeWindow === w, minimized: w.minimized,
                                      x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.width), h: Math.round(g.height)}));
   if (action === "focus") break;
 }
 console.warn(tag + "END " + n);
 """
+
+
+# Живой список окон. KWin не отдаёт его обычным клиентам вовсе: ни wlr-foreign-toplevel, ни
+# org_kde_plasma_window_management в реестре вейланда нет — их видит только плазма. Поэтому список
+# берётся у самого KWin, но не опросом: постоянный скрипт сидит внутри него, просыпается на событиях
+# окон и пишет строку в журнал. Опрос раз в секунду стоил бы десятой доли ядра круглые сутки — ровно
+# того, что мы только что убрали из памяти.
+WATCH_TAG = "JustDayDOCK "
+WATCH_NAME = "justday-windows"
+_WATCH_JS = """
+const tag = "JustDayDOCK ";
+function snap() {
+  const out = [];
+  for (const w of workspace.windowList()) {
+    if (!w.normalWindow || w.skipTaskbar) continue;
+    out.push({id: String(w.internalId), app: w.resourceClass, title: w.caption, pid: w.pid,
+              active: workspace.activeWindow === w, minimized: w.minimized});
+  }
+  console.warn(tag + JSON.stringify(out));
+}
+function hook(w) { if (w && w.minimizedChanged) w.minimizedChanged.connect(snap); }
+workspace.windowAdded.connect(function (w) { hook(w); snap(); });
+workspace.windowRemoved.connect(snap);
+workspace.windowActivated.connect(snap);
+for (const w of workspace.windowList()) hook(w);
+snap();
+"""
+
+
+def _kwin(*args: str) -> str:
+    try:
+        return subprocess.run(["qdbus-qt6", "org.kde.KWin", *args],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def watch_start() -> bool:
+    """Поселить в KWin скрипт, который сам рассказывает об окнах. Идемпотентно."""
+    if backend() != "kwin":
+        return False
+    watch_stop()
+    path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-kwin-windows.js"
+    try:
+        path.write_text(_WATCH_JS, encoding="utf-8")
+    except OSError:
+        return False
+    sid = _kwin("/Scripting", "org.kde.kwin.Scripting.loadScript", str(path), WATCH_NAME)
+    if not sid:
+        return False
+    _kwin(f"/Scripting/Script{sid}", "org.kde.kwin.Script.run")
+    return True
+
+
+def watch_stop() -> None:
+    if backend() == "kwin":
+        _kwin("/Scripting", "org.kde.kwin.Scripting.unloadScript", WATCH_NAME)
 
 
 def backend() -> str:
@@ -410,7 +468,7 @@ def _x11_windows(action: str, query: str) -> list[dict]:
     return out
 
 
-def windows(action: str = "list", query: str = "") -> list[dict]:
+def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
     """List/focus/close/minimize top-level windows through a throw-away KWin script.
 
     close = the same as clicking the window's close button (apps can save / ask), unlike pkill.
@@ -422,7 +480,8 @@ def windows(action: str = "list", query: str = "") -> list[dict]:
         return _x11_windows(action, query) if backend() == "x11" else []
 
     tag = f"JustDayWIN{uuid.uuid4().hex[:8]} "
-    js = _KWIN_JS % {"query": json.dumps(query.lower()), "action": json.dumps(action), "tag": json.dumps(tag)}
+    js = _KWIN_JS % {"query": json.dumps(query.lower()), "action": json.dumps(action), "tag": json.dumps(tag),
+                     "wid": json.dumps(wid)}
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
         f.write(js)
     name = tag.strip()
