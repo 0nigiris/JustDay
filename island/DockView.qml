@@ -42,6 +42,11 @@ Item {
     // Заголовки открытых окон под подписью. Настоящих картинок-предпросмотров KWin обычным
     // клиентам не отдаёт, и обещать их было бы враньём.
     readonly property bool preview: JD.dockCfg.preview !== false
+    // Черта: сколько места занимает, какой толщины, какой высоты и насколько заметна.
+    readonly property real sepWidth: JD.dockCfg.separator_room ? Math.max(2, Math.min(80, JD.dockCfg.separator_room)) : Math.round(gap * 0.8)
+    readonly property real sepThick: Math.max(1, Math.min(6, JD.dockCfg.separator_width === undefined ? 1 : JD.dockCfg.separator_width))
+    readonly property real sepHeight: Math.max(0.1, Math.min(1, (JD.dockCfg.separator_height === undefined ? 62 : JD.dockCfg.separator_height) / 100))
+    readonly property real sepInk: Math.max(0, Math.min(1, (JD.dockCfg.separator_opacity === undefined ? 16 : JD.dockCfg.separator_opacity) / 100))
     readonly property bool showRunning: JD.dockCfg.show_running !== false
     readonly property bool showTrash: JD.dockCfg.show_trash !== false
     // Док уехал за край — кошке незачем перебирать лапами в пустоту: под нагрузкой это тридцать
@@ -84,31 +89,56 @@ Item {
         return { by: byKey, order: order }
     }
 
+    // Состав полосы задаётся списком в настройках, а не вшит сюда. Слова простые: launcher, pinned,
+    // running, trash, cat, clock — что именно поставить; sep — черта; space — пустой промежуток.
+    // Порядок в списке и есть порядок на экране, поэтому «часы слева, перед программами» — это не
+    // новая настройка, а другой порядок слов.
+    readonly property var layoutWords: {
+        const raw = JD.dockCfg.layout
+        const list = (Array.isArray(raw) && raw.length ? raw
+                     : ["launcher", "sep", "pinned", "running", "sep", "trash", "sep", "cat", "clock"])
+        return list.map(w => String(w).trim().toLowerCase()).filter(w => !!w)
+    }
+
     readonly property var entries: {
-        const out = [{ t: "launcher" }], by = grouped.by, taken = ({})
+        const out = [], by = grouped.by, taken = ({})
         const pinnedItems = JD.dockItems
-        if (pinnedItems.length) out.push({ t: "sep" })
-        for (const it of pinnedItems) {
-            taken[it.key] = true
-            const live = by[it.key]
-            out.push({ t: "app", key: it.key, kind: it.kind, id: it.id, name: it.name, icon: it.icon,
-                       pinned: true, wins: live ? live.wins : [] })
+        for (const it of pinnedItems) taken[it.key] = true
+        const extra = showRunning ? grouped.order.filter(k => !taken[k]) : []
+
+        // Черта, за которой ничего нет, — это черта в пустоте. Поэтому разделители и промежутки
+        // кладём только между тем, что действительно встало в полосу.
+        const put = (item) => {
+            if (item.t !== "sep" && item.t !== "space") { out.push(item); return }
+            if (!out.length) return                        // в самом начале — незачем
+            const last = out[out.length - 1]
+            if (last.t === "sep" || last.t === "space") return   // две подряд — тоже незачем
+            out.push(item)
         }
-        if (showRunning) {
-            const extra = grouped.order.filter(k => !taken[k])
-            if (extra.length) out.push({ t: "sep" })
-            for (const k of extra) {
-                const g = by[k]
-                out.push({ t: "app", key: k, kind: g.kind, id: g.id, name: g.name, icon: g.icon,
-                           pinned: false, wins: g.wins })
+
+        for (const word of layoutWords) {
+            if (word === "launcher") put({ t: "launcher" })
+            else if (word === "sep") put({ t: "sep" })
+            else if (word === "space") put({ t: "space" })
+            else if (word === "trash") { if (showTrash) put({ t: "trash" }) }
+            else if (word === "cat") { if (showCat) put({ t: "cat" }) }
+            else if (word === "clock") { if (showClock) put({ t: "clock" }) }
+            else if (word === "pinned") {
+                for (const it of pinnedItems) {
+                    const live = by[it.key]
+                    put({ t: "app", key: it.key, kind: it.kind, id: it.id, name: it.name, icon: it.icon,
+                          pinned: true, wins: live ? live.wins : [] })
+                }
+            } else if (word === "running") {
+                for (const k of extra) {
+                    const g = by[k]
+                    put({ t: "app", key: k, kind: g.kind, id: g.id, name: g.name, icon: g.icon,
+                          pinned: false, wins: g.wins })
+                }
             }
         }
-        if (showTrash) { out.push({ t: "sep" }); out.push({ t: "trash" }) }
-        // Виджеты — в самом конце, за своей чертой: они не запускаются и не закрепляются, и стоять
-        // вперемешку с программами им незачем.
-        if (showCat || showClock) out.push({ t: "sep" })
-        if (showCat) out.push({ t: "cat" })
-        if (showClock) out.push({ t: "clock" })
+        // Черта в самом конце висит ни на чём.
+        while (out.length && (out[out.length - 1].t === "sep" || out[out.length - 1].t === "space")) out.pop()
         return out
     }
 
@@ -118,7 +148,8 @@ Item {
         let at = pad
         for (let i = 0; i < entries.length; i++) {
             const t = entries[i].t
-            const w = t === "sep" ? Math.round(gap * 0.8)
+            const w = t === "sep" ? dv.sepWidth
+                    : t === "space" ? Math.round(cell * 0.6)
                     : t === "cat" ? Math.round(cell * 1.2)
                     : t === "clock" ? Math.round(cell * 1.25) : cell
             out.push(Object.assign({}, entries[i], { at: at, w: w, i: i }))
@@ -316,10 +347,11 @@ Item {
                 // открытое сливаются в один ряд, и непонятно, что исчезнет после закрытия окна.
                 Rectangle {
                     visible: slot.e.t === "sep"
-                    width: 1
-                    height: dv.icon * 0.62
+                    width: dv.sepThick
+                    height: dv.icon * dv.sepHeight
+                    radius: width / 2
                     anchors.centerIn: parent
-                    color: Qt.rgba(1, 1, 1, 0.16)
+                    color: Qt.rgba(1, 1, 1, dv.sepInk)
                 }
 
                 Item {
@@ -553,9 +585,16 @@ Item {
     //
     // Не системное меню, а свои три строки: закрепить, закрыть, настройки. Столько и нужно — всё
     // остальное у программы есть в её собственном окне.
+    DockAudio { id: audio }
+
     property var ctxEntry: null
     property var ctxWins: []
     property real ctxAt: 0
+    // Ручьи звука той программы, по которой нажали правой кнопкой. Пересчитываются, когда меняется
+    // и выбор, и сам список ручьёв: программа могла заиграть уже после открытия меню.
+    readonly property var ctxStreams: ctxEntry ? audio.streamsFor(ctxEntry) : []
+    readonly property real ctxVolume: audio.volumeOf(ctxStreams)
+    readonly property bool ctxMuted: audio.mutedOf(ctxStreams)
     function openCtx(e, wins, at) {
         if (e.t === "sep") return
         ctxEntry = e; ctxWins = wins || []; ctxAt = at
@@ -567,7 +606,7 @@ Item {
     Rectangle {
         id: ctx
         visible: !!dv.ctxEntry
-        width: 210
+        width: dv.ctxStreams.length ? 272 : 210
         height: ctxRows.implicitHeight + 12
         radius: 14
         color: Qt.rgba(0, 0, 0, 0.9)
@@ -580,6 +619,85 @@ Item {
             id: ctxRows
             y: 6
             width: parent.width
+
+            // ───────────── громкость этой программы ─────────────
+            //
+            // Системная громкость — это громкость всего сразу, и когда мешает один Discord, крутить
+            // приходится весь звук. Ползунок появляется только тогда, когда программа действительно
+            // что-то играет: пустой ползунок у молчащего значка — обещание, которого он не держит.
+            Item {
+                width: parent.width
+                height: dv.ctxStreams.length ? 42 : 0
+                visible: dv.ctxStreams.length > 0
+                Row {
+                    anchors { left: parent.left; right: parent.right; leftMargin: 12; rightMargin: 12
+                              verticalCenter: parent.verticalCenter }
+                    spacing: 9
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: dv.ctxMuted ? "volume-x" : dv.ctxVolume > 0.5 ? "volume-2" : "volume-1"
+                        implicitSize: 15
+                        tint: dv.ctxMuted ? JD.text3 : JD.text1
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler {
+                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                            onTapped: audio.setMuted(dv.ctxStreams, !dv.ctxMuted)
+                        }
+                    }
+                    // Полоска, за которую тянут. Значение отдаётся сразу, без пружин: звук — это то,
+                    // что правят на слух, и задержка между рукой и громкостью тут недопустима.
+                    Rectangle {
+                        id: volTrack
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: ctx.width - 24 - 15 - 9 - 40
+                        height: 5
+                        radius: 2.5
+                        color: Qt.rgba(1, 1, 1, 0.18)
+                        Rectangle {
+                            height: parent.height
+                            radius: parent.radius
+                            width: parent.width * Math.max(0, Math.min(1, dv.ctxVolume))
+                            color: dv.ctxMuted ? JD.text3 : JD.accentBlue
+                        }
+                        Rectangle {
+                            width: 12
+                            height: 12
+                            radius: 6
+                            color: "#ffffff"
+                            y: (parent.height - height) / 2
+                            x: Math.max(0, Math.min(parent.width - width,
+                                        parent.width * Math.max(0, Math.min(1, dv.ctxVolume)) - width / 2))
+                        }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        DragHandler {
+                            target: null
+                            xAxis.enabled: true
+                            yAxis.enabled: false
+                            onCentroidChanged: if (active) audio.setVolume(dv.ctxStreams, centroid.position.x / volTrack.width)
+                        }
+                        TapHandler {
+                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                            onSingleTapped: eventPoint => audio.setVolume(dv.ctxStreams, eventPoint.position.x / volTrack.width)
+                        }
+                    }
+                    Label2 {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 34
+                        horizontalAlignment: Text.AlignRight
+                        font.pixelSize: 11
+                        color: JD.text3
+                        text: Math.round(Math.max(0, dv.ctxVolume) * 100) + "%"
+                    }
+                }
+            }
+            Rectangle {
+                visible: dv.ctxStreams.length > 0
+                width: parent.width - 24
+                x: 12
+                height: 1
+                color: Qt.rgba(1, 1, 1, 0.08)
+            }
+
             Repeater {
                 model: dv.ctxActions
                 delegate: Rectangle {

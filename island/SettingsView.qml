@@ -895,6 +895,29 @@ Item {
                 Row { title: JD.tr("Подпись под курсором"); Toggle { checked: win.get("dock.labels") !== false; onToggled: v => win.set("dock.labels", v) } }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
+                Row { title: JD.tr("Окна программы при наведении"); subtitle: JD.tr("Заголовки открытых окон под подписью. Картинок нет: снимать чужие окна на KWin умеет только композитор"); Toggle { checked: win.get("dock.preview") !== false; onToggled: v => win.set("dock.preview", v) } }
+                Row {
+                    title: JD.tr("Состав полосы")
+                    subtitle: JD.tr("Порядок слов — порядок на экране. launcher, pinned, running, trash, cat, clock, sep (черта), space (промежуток)")
+                    Field { key: "dock.layout"; implicitWidth: 320 }
+                }
+                Row {
+                    title: JD.tr("Место под черту")
+                    subtitle: JD.tr("Ноль — столько же, сколько между значками")
+                    SSlider { key: "dock.separator_room"; from: 0; to: 80; step: 2; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row {
+                    title: JD.tr("Толщина черты")
+                    SSlider { key: "dock.separator_width"; from: 1; to: 6; step: 1; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row {
+                    title: JD.tr("Высота черты")
+                    SSlider { key: "dock.separator_height"; from: 10; to: 100; step: 5; decimals: 0; unit: JD.tr("%") }
+                }
+                Row {
+                    title: JD.tr("Заметность черты")
+                    SSlider { key: "dock.separator_opacity"; from: 0; to: 60; step: 2; decimals: 0; unit: JD.tr("%") }
+                }
                 Row {
                     title: JD.tr("Значок меню")
                     subtitle: JD.tr("«Из темы» берёт start-here у набора значков — в макосных темах это яблоко")
@@ -968,7 +991,7 @@ Item {
                     subtitle: JD.tr("Ни одна запущенная программа не положила в него значок")
                 }
             }
-            Note { text: JD.tr("Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
+            Note { text: JD.tr("Громкость отдельной программы — правой кнопкой по её значку в доке, пока она что-то играет. Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
         }
     }
 
