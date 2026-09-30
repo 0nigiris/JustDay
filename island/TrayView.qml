@@ -99,6 +99,10 @@ Item {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onTapped: {
                             const it = slot.modelData
+                            // Меню соседнего значка, если оно открыто, закрывается само: полоса
+                            // остаётся нажимаемой из-под меню, и щелчок по ней — это работа со
+                            // значком, а не с чужим меню.
+                            JD.closeTrayMenu()
                             if (it.onlyMenu && it.hasMenu) tv.showMenu(it, slot)
                             else it.activate()
                         }
@@ -133,6 +137,9 @@ Item {
     // оно. Точка — в координатах экрана: меню живёт в отдельном окне во весь экран.
     function showMenu(item, at) {
         if (!item || !item.hasMenu) return
+        // Повторный щелчок по тому же значку закрывает меню, а не открывает его заново: иначе
+        // единственный способ убрать его — целиться мимо.
+        if (JD.trayMenu === item) { JD.closeTrayMenu(); return }
         const p = at.mapToItem(null, tv.atRight ? 0 : at.width, at.height / 2)
         const left = tv.atRight ? JD.screenWidth - tv.width - 10 : tv.x + tv.width
         JD.openTrayMenu(item, Math.round(tv.atRight ? left : left + 8), Math.round(p.y))

@@ -2964,7 +2964,23 @@ ShellRoot {
             onClicked: JD.closeTrayMenu()
         }
         Shortcut { sequence: "Escape"; enabled: trayMenuWin.open; onActivated: JD.closeTrayMenu() }
-        mask: Region { item: trayMenuWin.open ? trayMenuBackdrop : null }
+
+        // Дырка по полосе лотка — та же, что у меню приложений. Без неё полоса под перекрытием
+        // становится картинкой: значки видно, а единственное, что делает щелчок по ним, — закрывает
+        // меню. А человек, открыв меню не того значка, щёлкает именно по соседнему.
+        Item {
+            id: trayMenuHole
+            visible: false
+            readonly property var r: JD.trayRect
+            x: r && r.live ? r.x : 0
+            y: r && r.live ? r.y : 0
+            width: r && r.live ? r.w : 0
+            height: r && r.live ? r.h : 0
+        }
+        mask: Region {
+            item: trayMenuWin.open ? trayMenuBackdrop : null
+            Region { item: trayMenuHole; intersection: Intersection.Subtract }
+        }
 
         // Размытия под карточкой нет намеренно: она почти непрозрачная — как меню дока, — и
         // размывать под ней нечего. Лишний слой на каждый щелчок правой кнопкой того не стоит.
