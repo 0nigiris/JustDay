@@ -15,6 +15,8 @@ echo "downloading the voice model (first run only)…"
 "$ROOT/.venv/bin/python" -c "from huggingface_hub import snapshot_download as d; d('Qwen/Qwen3-TTS-12Hz-0.6B-Base')" >/dev/null
 mkdir -p "$HOME/.config/systemd/user"
 sed "s|@REPO@|$REPO|" "$REPO/systemd/justday-voice.service" > "$HOME/.config/systemd/user/justday-voice.service"
+cp "$REPO/systemd/justday-voice.socket" "$HOME/.config/systemd/user/justday-voice.socket"
 systemctl --user daemon-reload
+systemctl --user enable --now justday-voice.socket
 systemctl --user enable --now justday-voice.service
 echo "neural voice ready: justday config set tts.engine qwen   (voice: jarvis)"

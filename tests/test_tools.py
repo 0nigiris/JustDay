@@ -255,3 +255,63 @@ def test_recently_launched_come_first(apps) -> None:
 def test_nothing_matches_means_nothing_and_not_noise(apps) -> None:
     """Пустой ответ — это сигнал островку предложить спросить ассистента, а не показать мусор."""
     assert apps.items("поставь таймер на десять минут") == []
+
+
+# ──────────────────────── меню приложений ────────────────────────
+
+
+def test_categories_pick_the_telling_label_not_the_first_one(apps) -> None:
+    """Kate — это и Utility, и TextEditor, и Development. В меню она должна быть в одном месте."""
+    from justday import launcher
+
+    assert launcher.category_of("Qt;KDE;Utility;TextEditor;Development;") == "dev"
+    assert launcher.category_of("Game;ActionGame;") == "games"
+    assert launcher.category_of("Network;WebBrowser;") == "net"
+    assert launcher.category_of("") == launcher.OTHER          # некуда — не «прочее» пустотой
+
+
+def test_the_same_thing_is_not_listed_twice(apps) -> None:
+    """Steam и flatpak кладут одну вещь и программой, и игрой: в меню должна остаться одна."""
+    from justday import launcher
+
+    apps.desktop.list_games = lambda: [{"source": "steam", "id": "570", "name": "Discord"}]
+    names = [a["name"] for a in launcher.catalog()["apps"]]
+    assert names.count("Discord") == 1
+    assert next(a for a in launcher.catalog()["apps"] if a["name"] == "Discord")["kind"] == "app"
+
+
+def test_pinning_survives_and_toggles(apps, tmp_path, monkeypatch) -> None:
+    from justday import launcher
+
+    monkeypatch.setattr(launcher, "FAV_FILE", tmp_path / "fav.json")
+    assert launcher.pin("app", "code")["pinned"] is True
+    assert launcher.favourites() == ["app:code"]
+    assert launcher.pin("app", "code")["pinned"] is False       # то же нажатие снимает
+    assert launcher.favourites() == []
+
+
+def test_an_empty_favourites_page_shows_the_recent_ones(apps, tmp_path, monkeypatch) -> None:
+    """Раздел, встречающий пустотой в первый день, человек больше не открывает."""
+    from justday import launcher
+
+    monkeypatch.setattr(launcher, "FAV_FILE", tmp_path / "fav.json")
+    launcher.remember("app", "discord")
+    assert launcher.catalog()["pinned"] == ["app:discord"]
+
+
+# ──────────────────────── завершение сеанса ────────────────────────
+
+
+@pytest.mark.parametrize("what", ["logout", "reboot", "poweroff"])
+def test_losing_work_needs_saying_so_twice(what: str) -> None:
+    """Запрет живёт в самой функции, а не в виде: кнопка может ошибиться, функция — нет."""
+    from justday import session
+
+    got = session.run(what)
+    assert got["ok"] is False and got["confirm"] is True
+
+
+def test_there_is_no_such_thing_as_a_made_up_action() -> None:
+    from justday import session
+
+    assert session.run("rm -rf /", confirm=True)["ok"] is False

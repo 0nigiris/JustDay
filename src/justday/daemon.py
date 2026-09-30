@@ -167,7 +167,16 @@ class Daemon:
         """Что говорит голосовой сервис о себе: поднята ли модель и давно ли молчит."""
         import json as jsonlib
         import socket as socket_mod
+        import subprocess as sp
 
+        # Служба может быть выключена по простою, и спрашивать её «спишь ли ты» через гнездо —
+        # значит будить: вопрос сам бы поднял два гигабайта обратно.
+        try:
+            if sp.run(["systemctl", "--user", "is-active", "--quiet", "justday-voice.service"],
+                      timeout=4).returncode != 0:
+                return {"ok": True, "loaded": False, "stopped": True, "idle": None}
+        except (OSError, sp.SubprocessError):
+            pass
         try:
             with socket_mod.socket(socket_mod.AF_UNIX) as sock:
                 sock.settimeout(3)
@@ -187,8 +196,12 @@ class Daemon:
         """
         if value == "listening":
             self.stt.warm()
-        if value in ("listening", "thinking") and not self.silent() and self.cfg["tts"]["engine"] == "qwen":
+        if value not in ("listening", "thinking") or self.silent() or self.cfg["tts"]["engine"] != "qwen":
+            return
+        try:   # состояние меняется и до запуска цикла — тогда греть попросту некуда и незачем
             spawn(asyncio.get_running_loop().run_in_executor(None, self.tts.nudge, "warm"))
+        except RuntimeError:
+            pass
 
     def publish(self, **msg) -> None:
         """Push a status update to every `subscribe` client (the on-screen indicator). Loop thread only."""

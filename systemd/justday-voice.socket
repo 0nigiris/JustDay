@@ -1,0 +1,12 @@
+[Unit]
+Description=JustDay neural voice socket
+# Гнездо живёт дольше службы: демон подключается к нему, а systemd поднимает сервис на первое
+# обращение. Так голос может выйти совсем, когда с машиной долго не разговаривают, и вернуть
+# системе два гигабайта — а следующая просьба поднимет его обратно, ничего не заметив.
+
+[Socket]
+ListenStream=%t/justday-voice.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

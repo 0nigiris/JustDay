@@ -51,18 +51,34 @@ RATE = 24000
 lock = threading.Lock()
 model = None
 last_use = time.time()      # когда голосом пользовались в последний раз
+busy = 0                    # сколько просьб выполняется прямо сейчас
+_from_socket = (os.environ.get("LISTEN_PID") == str(os.getpid())
+                and int(os.environ.get("LISTEN_FDS") or 0) >= 1)
 
 
-def _idle_minutes() -> float:
-    """Через сколько минут молчания отпустить видеопамять. 0 — держать всегда."""
+def _setting(name: str, fallback: float) -> float:
     try:
         import tomllib
 
         cfg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "justday" / "config.toml"
-        got = tomllib.loads(cfg.read_text(encoding="utf-8")).get("tts", {}).get("idle_unload_minutes", 15)
-        return max(0.0, float(got))
+        return max(0.0, float(tomllib.loads(cfg.read_text(encoding="utf-8")).get("tts", {}).get(name, fallback)))
     except (OSError, ValueError, TypeError):
-        return 15.0
+        return fallback
+
+
+def _idle_minutes() -> float:
+    """Через сколько минут молчания отпустить видеопамять. 0 — держать всегда."""
+    return _setting("idle_unload_minutes", 15.0)
+
+
+def _quit_minutes() -> float:
+    """Через сколько минут выйти совсем. 0 — не выходить.
+
+    Отпущенная модель возвращает видеопамять, но обычную память держит torch: с ним процесс весит
+    около двух гигабайт и пустой. Отдать их можно только выходом — и это не потеря, потому что
+    служба поднята через гнездо systemd: следующая просьба разбудит её сама.
+    """
+    return _setting("quit_after_minutes", 40.0) if _from_socket else 0.0
 
 
 def log(*a) -> None:
@@ -137,8 +153,12 @@ def watchdog() -> None:
     """
     while True:
         time.sleep(20)
-        minutes = _idle_minutes()
-        if minutes <= 0 or model is None or time.time() - last_use < minutes * 60:
+        idle = time.time() - last_use
+        minutes, quit_after = _idle_minutes(), _quit_minutes()
+        if 0 < quit_after * 60 <= idle and model is None and busy == 0:
+            log(f"молчим {quit_after:g} мин — выходим, гнездо разбудит")
+            os._exit(0)
+        if minutes <= 0 or model is None or idle < minutes * 60:
             continue
         # Не вырываем модель из-под говорящего: замок держит say().
         if lock.acquire(blocking=False):
@@ -220,13 +240,18 @@ def clone(name: str, audio: str, text: str) -> dict:
 
 
 def handle(conn: socket.socket) -> None:
+    global busy
+    busy += 1
     with conn:
         f = conn.makefile("rb")
         try:
             req = json.loads(f.readline() or b"{}")
             cmd = req.get("cmd")
             if cmd == "say":
-                say(conn, req["text"], req.get("voice", ""), str(req.get("instruct") or ""))
+                try:
+                    say(conn, req["text"], req.get("voice", ""), str(req.get("instruct") or ""))
+                finally:
+                    busy -= 1
                 return
             if cmd == "voices":
                 resp = {"ok": True, "voices": voice_list()}
@@ -260,19 +285,32 @@ def handle(conn: socket.socket) -> None:
             conn.sendall((json.dumps(resp, ensure_ascii=False) + "\n").encode())
         except OSError:
             pass
+        finally:
+            busy -= 1
 
 
-def main() -> None:
-    VOICES.mkdir(parents=True, exist_ok=True)
+def listener() -> socket.socket:
+    """Гнездо от systemd, если служба поднята по обращению; своё — если запущена руками."""
+    if _from_socket:
+        return socket.socket(family=socket.AF_UNIX, type=socket.SOCK_STREAM, fileno=3)
     if SOCKET.exists():
         SOCKET.unlink()
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(str(SOCKET))
     os.chmod(SOCKET, 0o600)
     srv.listen(8)
-    threading.Thread(target=load_base, daemon=True).start()  # warm up in the background
+    return srv
+
+
+def main() -> None:
+    VOICES.mkdir(parents=True, exist_ok=True)
+    srv = listener()
+    # Разбуженную просьбой службу греть наперёд незачем: она и так сейчас будет говорить, а вот
+    # поднятую вместе с сеансом — стоит, чтобы первый ответ за день не ждал.
+    if not _from_socket:
+        threading.Thread(target=load_base, daemon=True).start()
     threading.Thread(target=watchdog, daemon=True).start()   # и отпускает, когда долго молчим
-    log(f"listening on {SOCKET}")
+    log(f"listening on {SOCKET}" + (" (от systemd)" if _from_socket else ""))
     while True:
         conn, _ = srv.accept()
         threading.Thread(target=handle, args=(conn,), daemon=True).start()

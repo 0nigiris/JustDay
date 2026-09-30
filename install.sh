@@ -555,7 +555,11 @@ services() {
   fi
   if systemctl --user cat justday-voice.service >/dev/null 2>&1; then
     sed "s|@REPO@|$APP_DIR|" "$APP_DIR/systemd/justday-voice.service" > "$UNIT_DIR/justday-voice.service"
+    # Гнездо переживает службу: голос выходит, когда с машиной долго молчат, и возвращается на
+    # первую же просьбу. Без него выход был бы уходом навсегда.
+    cp "$APP_DIR/systemd/justday-voice.socket" "$UNIT_DIR/justday-voice.socket"
     systemctl --user daemon-reload
+    systemctl --user enable --now justday-voice.socket
     systemctl --user try-restart justday-voice.service
   fi
 }

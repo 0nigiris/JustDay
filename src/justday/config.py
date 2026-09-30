@@ -125,6 +125,10 @@ DEFAULTS: dict = {
         # Сколько минут молчания держать нейроголос в видеопамяти (~2,5 ГБ у 0.6B, ~4,5 ГБ у 1.7B).
         # 0 — держать всегда. Возврат стоит около десяти секунд, и он прячется за раздумьем ассистента.
         "idle_unload_minutes": 15,
+        # А через сколько минут голосовой службе выйти совсем: отпущенная модель возвращает
+        # видеопамять, но ~2 ГБ обычной держит torch, и отдать их можно только выходом. Служба
+        # поднята через гнездо systemd, поэтому следующая просьба разбудит её сама. 0 — не выходить.
+        "quit_after_minutes": 40,
         "mute_in_games": True,  # and it falls silent by itself while a game is running: the GPU is the game's
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase

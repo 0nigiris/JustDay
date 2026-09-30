@@ -2,12 +2,16 @@
 Description=JustDay neural voice (Qwen3-TTS)
 PartOf=graphical-session.target
 After=graphical-session.target
+Requires=justday-voice.socket
+After=justday-voice.socket
 
 [Service]
 Type=simple
 ExecStart=%h/.local/share/justday/voice/.venv/bin/python @REPO@/voice/server.py
 Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
+# Выход по простою — не отказ: гнездо поднимет службу на следующую просьбу.
+SuccessExitStatus=0
 RestartSec=5
 
 [Install]
