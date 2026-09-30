@@ -16,8 +16,6 @@ import QtQuick.Layouts
 
 Item {
     id: mv
-    implicitWidth: 880
-    implicitHeight: 716
 
     // Меню — рабочая поверхность, а не украшение: на ней читают и целятся, поэтому карточка почти
     // непрозрачная, а заливки кнопок плотнее островных. На чёрном острове 8% белого видно; на
@@ -30,7 +28,24 @@ Item {
     readonly property var user: JD.menuUser
     // Ничего не нашлось, а что-то напечатано — это не тупик, а вопрос ассистенту.
     readonly property bool askInstead: JD.menuSearching && shown.length === 0
-    readonly property int columns: 5
+
+    // Высота — по содержимому, а не константой. Шесть закреплённых программ в окне на 716 точек
+    // означают семьдесят процентов пустоты, и никакая раскраска этого не спасает: окно, которое не
+    // знает, сколько в нём лежит, выглядит чужим при любом наборе значков.
+    // Колонок столько, чтобы получился прямоугольник, а не строка с хвостом. Шесть программ в пять
+    // колонок — это пять в ряд и одна под ними, и выглядит это как недогруженный список; те же
+    // шесть в три колонки — ровный блок, который видно целиком одним взглядом.
+    readonly property int columns: shown.length <= 4 ? Math.max(1, shown.length)
+                                 : shown.length <= 9 ? 3
+                                 : shown.length <= 16 ? 4 : 5
+    readonly property real tile: 106
+    readonly property real railRow: 32
+    readonly property real railWants: JD.menuGroups.length * railRow + Math.max(0, JD.menuGroups.length - 1) * 2
+    readonly property real gridWants: Math.ceil(Math.max(1, shown.length) / columns) * tile
+    readonly property real bodyHeight: Math.max(220, Math.min(560, Math.max(railWants, gridWants)))
+
+    implicitWidth: 880
+    implicitHeight: 20 + 44 + 12 + 40 + 12 + bodyHeight + 12 + 30 + 18
     // Одна строка подсказки внизу вместо всплывающих плашек у курсора: плашка закрывает соседнюю
     // плитку ровно в тот момент, когда по ней целятся.
     property string hint: ""
@@ -43,14 +58,14 @@ Item {
         property string icon: ""
         property string note: ""
         signal picked()
-        implicitWidth: 34
-        implicitHeight: 34
-        radius: 17
-        color: dotHover.hovered ? mv.fill3 : mv.fill1
+        implicitWidth: 30
+        implicitHeight: 30
+        radius: 15
+        color: dotHover.hovered ? mv.fill3 : "transparent"
         Behavior on color { ColorAnimation { duration: 120 } }
         scale: dotTap.pressed ? 0.92 : 1
         Behavior on scale { NumberAnimation { duration: 110 } }
-        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 17 }
+        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dotHover.hovered ? JD.text1 : JD.text3 }
         HoverHandler { id: dotHover; cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, dot.note) }
         TapHandler { id: dotTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: dot.picked() }
     }
@@ -91,11 +106,13 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
-        spacing: 14
+        anchors.bottomMargin: 18
+        spacing: 12
 
         // ───────────── шапка: кто за машиной и кнопка питания ─────────────
         RowLayout {
             Layout.fillWidth: true
+            Layout.preferredHeight: 44
             spacing: 12
 
             Rectangle {
@@ -130,22 +147,25 @@ Item {
             // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
             // краснеет и подписывается «точно?». Блокировка и сон не теряют ничего и спрашивать
             // не должны — иначе защита превращается в помеху.
+            //
+            // В покое кружков нет — только значки. Пять одинаковых серых кругов в углу тянут на
+            // себя больше внимания, чем всё меню вместе, а нажимают из них дай бог один в неделю.
             Repeater {
                 model: JD.sessionActions
                 delegate: Rectangle {
                     required property var modelData
                     readonly property bool asking: JD.menuConfirm === modelData.id
-                    implicitWidth: asking ? askRow.implicitWidth + 26 : 36
-                    implicitHeight: 36
-                    radius: 18
-                    color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : mv.fill1)
+                    implicitWidth: asking ? askRow.implicitWidth + 26 : 34
+                    implicitHeight: 34
+                    radius: 17
+                    color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : "transparent")
                     Behavior on implicitWidth { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                     Behavior on color { ColorAnimation { duration: 140 } }
                     RowLayout {
                         id: askRow
                         anchors.centerIn: parent
                         spacing: 6
-                        Icon { name: modelData.icon; implicitSize: 16 }
+                        Icon { name: modelData.icon; implicitSize: 16; tint: parent.parent.asking ? JD.text1 : JD.text2 }
                         Label1 { visible: parent.parent.asking; text: "точно?" }
                     }
                     HoverHandler {
@@ -163,17 +183,21 @@ Item {
         }
 
         // ───────────── поиск ─────────────
+        //
+        // Поле и так под курсором с первой секунды — обводить его толстым синим кольцом незачем.
+        // Кольцо в два пикселя кричало на всё окно о том, что и без него очевидно.
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 44
-            radius: 22
-            color: mv.fill1
-            border.width: field.activeFocus ? 2 : 1
-            border.color: field.activeFocus ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.12)
+            Layout.preferredHeight: 40
+            radius: 20
+            color: field.activeFocus ? mv.fill2 : mv.fill1
+            border.width: 1
+            border.color: field.activeFocus ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
+            Behavior on color { ColorAnimation { duration: 140 } }
             Behavior on border.color { ColorAnimation { duration: 140 } }
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 15
+                anchors.leftMargin: 14
                 anchors.rightMargin: 12
                 spacing: 9
                 Icon { name: "search"; implicitSize: 16; tint: JD.text3 }
@@ -220,8 +244,8 @@ Item {
         // ───────────── разделы и сетка ─────────────
         RowLayout {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 14
+            Layout.preferredHeight: mv.bodyHeight
+            spacing: 16
 
             // Пока ищут, разделы не при чём: поиск идёт по всему сразу, и подсвеченный раздел
             // только врал бы, что ищем в нём.
@@ -229,8 +253,9 @@ Item {
                 // Внутри RowLayout вложенная раскладка по умолчанию тянется во всю ширину и съедает
                 // preferredWidth вместе с сеткой. Здесь ширина задана нарочно — значит, не тянуть.
                 Layout.fillWidth: false
-                Layout.preferredWidth: 200
+                Layout.preferredWidth: 196
                 Layout.fillHeight: true
+                Layout.alignment: Qt.AlignTop
                 spacing: 2
                 opacity: JD.menuSearching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: 160 } }
@@ -241,18 +266,27 @@ Item {
                         required property var modelData
                         readonly property bool on: !JD.menuSearching && JD.menuGroup === modelData.id
                         Layout.fillWidth: true
-                        implicitHeight: 36
-                        radius: 10
-                        color: on ? JD.accentBlue : (railHover.hovered ? mv.fill2 : "transparent")
+                        implicitHeight: mv.railRow
+                        radius: 9
+                        // Выбранный раздел — приглушённая заливка, а синим горит только значок.
+                        // Сплошная синяя полоса во всю ширину была самым громким пятном на экране,
+                        // хотя говорит она всего лишь «вы здесь».
+                        color: on ? mv.fill3 : (railHover.hovered ? mv.fill1 : "transparent")
                         Behavior on color { ColorAnimation { duration: 130 } }
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 11
-                            anchors.rightMargin: 11
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
                             spacing: 9
-                            Icon { name: modelData.icon; implicitSize: 16; tint: JD.text1 }
-                            Label1 { Layout.fillWidth: true; text: modelData.name }
-                            Label2 { color: on ? JD.text1 : JD.text2; text: modelData.count || "" }
+                            Icon { name: modelData.icon; implicitSize: 15; tint: on ? JD.accentBlue : JD.text2 }
+                            Label1 {
+                                Layout.fillWidth: true
+                                font.pixelSize: 13
+                                font.weight: on ? Font.DemiBold : Font.Medium
+                                color: on ? JD.text1 : JD.text2
+                                text: modelData.name
+                            }
+                            Label2 { font.pixelSize: 11; color: JD.text3; text: modelData.count || "" }
                         }
                         HoverHandler { id: railHover; cursorShape: Qt.PointingHandCursor }
                         TapHandler {
@@ -262,17 +296,6 @@ Item {
                     }
                 }
                 Item { Layout.fillHeight: true }
-                // Дверь к остальному острову: панель инструментов и настройки — оттуда же, откуда
-                // человек уже привык открывать программы.
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
-                    ToolDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
-                    ToolDot { icon: "gauge"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
-                    Item { Layout.fillWidth: true }
-                    ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
-                }
             }
 
             // Сетка. Плитка, а не строка: значок программы — это то, по чему её узнают, и в списке
@@ -281,17 +304,24 @@ Item {
             // и растворения у нижнего края. Ряд, обрезанный ровной чертой, читается как поломка
             // вёрстки; тот же ряд, уходящий в прозрачность, читается как «дальше есть ещё».
             Item {
+                id: gridBox
                 visible: !mv.askInstead && mv.shown.length > 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
             GridView {
                 id: grid
-                anchors.fill: parent
-                anchors.rightMargin: 6
+                // Программ меньше, чем помещается, — сетка стоит посередине, а не жмётся к верху и
+                // левому краю, оставив вокруг себя дыру. Дыра поровну со всех сторон читается как
+                // замысел; дыра с двух — как незаполненная форма.
+                readonly property real cell: Math.min(Math.floor((parent.width - 6) / mv.columns), 142)
+                width: cell * mv.columns
+                height: Math.min(parent.height, contentHeight)
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
                 clip: true
-                cellWidth: Math.floor(width / mv.columns)
-                cellHeight: 106
+                cellWidth: cell
+                cellHeight: mv.tile
                 model: mv.shown
                 currentIndex: JD.menuPick
                 highlightMoveDuration: 90
@@ -380,7 +410,7 @@ Item {
 
             // Нижний ряд уходит в прозрачность, а не режется чертой.
             Rectangle {
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                anchors { left: grid.left; right: grid.right; bottom: grid.bottom }
                 height: 20
                 visible: !grid.atYEnd
                 gradient: Gradient {
@@ -397,8 +427,8 @@ Item {
                 width: 4
                 radius: 2
                 color: Qt.rgba(1, 1, 1, 0.3)
-                height: Math.max(28, parent.height * grid.visibleArea.heightRatio)
-                y: parent.height * grid.visibleArea.yPosition
+                height: Math.max(28, grid.height * grid.visibleArea.heightRatio)
+                y: grid.y + grid.height * grid.visibleArea.yPosition
             }
             }
 
@@ -456,15 +486,42 @@ Item {
             }
         }
 
-        // Что делает то, на что навели. Пусто — значит ни на чём.
-        Label2 {
+        // ───────────── подвал ─────────────
+        //
+        // Кнопки стоят под всей карточкой, а не под колонкой разделов. В колонке они держали её
+        // растянутой до самого низа независимо от того, сколько в меню программ, — и именно оттуда
+        // бралась половина пустоты. Здесь же живёт строка подсказки: одна полка на всё мелкое.
+        Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 16
-            color: JD.text2
-            font.pixelSize: 12
-            text: mv.hint
-            opacity: mv.hint ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            Layout.preferredHeight: 30
+
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; top: parent.top }
+                height: 1
+                color: Qt.rgba(1, 1, 1, 0.08)
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.topMargin: 6
+                spacing: 6
+                ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
+                ToolDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
+                ToolDot { icon: "gauge"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
+
+                // Что делает то, на что навели. Пусто — значит ни на чём.
+                Label2 {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    color: JD.text3
+                    font.pixelSize: 12
+                    text: mv.hint
+                    opacity: mv.hint ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+
+                ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
+            }
         }
     }
 }

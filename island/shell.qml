@@ -2923,7 +2923,11 @@ ShellRoot {
             id: menuCard
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
             width: Math.min(880, menuWin.width - 24)
-            height: Math.min(716, menuWin.height - 24)
+            // Высоту задаёт содержимое: шесть закреплённых программ и сто пятьдесят семь всех —
+            // это разные меню, и окно одного размера на оба выглядит незаполненной формой.
+            height: Math.min(menuWin.height - 24, menuBody.item ? menuBody.item.implicitHeight : 620)
+            Behavior on height { enabled: JD.animOn
+                                 NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
             // От значка: меню стоит над ним, но не левее края экрана и не правее его.
             x: menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
@@ -2962,6 +2966,7 @@ ShellRoot {
 
             // Живёт, только пока открыто: закрыли — освободили и сетку, и значки.
             Loader {
+                id: menuBody
                 anchors.fill: parent
                 active: menuWin.alive
                 sourceComponent: MenuView {}
