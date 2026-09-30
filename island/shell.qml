@@ -2781,7 +2781,8 @@ ShellRoot {
             Binding {
                 target: JD
                 property: "dockHover"
-                value: [Math.round(dock.focusX), Number(dock.power.toFixed(2)), dock.focused ? dock.focused.t : ""]
+                value: [Math.round(dock.pointerScene), dock.engaged ? 1 : 0, dock.focused ? dock.focused.t : "",
+                        Math.round(dock.laneLength), Math.round(dock.restLength)]
             }
 
             Binding {

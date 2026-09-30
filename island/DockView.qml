@@ -1,12 +1,30 @@
 // Док: полоса программ у края экрана. Закреплённое, открытое и значок, из которого достаётся меню.
 //
-// Окна берутся у вейланда напрямую (ToplevelManager), имена и значки — у демона: у открытого окна
-// есть только appId вроде «org.kde.dolphin», и превратить его в «Finder» может лишь тот, кто читал
-// .desktop-файлы. Поэтому здесь нет ни своего списка программ, ни своего поиска.
+// Окна и имена приходят от демона: у открытого окна есть только appId вроде «org.kde.dolphin», и
+// превратить его в «Finder» может лишь тот, кто читал .desktop-файлы. Поэтому здесь нет ни своего
+// списка программ, ни своего поиска.
 //
-// Увеличение под курсором сделано так, чтобы область нажатия не двигалась: значок растёт наружу от
-// края (вверх у нижнего дока), а его ячейка остаётся на месте. Иначе значок уезжает из-под курсора,
-// курсор попадает на соседа, тот увеличивается — и полоса начинает дрожать.
+// ───────────── про увеличение ─────────────
+//
+// Сначала было сделано наоборот: значок рос, а его ячейка стояла на месте. Так проще и так не
+// дрожит, но выходит панель инструментов с ховером, а не док. Весь смысл дока в том, что это одна
+// сплошная поверхность, которая целиком отвечает на положение курсора: ближний значок больше всех,
+// соседи подхватывают волну, и **все расступаются**, освобождая ему место. Полоса при этом
+// расширяется. Без раздвигания значки налезали бы друг на друга, а без него же не было бы главного
+// ощущения — что двигаешь не курсор, а саму поверхность.
+//
+// Отсюда две вещи, которых нет у обычного ховера.
+//
+// Первая: раскладка считается не привязками, а своим шагом физики на каждый кадр (FrameAnimation).
+// Каждый значок имеет цель, текущий размер и скорость; пружина подтягивает размер к цели, а позиции
+// пересчитываются из **тех же** текущих размеров. Поэтому нарисованное и занятое место совпадают
+// всегда, и наложиться значки не могут в принципе.
+//
+// Вторая: положение курсора переводится обратно в «спокойные» координаты полосы. Курсор стоит на
+// месте в координатах экрана, а полоса под ним едет и растёт; если считать расстояния по
+// нарисованным местам, получается обратная связь и дрожь. Поэтому каждый кадр по нарисованной
+// раскладке ищется, какой ячейке и в какой её доле курсор соответствует, и уже от этого места
+// считаются расстояния до спокойных центров.
 import QtQuick
 import Quickshell
 
@@ -105,40 +123,111 @@ Item {
         }
         return out
     }
-    readonly property real laneLength: (lane.length ? lane[lane.length - 1].at + lane[lane.length - 1].w : 0) + pad
+    // Спокойная длина полосы — та, при которой ничего не увеличено. По ней считаются расстояния.
+    readonly property real restLength: (lane.length ? lane[lane.length - 1].at + lane[lane.length - 1].w : 0) + pad
 
-    // ───────────── увеличение ─────────────
-    //
-    // Пружина живёт в каждом значке, а не в положении волны. Сначала было наоборот — волна
-    // догоняла курсор пружиной, — и на быстрой мыши это чувствовалось как задержка: увеличение
-    // ползло следом за курсором, а не под ним. Теперь центр волны приклеен к курсору намертво, а
-    // пружинит размер: значок разгоняется, проскакивает нужный размер и возвращается. Отскок на
-    // месте, задержки нет.
+    // ───────────── движок увеличения ─────────────
     readonly property string animStyle: JD.dockCfg.animation || "spring"
-    readonly property real amp: Math.max(0, Math.min(2, (JD.dockCfg.magnify_scale === undefined ? 60 : JD.dockCfg.magnify_scale) / 100))
-    readonly property real spread: Math.max(0.4, Math.min(4, (JD.dockCfg.magnify_spread === undefined ? 120 : JD.dockCfg.magnify_spread) / 100))
+    readonly property real amp: Math.max(0, Math.min(2, (JD.dockCfg.magnify_scale === undefined ? 80 : JD.dockCfg.magnify_scale) / 100))
+    readonly property real spread: Math.max(0.4, Math.min(6, (JD.dockCfg.magnify_spread === undefined ? 200 : JD.dockCfg.magnify_spread) / 100))
     // Жёсткость и затухание — наружу: «пружинисто» у каждого своё, а на 185 герцах разница видна.
-    // Затухание 1 — это и есть «плавно»: критическое, без отскока вовсе.
-    readonly property real springK: Math.max(0.5, Math.min(30, JD.dockCfg.spring === undefined ? 6.0 : JD.dockCfg.spring))
+    readonly property real springK: Math.max(10, Math.min(600, JD.dockCfg.spring === undefined ? 180 : JD.dockCfg.spring))
     readonly property real springDamp: animStyle === "smooth" ? 1.0
-        : Math.max(0.05, Math.min(1, JD.dockCfg.damping === undefined ? 0.32 : JD.dockCfg.damping))
+        : Math.max(0.3, Math.min(1, JD.dockCfg.damping === undefined ? 0.75 : JD.dockCfg.damping))
 
-    property real focusX: -9999          // курсор; волна считается прямо по нему
+    property real pointerScene: -99999   // курсор в координатах окна: он-то на месте и стоит
+    property bool engaged: false         // курсор в полосе
+    property int tick: 0                 // растёт на каждый шаг физики — по нему пересобирается раскладка
+    property var sizes: []               // текущий множитель размера каждой ячейки
+    property var speeds: []              // и его скорость
 
-    property real power: 0
-    Behavior on power { enabled: JD.animOn; NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+    function resetPhysics() {
+        const n = lane.length, s = [], v = []
+        for (let i = 0; i < n; i++) { s.push(1); v.push(0) }
+        sizes = s; speeds = v; tick++
+    }
+    onLaneChanged: resetPhysics()
+    Component.onCompleted: resetPhysics()
+
+    // Ячейка под курсором и доля внутри неё — по НАРИСОВАННОЙ раскладке. Отсюда получаем точку в
+    // спокойных координатах: курсор стоит, полоса едет, и считать расстояния надо от этой точки.
+    function restUnderPointer() {
+        if (!engaged) return -99999
+        const local = pointerScene - dv.x - card.x
+        let at = 0
+        for (let i = 0; i < lane.length; i++) {
+            const w = (sizes[i] || 1) * lane[i].w + (i === 0 ? pad : 0)
+            if (local < at + w || i === lane.length - 1) {
+                const frac = Math.max(0, Math.min(1, (local - at) / Math.max(1, w)))
+                return lane[i].at + frac * lane[i].w
+            }
+            at += w
+        }
+        return -99999
+    }
 
     // Виджеты правилу не подчиняются: кошка и часы показывают цифру, а не ждут нажатия, и прыгать
     // под курсором им незачем — от этого цифру только труднее прочитать.
-    function magOf(kind, at, w) {
-        if (power <= 0.001 || kind === "cat" || kind === "clock") return 1
-        const d = (at + w / 2 - focusX) / (cell * spread)
-        return 1 + amp * power * Math.exp(-d * d)
+    function targetSize(i, u) {
+        const s = lane[i]
+        if (!magnify || u < -9000 || s.t === "cat" || s.t === "clock" || s.t === "sep") return 1
+        const d = (s.at + s.w / 2 - u) / (cell * spread)
+        return 1 + amp * Math.exp(-d * d)
     }
+
+    function stepPhysics(dt) {
+        // После пропущенного кадра нельзя швырять пружину на всю задолженность — она взорвётся.
+        dt = Math.max(0.001, Math.min(0.033, dt))
+        const u = restUnderPointer()
+        const n = lane.length
+        let moving = false
+        const s = sizes, v = speeds
+        const decay = Math.pow(1 - springDamp, dt * 60)
+        for (let i = 0; i < n; i++) {
+            const t = targetSize(i, u)
+            v[i] = (v[i] + (t - s[i]) * springK * dt) * decay
+            s[i] += v[i] * dt
+            if (Math.abs(t - s[i]) > 0.0015 || Math.abs(v[i]) > 0.0015) moving = true
+        }
+        tick++
+        return moving
+    }
+
+    FrameAnimation {
+        id: physics
+        running: false
+        onTriggered: if (!dv.stepPhysics(frameTime)) running = false
+    }
+    function wake() { if (JD.animOn) physics.running = true; else { instantly(); } }
+    // Анимации выключены совсем — значит просто ставим целевые размеры без физики.
+    function instantly() {
+        const u = restUnderPointer()
+        for (let i = 0; i < lane.length; i++) { sizes[i] = targetSize(i, u); speeds[i] = 0 }
+        tick++
+    }
+
+    // Нарисованная раскладка: позиции пересчитываются из ТЕХ ЖЕ размеров, которые сейчас рисуются.
+    // Поэтому занятое место и видимое совпадают всегда, и наложиться значки не могут.
+    readonly property var geom: {
+        tick                                   // зависимость от шага физики
+        const out = []
+        let at = pad
+        for (let i = 0; i < lane.length; i++) {
+            const k = sizes[i] === undefined ? 1 : sizes[i]
+            const w = lane[i].w * k
+            out.push({ x: at, w: w, k: k })
+            at += w
+        }
+        return out
+    }
+    readonly property real laneLength: geom.length ? geom[geom.length - 1].x + geom[geom.length - 1].w + pad : restLength
+
     readonly property var focused: {
-        if (power <= 0.3) return null
-        for (const s of lane)
-            if (s.t !== "sep" && focusX >= s.at && focusX < s.at + s.w) return s
+        tick
+        if (!engaged) return null
+        const local = pointerScene - dv.x - card.x
+        for (let i = 0; i < lane.length; i++)
+            if (lane[i].t !== "sep" && local >= geom[i].x && local < geom[i].x + geom[i].w) return lane[i]
         return null
     }
 
@@ -157,15 +246,16 @@ Item {
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
 
+        // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
+        // когда полоса под ним растёт и переезжает, — и получилась бы обратная связь.
         HoverHandler {
             id: laneHover
-            onPointChanged: dv.focusX = point.position.x
+            onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.wake() }
             onHoveredChanged: {
-                if (hovered) dv.focusX = point.position.x
-                else ctxClose.restart()
-                // Уходя, волну не уводим: она просто гаснет на месте. Отъезд за край выглядел бы
-                // как будто по доку кто-то провёл рукой.
-                dv.power = hovered && dv.magnify ? 1 : 0
+                dv.engaged = hovered
+                if (hovered) dv.pointerScene = point.scenePosition.x
+                else { ctxClose.restart(); tipWait.stop(); dv.tipShown = false }
+                dv.wake()
             }
         }
 
@@ -174,14 +264,16 @@ Item {
             delegate: Item {
                 id: slot
                 required property var modelData
+                required property int index
                 readonly property var e: modelData
                 readonly property var wins: e.wins || []
                 readonly property bool running: wins.length > 0
                 readonly property bool active: wins.some(w => w.activated && !w.minimized)
-                readonly property real k: dv.magOf(e.t, e.at, e.w)
-                x: e.at
+                readonly property var g: dv.geom[index] || ({ x: e.at, w: e.w, k: 1 })
+                readonly property real k: g.k
+                x: g.x
                 y: 0
-                width: e.w
+                width: g.w
                 height: card.height
 
                 // Разделитель: волосяная черта, а не пустота. Без неё закреплённое и просто
@@ -200,14 +292,12 @@ Item {
                     width: dv.icon
                     height: dv.icon
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: dv.atTop ? dv.pad + dv.dotRoom : dv.pad
+                    // Растёт от края, к которому прижат док: низ значка остаётся на своей линии, и
+                    // ряд не начинает плавать по вертикали.
+                    y: (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + slot.bounce
+                    // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
+                    // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
                     scale: slot.k
-                    // Вот она, пружина: размер догоняет цель с отскоком, а цель считается прямо по
-                    // курсору. Затухание 1 («плавно») то же самое делает без отскока.
-                    Behavior on scale {
-                        enabled: JD.animOn && dv.animStyle !== "instant"
-                        SpringAnimation { spring: dv.springK; damping: dv.springDamp; mass: 0.5; epsilon: 0.003 }
-                    }
                     transformOrigin: dv.atTop ? Item.Top : Item.Bottom
                     opacity: slotTap.pressed ? 0.7 : 1
 
@@ -291,14 +381,32 @@ Item {
 
                 // Открыто — точка. Оно же и подсказка, что значок не запустит второе окно.
                 Rectangle {
-                    visible: slot.running
                     width: slot.wins.length > 1 ? 10 : 4
                     height: 4
                     radius: 2
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: dv.atTop ? dv.pad * 0.5 : card.height - dv.pad * 0.5 - height
                     color: slot.active ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.55)
+                    // Появляется и исчезает, а не мигает: окно закрыли — точка уходит, уменьшаясь.
+                    opacity: slot.running ? 1 : 0
+                    scale: slot.running ? 1 : 0.7
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 150 } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
+                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
+                }
+
+                // Отскок при запуске: программа открывается не мгновенно, и без него неясно,
+                // услышали нажатие или нет. Три затухающих скачка — не больше: док не мультфильм.
+                property real bounce: 0
+                readonly property bool launching: dv.bouncing !== "" && dv.bouncing === (e.key || e.t)
+                onLaunchingChanged: if (launching) bounceAnim.restart()
+                SequentialAnimation {
+                    id: bounceAnim
+                    loops: 3
+                    NumberAnimation { target: slot; property: "bounce"; to: dv.atTop ? 13 : -13
+                                      duration: 190; easing.type: Easing.OutQuad }
+                    NumberAnimation { target: slot; property: "bounce"; to: 0
+                                      duration: 240; easing.type: Easing.OutQuad }
                 }
 
                 HoverHandler { enabled: slot.e.t !== "sep"; cursorShape: Qt.PointingHandCursor }
@@ -312,32 +420,54 @@ Item {
                     enabled: slot.e.t !== "sep"
                     acceptedButtons: Qt.RightButton
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: dv.openCtx(slot.e, slot.wins, slot.e.at + slot.e.w / 2)
+                    onTapped: dv.openCtx(slot.e, slot.wins, slot.g.x + slot.g.w / 2)
                 }
             }
         }
     }
 
     // ───────────── подпись под курсором ─────────────
+    //
+    // Не сразу: подпись, выскакивающая в тот же миг, превращает проход вдоль дока в мельтешение
+    // плашек. Полсекунды — это ровно «я тут остановился и смотрю».
+    property bool tipShown: false
+    property string tipFor: ""
+    Timer { id: tipWait; interval: 480; onTriggered: dv.tipShown = true }
+    onFocusedChanged: {
+        const key = focused ? (focused.key || focused.t) : ""
+        if (key === tipFor) return
+        tipFor = key
+        tipShown = false
+        if (key && labels) tipWait.restart(); else tipWait.stop()
+    }
+
     Rectangle {
         id: tip
-        visible: dv.labels && !!dv.focused && dv.power > 0.5 && !ctx.visible
+        readonly property bool want: dv.labels && dv.tipShown && !!dv.focused && !ctx.visible
         readonly property string text: !dv.focused ? ""
             : dv.focused.t === "launcher" ? "Программы"
             : dv.focused.t === "trash" ? "Корзина"
             : dv.focused.t === "cat" ? "Процессор " + Math.round(JD.cpu) + "%"
             : dv.focused.t === "clock" ? Qt.formatDate(new Date(), "d MMMM, dddd")
             : (dv.focused.name || "")
+        readonly property int at: dv.focused ? dv.focused.i : -1
         width: tipText.implicitWidth + 20
         height: 26
         radius: 13
-        color: Qt.rgba(0, 0, 0, 0.82)
+        color: Qt.rgba(0, 0, 0, 0.86)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.12)
-        x: Math.max(0, Math.min(dv.width - width, (dv.focused ? dv.focused.at + dv.focused.w / 2 : 0) - width / 2))
-        y: dv.atTop ? card.height + 8 : dv.height - card.height - height - 8
-        opacity: visible ? 1 : 0
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
+        x: {
+            const g = at >= 0 && at < dv.geom.length ? dv.geom[at] : null
+            return Math.max(0, Math.min(dv.width - width, (g ? g.x + g.w / 2 : 0) - width / 2))
+        }
+        y: (dv.atTop ? card.height + 10 : dv.height - card.height - height - 10) + (want ? 0 : (dv.atTop ? -5 : 5))
+        opacity: want ? 1 : 0
+        scale: want ? 1 : 0.94
+        visible: opacity > 0.01
+        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 130 } }
+        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+        Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
         Label1 { id: tipText; anchors.centerIn: parent; text: tip.text }
     }
 
@@ -445,13 +575,20 @@ Item {
         if (JD.menuOpen) JD.closeMenu()
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
         if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
-        if (!wins || wins.length === 0) { JD.dockRun(e); return }
+        if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
         const front = wins.find(w => w.active && !w.minimized)
         if (front) { for (const w of wins) JD.windowDo("minimize", w.id); return }
         const up = wins.find(w => !w.minimized) || wins[0]
         JD.windowDo("focus", up.id)
     }
 
+    // Какой значок сейчас подпрыгивает. Гасим сами через полторы секунды: ждать появления окна
+    // нельзя — программа может и не открыться, а значок так и останется скакать.
+    property string bouncing: ""
+    function startBounce(e) { bouncing = e.key || e.t; bounceStop.restart() }
+    Timer { id: bounceStop; interval: 1500; onTriggered: dv.bouncing = "" }
+
     // Где на экране значок меню — считает shell.qml: только он видит и док, и его окно сразу.
-    readonly property real launcherCenter: lane.length ? lane[0].at + lane[0].w / 2 : 0
+    // По нарисованной раскладке, а не по спокойной: полоса под курсором шире, чем в покое.
+    readonly property real launcherCenter: geom.length ? geom[0].x + geom[0].w / 2 : 0
 }
