@@ -248,7 +248,12 @@ def catalog() -> dict:
     for game in desktop.list_games():
         rows.append({"kind": "game", "id": str(game["id"]), "name": game["name"],
                      "icon": "applications-games", "sub": game.get("source", ""), "cat": "games"})
-    rows.sort(key=lambda r: _flat(r["name"]))
+    # Steam и flatpak раскладывают одну и ту же вещь дважды: и как программу, и как игру. В меню это
+    # две одинаковые плитки подряд — не богатство выбора, а ощущение, что список сломан. Оставляем
+    # первую, и порядок ключа делает выбор предсказуемым: программа важнее записи в игровом лаунчере.
+    rows.sort(key=lambda r: (_flat(r["name"]), r["kind"] != "app", r["id"]))
+    seen: set[str] = set()
+    rows = [r for r in rows if not (_flat(r["name"]) in seen or seen.add(_flat(r["name"])))]
 
     fav, order = favourites(), {k: n for n, k in enumerate(recents())}
     by_key = {f"{r['kind']}:{r['id']}": r for r in rows}

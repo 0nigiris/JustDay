@@ -185,7 +185,7 @@ Item {
                 // Внутри RowLayout вложенная раскладка по умолчанию тянется во всю ширину и съедает
                 // preferredWidth вместе с сеткой. Здесь ширина задана нарочно — значит, не тянуть.
                 Layout.fillWidth: false
-                Layout.preferredWidth: 168
+                Layout.preferredWidth: 190
                 Layout.fillHeight: true
                 spacing: 2
                 opacity: JD.menuSearching ? 0.35 : 1
