@@ -58,10 +58,12 @@ Item {
         const who = p["application.name"] || ""
         return what && what !== who ? what : (p["application.process.binary"] || "")
     }
+    // Значок берём только тот, который программа назвала сама. Имя двоичного файла в роли имени
+    // значка выглядит правдоподобно и врёт: в теме находится что-нибудь похожее по названию, и в
+    // микшере появляется розовый квадрат неизвестно от чего. Лучше честный громкоговоритель.
     function iconOf(node) {
-        if (!node) return "volume-2"
-        const p = node.properties || ({})
-        return p["application.icon_name"] || p["application.process.binary"] || "volume-2"
+        const p = (node && node.properties) || ({})
+        return p["application.icon_name"] || ""
     }
 
     // ───────────── одна строка микшера ─────────────
@@ -73,7 +75,8 @@ Item {
         property var node: null
         property string title: ""
         property string note: ""
-        property string glyph: "volume-2"
+        property string glyph: ""           // значок программы из темы, если программа его назвала
+        property string own: "volume-2"     // наш штриховой — на случай, если не назвала
         property bool strong: false        // выход и микрофон — крупнее прочих
         property color tint: JD.accentBlue
 
@@ -107,11 +110,11 @@ Item {
                 Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 130 } }
                 Icon {
                     anchors.centerIn: parent
-                    name: lane.silent ? "volume-x" : lane.glyph
-                    fallback: lane.silent ? "volume-x" : "volume-2"
+                    name: lane.silent ? "volume-x" : (lane.glyph || lane.own)
+                    fallback: lane.own
                     implicitSize: lane.strong ? 19 : 16
                     tint: lane.silent ? JD.accentRed : JD.text1
-                    theme: !lane.silent && lane.glyph !== "volume-2" && lane.glyph !== "mic"
+                    theme: !lane.silent && !!lane.glyph
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler {
@@ -217,7 +220,7 @@ Item {
         Lane {
             node: mx.sink
             strong: true
-            glyph: "volume-2"
+            own: "volume-2"
             tint: JD.accentBlue
             title: mx.sink ? (mx.sink.description || mx.sink.name || "Выход") : "Выхода нет"
             note: "Общая громкость — всё сразу"
@@ -225,7 +228,7 @@ Item {
         Lane {
             node: mx.source
             strong: true
-            glyph: "mic"
+            own: "mic"
             tint: JD.accentCyan
             title: mx.source ? (mx.source.description || mx.source.name || "Микрофон") : "Микрофона нет"
             note: "Что слышат остальные"
@@ -292,7 +295,7 @@ Item {
                             node: modelData
                             title: mx.nameOf(modelData)
                             note: "слушает микрофон"
-                            glyph: "mic"
+                            own: "mic"
                             tint: JD.accentCyan
                         }
                     }
