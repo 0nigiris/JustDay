@@ -50,6 +50,19 @@ RATE = 24000
 
 lock = threading.Lock()
 model = None
+last_use = time.time()      # когда голосом пользовались в последний раз
+
+
+def _idle_minutes() -> float:
+    """Через сколько минут молчания отпустить видеопамять. 0 — держать всегда."""
+    try:
+        import tomllib
+
+        cfg = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "justday" / "config.toml"
+        got = tomllib.loads(cfg.read_text(encoding="utf-8")).get("tts", {}).get("idle_unload_minutes", 15)
+        return max(0.0, float(got))
+    except (OSError, ValueError, TypeError):
+        return 15.0
 
 
 def log(*a) -> None:
@@ -87,6 +100,46 @@ def load_base():
     return model
 
 
+def unload() -> bool:
+    """Отпустить модель и видеопамять. Возвращает True, если было что отпускать."""
+    global model
+    if model is None:
+        return False
+    model = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return True
+
+
+def watchdog() -> None:
+    """Голос молчал долго — видеопамять пусть достанется игре или монтажу.
+
+    Три с лишним гигабайта видеопамяти за право ответить без задержки — сделка, которая имеет смысл
+    в разговоре и не имеет никакого, когда за машиной не разговаривают. Возврат стоит секунд
+    десять, поэтому его прячут: демон просит `warm`, как только слышит речь или получает просьбу, и
+    модель поднимается, пока ассистент ещё думает над ответом.
+    """
+    while True:
+        time.sleep(20)
+        minutes = _idle_minutes()
+        if minutes <= 0 or model is None or time.time() - last_use < minutes * 60:
+            continue
+        # Не вырываем модель из-под говорящего: замок держит say().
+        if lock.acquire(blocking=False):
+            try:
+                if time.time() - last_use >= minutes * 60 and unload():
+                    log(f"молчим {minutes:g} мин — видеопамять отпущена")
+            finally:
+                lock.release()
+
+
+def warm() -> None:
+    """Поднять модель заранее, ничего не говоря."""
+    with lock:
+        load_base()
+
+
 def to_pcm16(chunk: np.ndarray) -> bytes:
     return (np.clip(chunk, -1.0, 1.0) * 32767).astype("<i2").tobytes()
 
@@ -96,6 +149,8 @@ def say(conn: socket.socket, text: str, voice: str, instruct: str = "") -> None:
 
     Модель умеет менять темп сама, и это звучит чисто. Растягивание уже готовой
     речи — то, что давало металлический призвук, — здесь больше не нужно."""
+    global last_use
+    last_use = time.time()
     voices = voice_dirs()
     d = voices.get(voice) or next(iter(voices.values()))
     ref_text = (d / "ref.txt").read_text(encoding="utf-8").strip()
@@ -110,6 +165,7 @@ def say(conn: socket.socket, text: str, voice: str, instruct: str = "") -> None:
                                   np.arange(len(chunk)), chunk)
             data = to_pcm16(chunk)
             conn.sendall(struct.pack("<I", len(data)) + data)
+    last_use = time.time()
     conn.sendall(struct.pack("<I", 0))
 
 
@@ -170,8 +226,16 @@ def handle(conn: socket.socket) -> None:
                 if ok:
                     shutil.rmtree(d)
                 resp = {"ok": ok}
-            elif cmd == "ping":
+            elif cmd == "warm":   # поднять модель заранее, пока ассистент думает над ответом
+                if model is None:
+                    threading.Thread(target=warm, daemon=True).start()
                 resp = {"ok": True, "loaded": model is not None}
+            elif cmd == "sleep":  # отпустить видеопамять сейчас (началась игра, попросили руками)
+                with lock:
+                    resp = {"ok": True, "freed": unload()}
+            elif cmd == "ping":
+                resp = {"ok": True, "loaded": model is not None, "idle": round(time.time() - last_use, 1),
+                        "idle_unload_minutes": _idle_minutes()}
             else:
                 resp = {"ok": False, "error": f"unknown command {cmd}"}
         except Exception as e:
@@ -192,6 +256,7 @@ def main() -> None:
     os.chmod(SOCKET, 0o600)
     srv.listen(8)
     threading.Thread(target=load_base, daemon=True).start()  # warm up in the background
+    threading.Thread(target=watchdog, daemon=True).start()   # и отпускает, когда долго молчим
     log(f"listening on {SOCKET}")
     while True:
         conn, _ = srv.accept()

@@ -172,6 +172,25 @@ class TTS:
             return 0.92
         return 1.0
 
+    def nudge(self, cmd: str) -> bool:
+        """Одна строка голосовому сервису без ожидания ответа: `warm` или `sleep`.
+
+        Нужна, чтобы прятать возврат модели. Сервис отпускает видеопамять, когда долго молчат, и
+        поднимает её обратно секунд десять — заметно. Но между «человек начал говорить» и «ассистент
+        ответил» проходит больше, и если попросить заранее, ждать не приходится вовсе.
+        """
+        import json
+        import socket as socket_mod
+
+        try:
+            with socket_mod.socket(socket_mod.AF_UNIX) as sock:
+                sock.settimeout(1.5)
+                sock.connect(str(self.SOCKET))
+                sock.sendall((json.dumps({"cmd": cmd}) + "\n").encode())
+            return True
+        except OSError:
+            return False
+
     async def stream(self, sentence: str):
         """Neural voice (justday-voice service): yields int16 PCM bytes at NEURAL_RATE as they are generated.
         Raises OSError when the service is unavailable (the caller falls back to Silero)."""

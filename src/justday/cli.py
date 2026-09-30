@@ -547,6 +547,8 @@ def main(argv: list[str] | None = None) -> None:
     # Имя не «panel»: так уже зовётся запасная полоска на Tk для машин без острова.
     sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps | emoji | clip | load")
     sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "load"])
+    sp = sub.add_parser("models", help="что держит память: слух, голос; free — отпустить сейчас")
+    sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
     sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")
     sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "open", "close"])
     sp = sub.add_parser("launch", help="поиск программ: без запроса открывает лаунчер в островке, "
@@ -623,6 +625,20 @@ def main(argv: list[str] | None = None) -> None:
         got = control("panel", which=a.which, timeout=5)
         if not got.get("ok"):
             sys.exit(got.get("error") or "островок не отвечает")
+    elif a.cmd == "models":
+        got = control("models", free=a.action == "free", timeout=20)
+        if not got.get("ok"):
+            sys.exit(got.get("error") or "демон не отвечает")
+        stt, tts, gpu = got["stt"], got.get("tts") or {}, got.get("gpu") or {}
+        mark = lambda on: "держит" if on else "отпущено"          # noqa: E731
+        print(f"  слух   {mark(stt['loaded']):8} · молчит {stt['idle_minutes']:g} мин "
+              f"· отпускать после {stt['unload_after']} мин")
+        print(f"  голос  {mark(tts.get('loaded')):8} · молчит {tts.get('idle', 0)} мин "
+              f"· отпускать после {tts.get('idle_unload_minutes', '?')} мин"
+              if tts.get("ok") else f"  голос  недоступен ({tts.get('error', '')})")
+        mem = got.get("memory") or {}
+        print(f"  память машины {mem.get('used', 0)} / {mem.get('total', 0)} МБ"
+              + (f" · видеопамять {gpu['mem_used']} / {gpu['mem_total']} МБ" if gpu.get("mem_total") else ""))
     elif a.cmd == "menu":
         got = control("menu", open=a.action != "close", toggle=a.action == "toggle", timeout=5)
         if not got.get("ok"):

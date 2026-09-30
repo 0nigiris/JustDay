@@ -97,6 +97,9 @@ DEFAULTS: dict = {
     "stt": {
         "model": "large-v3-turbo",
         "device": "cuda",
+        # Столько же для распознавания речи (~1,1 ГБ видеопамяти). Возврат около трёх секунд и
+        # прячется за нажатием «говорить»: модель поднимается, пока фразу ещё договаривают.
+        "idle_unload_minutes": 15,
         "compute_type": "int8_float16",
         "language": "ru",
         "initial_prompt": "Джарвис, JustDay, Claude Code, YouTube, Discord, Steam, Proton, GitHub, KDE, Helium, VS Code.",
@@ -119,6 +122,9 @@ DEFAULTS: dict = {
         "eleven_model": "eleven_flash_v2_5",  # flash = fastest; eleven_multilingual_v2 = richer, slower
         "previous_engine": "",  # remembered when voice replies are switched off
         "muted": False,  # answers are shown on the island but not spoken («отключи голос»)
+        # Сколько минут молчания держать нейроголос в видеопамяти (~2,5 ГБ у 0.6B, ~4,5 ГБ у 1.7B).
+        # 0 — держать всегда. Возврат стоит около десяти секунд, и он прячется за раздумьем ассистента.
+        "idle_unload_minutes": 15,
         "mute_in_games": True,  # and it falls silent by itself while a game is running: the GPU is the game's
     },
     # names = also wake on the assistant's names («Джарвис», «JustDay»), read by Whisper on the start of each phrase

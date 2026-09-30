@@ -39,14 +39,44 @@ class STT:
         self.cfg = cfg
         self._model = None
         self._lock = threading.Lock()  # the startup preload and the first phrase must not load it twice
+        self.last_use = time.monotonic()
 
     def load(self):
+        self.last_use = time.monotonic()
         if self._model is not None:
             return self._model
         with self._lock:
             if self._model is None:
                 self._model = self._load()
         return self._model
+
+    def unload(self) -> bool:
+        """Отпустить модель и видеопамять под ней. True — было что отпускать.
+
+        Слушать всё время и держать под это гигабайт видеопамяти — разные вещи. Пока в комнате
+        молчат, распознавать нечего, а память нужна игре или монтажу. Возврат стоит около трёх
+        секунд, и демон прячет их: модель поднимается, как только нажали «говорить», — то есть
+        пока человек ещё договаривает фразу.
+        """
+        import gc
+
+        with self._lock:
+            if self._model is None:
+                return False
+            self._model = None
+        gc.collect()
+        return True
+
+    def idle_unload(self, minutes: float) -> bool:
+        """Отпустить, если молчали дольше положенного. 0 — держать всегда."""
+        if minutes <= 0 or self._model is None or time.monotonic() - self.last_use < minutes * 60:
+            return False
+        return self.unload()
+
+    def warm(self) -> None:
+        """Поднять модель заранее, в стороне от разговора."""
+        if self._model is None:
+            threading.Thread(target=self.load, daemon=True).start()
 
     def _load(self):
         from faster_whisper import WhisperModel

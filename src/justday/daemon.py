@@ -87,6 +87,7 @@ class Daemon:
         self.recorder = audio.UtteranceRecorder(self.mic, a["silence_seconds"], a["no_speech_timeout_seconds"],
                                                 a["max_utterance_seconds"])
         self.stt = STT(self.cfg["stt"])
+        self._gave_up_vram = False   # видеопамять уже отдана игре
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
         self.side: Brain | None = None             # a second session, for what must not wait for the first one
@@ -158,8 +159,36 @@ class Daemon:
                 self._quiet_until = time.monotonic() + 0.8
             self._state = value
             self.publish(state=value)
+            self._warm_models(value)
             if self.music.alive and self.cfg["media"]["duck"]:  # music steps back while we talk
                 spawn(self.music.duck(value in ("listening", "speaking", "approval")))
+
+    def _voice_ping(self) -> dict:
+        """Что говорит голосовой сервис о себе: поднята ли модель и давно ли молчит."""
+        import json as jsonlib
+        import socket as socket_mod
+
+        try:
+            with socket_mod.socket(socket_mod.AF_UNIX) as sock:
+                sock.settimeout(3)
+                sock.connect(str(self.tts.SOCKET))
+                sock.sendall(b'{"cmd": "ping"}\n')
+                return jsonlib.loads(sock.makefile().readline() or "{}")
+        except (OSError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+
+    def _warm_models(self, value: str) -> None:
+        """Поднять то, что понадобится через пару секунд, пока есть эти пару секунд.
+
+        Модели отпускают память, когда ими долго не пользуются, и возвращаются небыстро: слух около
+        трёх секунд, голос около десяти. Но разговор устроен так, что предупреждение всегда есть.
+        Начали слушать — значит, сейчас придётся распознавать. Начали думать — значит, скоро
+        отвечать вслух. Обе просьбы уходят в сторону и ничего не ждут.
+        """
+        if value == "listening":
+            self.stt.warm()
+        if value in ("listening", "thinking") and not self.silent() and self.cfg["tts"]["engine"] == "qwen":
+            spawn(asyncio.get_running_loop().run_in_executor(None, self.tts.nudge, "warm"))
 
     def publish(self, **msg) -> None:
         """Push a status update to every `subscribe` client (the on-screen indicator). Loop thread only."""
@@ -1219,6 +1248,19 @@ class Daemon:
                 except Exception as e:
                     log.info("weather unavailable: %s", type(e).__name__)
                 self.publish(weather=self.weather)
+            # Игра началась — видеопамять её. Голос и так молчит в играх (tts.mute_in_games), но
+            # молчащая модель занимала столько же, сколько говорящая.
+            in_game = bool(self.cfg["tts"].get("mute_in_games", True)) and bool(desktop.running_game())
+            if in_game and not self._gave_up_vram:
+                self._gave_up_vram = True
+                self.stt.unload()
+                await asyncio.get_running_loop().run_in_executor(None, self.tts.nudge, "sleep")
+                log.info("игра запущена — видеопамять отпущена")
+            elif not in_game:
+                self._gave_up_vram = False
+                mins = float(self.cfg["stt"].get("idle_unload_minutes", 15) or 0)
+                if await asyncio.get_running_loop().run_in_executor(None, self.stt.idle_unload, mins):
+                    log.info("слух молчал %g мин — видеопамять отпущена", mins)
             if time.monotonic() - last_ping > 5:  # heartbeat: lets the island notice a dead connection
                 last_ping = time.monotonic()
                 self.stt.vocabulary = island.vocabulary(self.cfg)  # contacts learned meanwhile
@@ -2302,6 +2344,20 @@ class Daemon:
             elif cmd == "apps_run":
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", ""))))
+            elif cmd == "models":  # что сейчас держит память и сколько
+                loop = asyncio.get_running_loop()
+                free = bool(req.get("free"))
+                if free:
+                    freed_stt = await loop.run_in_executor(None, self.stt.unload)
+                    await loop.run_in_executor(None, self.tts.nudge, "sleep")
+                else:
+                    freed_stt = False
+                voice = await loop.run_in_executor(None, self._voice_ping)
+                resp = {"ok": True, "freed": free, "stt": {
+                    "loaded": self.stt._model is not None, "freed": freed_stt,
+                    "idle_minutes": round((time.monotonic() - self.stt.last_use) / 60, 1),
+                    "unload_after": self.cfg["stt"].get("idle_unload_minutes", 15),
+                }, "tts": voice, "memory": sysload.memory(), "gpu": sysload.gpu()}
             elif cmd == "apps_catalog":  # меню приложений: разделы, значки, закреплённое — одним куском
                 got = await asyncio.get_running_loop().run_in_executor(None, launcher.catalog)
                 resp = {"ok": True, "catalog": got | {"user": session.user(), "session": session.actions()}}
