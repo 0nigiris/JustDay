@@ -193,12 +193,29 @@ DEFAULTS: dict = {
         # Где висит сам остров и где открывается меню приложений:
         # top-left | top-center | top-right | bottom-left | bottom-center | bottom-right
         "position": "top-center",
-        "menu_position": "bottom-left",
+        # dock = меню вырастает из значка в доке (и садится к нему), иначе — угол экрана
+        "menu_position": "dock",
         # How much room to leave above the island: a panel along the top edge stays reachable
         "top_margin": 8,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here
         "video_volume": 1.0,  # how loud that frame is, 0–1 (the wheel over it)
     },
+    # Док: полоса программ у края экрана. Закреплённое и открытое, увеличение под курсором,
+    # значок меню в начале. position: bottom | top; reserve — отнимать место у развёрнутых окон.
+    "dock": {
+        "enabled": True,
+        "position": "bottom",
+        "icon_size": 44,
+        "magnify": True,
+        "autohide": False,
+        "reserve": True,
+        "show_running": True,   # открытые окна незакреплённых программ
+        "show_trash": True,
+        "labels": True,         # подпись под курсором
+    },
+    # Трей: чужие значки (те, что кладут в системный лоток) отдельной полосой у бокового края.
+    # position: left | right; align: center | start | end.
+    "tray": {"enabled": True, "position": "left", "align": "center", "icon_size": 22, "reserve": False},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
     # Local model for private data (mail). Ollama listens on localhost only.

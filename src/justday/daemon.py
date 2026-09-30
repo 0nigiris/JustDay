@@ -28,6 +28,7 @@ from . import (
     clipboard,
     config,
     desktop,
+    dock,
     events,
     fastpath,
     glyphs,
@@ -2376,6 +2377,17 @@ class Daemon:
                 resp = {"ok": True, "catalog": got | {"user": session.user(), "session": session.actions()}}
             elif cmd == "apps_pin":
                 resp = launcher.pin(str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
+            elif cmd == "dock":  # что закреплено в доке и чем ловить открытые окна
+                got = await asyncio.get_running_loop().run_in_executor(None, dock.catalog)
+                resp = {"ok": True, "dock": got}
+            elif cmd == "dock_pin":
+                got = await asyncio.get_running_loop().run_in_executor(
+                    None, dock.pin, str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
+                resp = {"ok": True, "dock": got}
+            elif cmd == "dock_arrange":  # новый порядок после перетаскивания
+                keys = [str(k) for k in (req.get("keys") or [])]
+                got = await asyncio.get_running_loop().run_in_executor(None, dock.arrange, keys)
+                resp = {"ok": True, "dock": got}
             elif cmd == "session":  # что умеет кнопка питания
                 resp = {"ok": True, "session": session.actions()}
             elif cmd == "session_do":  # выход, перезагрузка, выключение — опасное только с подтверждением

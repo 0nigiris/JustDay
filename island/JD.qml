@@ -278,6 +278,7 @@ Singleton {
         menuSerial++
         closeAll()
         send({ cmd: "apps_catalog" })
+        if (dockOn) dockRefresh()      // заодно: программы могли поставить или удалить
     }
     function closeMenu() { menuOpen = false; menuQuery = ""; menuFound = []; menuConfirm = "" }
     function toggleMenu() { menuOpen ? closeMenu() : openMenu() }
@@ -306,6 +307,48 @@ Singleton {
     }
     Timer { id: confirmTimeout; interval: 4000; onTriggered: jd.menuConfirm = "" }
     Timer { id: pinRefresh; interval: 60; onTriggered: jd.send({ cmd: "apps_catalog" }) }
+
+    // ───────────── док и трей ─────────────
+    //
+    // Док — не второе меню. Меню отвечает на «найти что-нибудь», док — на «то, чем пользуюсь
+    // всегда», и его смысл в том, что до него не надо ничего нажимать. Поэтому в нём нет ни поиска,
+    // ни разделов: закреплённое, открытое и один значок, из которого достаётся меню.
+    //
+    // Окна док берёт у вейланда напрямую (ToplevelManager), а имена и значки — у демона: у
+    // открытого окна есть только appId вроде «org.kde.dolphin», и превратить его в «Finder» с
+    // правильным значком может лишь тот, кто читал .desktop-файлы.
+    readonly property var dockCfg: settings.dock || ({})
+    readonly property var trayCfg: settings.tray || ({})
+    readonly property bool dockOn: dockCfg.enabled !== false
+    readonly property bool trayOn: trayCfg.enabled !== false
+    readonly property string dockPlace: dockCfg.position || "bottom"
+    readonly property string trayPlace: trayCfg.position || "left"
+    readonly property real dockIconSize: Math.max(24, Math.min(96, dockCfg.icon_size || 44))
+    readonly property real trayIconSize: Math.max(14, Math.min(48, trayCfg.icon_size || 22))
+    property var dockData: ({})           // {items, pinned, match, skip} — от демона
+    readonly property var dockItems: dockData.items || []
+    readonly property var dockMatch: dockData.match || ({})
+    readonly property var dockSkip: dockData.skip || []
+    // Где на экране значок меню. Меню вырастает оттуда и туда же садится: иначе оно появляется
+    // ниоткуда, и непонятно, что его открыл именно этот значок.
+    property var dockAnchor: null
+
+    // appId окна → программа, которой оно принадлежит. Промах — не беда: значок всё равно будет,
+    // только подписанный тем, как окно назвало себя само.
+    function dockLookup(appId) {
+        const a = String(appId || "").toLowerCase()
+        if (!a) return null
+        return dockMatch[a] || (a.indexOf(".") > 0 ? dockMatch[a.split(".").pop()] : undefined) || null
+    }
+    function dockRefresh() { send({ cmd: "dock" }) }
+    function dockRun(item) { if (item) send({ cmd: "apps_run", kind: item.kind || "app", id: item.id }) }
+    function dockPin(kind, ident, on) {
+        if (!ident) return
+        send({ cmd: "dock_pin", kind: kind || "app", id: ident, on: on === undefined ? null : on })
+    }
+    function dockArrange(keys) { send({ cmd: "dock_arrange", keys: keys }) }
+    function dockIsPinned(key) { return (dockData.pinned || []).indexOf(key) >= 0 }
+    onLinkedChanged: if (linked) dockRefresh()
 
     property bool settingsOpen: false
     property string settingsPage: "general"
@@ -535,6 +578,7 @@ Singleton {
             if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
+        if (m.dock !== undefined) dockData = m.dock
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
         if (m.load !== undefined) {

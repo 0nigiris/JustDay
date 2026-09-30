@@ -66,6 +66,7 @@ def settings_snapshot(cfg: dict) -> dict:
             "earcons": cfg["audio"]["earcons"], "notifications": cfg["ui"]["notifications"],
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],
             "accessibility": cfg["desktop"]["accessibility"], "island": cfg["island"],
+            "dock": cfg["dock"], "tray": cfg["tray"],
             "microphone": cfg["audio"].get("microphone", True),
             "voice": cfg["tts"]["engine"] != "none" and not cfg["tts"].get("muted"),
             # Отдельно от «voice»: молчит по просьбе («молчи») — это не то же, что «голоса нет

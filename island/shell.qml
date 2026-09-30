@@ -2702,6 +2702,129 @@ ShellRoot {
         }
     }
 
+    // ───────────── док ─────────────
+    //
+    // Своё окно у нижнего края. Маска — только карточка: увеличенный значок и подпись выходят за её
+    // пределы, но щелчки там проходят насквозь, иначе полоса пустого воздуха над доком отбирала бы
+    // нажатия у окон под ней.
+    //
+    // Зону отнимаем честно (exclusiveZone), когда об этом просят: док, под который уезжают окна, —
+    // это док, из-под которого их приходится вытаскивать. Прятать умеет тоже, и тогда зону не
+    // отнимает, а оставляет полоску в два пикселя, чтобы его можно было позвать обратно.
+    Loader {
+        active: JD.dockOn
+        sourceComponent: PanelWindow {
+            id: dockWin
+            screen: win.screen
+            readonly property bool atTop: JD.dockPlace === "top"
+            readonly property bool autohide: JD.dockCfg.autohide === true
+            property bool shown: !autohide
+            anchors { left: true; right: true; top: atTop; bottom: !atTop }
+            exclusionMode: ExclusionMode.Normal
+            // Прячущийся док места не отнимает: он затем и прячется.
+            readonly property real edgeMargin: 8
+            exclusiveZone: autohide || JD.dockCfg.reserve === false ? 0 : Math.round(dock.cardHeight + edgeMargin)
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.namespace: "justday-dock"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            color: "transparent"
+            implicitWidth: JD.screenWidth
+            // Место под увеличенный значок, подпись и меню правой кнопки — всё это выходит за карточку.
+            implicitHeight: Math.min(JD.screenHeight, dock.implicitHeight + 220)
+
+            // Щелчки проходят везде, кроме самой карточки и открытого меню правой кнопки.
+            mask: Region {
+                item: dockWin.shown ? dock : edge
+                Region { item: dock.ctxEntry ? dockCtxZone : null }
+            }
+            // Полоска у самого края: ею прячущийся док зовут обратно.
+            Item {
+                id: edge
+                width: parent.width
+                height: 2
+                y: dockWin.atTop ? 0 : parent.height - height
+            }
+            Item {
+                id: dockCtxZone
+                width: dock.width
+                height: dock.height + 220
+                x: dock.x
+                y: dockWin.atTop ? dock.y : dock.y - 220
+            }
+            HoverHandler {
+                onHoveredChanged: if (dockWin.autohide) { if (hovered) { hideDock.stop(); dockWin.shown = true } else hideDock.restart() }
+            }
+            Timer { id: hideDock; interval: 600; onTriggered: if (dockWin.autohide) dockWin.shown = false }
+
+            // Откуда вырастает меню приложений. Считается здесь, потому что только это окно знает
+            // и где стоит карточка, и где у окна край экрана: у самого дока в его координатах нет
+            // ни того, ни другого.
+            Binding {
+                target: JD
+                property: "dockAnchor"
+                value: ({ x: dock.x + dock.launcherCenter,
+                          gap: dockWin.atTop ? dock.y + dock.cardHeight
+                                             : dockWin.height - dock.y - dock.height + dock.cardHeight,
+                          top: dockWin.atTop, shown: dockWin.shown })
+            }
+
+            DockView {
+                id: dock
+                x: (parent.width - width) / 2
+                // Спрятанный док уезжает за край целиком, оставляя полоску: это и есть «его нет».
+                y: {
+                    const rest = dockWin.atTop ? dockWin.edgeMargin : parent.height - height - dockWin.edgeMargin
+                    const away = dockWin.atTop ? -cardHeight - 20 : cardHeight + 20
+                    return rest + (dockWin.shown ? 0 : away)
+                }
+                opacity: dockWin.shown ? 1 : 0
+                Behavior on y { enabled: JD.animOn
+                                NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 180 } }
+            }
+        }
+    }
+
+    // ───────────── трей ─────────────
+    //
+    // Узкая полоса у бокового края. Пуст лоток — окна нет вовсе: пустая полоса у края экрана
+    // выглядит поломкой оболочки, а не отсутствием значков.
+    Loader {
+        active: JD.trayOn
+        sourceComponent: PanelWindow {
+            id: trayWin
+            screen: win.screen
+            readonly property bool right: JD.trayPlace === "right"
+            readonly property string align: JD.trayCfg.align || "center"
+            visible: !tray.empty
+            anchors { top: true; bottom: true; left: !right; right: right }
+            exclusionMode: ExclusionMode.Normal
+            exclusiveZone: JD.trayCfg.reserve === true && !tray.empty ? Math.round(tray.implicitWidth + 10) : 0
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.namespace: "justday-tray"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            color: "transparent"
+            // Шире полосы: подпись всплывает рядом с ней и обязана поместиться в окно.
+            implicitWidth: Math.round(tray.implicitWidth + 260)
+            implicitHeight: JD.screenHeight
+
+            mask: Region { item: tray }
+
+            TrayView {
+                id: tray
+                host: trayWin
+                x: trayWin.right ? parent.width - width - 10 : 10
+                y: {
+                    const top = JD.atTop ? JD.topMargin + 60 : 20
+                    if (trayWin.align === "start") return top
+                    if (trayWin.align === "end") return parent.height - height - 20
+                    return (parent.height - height) / 2
+                }
+                Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+            }
+        }
+    }
+
     // ───────────── меню приложений ─────────────
     //
     // Своё окно, а не страница острова. Меню открывается от своего угла экрана, живёт по своим
@@ -2729,7 +2852,15 @@ ShellRoot {
         WlrLayershell.keyboardFocus: alive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         color: "transparent"
 
-        readonly property string place: JD.island.menu_position || "bottom-left"
+        // «dock» — меню вырастает из значка в доке и садится в него же. Иначе — свой угол экрана.
+        // Нет дока — нет и значка: тогда меню ведёт себя как «снизу слева», а не исчезает.
+        readonly property var anchor: JD.dockAnchor
+        readonly property bool fromDock: (JD.island.menu_position || "dock") === "dock" && JD.dockOn && !!anchor
+        readonly property string place: {
+            const want = JD.island.menu_position || "dock"
+            if (want !== "dock") return want
+            return fromDock && anchor.top ? "top-left" : "bottom-left"
+        }
         readonly property bool atTop: place.startsWith("top")
         readonly property string side: place.split("-")[1] || "left"
 
@@ -2741,10 +2872,20 @@ ShellRoot {
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
             width: Math.min(760, menuWin.width - 24)
             height: Math.min(560, menuWin.height - 24)
-            x: menuWin.side === "left" ? 12
-             : menuWin.side === "right" ? menuWin.width - width - 12
-             : (menuWin.width - width) / 2
-            y: menuWin.atTop ? 12 : menuWin.height - height - 12
+            // От значка: меню стоит над ним, но не левее края экрана и не правее его.
+            x: menuWin.fromDock
+                 ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
+                 : menuWin.side === "left" ? 12
+                 : menuWin.side === "right" ? menuWin.width - width - 12
+                 : (menuWin.width - width) / 2
+            // Док, который отнимает место, уже сдвинул край этого окна — считать его высоту второй
+            // раз значит отодвинуть меню от значка на его же толщину. Прячущийся док места не
+            // отнимает, и тогда отступ нужен полный.
+            readonly property real fromEdge: menuWin.fromDock && (JD.dockCfg.reserve === false || JD.dockCfg.autohide === true)
+                                             ? menuWin.anchor.gap + 10 : 12
+            y: menuWin.fromDock
+                 ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
+                 : (menuWin.atTop ? 12 : menuWin.height - height - 12)
             radius: 26
             color: JD.ink
             border.width: 1

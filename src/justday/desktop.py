@@ -59,6 +59,10 @@ def list_apps() -> list[dict]:
                 "generic": e.get("GenericName[ru]") or e.get("GenericName", ""), "exec": e.get("Exec", ""),
                 "keywords": e.get("Keywords[ru]", "") + ";" + e.get("Keywords", ""), "path": str(f),
                 "categories": e.get("Categories", ""), "icon": e.get("Icon", ""),
+                # Чем ловить открытое окно: вейланд называет его appId, и это почти всегда либо
+                # StartupWMClass, либо идентификатор файла. Без этого док не знает, что запущенное
+                # окно — та самая закреплённая программа, и рисует её вторым значком.
+                "wmclass": e.get("StartupWMClass", ""),
             }
     _apps_cache = (time.monotonic(), list(apps.values()))
     return _apps_cache[1]
