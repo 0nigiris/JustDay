@@ -2557,6 +2557,10 @@ class Daemon:
             spawn(self._watch_notifications())
         spawn(self._watch_windows())
         spawn(self._cpu_loop())
+        # Остров — единственное место для уведомлений, если так попросили.
+        want_popups = bool(self.cfg["island"].get("system_popups", False))
+        if notifications.system_popups().get("popups") != want_popups:
+            await loop.run_in_executor(None, notifications.system_popups, want_popups)
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()

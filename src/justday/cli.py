@@ -551,6 +551,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
     sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")
     sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "open", "close"])
+    sp = sub.add_parser("popups", help="чьи всплывашки с уведомлениями: island (только остров) | system (ещё и плазмы)")
+    sp.add_argument("where", nargs="?", default="show", choices=["show", "island", "system"])
     sp = sub.add_parser("dock", help="док: что в нём лежит, закрепить и открепить")
     sp.add_argument("action", nargs="?", default="show", choices=["show", "pin", "unpin"])
     sp.add_argument("what", nargs="*", help="идентификатор программы (как в `justday apps --list`)")
@@ -652,6 +654,15 @@ def main(argv: list[str] | None = None) -> None:
         got = control("menu", open=a.action != "close", toggle=a.action == "toggle", timeout=5)
         if not got.get("ok"):
             sys.exit(got.get("error") or "островок не отвечает")
+    elif a.cmd == "popups":
+        from . import notifications as notif
+
+        if a.where != "show":
+            notif.system_popups(a.where == "system")
+            config.set_value("island", "system_popups", a.where == "system")
+        got = notif.system_popups()
+        print("всплывашки плазмы показываются" if got.get("popups")
+              else "всплывашки плазмы молчат — уведомления только на острове")
     elif a.cmd == "dock":
         sys.exit(_dock_cmd(a.action, " ".join(a.what)))
     elif a.cmd == "launch":

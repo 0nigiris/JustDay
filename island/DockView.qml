@@ -151,7 +151,9 @@ Item {
         height: dv.cardHeight
         y: dv.atTop ? 0 : dv.height - height
         radius: Math.round(dv.cardHeight * 0.3)
-        color: Qt.rgba(0, 0, 0, 0.4)
+        // Без размытия под доком та же прозрачность превращается в кашу: значки читаются по тому,
+        // что за ними, а не по себе. Нет размытия — нет и прозрачности.
+        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
 

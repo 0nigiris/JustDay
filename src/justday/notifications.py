@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 import re
+import subprocess
+from datetime import datetime, timedelta
 
 from . import desktop
 
@@ -87,3 +89,48 @@ def open_notification_app(app: str, desktop_id: str) -> str:
         return "launched"
     log.info("notification: no app for app=%r desktop=%r", app, desktop_id)
     return "not found"
+
+
+# ───────────── чьи всплывашки показывать ─────────────
+#
+# Уведомления и так приходят на остров: демон подслушивает шину и рисует их своим шрифтом и своими
+# цветами. Но плазма в это же время показывает свою всплывашку — и человек видит одно и то же
+# дважды, вторым разом в чужом оформлении.
+#
+# Выключается это её же «не беспокоить»: всплывашек нет, история остаётся, а программы как звали
+# Notify, так и зовут — значит, остров по-прежнему всё слышит. Отдельного «отключить всплывашки»
+# у плазмы нет, поэтому пользуемся тем, что есть.
+QUIET_YEARS = 50
+
+
+def system_popups(on: bool | None = None) -> dict:
+    """Показывает ли плазма свои всплывашки. on=None — только узнать."""
+    if on is None:
+        return {"ok": True, "popups": not _quiet_now()}
+    if on:
+        value = ""                       # пустая дата — «не беспокоить» выключено
+    else:
+        until = datetime.now() + timedelta(days=365 * QUIET_YEARS)
+        value = until.strftime("%Y,%-m,%-d,%-H,%-M,%-S.000")
+    try:
+        subprocess.run(["kwriteconfig6", "--file", "plasmanotifyrc", "--group", "DoNotDisturb",
+                        "--key", "Until", value], capture_output=True, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "popups": bool(on)}
+
+
+def _quiet_now() -> bool:
+    try:
+        raw = subprocess.run(["kreadconfig6", "--file", "plasmanotifyrc", "--group", "DoNotDisturb",
+                              "--key", "Until"], capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    parts = raw.split(",")
+    if len(parts) < 3:
+        return False
+    try:
+        until = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return False
+    return until > datetime.now()

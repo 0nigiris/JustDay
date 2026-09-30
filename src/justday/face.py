@@ -83,11 +83,12 @@ def run() -> int:
     print(f"justday ui: {what} — {why}", file=sys.stderr, flush=True)
     if what == "island":
         exe = quickshell()
-        # Qt сам выбирает «basic» цикл отрисовки, а он крутит анимации таймером на 16 мс — то есть
-        # шестьдесят шагов в секунду, сколько бы герц ни было у монитора. На 165 и 185 это видно
-        # глазом: движение идёт ступеньками. «threaded» привязывает анимации к развёртке.
-        # Оставлена лазейка на случай драйвера, которому потоки не нравятся: island.render_loop.
-        loop = str((config.load()["island"] or {}).get("render_loop", "threaded")).lower()
+        # Цикл отрисовки Qt. «basic» (его Qt выбирает сам) крутит анимации таймером на 16 мс —
+        # шестьдесят шагов в секунду при любой развёртке, и на 165 герцах движение идёт ступеньками.
+        # «threaded» привязывает их к развёртке, но заставляет оболочку рисоваться в два-три раза
+        # чаще; на видеокарте, занятой игрой, это ощущается хуже ступенек. Правильного ответа нет —
+        # поэтому по умолчанию решает Qt, а island.render_loop отдаёт выбор человеку.
+        loop = str((config.load()["island"] or {}).get("render_loop", "auto")).lower()
         if loop in ("threaded", "basic") and "QSG_RENDER_LOOP" not in os.environ:
             os.environ["QSG_RENDER_LOOP"] = loop
         os.execvp(exe, [exe, "-p", str(ISLAND_DIR)])

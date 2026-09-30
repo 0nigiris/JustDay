@@ -2755,7 +2755,7 @@ ShellRoot {
             }
             // Размытие под карточкой: без него полупрозрачная полоса поверх пёстрых обоев
             // превращается в кашу, а значки в ней перестают читаться.
-            BackgroundEffect.blurRegion: Region { item: dockWin.shown ? dock.blurItem : null }
+            BackgroundEffect.blurRegion: Region { item: dockWin.shown && JD.blurOn ? dock.blurItem : null }
             // Полоска у самого края: ею прячущийся док зовут обратно.
             Item {
                 id: edge
@@ -2863,7 +2863,7 @@ ShellRoot {
             Timer { id: hideTray; interval: 600; onTriggered: if (trayWin.autohide) trayWin.shown = false }
 
             mask: Region { item: trayWin.shown ? tray : trayEdge }
-            BackgroundEffect.blurRegion: Region { item: trayWin.shown ? tray.blurItem : null }
+            BackgroundEffect.blurRegion: Region { item: trayWin.shown && JD.blurOn ? tray.blurItem : null }
 
             // То же, что у дока: меню прорежет по этому месту дырку в своём перекрытии.
             Binding {
@@ -2921,7 +2921,7 @@ ShellRoot {
         WlrLayershell.namespace: "justday-menu"
         WlrLayershell.keyboardFocus: alive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         color: "transparent"
-        BackgroundEffect.blurRegion: Region { item: JD.menuOpen ? menuCard : null }
+        BackgroundEffect.blurRegion: Region { item: JD.menuOpen && JD.blurOn ? menuCard : null }
 
         // «dock» — меню вырастает из значка в доке и садится в него же. Иначе — свой угол экрана.
         // Нет дока — нет и значка: тогда меню ведёт себя как «снизу слева», а не исчезает.
@@ -2993,7 +2993,7 @@ ShellRoot {
             // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
             // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
             // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
-            color: JD.menuSurface
+            color: JD.blurOn ? JD.menuSurface : Qt.rgba(0.04, 0.04, 0.05, 0.99)
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.14)
             clip: true

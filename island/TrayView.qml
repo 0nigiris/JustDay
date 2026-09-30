@@ -40,7 +40,7 @@ Item {
         id: strip
         anchors.fill: parent
         radius: Math.round(tv.implicitWidth * 0.34)
-        color: Qt.rgba(0, 0, 0, 0.4)
+        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.12)
 
