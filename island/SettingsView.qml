@@ -111,6 +111,7 @@ Item {
                         { id: "general", title: JD.tr("Общие"), icon: "settings", tint: "#8e8e93" },
                         { id: "character", title: JD.tr("Характер"), icon: "user-round", tint: "#ff9f0a" },
                         { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
+                        { id: "dock", title: JD.tr("Док и лоток"), icon: "layout-grid", tint: "#5e5ce6" },
                         { id: "widgets", title: JD.tr("Виджеты"), icon: "cloud-sun", tint: "#32ade6" },
                         { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
                         { id: "media", title: JD.tr("Музыка и видео"), icon: "music", tint: "#fc3c44" },
@@ -210,7 +211,7 @@ Item {
                     y: 26
                     width: Math.min(700, scroller.width - 64)
                     active: !win.loading
-                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage, widgets: widgetsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
+                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage, dock: dockPage, widgets: widgetsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
                                         people: peoplePage, memory: memoryPage, privacy: privacyPage, diagnostics: diagnosticsPage,
                                         about: aboutPage })[win.page]
                     onLoaded: { scroller.contentY = 0; pageIn.restart() }
@@ -813,10 +814,11 @@ Item {
                 }
                 Row {
                     title: JD.tr("Где открывается меню приложений")
-                    subtitle: JD.tr("Клавиша Windows; по умолчанию — от левого нижнего угла, как привычнее")
+                    subtitle: JD.tr("Клавиша Windows; по умолчанию — из того самого значка, на который нажали")
                     Choice {
                         key: "island.menu_position"
-                        options: [{ value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
+                        options: [{ value: "dock", label: JD.tr("Из значка в доке") },
+                                 { value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
                                  { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
                                  { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
                     }
@@ -830,6 +832,60 @@ Item {
                 }
             }
             Note { text: JD.tr("Все изменения применяются сразу. Погода и события — в разделе «Виджеты». Видео на острове тянется за правый нижний уголок, размер запоминается. Плеер и видео не забирают экран: мимо них можно нажимать на панель и окна. Открыть меню клавишей: команда <tt>qs -p ~/JustDay/island ipc call island toggle</tt> в Системных настройках → Комбинации клавиш.") }
+        }
+    }
+
+    Component {
+        id: dockPage
+        ColumnLayout {
+            spacing: 6
+            PageTitle { title: JD.tr("Док и лоток"); subtitle: JD.tr("Полоса программ у края экрана и чужие значки из системного лотка") }
+            Group {
+                Row { title: JD.tr("Док"); subtitle: JD.tr("Закреплённое, открытое и значок, из которого достаётся меню"); Toggle { checked: win.get("dock.enabled") !== false; onToggled: v => win.set("dock.enabled", v) } }
+                Row {
+                    title: JD.tr("У какого края")
+                    Choice {
+                        key: "dock.position"
+                        options: [{ value: "bottom", label: JD.tr("Снизу") }, { value: "top", label: JD.tr("Сверху") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Размер значков")
+                    SSlider { key: "dock.icon_size"; from: 28; to: 80; step: 2; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row { title: JD.tr("Увеличивать под курсором"); subtitle: JD.tr("Значок растёт наружу, а его место в полосе не двигается"); Toggle { checked: win.get("dock.magnify") !== false; onToggled: v => win.set("dock.magnify", v) } }
+                Row { title: JD.tr("Подпись под курсором"); Toggle { checked: win.get("dock.labels") !== false; onToggled: v => win.set("dock.labels", v) } }
+                Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
+                Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
+                Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("dock.autohide") === true; onToggled: v => win.set("dock.autohide", v) } }
+                Row {
+                    title: JD.tr("Отнимать место у окон")
+                    subtitle: JD.tr("Развёрнутые окна перестанут уезжать под док — но плазма сожмёт заодно и обои, и под доком останется чёрная полоса")
+                    Toggle { checked: win.get("dock.reserve") === true; onToggled: v => win.set("dock.reserve", v) }
+                }
+            }
+            Group {
+                Row { title: JD.tr("Полоса лотка"); subtitle: JD.tr("Значки, которые программы кладут в системный лоток"); Toggle { checked: win.get("tray.enabled") !== false; onToggled: v => win.set("tray.enabled", v) } }
+                Row {
+                    title: JD.tr("У какого края")
+                    Choice {
+                        key: "tray.position"
+                        options: [{ value: "left", label: JD.tr("Слева") }, { value: "right", label: JD.tr("Справа") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Где по высоте")
+                    Choice {
+                        key: "tray.align"
+                        options: [{ value: "center", label: JD.tr("По центру") }, { value: "start", label: JD.tr("Сверху") }, { value: "end", label: JD.tr("Снизу") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Размер значков")
+                    SSlider { key: "tray.icon_size"; from: 16; to: 40; step: 2; decimals: 0; unit: JD.tr(" точек") }
+                }
+            }
+            Note { text: JD.tr("Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
         }
     }
 

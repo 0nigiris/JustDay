@@ -551,6 +551,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
     sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")
     sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "open", "close"])
+    sp = sub.add_parser("dock", help="док: что в нём лежит, закрепить и открепить")
+    sp.add_argument("action", nargs="?", default="show", choices=["show", "pin", "unpin"])
+    sp.add_argument("what", nargs="*", help="идентификатор программы (как в `justday apps --list`)")
     sp = sub.add_parser("launch", help="поиск программ: без запроса открывает лаунчер в островке, "
                                       "с запросом запускает первое подходящее")
     sp.add_argument("query", nargs="*")
@@ -643,6 +646,8 @@ def main(argv: list[str] | None = None) -> None:
         got = control("menu", open=a.action != "close", toggle=a.action == "toggle", timeout=5)
         if not got.get("ok"):
             sys.exit(got.get("error") or "островок не отвечает")
+    elif a.cmd == "dock":
+        sys.exit(_dock_cmd(a.action, " ".join(a.what)))
     elif a.cmd == "launch":
         sys.exit(_launch_cmd(" ".join(a.query), show=a.list))
     elif a.cmd == "load":
@@ -1332,6 +1337,27 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
         print("\n(на паузе: новое не запоминается — justday clip resume)")
     elif (missed := clipboard.skipped()["count"]):
         print(f"\n(пропущено как похожее на пароль или ключ: {missed})")
+    return 0
+
+
+def _dock_cmd(action: str, what: str) -> int:
+    """Показать док или изменить его состав. Ключ — идентификатор .desktop-файла без расширения."""
+    from . import dock
+
+    if action == "show":
+        got = dock.catalog()
+        if not got["items"]:
+            return print("док пуст") or 0
+        for item in got["items"]:
+            print(f"  {item['name']:28} {item['id']}")
+        return 0
+    if not what:
+        return print("нужен идентификатор программы, например: justday dock pin org.kde.dolphin") or 1
+    kind, _, ident = what.partition(":")
+    if not ident:
+        kind, ident = "app", what
+    got = dock.pin(kind, ident, action == "pin")
+    print(("закреплено: " if got["on"] else "откреплено: ") + ident)
     return 0
 
 

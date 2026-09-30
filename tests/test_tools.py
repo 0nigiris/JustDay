@@ -315,3 +315,60 @@ def test_there_is_no_such_thing_as_a_made_up_action() -> None:
     from justday import session
 
     assert session.run("rm -rf /", confirm=True)["ok"] is False
+
+
+# ──────────────────────── док ────────────────────────
+
+
+@pytest.fixture
+def docked(monkeypatch, tmp_path):
+    """Тот же выдуманный набор программ, но с тем, чем док ловит открытые окна."""
+    from justday import desktop, dock
+
+    monkeypatch.setattr(dock.config, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(dock, "PIN_FILE", tmp_path / "dock.json")
+    monkeypatch.setattr(desktop, "list_apps", lambda: [
+        {"id": "org.kde.dolphin", "name": "Dolphin", "name_ru": "", "generic": "", "keywords": "",
+         "icon": "system-file-manager", "categories": "System;FileManager;", "exec": "dolphin %u", "wmclass": ""},
+        {"id": "steam", "name": "Steam", "name_ru": "", "generic": "", "keywords": "", "icon": "steam",
+         "categories": "Game;", "exec": "/usr/bin/steam %U", "wmclass": "steam"},
+        {"id": "burglin-gnomes", "name": "Burglin' Gnomes Demo", "name_ru": "", "generic": "", "keywords": "",
+         "icon": "", "categories": "Game;", "exec": "steam steam://rungameid/1234", "wmclass": ""},
+        {"id": "discord", "name": "Discord", "name_ru": "", "generic": "", "keywords": "", "icon": "discord",
+         "categories": "Network;InstantMessaging;",
+         "exec": "flatpak run --branch=stable com.discordapp.Discord", "wmclass": ""},
+    ])
+    monkeypatch.setattr(desktop, "list_games", lambda: [])
+    return dock
+
+
+def test_a_window_is_matched_to_the_app_that_owns_it(docked) -> None:
+    """У окна есть только appId: «org.kde.dolphin» обязан превратиться в программу с именем и значком."""
+    match = docked.catalog()["match"]
+    assert match["org.kde.dolphin"]["name"] == "Dolphin"
+    assert match["dolphin"]["name"] == "Dolphin"              # так окно зовут в половине случаев
+    assert match["com.discordapp.discord"]["name"] == "Discord"   # обёртка flatpak, а не «flatpak»
+
+
+def test_a_game_shim_does_not_steal_the_windows_of_its_launcher(docked) -> None:
+    """Exec любой демки из библиотеки — «steam …». Без разделения проходов она забирала окна Steam."""
+    assert docked.catalog()["match"]["steam"]["name"] == "Steam"
+
+
+def test_an_untouched_dock_is_not_empty(docked) -> None:
+    """Пустая полоса у края экрана — это не чистый лист, а поломка: по ней нечего нажать."""
+    assert docked.catalog()["items"], "док в первый запуск обязан чем-то заполниться"
+
+
+def test_pinning_keeps_the_order_things_were_pinned_in(docked) -> None:
+    docked.pin("app", "discord", True)
+    docked.pin("app", "steam", True)
+    assert docked.pinned()[-2:] == ["app:discord", "app:steam"]
+    assert docked.pin("app", "discord", False)["on"] is False
+    assert "app:discord" not in docked.pinned()
+
+
+def test_dragging_cannot_smuggle_in_something_that_was_not_pinned(docked) -> None:
+    docked.pin("app", "discord", True)
+    docked.arrange(["app:steam", "app:discord"])
+    assert docked.pinned() == ["app:discord"]

@@ -341,7 +341,7 @@ Item {
     function doCtx(what) {
         const e = ctxEntry, wins = ctxWins
         if (what === "menu") JD.toggleMenu()
-        else if (what === "settings") JD.openSettings("island")
+        else if (what === "settings") JD.openSettings("dock")
         else if (what === "trash") Quickshell.execDetached(["xdg-open", "trash:///"])
         else if (what === "open") JD.dockRun(e)
         else if (what === "pin") JD.dockPin(e.kind, e.id, true)
