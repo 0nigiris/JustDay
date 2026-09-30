@@ -8,6 +8,10 @@ Type=simple
 ExecStart=@JUSTDAY@ daemon
 Environment=PATH=@PATH@
 Environment=PYTHONUNBUFFERED=1
+# Сколько куч glibc заводит под потоки. По умолчанию их до восьми на ядро, каждая по 64 МБ, и у
+# демона с шестью десятками потоков (распознавание речи, звук, инференс) они съедали больше гигабайта
+# — не данными, а пустотой между ними. Двух хватает: демон почти всё время ждёт, а не считает.
+Environment=MALLOC_ARENA_MAX=2
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15

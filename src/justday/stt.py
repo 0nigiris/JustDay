@@ -34,6 +34,19 @@ HALLUCINATION = re.compile(
     r"^\W*(продолжение следует|спасибо за просмотр|подписывайтесь на канал)\W*$|amara\.org", re.I)
 
 
+def trim() -> None:
+    """Вернуть системе страницы, которые питон уже отдал, а распределитель придержал.
+
+    Без этого в `ps` ничего не меняется: память «освобождена» внутри процесса и снаружи не видна.
+    """
+    import ctypes
+
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 class STT:
     def __init__(self, cfg: dict):
         self.cfg = cfg
@@ -48,6 +61,11 @@ class STT:
         with self._lock:
             if self._model is None:
                 self._model = self._load()
+                # Пока модель ехала с диска на видеокарту, она успела побывать в оперативной
+                # памяти целиком. На видеокарте она уже есть, а распределитель держит освободившиеся
+                # страницы за собой — и в `ps` у демона стоит лишний гигабайт, которым никто не
+                # пользуется. Один вызов после загрузки, не в горячем пути.
+                trim()
         return self._model
 
     def unload(self) -> bool:
@@ -58,7 +76,6 @@ class STT:
         секунд, и демон прячет их: модель поднимается, как только нажали «говорить», — то есть
         пока человек ещё договаривает фразу.
         """
-        import ctypes
         import gc
 
         with self._lock:
@@ -66,12 +83,7 @@ class STT:
                 return False
             self._model = None
         gc.collect()
-        # Питон отдал память распределителю, а тот держит страницы за собой: в `ps` без этого
-        # ничего не меняется, и «отпустили» выглядит неправдой.
-        try:
-            ctypes.CDLL("libc.so.6").malloc_trim(0)
-        except (OSError, AttributeError):
-            pass
+        trim()
         return True
 
     def idle_unload(self, minutes: float) -> bool:
