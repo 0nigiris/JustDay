@@ -1,4 +1,14 @@
 // Arc-reactor ring: pulses with the voice, spins while thinking
+//
+// Каждая здешняя анимация спрашивает `visible` — и это не перестраховка, а починка. Кольцо стоит в
+// десятке мест сразу, и некоторые из них показываются раз в неделю: кружок «грузится» в проигрывателе,
+// кольцо в развёрнутом виде. Вид скрыт, а кольцо в нём крутилось всё время: Qt анимирует и невидимое,
+// поворот шёл шестьдесят раз в секунду, окно островка каждый раз считалось изменившимся и рисовалось
+// заново. Само рисование занимало ноль миллисекунд — платили за то, что кадр вообще собирали, и это
+// была треть процессорного ядра круглые сутки, из-за которой «бар чуть лагает».
+//
+// `visible` в QML — видимость настоящая, с учётом всех родителей. Поэтому одной проверки внутри
+// кольца хватает на все места, где оно стоит.
 import QtQuick
 import QtQuick.Shapes
 
@@ -16,9 +26,9 @@ Item {
         radius: width / 2
         color: ring.tint
         opacity: 0.9
-        Behavior on width { NumberAnimation { duration: 90 } }
+        Behavior on width { enabled: ring.visible; NumberAnimation { duration: 90 } }
         SequentialAnimation on opacity {
-            running: JD.dstate === "speaking"
+            running: ring.visible && JD.dstate === "speaking"
             loops: Animation.Infinite
             NumberAnimation { to: 0.45; duration: 420; easing.type: Easing.InOutSine }
             NumberAnimation { to: 0.95; duration: 420; easing.type: Easing.InOutSine }
@@ -37,10 +47,16 @@ Item {
                 radiusX: ring.size / 2 - 1.5; radiusY: radiusX
                 startAngle: 0
                 sweepAngle: ring.spinning ? 250 : 360
-                Behavior on sweepAngle { NumberAnimation { duration: 300 } }
+                Behavior on sweepAngle { enabled: ring.visible; NumberAnimation { duration: 300 } }
             }
         }
-        RotationAnimation on rotation { running: ring.spinning; loops: Animation.Infinite; from: 0; to: 360; duration: 900 }
+        RotationAnimation on rotation {
+            running: ring.visible && ring.spinning
+            loops: Animation.Infinite
+            from: 0
+            to: 360
+            duration: 900
+        }
     }
 }
 
