@@ -372,3 +372,52 @@ def test_dragging_cannot_smuggle_in_something_that_was_not_pinned(docked) -> Non
     docked.pin("app", "discord", True)
     docked.arrange(["app:steam", "app:discord"])
     assert docked.pinned() == ["app:discord"]
+
+
+def test_the_menu_icon_is_repainted_before_it_is_used(tmp_path, monkeypatch) -> None:
+    """В темах такие значки нарисованы «цветом текста», и Qt его не разрешает: на тёмном доке
+    получилось бы чёрное пятно вместо яблока."""
+    from justday import dock
+
+    theme = tmp_path / "icons" / "SomeTheme" / "places" / "scalable"
+    theme.mkdir(parents=True)
+    (theme / "start-here.svg").write_text('<svg><path fill="currentColor" d="M0 0"/></svg>', encoding="utf-8")
+    monkeypatch.setattr(dock, "ICON_DIRS", (tmp_path / "icons",))
+    monkeypatch.setattr(dock, "icon_theme", lambda: "SomeTheme")
+    monkeypatch.setattr(dock.config, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(dock, "LAUNCHER_FILE", tmp_path / "launcher-icon.svg")
+
+    got = dock.launcher_icon("apple")
+    assert got, "значок не нашёлся в теме"
+    assert "currentColor" not in (tmp_path / "launcher-icon.svg").read_text(encoding="utf-8")
+
+
+def test_a_colour_icon_is_left_alone(tmp_path, monkeypatch) -> None:
+    from justday import dock
+
+    theme = tmp_path / "icons" / "SomeTheme" / "places" / "scalable"
+    theme.mkdir(parents=True)
+    src = theme / "start-here.svg"
+    src.write_text('<svg><path fill="#ff0000" d="M0 0"/></svg>', encoding="utf-8")
+    monkeypatch.setattr(dock, "ICON_DIRS", (tmp_path / "icons",))
+    monkeypatch.setattr(dock, "icon_theme", lambda: "SomeTheme")
+    assert dock.launcher_icon("apple") == str(src)
+
+
+def test_the_grid_asks_for_no_file_at_all(monkeypatch) -> None:
+    from justday import dock
+
+    assert dock.launcher_icon("grid") == ""
+
+
+def test_hiding_a_tray_icon_is_case_blind(tmp_path, monkeypatch) -> None:
+    """Значки называют себя как попало: «Xwayland Video Bridge» и «xwayland video bridge» — одно."""
+    from justday import config, dock
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    config.set_value("tray", "hidden", [])
+    dock.hide_tray("Blueman", True)
+    assert "blueman" in dock.hidden_tray()
+    assert dock.hide_tray("BLUEMAN", False)["on"] is False
+    assert "blueman" not in dock.hidden_tray()

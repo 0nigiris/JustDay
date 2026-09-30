@@ -12,7 +12,9 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import re
+import subprocess
 
 from . import config, desktop, launcher
 
@@ -133,6 +135,84 @@ def arrange(keys: list[str]) -> dict:
     return {"ok": True} | catalog()
 
 
+# Значок меню берётся у темы значков: в макосных темах «start-here» — это яблоко. Но нарисован он
+# «цветом текста» (currentColor), которого разрисовщик Qt не разрешает: на тёмном доке получилось бы
+# чёрное пятно. Поэтому файл перекрашивается один раз и кладётся рядом, а док читает уже копию.
+LAUNCHER_FILE = config.STATE_DIR / "launcher-icon.svg"
+ICON_DIRS = (config.HOME / ".local/share/icons", config.HOME / ".icons",
+             pathlib.Path("/usr/share/icons"), pathlib.Path("/usr/local/share/icons"))
+
+
+def icon_theme() -> str:
+    """Имя набора значков, выбранного в системе.
+
+    Плазма держит его в каскаде: своё поверх того, что положила тема оформления. Поэтому сначала
+    спрашиваем саму плазму, и только если её утилиты нет — читаем файлы руками.
+    """
+    try:
+        got = subprocess.run(["kreadconfig6", "--file", "kdeglobals", "--group", "Icons", "--key", "Theme"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+        if got:
+            return got
+    except (OSError, subprocess.SubprocessError):
+        pass
+    base = config.CONFIG_DIR.parent
+    for path in (base / "kdeglobals", base / "kdedefaults/kdeglobals"):
+        try:
+            in_icons = False
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("["):
+                    in_icons = line.strip() == "[Icons]"
+                elif in_icons and line.startswith("Theme="):
+                    return line.partition("=")[2].strip()
+        except OSError:
+            continue
+    return ""
+
+
+def find_icon(name: str, theme: str = "") -> pathlib.Path | None:
+    """Файл значка в выбранном наборе. Крупный предпочтительнее: его потом уменьшат, а не растянут."""
+    theme = theme or icon_theme()
+    if not theme:
+        return None
+    found: list[pathlib.Path] = []
+    for root in ICON_DIRS:
+        base = root / theme
+        if base.is_dir():
+            found += list(base.rglob(f"{name}.svg")) + list(base.rglob(f"{name}.png"))
+    if not found:
+        return None
+    # scalable важнее всех, дальше — по размеру в имени каталога, дальше — svg важнее png
+    def rank(p: pathlib.Path) -> tuple:
+        parts = [q for q in p.parts if q.isdigit()]
+        size = int(parts[-1]) if parts else 0
+        return (0 if "scalable" in p.parts else 1, -size, 0 if p.suffix == ".svg" else 1)
+    return sorted(found, key=rank)[0]
+
+
+def launcher_icon(want: str = "apple") -> str:
+    """Путь к значку, из которого достаётся меню. Пусто — рисовать свою сетку точек."""
+    if want in ("", "grid"):
+        return ""
+    src = find_icon("start-here" if want == "apple" else want)
+    if not src:
+        return ""
+    if src.suffix != ".svg":
+        return str(src)
+    try:
+        text = src.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    if "currentColor" not in text:
+        return str(src)                      # цветной значок трогать незачем
+    try:
+        config.STATE_DIR.mkdir(parents=True, exist_ok=True)
+        LAUNCHER_FILE.write_text(text.replace("currentColor", "#ffffff"), encoding="utf-8")
+    except OSError:
+        return ""
+    return str(LAUNCHER_FILE)
+
+
 def hidden_tray() -> list[str]:
     """Идентификаторы значков лотка, которые прятать. Сравнение — без учёта регистра."""
     from . import config as cfg_mod
@@ -180,7 +260,8 @@ def catalog() -> dict:
             for k in row[field]:
                 match.setdefault(k, short)
 
+    launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
     want = pinned()
-    return {"items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
+    return {"launcher": launcher, "items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
                       for k in want if k in known],
             "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP)}

@@ -345,6 +345,9 @@ Singleton {
     readonly property var dockItems: dockData.items || []
     readonly property var dockMatch: dockData.match || ({})
     readonly property var dockSkip: dockData.skip || []
+    // Готовый файл значка меню: демон нашёл его в теме и перекрасил в белый. Пусто — рисуем свою
+    // сетку точек.
+    readonly property string dockLauncher: dockData.launcher || ""
     // Где на экране значок меню. Меню вырастает оттуда и туда же садится: иначе оно появляется
     // ниоткуда, и непонятно, что его открыл именно этот значок.
     property var dockAnchor: null

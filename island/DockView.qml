@@ -26,11 +26,11 @@ Item {
     readonly property bool showCat: JD.dockCfg.cat !== false
     readonly property bool showClock: JD.dockCfg.clock === true
     // Значок меню: «apple» — то, что тема значков зовёт start-here (в макосных темах это яблоко),
-    // «grid» — своя сетка точек. Темы без start-here есть, поэтому сетка ещё и запасной вариант.
-    readonly property string launcherWant: JD.dockCfg.launcher || "apple"
-    readonly property string launcherIcon: launcherWant === "grid" ? ""
-        : launcherWant === "apple" ? Quickshell.iconPath("start-here", true)
-        : Quickshell.iconPath(launcherWant, true)
+    // «grid» — своя сетка точек. Файл готовит демон: в темах такие значки нарисованы «цветом
+    // текста», которого разрисовщик Qt не разрешает, и на тёмном доке вышло бы чёрное пятно.
+    // Темы без start-here есть, поэтому сетка ещё и запасной вариант.
+    readonly property string launcherWant: JD.dockCfg.launcher || "grid"
+    readonly property string launcherIcon: launcherWant === "grid" ? "" : JD.dockLauncher
     // Сколько места оставить под увеличенный значок и подпись: они выходят за карточку, и им нужна
     // своя высота в окне, иначе верхушка срезается.
     readonly property real headroom: Math.round(icon * 0.55) + 30
@@ -182,14 +182,15 @@ Item {
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
                     // Яблоко (или что тема зовёт start-here) рисуем без подложки: у макосных тем
                     // это готовый значок со своей формой, и квадрат под ним выглядит наклейкой.
-                    Icon {
+                    Image {
                         anchors.fill: parent
+                        anchors.margins: Math.round(dv.icon * 0.06)
                         visible: slot.e.t === "launcher" && dv.launcherIcon !== ""
-                        name: dv.launcherWant === "apple" ? "start-here" : dv.launcherWant
-                        fallback: "start-here"
-                        implicitSize: dv.icon
-                        renderSize: dv.icon * 2.4
-                        theme: true
+                        source: dv.launcherIcon ? "file://" + dv.launcherIcon : ""
+                        sourceSize: Qt.size(dv.icon * 2.4, dv.icon * 2.4)
+                        fillMode: Image.PreserveAspectFit
+                        mipmap: true
+                        smooth: true
                     }
 
                     Rectangle {
