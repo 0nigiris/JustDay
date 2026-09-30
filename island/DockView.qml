@@ -149,24 +149,36 @@ Item {
     onLaneChanged: resetPhysics()
     Component.onCompleted: resetPhysics()
 
+    // Середина, вокруг которой полоса растёт. Задаётся снаружи: центрирует док окно, а не он сам.
+    property real anchorCentre: 0
+
     // Куда курсор попадает в спокойных координатах полосы.
     //
-    // Считать это по нарисованной раскладке — первое, что приходит в голову, и оно неверно: цель
-    // тогда зависит от того, докуда доехала анимация, а анимация едет к цели. Петля не сходится, и
-    // увеличение то недотягивает до нужного, то дёргается. Поэтому решаем честно: ищем такое
-    // спокойное место u, которое при своих же размерах рисуется ровно под курсором. Растяжение в
-    // любой точке от 1 до 1+amp, поэтому простая итерация сходится за три-четыре шага.
-    function solveRest(local) {
-        let u = local - pad
-        for (let step = 0; step < 6; step++) {
-            let x = pad
+    // Тут два подвоха, и оба неочевидны.
+    //
+    // Первый: считать место курсора по нарисованной раскладке нельзя. Цель тогда зависит от того,
+    // докуда доехала анимация, а анимация едет к цели; петля не сходится, и увеличение то
+    // недотягивает, то дёргается. Значит, решаем уравнение: ищем спокойное место u, которое при
+    // своих же размерах рисуется ровно под курсором.
+    //
+    // Второй: полоса, расширяясь, ещё и переезжает — она центрирована, и её левый край уходит
+    // влево ровно на половину прироста. Если этого не учесть, курсор оказывается не там, где
+    // думает решение, увеличение садится между значками и до полного размера не доходит никогда.
+    // Поэтому в уравнении участвует и общая длина: центр − длина/2 + путь до u = курсор.
+    //
+    // Растяжение в любой точке от 1 до 1+amp, поэтому простая итерация сходится за три-четыре шага.
+    function solveRest(scene) {
+        let u = scene - anchorCentre + restLength / 2 - pad
+        for (let step = 0; step < 7; step++) {
+            let total = pad * 2, before = pad
             for (let i = 0; i < lane.length; i++) {
                 const k = targetSize(i, u)
-                if (u >= lane[i].at + lane[i].w) { x += lane[i].w * k; continue }
-                x += Math.max(0, u - lane[i].at) * k
-                break
+                const w = lane[i].w * k
+                total += w
+                if (u >= lane[i].at + lane[i].w) before += w
+                else if (u > lane[i].at) before += (u - lane[i].at) * k
             }
-            const err = local - x
+            const err = scene - (anchorCentre - total / 2 + before)
             if (Math.abs(err) < 0.2) break
             u += err / (1 + amp * 0.5)
         }
@@ -174,8 +186,7 @@ Item {
     }
 
     function restUnderPointer() {
-        if (!engaged) return -99999
-        return solveRest(pointerScene - dv.x - card.x)
+        return engaged ? solveRest(pointerScene) : -99999
     }
 
     // Виджеты правилу не подчиняются: кошка и часы показывают цифру, а не ждут нажатия, и прыгать
@@ -600,9 +611,11 @@ Item {
     function probe(x) {
         const wasEngaged = engaged, wasAt = pointerScene
         engaged = true
-        pointerScene = dv.x + x
+        // x — место вдоль спокойной полосы, от её левого края. Устойчивая мера: нарисованная
+        // полоса под курсором и шире, и сдвинута, и мерить по ней — мерить резиновой линейкой.
+        pointerScene = anchorCentre - restLength / 2 + x
         for (let n = 0; n < 400 && stepPhysics(1 / 120); n++) { /* до схождения */ }
-        const out = { at: x, length: Math.round(laneLength), rest: Math.round(restLength),
+        const out = { at: x, u: Math.round(restUnderPointer()), length: Math.round(laneLength), rest: Math.round(restLength),
                       cells: lane.map((s, i) => ({ t: s.t, x: Math.round(geom[i].x),
                                                    w: Math.round(geom[i].w), k: Number(geom[i].k.toFixed(3)) })) }
         engaged = wasEngaged
