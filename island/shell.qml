@@ -3119,7 +3119,13 @@ ShellRoot {
             cardW = Math.max(520, Math.min(width - 24, JD.menuWidth))
             cardH = Math.max(360, Math.min(height - 24, JD.menuHeight))
         }
+        // Пересчитывать надо и когда окно узнало свой размер. При запуске его ширина ещё ноль,
+        // и «не больше экрана» превращается в «не больше минус двадцати четырёх»: карточка
+        // защёлкивалась на наименьшем допустимом размере и такой и оставалась. Та же ошибка, что
+        // была с отнятой зоной дока, и ловится она тем же — пересчётом на изменение размера окна.
         Component.onCompleted: fitCard()
+        onWidthChanged: fitCard()
+        onHeightChanged: fitCard()
         Connections {
             target: JD
             function onMenuWidthChanged() { menuWin.fitCard() }
