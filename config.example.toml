@@ -123,6 +123,14 @@ launcher = "apple"          # apple = the icon theme's start-here (an Apple mark
 cat = true                  # a running cat: the busier the CPU, the faster it runs (CatWalk's frames when installed)
 cat_sleep_below = 0         # below this CPU percentage the cat sleeps; 0 = never
 clock = false               # a clock in the dock (there is already one above)
+preview = true              # window titles under the tooltip (no thumbnails: KWin gives them to nobody)
+# What the strip is made of, left to right. Words: launcher, pinned, running, trash, cat, clock,
+# sep (a hairline), space (a gap). The order of the words is the order on screen.
+layout = ["launcher", "sep", "pinned", "running", "sep", "trash", "sep", "cat", "clock"]
+separator_room = 0          # room for the hairline in points; 0 = the same as the icon spacing
+separator_width = 1
+separator_height = 62       # in percent of the icon
+separator_opacity = 16
 
 [tray]                      # other apps' status icons, as their own strip
 enabled = true
