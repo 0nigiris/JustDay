@@ -260,6 +260,28 @@ Item {
                 highlightMoveDuration: 90
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
                 boundsBehavior: Flickable.StopAtBounds
+                flickDeceleration: 2600
+                maximumFlickVelocity: 6000
+
+                // Колесо крутят по-разному: один щелчок, чтобы посмотреть следующий ряд, и десять
+                // подряд, чтобы долистать до конца. Шаг постоянной величины отвечает на оба
+                // одинаково, и быстрое кручение превращается в долгое. Поэтому чем чаще приходят
+                // щелчки, тем крупнее шаг — до четырёх раз, дальше уже промахиваешься мимо цели.
+                WheelHandler {
+                    property real rush: 1
+                    property real lastAt: 0
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: event => {
+                        const now = Date.now()
+                        const since = now - lastAt
+                        lastAt = now
+                        rush = since < 90 ? Math.min(4, rush + 0.55) : since < 220 ? Math.max(1, rush * 0.8) : 1
+                        const step = (event.angleDelta.y / 120) * mv.tile * 0.75 * rush
+                        const max = Math.max(0, grid.contentHeight - grid.height)
+                        grid.contentY = Math.max(0, Math.min(max, grid.contentY - step))
+                        event.accepted = true
+                    }
+                }
 
                 delegate: Item {
                     required property var modelData

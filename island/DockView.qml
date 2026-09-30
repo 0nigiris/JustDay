@@ -39,6 +39,9 @@ Item {
     readonly property real dotRoom: 9
     readonly property bool magnify: JD.dockCfg.magnify !== false
     readonly property bool labels: JD.dockCfg.labels !== false
+    // Заголовки открытых окон под подписью. Настоящих картинок-предпросмотров KWin обычным
+    // клиентам не отдаёт, и обещать их было бы враньём.
+    readonly property bool preview: JD.dockCfg.preview !== false
     readonly property bool showRunning: JD.dockCfg.show_running !== false
     readonly property bool showTrash: JD.dockCfg.show_trash !== false
     // Док уехал за край — кошке незачем перебирать лапами в пустоту: под нагрузкой это тридцать
@@ -265,7 +268,7 @@ Item {
     }
 
     // ───────────── карточка ─────────────
-    readonly property Item blurItem: card
+    readonly property Rectangle blurItem: card
 
     Rectangle {
         id: card
@@ -390,7 +393,7 @@ Item {
                     Icon {
                         anchors.fill: parent
                         visible: slot.e.t === "trash"
-                        name: "user-trash"
+                        name: JD.trashFull ? "user-trash-full" : "user-trash"
                         fallback: "user-trash"
                         implicitSize: dv.icon
                         renderSize: dv.icon * 2.4
@@ -479,17 +482,23 @@ Item {
         readonly property bool want: dv.labels && dv.tipShown && !!dv.focused && !ctx.visible
         readonly property string text: !dv.focused ? ""
             : dv.focused.t === "launcher" ? "Программы"
-            : dv.focused.t === "trash" ? "Корзина"
+            : dv.focused.t === "trash" ? (JD.trashFull ? "Корзина — не пуста" : "Корзина пуста")
             : dv.focused.t === "cat" ? "Процессор " + Math.round(JD.cpu) + "%"
             : dv.focused.t === "clock" ? Qt.formatDate(new Date(), "d MMMM, dddd")
             : (dv.focused.name || "")
+        // Заголовки открытых окон. Настоящих картинок-предпросмотров на KWin обычным клиентам не
+        // дают — снимать чужие окна умеет только композитор, — поэтому показываем то, что у нас
+        // есть и что на деле нужнее: какие именно окна открыты и какое из них сейчас наверху.
+        readonly property var wins: dv.focused && dv.focused.wins ? dv.focused.wins : []
+        readonly property bool showsWindows: dv.preview && wins.length > 0
         readonly property int at: dv.focused ? dv.focused.i : -1
-        width: tipText.implicitWidth + 20
-        height: 26
-        radius: 13
+        width: Math.max(tipText.implicitWidth, winList.implicitWidth) + 20
+        height: showsWindows ? 26 + winList.implicitHeight + 6 : 26
+        radius: showsWindows ? 12 : 13
         color: Qt.rgba(0, 0, 0, 0.86)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.12)
+        Behavior on height { enabled: JD.animOn; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
         x: {
             const g = at >= 0 && at < dv.geom.length ? dv.geom[at] : null
             return Math.max(0, Math.min(dv.width - width, (g ? g.x + g.w / 2 : 0) - width / 2))
@@ -501,7 +510,43 @@ Item {
         Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 130 } }
         Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
         Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-        Label1 { id: tipText; anchors.centerIn: parent; text: tip.text }
+        Label1 {
+            id: tipText
+            anchors { top: parent.top; topMargin: 5; horizontalCenter: parent.horizontalCenter }
+            text: tip.text
+        }
+        Column {
+            id: winList
+            visible: tip.showsWindows
+            anchors { top: tipText.bottom; topMargin: 4; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 10 }
+            spacing: 2
+            Repeater {
+                model: tip.showsWindows ? tip.wins.slice(0, 5) : []
+                delegate: Row {
+                    required property var modelData
+                    spacing: 6
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 4
+                        height: 4
+                        radius: 2
+                        color: modelData.active ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.35)
+                    }
+                    Label2 {
+                        width: Math.min(implicitWidth, 260)
+                        font.pixelSize: 11
+                        color: modelData.minimized ? JD.text3 : JD.text2
+                        text: (modelData.title || "").trim() || "без названия"
+                    }
+                }
+            }
+            Label2 {
+                visible: tip.wins.length > 5
+                font.pixelSize: 11
+                color: JD.text3
+                text: "и ещё " + (tip.wins.length - 5)
+            }
+        }
     }
 
     // ───────────── правая кнопка ─────────────

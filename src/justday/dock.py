@@ -251,6 +251,25 @@ def cat_frames() -> dict:
     return {}
 
 
+# Корзина. Значок у неё два: пустая и полная, и показывать пустую при сорока файлах внутри — это
+# не мелочь, а прямая ложь о состоянии машины. Смотрим один каталог и останавливаемся на первой же
+# записи: считать сорок штук незачем, вопрос двоичный.
+TRASH_DIRS = (config.HOME / ".local/share/Trash/files",)
+
+
+def trash_full() -> bool:
+    import os
+
+    for base in TRASH_DIRS:
+        try:
+            with os.scandir(base) as it:
+                for _ in it:
+                    return True
+        except OSError:
+            continue
+    return False
+
+
 def hidden_tray() -> list[str]:
     """Идентификаторы значков лотка, которые прятать. Сравнение — без учёта регистра."""
     from . import config as cfg_mod
@@ -302,4 +321,5 @@ def catalog() -> dict:
     want = pinned()
     return {"launcher": launcher, "cat": cat_frames(), "items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
                       for k in want if k in known],
-            "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP)}
+            "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP),
+            "trash_full": trash_full()}

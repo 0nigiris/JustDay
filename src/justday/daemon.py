@@ -98,6 +98,7 @@ class Daemon:
         self._notify_proc: asyncio.subprocess.Process | None = None
         self._windows_proc: asyncio.subprocess.Process | None = None
         self._windows: list[dict] = []
+        self._trash_full = False
         self._state = "idle"
         self._workers_active = 0
         self._listen_cancel: asyncio.Event | None = None
@@ -2048,6 +2049,12 @@ class Daemon:
             if abs(pct - last) >= 1.5 or (pct < 1.5) != (last < 1.5):
                 last = pct
                 self.publish(cpu=pct)
+            # Заодно корзина: один взгляд в каталог до первой записи, вопрос двоичный. Значок,
+            # говорящий «пусто» при сорока файлах внутри, — это ложь о состоянии машины.
+            full = dock.trash_full()
+            if full != self._trash_full:
+                self._trash_full = full
+                self.publish(trash_full=full)
 
     async def _clip_watch(self) -> None:
         """Следить за буфером обмена.

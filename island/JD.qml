@@ -352,6 +352,8 @@ Singleton {
     readonly property string dockLauncher: dockData.launcher || ""
     // Кадры кошки. Пусто — у островка есть свои; иначе это кадры виджета CatWalk с этой машины.
     readonly property var dockCat: dockData.cat || ({})
+    // Корзина: пустая и полная — разные значки. Демон следит и говорит, когда меняется.
+    property bool trashFull: false
     // Где на экране значок меню. Меню вырастает оттуда и туда же садится: иначе оно появляется
     // ниоткуда, и непонятно, что его открыл именно этот значок.
     property var dockAnchor: null
@@ -617,8 +619,9 @@ Singleton {
             if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
-        if (m.dock !== undefined) dockData = m.dock
+        if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
         if (m.cpu !== undefined) cpu = m.cpu
+        if (m.trash_full !== undefined) trashFull = m.trash_full
         if (m.windows !== undefined) windows = m.windows || []
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }

@@ -2762,7 +2762,16 @@ ShellRoot {
             }
             // Размытие под карточкой: без него полупрозрачная полоса поверх пёстрых обоев
             // превращается в кашу, а значки в ней перестают читаться.
-            BackgroundEffect.blurRegion: Region { item: dockWin.shown && JD.blurOn ? dock.blurItem : null }
+            // Не `item:`, а прямоугольник с радиусом. Маска по элементу — это его habitual
+            // прямоугольник, и размытие торчало за скруглёнными углами карточки четырьмя острыми
+            // уголками. Радиус у Region свой, и он обязан совпадать с радиусом карточки.
+            BackgroundEffect.blurRegion: Region {
+                x: Math.round(dock.x + dock.blurItem.x)
+                y: Math.round(dock.y + dock.blurItem.y)
+                width: dockWin.shown && JD.blurOn ? Math.round(dock.blurItem.width) : 0
+                height: dockWin.shown && JD.blurOn ? Math.round(dock.blurItem.height) : 0
+                radius: Math.round(dock.blurItem.radius)
+            }
             // Полоска у самого края: ею прячущийся док зовут обратно.
             Item {
                 id: edge
@@ -2876,7 +2885,13 @@ ShellRoot {
             Timer { id: hideTray; interval: 600; onTriggered: if (trayWin.autohide) trayWin.shown = false }
 
             mask: Region { item: trayWin.shown ? tray : trayEdge }
-            BackgroundEffect.blurRegion: Region { item: trayWin.shown && JD.blurOn ? tray.blurItem : null }
+            BackgroundEffect.blurRegion: Region {
+                x: Math.round(tray.x + tray.blurItem.x)
+                y: Math.round(tray.y + tray.blurItem.y)
+                width: trayWin.shown && JD.blurOn ? Math.round(tray.blurItem.width) : 0
+                height: trayWin.shown && JD.blurOn ? Math.round(tray.blurItem.height) : 0
+                radius: Math.round(tray.blurItem.radius)
+            }
 
             // То же, что у дока: меню прорежет по этому месту дырку в своём перекрытии.
             Binding {
@@ -2934,7 +2949,13 @@ ShellRoot {
         WlrLayershell.namespace: "justday-menu"
         WlrLayershell.keyboardFocus: alive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         color: "transparent"
-        BackgroundEffect.blurRegion: Region { item: JD.menuOpen && JD.blurOn ? menuCard : null }
+        BackgroundEffect.blurRegion: Region {
+            x: Math.round(menuCard.x)
+            y: Math.round(menuCard.y)
+            width: JD.menuOpen && JD.blurOn ? Math.round(menuCard.width) : 0
+            height: JD.menuOpen && JD.blurOn ? Math.round(menuCard.height) : 0
+            radius: Math.round(menuCard.radius)
+        }
 
         // «dock» — меню вырастает из значка в доке и садится в него же. Иначе — свой угол экрана.
         // Нет дока — нет и значка: тогда меню ведёт себя как «снизу слева», а не исчезает.

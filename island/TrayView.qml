@@ -34,7 +34,7 @@ Item {
     implicitWidth: icon + pad * 2
     implicitHeight: Math.max(cell, items.length * cell + pad * 2)
 
-    readonly property Item blurItem: strip
+    readonly property Rectangle blurItem: strip
 
     Rectangle {
         id: strip
