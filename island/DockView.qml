@@ -95,7 +95,7 @@ Item {
         for (let i = 0; i < entries.length; i++) {
             const t = entries[i].t
             const w = t === "sep" ? Math.round(gap * 0.8)
-                    : t === "cat" ? Math.round(cell * 1.15)
+                    : t === "cat" ? Math.round(cell * 1.2)
                     : t === "clock" ? Math.round(cell * 1.25) : cell
             out.push(Object.assign({}, entries[i], { at: at, w: w, i: i }))
             at += w
@@ -244,7 +244,8 @@ Item {
                         anchors.centerIn: parent
                         visible: slot.e.t === "cat"
                         cpu: JD.cpu
-                        size: Math.round(dv.icon * 0.82)
+                        sleepBelow: JD.dockCfg.cat_sleep_below || 0
+                        size: dv.icon
                     }
                     DockClock {
                         anchors.centerIn: parent

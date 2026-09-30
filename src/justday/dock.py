@@ -213,6 +213,44 @@ def launcher_icon(want: str = "apple") -> str:
     return str(LAUNCHER_FILE)
 
 
+# Кошка. Эталон — виджет CatWalk (Юрий Сауров, GPL-2.0+), а он, в свою очередь, повторяет RunCat.
+# Если виджет стоит на машине, берём его кадры: ровно та кошка, к которой человек привык. Свои
+# остаются запасными — для машин, где виджета нет. Файлы читаются у него, а не лежат у нас: чужую
+# рисовку под другой лицензией мы не раздаём.
+CAT_DIR = config.STATE_DIR / "cat"
+CATWALK_DIRS = (config.HOME / ".local/share/plasma/plasmoids/org.kde.plasma.catwalk/contents/images",
+                pathlib.Path("/usr/share/plasma/plasmoids/org.kde.plasma.catwalk/contents/images"))
+CAT_NAMES = ("my-active-0", "my-active-1", "my-active-2", "my-active-3", "my-active-4", "my-idle")
+
+
+def _whiten(src: pathlib.Path, dst: pathlib.Path) -> bool:
+    """Копия значка, перекрашенная в белый. Ничего не делает, если копия уже свежая."""
+    try:
+        if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+            return True
+        text = src.read_text(encoding="utf-8")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(text.replace("currentColor", "#ffffff").replace("#232629", "#ffffff"), encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+def cat_frames() -> dict:
+    """Кадры бегущей кошки: пять в беге и один спящий. Пусто — у островка есть свои."""
+    for base in CATWALK_DIRS:
+        if not (base / "my-active-0-symbolic.svg").exists():
+            continue
+        out: list[str] = []
+        for name in CAT_NAMES:
+            src, dst = base / f"{name}-symbolic.svg", CAT_DIR / f"{name}.svg"
+            if not _whiten(src, dst):
+                return {}
+            out.append(str(dst))
+        return {"run": out[:5], "idle": out[5], "from": "catwalk"}
+    return {}
+
+
 def hidden_tray() -> list[str]:
     """Идентификаторы значков лотка, которые прятать. Сравнение — без учёта регистра."""
     from . import config as cfg_mod
@@ -262,6 +300,6 @@ def catalog() -> dict:
 
     launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
     want = pinned()
-    return {"launcher": launcher, "items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
+    return {"launcher": launcher, "cat": cat_frames(), "items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
                       for k in want if k in known],
             "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP)}

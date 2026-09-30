@@ -875,6 +875,11 @@ Item {
                     Toggle { checked: win.get("dock.cat") !== false; onToggled: v => win.set("dock.cat", v) }
                 }
                 Row {
+                    title: JD.tr("Кошка засыпает ниже")
+                    subtitle: JD.tr("Ноль — не спит никогда. Спящий кадр есть только у кадров виджета CatWalk")
+                    SSlider { key: "dock.cat_sleep_below"; from: 0; to: 30; step: 1; decimals: 0; unit: JD.tr("%") }
+                }
+                Row {
                     title: JD.tr("Часы в доке")
                     subtitle: JD.tr("Выключены: время уже есть у верхнего края, и два одинаковых числа — это рябь")
                     Toggle { checked: win.get("dock.clock") === true; onToggled: v => win.set("dock.clock", v) }
