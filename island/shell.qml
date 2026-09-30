@@ -37,7 +37,9 @@ ShellRoot {
         function dock(): string {
             return JSON.stringify({ windows: JD.windows.map(w => ({ app: w.app, min: w.minimized, on: w.active })),
                                     pinned: JD.dockItems.map(i => i.key), anchor: JD.dockAnchor,
-                                    known: Object.keys(JD.dockMatch).length })
+                                    known: Object.keys(JD.dockMatch).length,
+                                    menu: [menuWin.x, menuWin.y, menuWin.width, menuWin.height],
+                                    card: [menuCard.x, menuCard.y, menuCard.width, menuCard.height] })
         }
     }
 
@@ -2730,7 +2732,9 @@ ShellRoot {
             exclusionMode: ExclusionMode.Normal
             // Прячущийся док места не отнимает: он затем и прячется.
             readonly property real edgeMargin: 8
-            exclusiveZone: autohide || JD.dockCfg.reserve === false ? 0 : Math.round(dock.cardHeight + edgeMargin)
+            // Через «=== true», а не «!== false»: до прихода настроек свойства нет вовсе, а зона,
+            // отнятая на секунду при запуске, остаётся отнятой — окно под ней уже сжалось.
+            exclusiveZone: JD.dockCfg.reserve === true && !autohide ? Math.round(dock.cardHeight + edgeMargin) : 0
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.namespace: "justday-dock"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
