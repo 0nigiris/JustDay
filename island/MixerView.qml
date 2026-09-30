@@ -17,10 +17,26 @@ import Quickshell.Services.Pipewire
 Item {
     id: mx
 
-    // Всё, что сейчас играет: ручьи программ, без записи с микрофона.
-    readonly property var streams: Pipewire.nodes.values.filter(n => n && n.isStream && !n.isSink && n.audio)
-    // И то, что пишет: звонок в дискорде должно быть видно там же, где всё остальное.
-    readonly property var inputs: Pipewire.nodes.values.filter(n => n && n.isStream && n.isSink && n.audio)
+    // Кто есть кто, решаем по media.class, а не по «это же поток»: у PipeWire поток бывает и
+    // играющим, и пишущим, и это ровно противоположные вещи.
+    //
+    // И два рода ручьёв сюда не попадают. Монитор (stream.monitor) — не звук, а подглядывание за
+    // ним: так рисуют полоску уровня в самой плазме, и их бывает сразу три штуки. Ползунок у
+    // такого ручья не делает ничего, и место он занимает как настоящий. Второй — наш собственный
+    // pw-record: это ассистент слушает своё имя, и предлагать человеку убавить громкость
+    // собственных ушей ассистента незачем.
+    function kindOf(node) {
+        if (!node || !node.audio || !node.isStream) return ""
+        const p = node.properties || ({})
+        if (String(p["stream.monitor"]) === "true") return ""
+        if ((p["application.name"] || "") === "pw-record") return ""
+        const cls = p["media.class"] || ""
+        if (cls === "Stream/Output/Audio") return "play"
+        if (cls === "Stream/Input/Audio") return "rec"
+        return ""
+    }
+    readonly property var streams: Pipewire.nodes.values.filter(n => mx.kindOf(n) === "play")
+    readonly property var inputs: Pipewire.nodes.values.filter(n => mx.kindOf(n) === "rec")
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var source: Pipewire.defaultAudioSource
 
