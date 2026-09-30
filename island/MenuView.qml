@@ -275,7 +275,7 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 font.family: JD.fontFamily
-                                font.pixelSize: 11.5
+                                font.pixelSize: 12
                                 color: JD.text1
                                 horizontalAlignment: Text.AlignHCenter
                                 maximumLineCount: 2
