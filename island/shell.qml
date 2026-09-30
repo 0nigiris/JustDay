@@ -2846,6 +2846,7 @@ ShellRoot {
             }
 
             function probe(x) { return dock.probe(x) }
+            function dragProbe(n, x) { return dock.dragProbe(n, x) }
 
             DockView {
                 id: dock
