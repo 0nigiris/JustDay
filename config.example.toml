@@ -97,6 +97,8 @@ show_events = true
 show_notifications = true   # mirror desktop notifications (they never leave the computer)
 city = ""                   # weather location; empty = no weather requests
 top_margin = 8              # room above the island: a panel along the top edge stays clickable
+menu_width = 760            # the app menu: its size is set by dragging the card's free corner
+menu_height = 620           # not computed from content — then the category strip moves under the cursor
 video_width = 640           # the island video frame, in points — drag its corner, the size is kept here
 video_volume = 1.0          # how loud that frame is, 0–1 (the wheel over the video)
 screen = ""                 # monitor name, e.g. DP-2; empty = top-left one
