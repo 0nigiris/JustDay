@@ -3188,15 +3188,15 @@ ShellRoot {
                 id: menuGrip
                 readonly property bool atLeft: menuWin.side === "right"
                 readonly property bool atTop: !menuWin.atTop
-                width: 22
-                height: 22
+                width: 26
+                height: 26
                 x: atLeft ? 0 : parent.width - width
                 y: atTop ? 0 : parent.height - height
 
                 Canvas {
                     anchors.fill: parent
                     anchors.margins: 5
-                    opacity: gripHover.hovered ? 0.75 : menuCardBody.containsMouse ? 0.3 : 0.18
+                    opacity: gripHover.hovered ? 0.8 : menuCardBody.containsMouse ? 0.45 : 0.28
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
                     onPaint: {
                         const ctx = getContext("2d")

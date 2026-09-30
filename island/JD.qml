@@ -182,7 +182,7 @@ Singleton {
     // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
     // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
     // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
-    property string toolsPage: ""          // "" — закрыта; emoji | clip | load
+    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | load
     property int toolsPick: 0             // выбранная строка в списке: стрелками и Enter
     property string toolsQuery: ""
     property var toolsItems: []           // что нашлось: эмодзи или записи буфера

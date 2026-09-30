@@ -2507,7 +2507,7 @@ class Daemon:
                 resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))
-                if which not in ("emoji", "clip", "load", "apps", ""):
+                if which not in ("emoji", "clip", "mixer", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
                 elif which == "apps":     # программы переехали в собственное меню на всё окно
                     self.publish(menu=True)

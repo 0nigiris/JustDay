@@ -1,4 +1,4 @@
-// Панель инструментов островка: эмодзи, буфер обмена, нагрузка машины.
+// Панель инструментов островка: эмодзи, буфер обмена, звук, нагрузка машины.
 //
 // Программ здесь больше нет: у них своё меню (MenuView.qml) на всё окно, с разделами, значками и
 // кнопкой питания. Две строки поиска по одному и тому же набору расходятся в тот же день, когда их
@@ -57,6 +57,7 @@ Item {
                 model: [
                     { id: "emoji", name: "Эмодзи", icon: "smile" },
                     { id: "clip", name: "Буфер", icon: "clipboard" },
+                    { id: "mixer", name: "Звук", icon: "volume-2" },
                     { id: "load", name: "Машина", icon: "activity" },
                 ]
                 delegate: Rectangle {
@@ -308,6 +309,13 @@ Item {
                 labelColor: JD.accentRed
                 onClicked: { JD.send({ cmd: "clip_wipe" }); JD.refreshTools() }
             }
+        }
+
+        // ───────────── микшер ─────────────
+        MixerView {
+            visible: tv.page === "mixer"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
 
         // ───────────── нагрузка машины ─────────────
