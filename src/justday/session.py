@@ -1,87 +1,104 @@
-"""«Я ушёл» / «я вернулся»: close the day's windows, and put them back exactly as they were.
+"""Завершение сеанса: заблокировать, выйти, сон, перезагрузка, выключение.
 
-The computer is also a server: leaving it on with twenty windows open is the normal thing to do, and
-closing them one by one to free the memory is the annoying thing. So the open applications are written
-down first, then asked to close the way a click on their × asks — they save, they ask their questions —
-and one command later they are all back.
+Это то, что в KDE спрятано под кнопкой питания в меню приложений, и меню островка обязано уметь
+то же самое — иначе оно не замена, а половина замены.
 
-Nothing is killed: what refuses to close stays open and is reported.
+Два правила, из которых всё остальное следует.
+
+Первое: просим KDE, а не systemd. `org.kde.Shutdown` даёт программам сохранить несохранённое и
+закрыть себя по-человечески; `systemctl poweroff` просто гасит машину вместе с открытым редактором.
+К systemd уходим, только если KDE на шине нет (другая оболочка, голый сеанс).
+
+Второе: опасное требует подтверждения. Выход, перезагрузка и выключение теряют работу, поэтому
+`run()` без `confirm=True` их не делает вовсе — это не вежливость вида, а запрет в самой функции.
+Сон и блокировка ничего не теряют и подтверждения не просят: «Вы уверены?» перед блокировкой
+экрана — ровно тот случай, когда защита начинает мешать.
 """
 from __future__ import annotations
 
-import json
-import logging
-import time
+import getpass
+import os
+import pwd
+import shutil
+import socket
+import subprocess
+from pathlib import Path
 
-from . import config, desktop
+# id, подпись, значок, теряет ли несохранённое
+ACTIONS: tuple[tuple[str, str, str, bool], ...] = (
+    ("lock", "Заблокировать", "lock", False),
+    ("sleep", "Сон", "moon", False),
+    ("logout", "Выйти", "log-out", True),
+    ("reboot", "Перезагрузить", "refresh-cw", True),
+    ("poweroff", "Выключить", "power", True),
+)
+DANGEROUS = frozenset(a for a, _, _, danger in ACTIONS if danger)
 
-log = logging.getLogger("justday")
-
-FILE = config.STATE_DIR / "session.json"
-# The desktop's own furniture: not applications, and closing them would take the session down.
-SYSTEM = {"quickshell", "kwin_wayland", "plasmashell", "xwaylandvideobridge", "krunner", "kded6", "polkit-kde-authentication-agent-1"}
-
-
-def _apps() -> list[dict]:
-    """Open windows that belong to real applications, one entry per application."""
-    seen: dict[str, dict] = {}
-    for w in desktop.windows("list"):
-        cls = (w.get("app") or "").strip()
-        if not cls or cls.lower() in SYSTEM:
-            continue
-        hit = next((a for a in desktop.find_apps(cls.split(".")[-1], 1)), None)
-        seen.setdefault(cls.lower(), {"app": cls, "title": w.get("title", ""),
-                                      "id": hit["id"] if hit else "", "name": hit["name"] if hit else cls})
-    return list(seen.values())
+# Сначала KDE (закрывает программы по-хорошему), потом запасной путь.
+_WAYS: dict[str, tuple[list[str], list[str]]] = {
+    "lock": (["loginctl", "lock-session"], ["loginctl", "lock-session"]),
+    "sleep": (["systemctl", "suspend"], ["systemctl", "suspend"]),
+    "logout": (["qdbus-qt6", "org.kde.Shutdown", "/Shutdown", "logout"], ["loginctl", "terminate-user", ""]),
+    "reboot": (["qdbus-qt6", "org.kde.Shutdown", "/Shutdown", "logoutAndReboot"], ["systemctl", "reboot"]),
+    "poweroff": (["qdbus-qt6", "org.kde.Shutdown", "/Shutdown", "logoutAndShutdown"], ["systemctl", "poweroff"]),
+}
 
 
-def saved() -> dict:
+def actions() -> list[dict]:
+    """Что показать в меню. Порядок — от безобидного к необратимому."""
+    return [{"id": a, "name": name, "icon": icon, "danger": danger} for a, name, icon, danger in ACTIONS]
+
+
+def _kde_alive() -> bool:
+    if not shutil.which("qdbus-qt6"):
+        return False
     try:
-        return json.loads(FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+        got = subprocess.run(["qdbus-qt6", "org.kde.Shutdown"], capture_output=True, timeout=4)
+        return got.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
-def save() -> dict:
-    """Write down what is open right now (and keep the previous list until something is saved again)."""
-    apps = _apps()
-    FILE.parent.mkdir(parents=True, exist_ok=True)
-    rec = {"at": time.time(), "apps": apps}
-    FILE.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
-    return rec
+def run(what: str, *, confirm: bool = False) -> dict:
+    """Выполнить действие. Опасное — только с confirm=True."""
+    if what not in _WAYS:
+        return {"ok": False, "error": f"нет такого действия: {what}"}
+    if what in DANGEROUS and not confirm:
+        return {"ok": False, "error": "нужно подтверждение", "confirm": True}
+    kde, plain = _WAYS[what]
+    cmd = kde if _kde_alive() else plain
+    if cmd[-1] == "":                                   # loginctl terminate-user <кто>
+        import getpass
+        cmd = [*cmd[:-1], getpass.getuser()]
+    if not shutil.which(cmd[0]):
+        return {"ok": False, "error": f"нечем: нет {cmd[0]}"}
+    try:
+        # Не ждём: выключение завершает и нас самих, а `run` должен успеть ответить островку.
+        subprocess.Popen(cmd, start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "did": what}
 
 
-def close(keep: list[str] | None = None) -> dict:
-    """Save the list, then ask every application to close — as a click on its × would."""
-    keep_l = [k.lower() for k in (keep or []) + config.load()["session"]["keep"]]
-    rec = save()
-    closed, left = [], []
-    for app in rec["apps"]:
-        if any(k in app["app"].lower() or k in app["name"].lower() for k in keep_l):
+def user() -> dict:
+    """Кто за машиной: имя в шапку меню и картинка, если её когда-то ставили.
+
+    Картинку ищем там же, где её держит KDE, — чтобы меню показывало то же лицо, что и экран входа,
+    а не заводило себе второе.
+    """
+    login = getpass.getuser()
+    try:
+        full = pwd.getpwnam(login).pw_gecos.split(",")[0].strip()
+    except (KeyError, OSError):
+        full = ""
+    avatar = ""
+    for p in (Path.home() / ".face.icon", Path.home() / ".face",
+              Path(f"/var/lib/AccountsService/icons/{login}")):
+        try:
+            if p.is_file() and os.access(p, os.R_OK):
+                avatar = str(p)
+                break
+        except OSError:
             continue
-        if desktop.windows("close", app["app"]):
-            closed.append(app["name"])
-        else:
-            left.append(app["name"])
-    log.info("session: closed %s, left %s", closed, left)
-    return {"ok": True, "closed": closed, "still_open": left, "saved": len(rec["apps"])}
-
-
-def restore() -> dict:
-    """Open again everything that was written down — skipping what is already running."""
-    rec = saved()
-    if not rec.get("apps"):
-        return {"ok": False, "error": "nothing was saved"}
-    running = {w.get("app", "").lower() for w in desktop.windows("list")}
-    started, skipped, unknown = [], [], []
-    for app in rec["apps"]:
-        if app["app"].lower() in running:
-            skipped.append(app["name"])
-        elif app["id"]:
-            desktop.launch_app_id(app["id"])
-            started.append(app["name"])
-            time.sleep(0.3)  # a dozen gtk-launch calls at once make the desktop stutter
-        else:
-            unknown.append(app["name"])
-    return {"ok": True, "started": started, "already_open": skipped, "unknown": unknown,
-            "at": time.strftime("%H:%M", time.localtime(rec.get("at", time.time())))}
+    return {"login": login, "name": full or login, "host": socket.gethostname(), "avatar": avatar}

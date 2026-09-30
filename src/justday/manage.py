@@ -207,6 +207,7 @@ HOTKEYS: tuple[tuple[str, str, str], ...] = (
     ("clip", "Буфер обмена", "Meta+V"),
     ("emoji", "Эмодзи", "Meta+."),
     ("load", "Нагрузка машины", ""),
+    ("menu", "Меню приложений", ""),
 )
 HOTKEY_DEFAULTS = {name: default for name, _, default in HOTKEYS}
 
@@ -229,7 +230,11 @@ def _hotkey_id(name: str) -> str:
 
 QT_MODS = {"meta": 0x10000000, "super": 0x10000000, "win": 0x10000000,
            "ctrl": 0x04000000, "control": 0x04000000, "alt": 0x08000000, "shift": 0x02000000}
-QT_KEYS = {"space": 0x20, "tab": 0x01000001, "backspace": 0x01000003, "return": 0x01000004,
+# Голая «Meta» — это не модификатор, а самостоятельная клавиша (Qt::Key_Meta). Так её держит
+# plasmashell под меню приложений, так же её должны просить и мы.
+QT_KEYS = {"meta": 0x01000022, "super": 0x01000022, "win": 0x01000022,
+           "ctrl": 0x01000021, "control": 0x01000021, "alt": 0x01000023, "shift": 0x01000020,
+           "space": 0x20, "tab": 0x01000001, "backspace": 0x01000003, "return": 0x01000004,
            "enter": 0x01000005, "esc": 0x01000000, "escape": 0x01000000, "insert": 0x01000006,
            "delete": 0x01000007, "home": 0x01000010, "end": 0x01000011, "pageup": 0x01000016,
            "pagedown": 0x01000017, "left": 0x01000012, "up": 0x01000013, "right": 0x01000014,

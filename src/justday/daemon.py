@@ -45,6 +45,7 @@ from . import (
     parts,
     reminders,
     scenes,
+    session,
     sysload,
     voiceprint,
     workers,
@@ -2301,6 +2302,18 @@ class Daemon:
             elif cmd == "apps_run":
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", ""))))
+            elif cmd == "apps_catalog":  # меню приложений: разделы, значки, закреплённое — одним куском
+                got = await asyncio.get_running_loop().run_in_executor(None, launcher.catalog)
+                resp = {"ok": True, "catalog": got | {"user": session.user(), "session": session.actions()}}
+            elif cmd == "apps_pin":
+                resp = launcher.pin(str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
+            elif cmd == "session":  # что умеет кнопка питания
+                resp = {"ok": True, "session": session.actions()}
+            elif cmd == "session_do":  # выход, перезагрузка, выключение — опасное только с подтверждением
+                resp = session.run(str(req.get("what", "")), confirm=bool(req.get("confirm")))
+            elif cmd == "menu":  # открыть меню приложений (клавиша Windows, `justday menu`)
+                self.publish(menu="toggle" if req.get("toggle") else bool(req.get("open", True)))
+                resp = {"ok": True}
             elif cmd == "clip_list":
                 resp = {"ok": True, "clip": clipboard.items(int(req.get("limit") or 60),
                                                             req.get("query", "")),
@@ -2322,6 +2335,9 @@ class Daemon:
                 which = str(req.get("which", ""))
                 if which not in ("emoji", "clip", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
+                elif which == "apps":     # программы переехали в собственное меню на всё окно
+                    self.publish(menu=True)
+                    resp = {"ok": True, "panel": "menu"}
                 else:
                     self.publish(panel=which)
                     resp = {"ok": True, "panel": which}

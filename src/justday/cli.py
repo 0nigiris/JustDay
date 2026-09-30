@@ -547,6 +547,8 @@ def main(argv: list[str] | None = None) -> None:
     # Имя не «panel»: так уже зовётся запасная полоска на Tk для машин без острова.
     sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps | emoji | clip | load")
     sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "load"])
+    sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")
+    sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "open", "close"])
     sp = sub.add_parser("launch", help="поиск программ: без запроса открывает лаунчер в островке, "
                                       "с запросом запускает первое подходящее")
     sp.add_argument("query", nargs="*")
@@ -619,6 +621,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_clip_cmd(a.action, a.which, search=a.search, image=a.image, copy_only=a.copy))
     elif a.cmd == "tools":
         got = control("panel", which=a.which, timeout=5)
+        if not got.get("ok"):
+            sys.exit(got.get("error") or "островок не отвечает")
+    elif a.cmd == "menu":
+        got = control("menu", open=a.action != "close", toggle=a.action == "toggle", timeout=5)
         if not got.get("ok"):
             sys.exit(got.get("error") or "островок не отвечает")
     elif a.cmd == "launch":

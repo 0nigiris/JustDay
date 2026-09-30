@@ -182,7 +182,7 @@ Singleton {
     // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
     // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
     // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
-    property string toolsPage: ""          // "" — закрыта; apps | emoji | clip | load
+    property string toolsPage: ""          // "" — закрыта; emoji | clip | load
     property int toolsPick: 0             // выбранная строка в списке: стрелками и Enter
     property string toolsQuery: ""
     property var toolsItems: []           // что нашлось: эмодзи или записи буфера
@@ -195,7 +195,7 @@ Singleton {
     property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
 
     function openTools(page) {
-        toolsPage = page || "apps"
+        toolsPage = page || "emoji"
         toolsQuery = ""
         toolsPick = 0
         emojiGroup = ""
@@ -225,19 +225,87 @@ Singleton {
     // Ищет демон, а не островок: набор эмодзи лежит там, история буфера тоже, и второй такой же
     // поиск на QML разошёлся бы с первым в тот же день.
     function refreshTools() {
-        if (toolsPage === "apps") send({ cmd: "apps", query: toolsQuery, limit: 40 })
-        else if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
+        if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
     }
-    // Запустить или, если ничего не нашлось, спросить ассистента. Это и есть разница между этим
-    // лаунчером и всеми остальными: поле не обязано быть командой.
-    function runApp(item) { send({ cmd: "apps_run", kind: item.kind, id: item.id }); closeTools() }
-    function askFromLauncher(text) { closeTools(); send({ cmd: "type", text: text }) }
     function useEmoji(ch) { send({ cmd: "emoji_use", char: ch }); closeTools() }
     function useClip(which) { send({ cmd: "clip_use", which: String(which) }); closeTools() }
     function forgetClip(which) { send({ cmd: "clip_forget", which: String(which) }); refreshTools() }
     function pauseClip(on) { send({ cmd: "clip_pause", on: on }) }
+
+    // ───────────── меню приложений ─────────────
+    //
+    // Замена кикоффу KDE. Отдельное окно, а не страница острова: меню открывается от своего угла
+    // экрана и живёт по своим размерам, а остров в это время может показывать таймер или плеер.
+    // Общего у них — цвета, значки, клавиши и демон; этого и хотелось.
+    property bool menuOpen: false
+    property var menuCatalog: ({})        // разделы, программы, закреплённое, кто за машиной
+    property string menuGroup: "fav"
+    property string menuQuery: ""
+    property var menuFound: []            // что нашёл поиск: программы, игры, открытые окна
+    property int menuPick: 0
+    property int menuSerial: 0            // растёт на каждое открытие: поле снова берёт фокус
+    property string menuConfirm: ""       // выключение ждёт второго щелчка
+
+    readonly property var menuUser: menuCatalog.user || ({})
+    readonly property var menuGroups: menuCatalog.groups || []
+    readonly property var sessionActions: menuCatalog.session || []
+    readonly property bool menuSearching: menuQuery.trim() !== ""
+    // Закреплённые — по ключам, чтобы порядок был тот, в каком их закрепляли, а не алфавитный.
+    readonly property var menuPinned: {
+        const all = menuCatalog.apps || [], want = menuCatalog.pinned || []
+        const by = ({})
+        for (const a of all) by[a.kind + ":" + a.id] = a
+        return want.map(k => by[k]).filter(a => a !== undefined)
+    }
+    // Что показать сеткой: закреплённые, всё подряд или один раздел.
+    readonly property var menuShown: {
+        if (menuSearching) return menuFound
+        if (menuGroup === "fav") return menuPinned
+        const all = menuCatalog.apps || []
+        return menuGroup === "all" ? all : all.filter(a => a.cat === menuGroup)
+    }
+    function isPinned(item) {
+        return item && (menuCatalog.favourites || []).indexOf(item.kind + ":" + item.id) >= 0
+    }
+
+    function openMenu() {
+        menuQuery = ""
+        menuPick = 0
+        menuConfirm = ""
+        menuOpen = true
+        menuSerial++
+        closeAll()
+        send({ cmd: "apps_catalog" })
+    }
+    function closeMenu() { menuOpen = false; menuQuery = ""; menuFound = []; menuConfirm = "" }
+    function toggleMenu() { menuOpen ? closeMenu() : openMenu() }
+    // Ищет тот же демон, что отвечает и ассистенту: «открой дискорд» голосом и строка в меню
+    // находят одно и то же. Поиск шире сетки — в нём есть ещё и открытые окна.
+    function searchMenu() { send({ cmd: "apps", query: menuQuery, limit: 60 }) }
+    function runFromMenu(item) {
+        if (!item) return
+        send({ cmd: "apps_run", kind: item.kind, id: item.id })
+        closeMenu()
+    }
+    // Ничего не нашлось — не тупик: строка уходит ассистенту. Ради этого меню и своё.
+    function askFromMenu(text) { closeMenu(); send({ cmd: "type", text: text }) }
+    function pinFromMenu(item) {
+        if (!item) return
+        send({ cmd: "apps_pin", kind: item.kind, id: item.id })
+        pinRefresh.restart()
+    }
+    // Опасное — со вторым щелчком. Не «Вы уверены?» окном, а той же кнопкой, которая на секунду
+    // становится красной: подтверждение на месте, без окна поверх окна.
+    function sessionDo(what, danger) {
+        if (danger && menuConfirm !== what) { menuConfirm = what; confirmTimeout.restart(); return }
+        menuConfirm = ""
+        send({ cmd: "session_do", what: what, confirm: true })
+        closeMenu()
+    }
+    Timer { id: confirmTimeout; interval: 4000; onTriggered: jd.menuConfirm = "" }
+    Timer { id: pinRefresh; interval: 60; onTriggered: jd.send({ cmd: "apps_catalog" }) }
 
     property bool settingsOpen: false
     property string settingsPage: "general"
@@ -452,7 +520,9 @@ Singleton {
         if (m.jobs !== undefined) jobs = m.jobs || []
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
-        if (m.apps !== undefined) { toolsItems = m.apps; toolsPick = 0 }
+        if (m.menu !== undefined) { m.menu === "toggle" ? toggleMenu() : (m.menu ? openMenu() : closeMenu()) }
+        if (m.catalog !== undefined) menuCatalog = m.catalog
+        if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
         if (m.load !== undefined) {

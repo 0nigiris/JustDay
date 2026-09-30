@@ -180,6 +180,10 @@ DEFAULTS: dict = {
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         "city": "",  # weather location; empty = no weather requests at all
         "screen": "",  # monitor name (e.g. DP-2); empty = the one at the top-left
+        # Где висит сам остров и где открывается меню приложений:
+        # top-left | top-center | top-right | bottom-left | bottom-center | bottom-right
+        "position": "top-center",
+        "menu_position": "bottom-left",
         # How much room to leave above the island: a panel along the top edge stays reachable
         "top_margin": 8,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here

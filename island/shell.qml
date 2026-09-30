@@ -2692,4 +2692,76 @@ ShellRoot {
         }
         }
     }
+
+    // ───────────── меню приложений ─────────────
+    //
+    // Своё окно, а не страница острова. Меню открывается от своего угла экрана, живёт по своим
+    // размерам и может быть открыто, пока остров показывает таймер или играет музыку. Общего у них —
+    // цвета, значки, клавиши и демон.
+    //
+    // Слой перекрывает всё, но зону ищет обычную: exclusiveZone 0 при Normal значит «сам ничего не
+    // отнимаю, но чужие полосы уважаю». Поэтому меню ложится в свободную часть экрана и не налезает
+    // на панель KDE, пока та ещё на месте.
+    PanelWindow {
+        id: menuWin
+        readonly property bool want: JD.menuOpen
+        property bool alive: false
+        // Окно гаснет не мгновенно: иначе исчезновение выглядит обрывом, а не закрытием.
+        onWantChanged: { if (want) { alive = true; fadeOut.stop() } else fadeOut.restart() }
+        Timer { id: fadeOut; interval: JD.dur(170); onTriggered: menuWin.alive = false }
+
+        visible: alive
+        screen: win.screen
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Normal
+        exclusiveZone: 0
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "justday-menu"
+        WlrLayershell.keyboardFocus: JD.menuOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        color: "transparent"
+
+        readonly property string place: JD.island.menu_position || "bottom-left"
+        readonly property bool atTop: place.startsWith("top")
+        readonly property string side: place.split("-")[1] || "left"
+
+        MouseArea { anchors.fill: parent; onClicked: JD.closeMenu() }
+        Shortcut { sequence: "Escape"; enabled: JD.menuOpen; onActivated: JD.closeMenu() }
+
+        Rectangle {
+            id: menuCard
+            // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
+            width: Math.min(760, menuWin.width - 24)
+            height: Math.min(560, menuWin.height - 24)
+            x: menuWin.side === "left" ? 12
+             : menuWin.side === "right" ? menuWin.width - width - 12
+             : (menuWin.width - width) / 2
+            y: menuWin.atTop ? 12 : menuWin.height - height - 12
+            radius: 26
+            color: JD.ink
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.10)
+            clip: true
+
+            // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.
+            transformOrigin: menuWin.atTop
+                ? (menuWin.side === "left" ? Item.TopLeft : menuWin.side === "right" ? Item.TopRight : Item.Top)
+                : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
+            opacity: JD.menuOpen ? 1 : 0
+            scale: JD.menuOpen ? 1 : 0.94
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on scale { enabled: JD.animOn
+                                SpringAnimation { spring: JD.springK; damping: Math.max(0.5, JD.springDamping); epsilon: 0.004 } }
+
+            // Щелчок по самой карточке её не закрывает — только мимо.
+            MouseArea { anchors.fill: parent }
+
+            // Живёт, только пока открыто: закрыли — освободили и сетку, и значки.
+            Loader {
+                anchors.fill: parent
+                active: menuWin.alive
+                sourceComponent: MenuView {}
+            }
+        }
+    }
+
 }

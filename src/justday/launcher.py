@@ -19,7 +19,9 @@ import time
 from . import config, desktop
 
 RECENT_FILE = config.STATE_DIR / "launcher-recent.json"
+FAV_FILE = config.STATE_DIR / "launcher-favourites.json"
 RECENT_MAX = 40
+FAV_MAX = 24
 
 
 def recents() -> list[str]:
@@ -166,3 +168,103 @@ def stats() -> dict:
     """Что лаунчер видит — для `justday test launcher`."""
     return {"apps": len(desktop.list_apps()), "games": len(desktop.list_games()),
             "recent": len(recents()), "at": time.time()}
+
+
+# ──────────────────────────── разделы меню ────────────────────────────
+#
+# Freedesktop раскладывает программы по десяткам меток сразу: Kate — это и Utility, и TextEditor, и
+# Development. Меню же должно показать её в одном месте, иначе человек ищет её трижды. Поэтому
+# разделы разбираются по порядку сверху вниз и первый подошедший забирает программу себе; порядок и
+# есть решение, какой признак важнее («редактор кода» важнее, чем «утилита»).
+#
+# Разделов нарочно мало. У KDE их полтора десятка, и половина пустая — раздел, в котором ничего нет,
+# это лишний щелчок, а не порядок.
+
+CATEGORIES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+    ("fav", "Избранное", "star", ()),
+    ("all", "Все программы", "layout-grid", ()),
+    ("net", "Интернет", "globe", ("Network", "WebBrowser", "Email", "InstantMessaging", "Chat")),
+    ("media", "Музыка и видео", "music", ("AudioVideo", "Audio", "Video", "Player", "Music")),
+    ("graphics", "Графика", "palette", ("Graphics", "Photography", "RasterGraphics", "VectorGraphics", "3DGraphics")),
+    ("games", "Игры", "gamepad-2", ("Game",)),
+    ("dev", "Разработка", "code", ("Development", "IDE", "TextEditor", "Debugger")),
+    ("office", "Документы", "file-text", ("Office", "WordProcessor", "Spreadsheet", "Presentation", "Viewer")),
+    ("learn", "Обучение", "book-open", ("Education", "Science", "Math")),
+    ("system", "Система", "settings", ("System", "Settings", "TerminalEmulator", "Monitor", "Security")),
+    ("tools", "Утилиты", "package", ("Utility", "Accessories", "Archiving", "FileTools")),
+)
+_REAL = tuple(c for c in CATEGORIES if c[0] not in ("fav", "all"))
+OTHER = "tools"                                    # некуда положить — пусть будет утилитой
+
+
+def category_of(categories: str) -> str:
+    """«Qt;KDE;Utility;TextEditor;» → идентификатор раздела."""
+    marks = {m.strip() for m in str(categories or "").split(";") if m.strip()}
+    for cat_id, _, _, marks_of in _REAL:
+        if marks & set(marks_of):
+            return cat_id
+    return OTHER
+
+
+def favourites() -> list[str]:
+    """Закреплённые, в том порядке, в каком их закрепляли. Ключ — «вид:идентификатор»."""
+    try:
+        got = json.loads(FAV_FILE.read_text(encoding="utf-8"))
+        return [str(k) for k in got][:FAV_MAX] if isinstance(got, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _save_favourites(keep: list[str]) -> None:
+    config.STATE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        FAV_FILE.write_text(json.dumps(keep[:FAV_MAX], ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def pin(kind: str, ident: str, on: bool | None = None) -> dict:
+    """Закрепить или открепить. on=None — переключить."""
+    key = f"{kind}:{ident}"
+    have = favourites()
+    on = key not in have if on is None else bool(on)
+    _save_favourites(([k for k in have if k != key] + [key]) if on else [k for k in have if k != key])
+    return {"ok": True, "pinned": on, "favourites": favourites()}
+
+
+def _row(app: dict) -> dict:
+    name = app.get("name_ru") or app.get("name") or app["id"]
+    return {"kind": "app", "id": app["id"], "name": name, "icon": app.get("icon", ""),
+            "sub": app.get("generic", ""), "cat": category_of(app.get("categories", ""))}
+
+
+def catalog() -> dict:
+    """Всё меню разом: разделы с числом программ, сами программы и закреплённые.
+
+    Отдаётся одним куском нарочно. Меню открывается по клавише и обязано нарисоваться сразу, а не
+    досылать разделы по одному — на слабой машине это видно глазом.
+    """
+    rows = [_row(a) for a in desktop.list_apps()]
+    for game in desktop.list_games():
+        rows.append({"kind": "game", "id": str(game["id"]), "name": game["name"],
+                     "icon": "applications-games", "sub": game.get("source", ""), "cat": "games"})
+    rows.sort(key=lambda r: _flat(r["name"]))
+
+    fav, order = favourites(), {k: n for n, k in enumerate(recents())}
+    by_key = {f"{r['kind']}:{r['id']}": r for r in rows}
+    # Пусто в избранном — показываем недавние: раздел, который встречает пустотой в первый же день,
+    # человек больше не открывает.
+    pinned = [by_key[k] for k in fav if k in by_key]
+    if not pinned:
+        pinned = [by_key[k] for k in recents() if k in by_key][:12]
+
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["cat"]] = counts.get(r["cat"], 0) + 1
+    groups = [{"id": c, "name": name, "icon": icon,
+               "count": len(pinned) if c == "fav" else len(rows) if c == "all" else counts.get(c, 0)}
+              for c, name, icon, _ in CATEGORIES]
+
+    return {"groups": [g for g in groups if g["count"] or g["id"] in ("fav", "all")],
+            "apps": rows, "favourites": fav, "pinned": [f"{r['kind']}:{r['id']}" for r in pinned],
+            "recent": [k for k in order]}

@@ -7,7 +7,7 @@
 #
 #   setup-hotkey.sh [--talk "Meta+J"] [--extra F19] [--cancel "Meta+Shift+J"] [--type Meta+K]
 #                   [--yes Meta+Y] [--no Meta+N] [--apps "Alt+Space"] [--clip "Meta+V"]
-#                   [--emoji "Meta+."] [--load ""] [--mouse ExtraButton1] [--remove]
+#                   [--emoji "Meta+."] [--load ""] [--menu Meta] [--mouse ExtraButton1] [--remove]
 # Пустое значение — не регистрировать вовсе.
 #
 # kglobalacceld включает командные сочетания только для «служебных» составляющих, а те создаются из
@@ -26,6 +26,7 @@ KEYS=(
   "clip|буфер обмена|tools clip|Meta+V"
   "emoji|эмодзи|tools emoji|Meta+."
   "load|нагрузка машины|tools load|"
+  "menu|меню приложений|menu|"
 )
 
 declare -A KEY
