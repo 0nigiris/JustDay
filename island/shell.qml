@@ -2794,10 +2794,10 @@ ShellRoot {
         sourceComponent: PanelWindow {
             id: trayWin
             screen: win.screen
-            readonly property bool right: JD.trayPlace === "right"
+            readonly property bool atRight: JD.trayPlace === "right"
             readonly property string align: JD.trayCfg.align || "center"
             visible: !tray.empty
-            anchors { top: true; bottom: true; left: !right; right: right }
+            anchors { top: true; bottom: true; left: !atRight; right: atRight }
             exclusionMode: ExclusionMode.Normal
             exclusiveZone: JD.trayCfg.reserve === true && !tray.empty ? Math.round(tray.implicitWidth + 10) : 0
             WlrLayershell.layer: WlrLayer.Top
@@ -2813,7 +2813,7 @@ ShellRoot {
             TrayView {
                 id: tray
                 host: trayWin
-                x: trayWin.right ? parent.width - width - 10 : 10
+                x: trayWin.atRight ? parent.width - width - 10 : 10
                 y: {
                     const top = JD.atTop ? JD.topMargin + 60 : 20
                     if (trayWin.align === "start") return top

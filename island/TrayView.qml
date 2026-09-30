@@ -20,7 +20,7 @@ Item {
     readonly property real icon: JD.trayIconSize
     readonly property real pad: 8
     readonly property real cell: icon + 14
-    readonly property bool right: JD.trayPlace === "right"
+    readonly property bool atRight: JD.trayPlace === "right"
 
     // Показываем всё, что в лотке есть. KDE прячет «пассивные» значки во всплывающий ящик, но
     // «мой значок пропал» — худшая новость, какую может принести полоса лотка: человек не знает,
@@ -73,7 +73,7 @@ Item {
                         height: 6
                         radius: 3
                         color: JD.accentOrange
-                        x: tv.right ? 2 : parent.width - width - 2
+                        x: tv.atRight ? 2 : parent.width - width - 2
                         y: 3
                     }
 
@@ -118,7 +118,7 @@ Item {
     property string hint: ""
     function showMenu(item, at) {
         if (!item || !item.hasMenu) return
-        const p = at.mapToItem(null, tv.right ? 0 : at.width, at.height / 2)
+        const p = at.mapToItem(null, tv.atRight ? 0 : at.width, at.height / 2)
         item.display(tv.host, Math.round(p.x), Math.round(p.y))
     }
 
@@ -131,7 +131,7 @@ Item {
         color: Qt.rgba(0, 0, 0, 0.82)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.12)
-        x: tv.right ? -width - 10 : tv.width + 10
+        x: tv.atRight ? -width - 10 : tv.width + 10
         y: Math.max(0, Math.min(tv.height - height, tv.hintY - height / 2))
         Label1 { id: hintText; anchors.centerIn: parent; text: tv.hint }
     }
