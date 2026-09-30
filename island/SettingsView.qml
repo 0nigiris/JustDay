@@ -7,6 +7,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.SystemTray
 
 Item {
     id: win
@@ -860,6 +861,24 @@ Item {
                 Row { title: JD.tr("Подпись под курсором"); Toggle { checked: win.get("dock.labels") !== false; onToggled: v => win.set("dock.labels", v) } }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
+                Row {
+                    title: JD.tr("Значок меню")
+                    subtitle: JD.tr("«Из темы» берёт start-here у набора значков — в макосных темах это яблоко")
+                    Choice {
+                        key: "dock.launcher"
+                        options: [{ value: "apple", label: JD.tr("Из темы значков") }, { value: "grid", label: JD.tr("Сетка точек") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Бегущая кошка")
+                    subtitle: JD.tr("Бежит тем быстрее, чем сильнее занят процессор: занятость видно боковым зрением")
+                    Toggle { checked: win.get("dock.cat") !== false; onToggled: v => win.set("dock.cat", v) }
+                }
+                Row {
+                    title: JD.tr("Часы в доке")
+                    subtitle: JD.tr("Выключены: время уже есть у верхнего края, и два одинаковых числа — это рябь")
+                    Toggle { checked: win.get("dock.clock") === true; onToggled: v => win.set("dock.clock", v) }
+                }
                 Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("dock.autohide") === true; onToggled: v => win.set("dock.autohide", v) } }
                 Row {
                     title: JD.tr("Отнимать место у окон")
@@ -887,8 +906,30 @@ Item {
                     title: JD.tr("Размер значков")
                     SSlider { key: "tray.icon_size"; from: 16; to: 40; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
+                Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("tray.autohide") === true; onToggled: v => win.set("tray.autohide", v) } }
             }
-            Note { text: JD.tr("Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
+            GroupTitle { text: JD.tr("Какие значки показывать") }
+            Group {
+                Repeater {
+                    model: SystemTray.items.values.filter(i => !!i)
+                    delegate: Row {
+                        required property var modelData
+                        readonly property string ident: modelData.id || modelData.title || ""
+                        title: modelData.title || modelData.id || JD.tr("без имени")
+                        subtitle: modelData.tooltipTitle && modelData.tooltipTitle !== title ? modelData.tooltipTitle : ""
+                        Toggle {
+                            checked: JD.trayShows(modelData)
+                            onToggled: v => { JD.trayHide(ident, !v); win.notify(JD.tr("Сохранено")) }
+                        }
+                    }
+                }
+                Row {
+                    visible: SystemTray.items.values.length === 0
+                    title: JD.tr("Лоток пуст")
+                    subtitle: JD.tr("Ни одна запущенная программа не положила в него значок")
+                }
+            }
+            Note { text: JD.tr("Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
         }
     }
 

@@ -2025,6 +2025,30 @@ class Daemon:
                 log.debug("не смог прочитать нагрузку", exc_info=True)
             await asyncio.sleep(1.0)
 
+    async def _cpu_loop(self) -> None:
+        """Одно число для кошки в доке: насколько занят процессор.
+
+        Свой счётчик, а не общий с монитором нагрузки: `Load.cpu()` считает разницу с прошлым
+        взглядом, и два потребителя на одном экземпляре растащили бы эту разницу пополам.
+
+        /proc/stat стоит микросекунды, поэтому читаем всегда, а отправляем — только когда есть кому
+        смотреть и кошка включена. Раз в две секунды: кошка бежит от числа, а не от точности.
+        """
+        meter = sysload.Load()
+        meter.cpu()                      # первый взгляд сравнивать не с чем
+        last = -1.0
+        while True:
+            await asyncio.sleep(2.0)
+            try:
+                pct = meter.cpu()["percent"]
+            except OSError:
+                continue
+            if not self._subs or not self.cfg["dock"].get("cat", True):
+                continue
+            if abs(pct - last) >= 1.5 or (pct < 1.5) != (last < 1.5):
+                last = pct
+                self.publish(cpu=pct)
+
     async def _clip_watch(self) -> None:
         """Следить за буфером обмена.
 
@@ -2434,6 +2458,13 @@ class Daemon:
                 got = await asyncio.get_running_loop().run_in_executor(
                     None, dock.pin, str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
                 resp = {"ok": True, "dock": got}
+            elif cmd == "tray_hide":  # убрать значок из полосы лотка или вернуть его
+                got = await asyncio.get_running_loop().run_in_executor(
+                    None, dock.hide_tray, str(req.get("id", "")), req.get("on"))
+                if got.get("ok"):
+                    self.cfg = config.load()
+                    self.publish(settings=island.settings_snapshot(self.cfg))
+                resp = got
             elif cmd == "dock_arrange":  # новый порядок после перетаскивания
                 keys = [str(k) for k in (req.get("keys") or [])]
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.arrange, keys)
@@ -2525,6 +2556,7 @@ class Daemon:
         if shutil.which("dbus-monitor"):
             spawn(self._watch_notifications())
         spawn(self._watch_windows())
+        spawn(self._cpu_loop())
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()

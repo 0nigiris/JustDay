@@ -25,7 +25,10 @@ Item {
     // Показываем всё, что в лотке есть. KDE прячет «пассивные» значки во всплывающий ящик, но
     // «мой значок пропал» — худшая новость, какую может принести полоса лотка: человек не знает,
     // программа умерла или это оболочка решила за него.
-    readonly property var items: SystemTray.items.values.filter(i => !!i)
+    // Показываем всё, кроме того, что попросили спрятать. «Мой значок пропал» — худшая новость,
+    // какую может принести полоса лотка, поэтому сама она ничего не решает: список спрятанного
+    // ведёт человек, и каждый значок в нём виден в настройках.
+    readonly property var items: SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
     readonly property bool empty: items.length === 0
 
     implicitWidth: icon + pad * 2
@@ -100,10 +103,17 @@ Item {
                             else it.activate()
                         }
                     }
-                    TapHandler {
+                    // Правая кнопка — меню самой программы, оно тут главное. Спрятать значок —
+                    // Ctrl и правая кнопка: редкое действие не должно занимать частый жест. Здесь
+                    // MouseArea, а не TapHandler: только она честно отдаёт зажатые модификаторы.
+                    MouseArea {
+                        anchors.fill: parent
                         acceptedButtons: Qt.RightButton
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: tv.showMenu(slot.modelData, slot)
+                        onClicked: mouse => {
+                            const it = slot.modelData
+                            if (mouse.modifiers & Qt.ControlModifier) JD.trayHide(it.id || it.title, true)
+                            else tv.showMenu(it, slot)
+                        }
                     }
                     TapHandler {
                         acceptedButtons: Qt.MiddleButton

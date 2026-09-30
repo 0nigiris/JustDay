@@ -133,6 +133,28 @@ def arrange(keys: list[str]) -> dict:
     return {"ok": True} | catalog()
 
 
+def hidden_tray() -> list[str]:
+    """Идентификаторы значков лотка, которые прятать. Сравнение — без учёта регистра."""
+    from . import config as cfg_mod
+
+    got = (cfg_mod.load().get("tray") or {}).get("hidden") or []
+    return [str(k).strip().lower() for k in got if str(k).strip()]
+
+
+def hide_tray(ident: str, on: bool | None = None) -> dict:
+    """Спрятать значок лотка или вернуть его. on=None — переключить."""
+    from . import config as cfg_mod
+
+    key = str(ident).strip().lower()
+    if not key:
+        return {"ok": False, "error": "пустой идентификатор"}
+    have = hidden_tray()
+    on = key not in have if on is None else bool(on)
+    keep = sorted(set(have) | {key}) if on else [k for k in have if k != key]
+    cfg_mod.set_value("tray", "hidden", keep)
+    return {"ok": True, "on": on, "hidden": keep}
+
+
 def catalog() -> dict:
     """Всё, что доку нужно от этой половины, одним куском.
 

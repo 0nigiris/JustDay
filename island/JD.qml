@@ -325,6 +325,18 @@ Singleton {
     readonly property string trayPlace: trayCfg.position || "left"
     readonly property real dockIconSize: Math.max(24, Math.min(96, dockCfg.icon_size || 44))
     readonly property real trayIconSize: Math.max(14, Math.min(48, trayCfg.icon_size || 22))
+    readonly property bool trayAutohide: trayCfg.autohide === true
+    // Что в лотке не показывать. Сравнение без учёта регистра: значки называют себя как попало.
+    readonly property var trayHidden: (trayCfg.hidden || []).map(k => String(k).toLowerCase())
+    function trayShows(item) {
+        if (!item) return false
+        const names = [item.id, item.title, item.tooltipTitle].filter(n => !!n).map(n => String(n).toLowerCase())
+        return !names.some(n => trayHidden.indexOf(n) >= 0)
+    }
+    function trayHide(ident, on) { if (ident) send({ cmd: "tray_hide", id: String(ident), on: on === undefined ? null : on }) }
+    // Насколько занят процессор — для кошки в доке. Демон присылает сам, раз в две секунды и
+    // только когда есть кому смотреть.
+    property real cpu: 0
     property var dockData: ({})           // {items, pinned, match, skip} — от демона
     // Открытые окна. Спрашивать вейланд бесполезно: KWin не отдаёт список окон обычным клиентам —
     // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
@@ -588,6 +600,7 @@ Singleton {
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.dock !== undefined) dockData = m.dock
+        if (m.cpu !== undefined) cpu = m.cpu
         if (m.windows !== undefined) windows = m.windows || []
         if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
         if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }

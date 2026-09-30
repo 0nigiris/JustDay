@@ -2729,7 +2729,10 @@ ShellRoot {
             screen: win.screen
             readonly property bool atTop: JD.dockPlace === "top"
             readonly property bool autohide: JD.dockCfg.autohide === true
-            property bool shown: !autohide
+            // Меню держит док на виду. Иначе клавиша Windows открывает меню, растущее из значка,
+            // которого на экране нет, — и оно появляется ниоткуда и не там.
+            property bool hovering: !autohide
+            readonly property bool shown: hovering || JD.menuOpen
             anchors { left: true; right: true; top: atTop; bottom: !atTop }
             exclusionMode: ExclusionMode.Normal
             // Прячущийся док места не отнимает: он затем и прячется.
@@ -2768,9 +2771,9 @@ ShellRoot {
                 y: dockWin.atTop ? dock.y : dock.y - 220
             }
             HoverHandler {
-                onHoveredChanged: if (dockWin.autohide) { if (hovered) { hideDock.stop(); dockWin.shown = true } else hideDock.restart() }
+                onHoveredChanged: if (dockWin.autohide) { if (hovered) { hideDock.stop(); dockWin.hovering = true } else hideDock.restart() }
             }
-            Timer { id: hideDock; interval: 600; onTriggered: if (dockWin.autohide) dockWin.shown = false }
+            Timer { id: hideDock; interval: 600; onTriggered: if (dockWin.autohide) dockWin.hovering = false }
 
             // Откуда вырастает меню приложений. Считается здесь, потому что только это окно знает
             // и где стоит карточка, и где у окна край экрана: у самого дока в его координатах нет
@@ -2784,9 +2787,10 @@ ShellRoot {
             Binding {
                 target: JD
                 property: "dockAnchor"
+                // По месту покоя, а не по текущему: пока док выезжает, точка ползёт вместе с ним,
+                // и меню уезжало бы вниз вслед за ней — то самое «как-то более вниз уходит».
                 value: ({ x: dock.x + dock.launcherCenter,
-                          gap: dockWin.atTop ? dock.y + dock.cardHeight
-                                             : dockWin.height - dock.y - dock.height + dock.cardHeight,
+                          gap: dock.cardHeight + dockWin.edgeMargin,
                           top: dockWin.atTop, shown: dockWin.shown })
             }
 
@@ -2821,7 +2825,8 @@ ShellRoot {
             visible: !tray.empty
             anchors { top: true; bottom: true; left: !atRight; right: atRight }
             exclusionMode: ExclusionMode.Normal
-            exclusiveZone: JD.trayCfg.reserve === true && !tray.empty ? Math.round(tray.implicitWidth + 10) : 0
+            exclusiveZone: JD.trayCfg.reserve === true && !JD.trayAutohide && !tray.empty
+                           ? Math.round(tray.implicitWidth + 10) : 0
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.namespace: "justday-tray"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
@@ -2830,13 +2835,35 @@ ShellRoot {
             implicitWidth: Math.round(tray.implicitWidth + 260)
             implicitHeight: JD.screenHeight
 
-            mask: Region { item: tray }
-            BackgroundEffect.blurRegion: Region { item: tray.blurItem }
+            readonly property bool autohide: JD.trayAutohide
+            property bool shown: !autohide
+
+            // Спрятанная полоса оставляет у края тонкую кромку: ею её и зовут обратно.
+            Item {
+                id: trayEdge
+                width: 3
+                height: parent.height
+                x: trayWin.atRight ? parent.width - width : 0
+            }
+            HoverHandler {
+                onHoveredChanged: if (trayWin.autohide) { if (hovered) { hideTray.stop(); trayWin.shown = true } else hideTray.restart() }
+            }
+            Timer { id: hideTray; interval: 600; onTriggered: if (trayWin.autohide) trayWin.shown = false }
+
+            mask: Region { item: trayWin.shown ? tray : trayEdge }
+            BackgroundEffect.blurRegion: Region { item: trayWin.shown ? tray.blurItem : null }
 
             TrayView {
                 id: tray
                 host: trayWin
-                x: trayWin.atRight ? parent.width - width - 10 : 10
+                x: {
+                    const rest = trayWin.atRight ? parent.width - width - 10 : 10
+                    const away = trayWin.atRight ? width + 16 : -width - 16
+                    return rest + (trayWin.shown ? 0 : away)
+                }
+                opacity: trayWin.shown ? 1 : 0
+                Behavior on x { enabled: JD.animOn; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 180 } }
                 y: {
                     const top = JD.atTop ? JD.topMargin + 60 : 20
                     if (trayWin.align === "start") return top

@@ -23,6 +23,14 @@ Item {
     readonly property bool labels: JD.dockCfg.labels !== false
     readonly property bool showRunning: JD.dockCfg.show_running !== false
     readonly property bool showTrash: JD.dockCfg.show_trash !== false
+    readonly property bool showCat: JD.dockCfg.cat !== false
+    readonly property bool showClock: JD.dockCfg.clock === true
+    // Значок меню: «apple» — то, что тема значков зовёт start-here (в макосных темах это яблоко),
+    // «grid» — своя сетка точек. Темы без start-here есть, поэтому сетка ещё и запасной вариант.
+    readonly property string launcherWant: JD.dockCfg.launcher || "apple"
+    readonly property string launcherIcon: launcherWant === "grid" ? ""
+        : launcherWant === "apple" ? Quickshell.iconPath("start-here", true)
+        : Quickshell.iconPath(launcherWant, true)
     // Сколько места оставить под увеличенный значок и подпись: они выходят за карточку, и им нужна
     // своя высота в окне, иначе верхушка срезается.
     readonly property real headroom: Math.round(icon * 0.55) + 30
@@ -72,6 +80,11 @@ Item {
             }
         }
         if (showTrash) { out.push({ t: "sep" }); out.push({ t: "trash" }) }
+        // Виджеты — в самом конце, за своей чертой: они не запускаются и не закрепляются, и стоять
+        // вперемешку с программами им незачем.
+        if (showCat || showClock) out.push({ t: "sep" })
+        if (showCat) out.push({ t: "cat" })
+        if (showClock) out.push({ t: "clock" })
         return out
     }
 
@@ -80,7 +93,10 @@ Item {
         const out = []
         let at = pad
         for (let i = 0; i < entries.length; i++) {
-            const w = entries[i].t === "sep" ? Math.round(gap * 0.8) : cell
+            const t = entries[i].t
+            const w = t === "sep" ? Math.round(gap * 0.8)
+                    : t === "cat" ? Math.round(cell * 1.15)
+                    : t === "clock" ? Math.round(cell * 1.25) : cell
             out.push(Object.assign({}, entries[i], { at: at, w: w, i: i }))
             at += w
         }
@@ -164,9 +180,21 @@ Item {
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
+                    // Яблоко (или что тема зовёт start-here) рисуем без подложки: у макосных тем
+                    // это готовый значок со своей формой, и квадрат под ним выглядит наклейкой.
+                    Icon {
+                        anchors.fill: parent
+                        visible: slot.e.t === "launcher" && dv.launcherIcon !== ""
+                        name: dv.launcherWant === "apple" ? "start-here" : dv.launcherWant
+                        fallback: "start-here"
+                        implicitSize: dv.icon
+                        renderSize: dv.icon * 2.4
+                        theme: true
+                    }
+
                     Rectangle {
                         anchors.fill: parent
-                        visible: slot.e.t === "launcher"
+                        visible: slot.e.t === "launcher" && dv.launcherIcon === ""
                         radius: width * 0.27
                         gradient: Gradient {
                             GradientStop { position: 0; color: "#3f8cff" }
@@ -197,6 +225,9 @@ Item {
                         name: slot.e.icon || ""
                         fallback: "application-x-executable"
                         implicitSize: dv.icon
+                        // Растр просят с запасом на увеличение: под курсором значок вырастает в
+                        // полтора раза, и нарисованный по обычному размеру он там расплывается.
+                        renderSize: dv.icon * 2.4
                         theme: true
                     }
                     Icon {
@@ -205,7 +236,19 @@ Item {
                         name: "user-trash"
                         fallback: "user-trash"
                         implicitSize: dv.icon
+                        renderSize: dv.icon * 2.4
                         theme: true
+                    }
+                    DockCat {
+                        anchors.centerIn: parent
+                        visible: slot.e.t === "cat"
+                        cpu: JD.cpu
+                        size: Math.round(dv.icon * 0.82)
+                    }
+                    DockClock {
+                        anchors.centerIn: parent
+                        visible: slot.e.t === "clock"
+                        size: dv.icon
                     }
                 }
 
@@ -244,7 +287,10 @@ Item {
         visible: dv.labels && !!dv.focused && dv.power > 0.5 && !ctx.visible
         readonly property string text: !dv.focused ? ""
             : dv.focused.t === "launcher" ? "Программы"
-            : dv.focused.t === "trash" ? "Корзина" : (dv.focused.name || "")
+            : dv.focused.t === "trash" ? "Корзина"
+            : dv.focused.t === "cat" ? "Процессор " + Math.round(JD.cpu) + "%"
+            : dv.focused.t === "clock" ? Qt.formatDate(new Date(), "d MMMM, dddd")
+            : (dv.focused.name || "")
         width: tipText.implicitWidth + 20
         height: 26
         radius: 13
@@ -329,6 +375,9 @@ Item {
         if (e.t === "launcher") return [{ id: "menu", label: "Открыть меню", icon: "layout-grid" },
                                         { id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
         if (e.t === "trash") return [{ id: "trash", label: "Открыть корзину", icon: "folder-open" }]
+        if (e.t === "cat") return [{ id: "load", label: "Нагрузка машины", icon: "gauge" },
+                                   { id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
+        if (e.t === "clock") return [{ id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
         const out = [{ id: "open", label: "Открыть", icon: "external-link" }]
         if (e.id) out.push(e.pinned ? { id: "unpin", label: "Убрать из дока", icon: "minus" }
                                     : { id: "pin", label: "Оставить в доке", icon: "plus" })
@@ -343,6 +392,7 @@ Item {
         if (what === "menu") JD.toggleMenu()
         else if (what === "settings") JD.openSettings("dock")
         else if (what === "trash") Quickshell.execDetached(["xdg-open", "trash:///"])
+        else if (what === "load") JD.openTools("load")
         else if (what === "open") JD.dockRun(e)
         else if (what === "pin") JD.dockPin(e.kind, e.id, true)
         else if (what === "unpin") JD.dockPin(e.kind, e.id, false)
@@ -355,6 +405,7 @@ Item {
         closeCtx()
         if (e.t === "launcher") { JD.toggleMenu(); return }
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
+        if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
         if (!wins || wins.length === 0) { JD.dockRun(e); return }
         const front = wins.find(w => w.active && !w.minimized)
         if (front) { for (const w of wins) JD.windowDo("minimize", w.id); return }

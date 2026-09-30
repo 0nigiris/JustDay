@@ -214,10 +214,18 @@ DEFAULTS: dict = {
         "show_running": True,   # открытые окна незакреплённых программ
         "show_trash": True,
         "labels": True,         # подпись под курсором
+        # Значок, из которого достаётся меню: apple = «start-here» из темы значков (в макосных
+        # темах это яблоко), grid = своя сетка точек, или прямо имя значка из темы.
+        "launcher": "apple",
+        "cat": True,            # бегущая кошка: чем сильнее занят процессор, тем быстрее бежит
+        "clock": False,         # часы в доке (сверху они уже есть)
     },
     # Трей: чужие значки (те, что кладут в системный лоток) отдельной полосой у бокового края.
     # position: left | right; align: center | start | end.
-    "tray": {"enabled": True, "position": "left", "align": "center", "icon_size": 22, "reserve": False},
+    # hidden — идентификаторы значков, которых в полосе быть не должно. Мост xwayland кладёт в
+    # лоток служебное окно, которое человеку не нужно никогда.
+    "tray": {"enabled": True, "position": "left", "align": "center", "icon_size": 22, "reserve": False,
+             "autohide": False, "hidden": ["xwayland video bridge"]},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
     # Local model for private data (mail). Ollama listens on localhost only.
