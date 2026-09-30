@@ -15,7 +15,7 @@ Item {
 
     readonly property bool atTop: JD.dockPlace === "top"
     readonly property real icon: JD.dockIconSize
-    readonly property real gap: Math.round(icon * 0.34)
+    readonly property real gap: Math.max(4, Math.min(64, JD.dockCfg.spacing === undefined ? 20 : JD.dockCfg.spacing))
     readonly property real cell: icon + gap
     readonly property real pad: Math.round(icon * 0.18)
     readonly property real dotRoom: 9
@@ -108,18 +108,50 @@ Item {
     readonly property real laneLength: (lane.length ? lane[lane.length - 1].at + lane[lane.length - 1].w : 0) + pad
 
     // ───────────── увеличение ─────────────
-    property real focusX: -9999
+    //
+    // Волна не приклеена к курсору: курсор задаёт, куда ей хочется, а доходит она туда пружиной.
+    // Из-за этого при переходе с значка на значок она успевает проскочить дальше и вернуться — то
+    // самое ощущение, ради которого это и делают. Прямое следование за курсором остаётся
+    // отдельным стилем: кому-то отскок мешает попадать.
+    readonly property string animStyle: JD.dockCfg.animation || "spring"
+    readonly property real amp: Math.max(0, Math.min(2, (JD.dockCfg.magnify_scale === undefined ? 60 : JD.dockCfg.magnify_scale) / 100))
+    readonly property real spread: Math.max(0.4, Math.min(4, (JD.dockCfg.magnify_spread === undefined ? 120 : JD.dockCfg.magnify_spread) / 100))
+
+    property real pointerX: -9999        // где курсор
+    property real focusX: -9999          // куда доехала волна
+    Behavior on focusX {
+        id: focusEase
+        enabled: JD.animOn && dv.animStyle !== "instant"
+        SpringAnimation {
+            spring: dv.animStyle === "smooth" ? 9.0 : 5.0
+            damping: dv.animStyle === "smooth" ? 1.0 : 0.28
+            mass: 0.9
+            epsilon: 0.4
+        }
+    }
+    // Курсор вошёл в док — волна должна оказаться под ним сразу, а не приехать с другого конца
+    // полосы, где её оставили в прошлый раз.
+    function aimAt(x, jump) {
+        pointerX = x
+        if (jump) { focusEase.enabled = false; focusX = x; focusEase.enabled = Qt.binding(() => JD.animOn && dv.animStyle !== "instant") }
+        else focusX = x
+    }
+
     property real power: 0
     Behavior on power { enabled: JD.animOn; NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
-    function magOf(at, w) {
-        if (power <= 0.001) return 1
-        const d = (at + w / 2 - focusX) / (cell * 1.15)
-        return 1 + 0.52 * power * Math.exp(-d * d)
+
+    // Виджеты правилу не подчиняются: кошка и часы показывают цифру, а не ждут нажатия, и прыгать
+    // под курсором им незачем — от этого цифру только труднее прочитать.
+    function magOf(kind, at, w) {
+        if (power <= 0.001 || kind === "cat" || kind === "clock") return 1
+        const d = (at + w / 2 - focusX) / (cell * spread)
+        return 1 + amp * power * Math.exp(-d * d)
     }
+    // Подпись идёт за курсором, а не за волной: иначе она отстаёт от того, на что смотрят.
     readonly property var focused: {
         if (power <= 0.3) return null
         for (const s of lane)
-            if (s.t !== "sep" && focusX >= s.at && focusX < s.at + s.w) return s
+            if (s.t !== "sep" && pointerX >= s.at && pointerX < s.at + s.w) return s
         return null
     }
 
@@ -138,10 +170,14 @@ Item {
 
         HoverHandler {
             id: laneHover
-            onPointChanged: dv.focusX = point.position.x
+            onPointChanged: dv.aimAt(point.position.x, dv.power <= 0.001)
             onHoveredChanged: {
+                if (hovered) dv.aimAt(point.position.x, true)
+                else ctxClose.restart()
+                // Уходя, волну не уводим: она просто гаснет на месте. Отъезд на минус десять тысяч
+                // пружиной выглядел бы как будто по доку кто-то провёл рукой.
                 dv.power = hovered && dv.magnify ? 1 : 0
-                if (!hovered) { dv.focusX = -9999; ctxClose.restart() }
+                if (!hovered) dv.pointerX = -9999
             }
         }
 
@@ -154,7 +190,7 @@ Item {
                 readonly property var wins: e.wins || []
                 readonly property bool running: wins.length > 0
                 readonly property bool active: wins.some(w => w.activated && !w.minimized)
-                readonly property real k: dv.magOf(e.at, e.w)
+                readonly property real k: dv.magOf(e.t, e.at, e.w)
                 x: e.at
                 y: 0
                 width: e.w

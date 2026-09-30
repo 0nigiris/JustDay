@@ -857,7 +857,31 @@ Item {
                     title: JD.tr("Размер значков")
                     SSlider { key: "dock.icon_size"; from: 28; to: 80; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
-                Row { title: JD.tr("Увеличивать под курсором"); subtitle: JD.tr("Значок растёт наружу, а его место в полосе не двигается"); Toggle { checked: win.get("dock.magnify") !== false; onToggled: v => win.set("dock.magnify", v) } }
+                Row {
+                    title: JD.tr("Расстояние между значками")
+                    SSlider { key: "dock.spacing"; from: 6; to: 48; step: 1; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row { title: JD.tr("Увеличивать под курсором"); subtitle: JD.tr("Значок растёт наружу, а его место в полосе не двигается. Кошка и часы не увеличиваются: цифру от этого только труднее прочитать"); Toggle { checked: win.get("dock.magnify") !== false; onToggled: v => win.set("dock.magnify", v) } }
+                Row {
+                    title: JD.tr("Как движется увеличение")
+                    subtitle: win.get("dock.animation") === "instant" ? JD.tr("Волна приклеена к курсору")
+                            : win.get("dock.animation") === "smooth" ? JD.tr("Догоняет курсор плавно, без отскока")
+                            : JD.tr("Догоняет курсор пружиной и на переходе проскакивает дальше — как у макоси")
+                    Segmented {
+                        options: [{ value: "spring", label: JD.tr("Пружиной") }, { value: "smooth", label: JD.tr("Плавно") }, { value: "instant", label: JD.tr("Сразу") }]
+                        current: win.get("dock.animation")
+                        onPicked: v => win.set("dock.animation", v)
+                    }
+                }
+                Row {
+                    title: JD.tr("Насколько вырастает")
+                    SSlider { key: "dock.magnify_scale"; from: 0; to: 120; step: 5; decimals: 0; unit: JD.tr("%") }
+                }
+                Row {
+                    title: JD.tr("Ширина волны")
+                    subtitle: JD.tr("Сколько соседей подхватывает увеличение")
+                    SSlider { key: "dock.magnify_spread"; from: 40; to: 300; step: 10; decimals: 0; unit: JD.tr("%") }
+                }
                 Row { title: JD.tr("Подпись под курсором"); Toggle { checked: win.get("dock.labels") !== false; onToggled: v => win.set("dock.labels", v) } }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
