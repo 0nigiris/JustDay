@@ -616,8 +616,10 @@ Item {
         pointerScene = anchorCentre - restLength / 2 + x
         for (let n = 0; n < 400 && stepPhysics(1 / 120); n++) { /* до схождения */ }
         const out = { at: x, u: Math.round(restUnderPointer()), length: Math.round(laneLength), rest: Math.round(restLength),
-                      cells: lane.map((s, i) => ({ t: s.t, x: Math.round(geom[i].x),
-                                                   w: Math.round(geom[i].w), k: Number(geom[i].k.toFixed(3)) })) }
+                      amp: amp, spread: spread, centre: Math.round(anchorCentre),
+                      cells: lane.map((s, i) => ({ t: s.t, x: Math.round(geom[i].x), rest: s.at,
+                                                   w: Math.round(geom[i].w), k: Number(geom[i].k.toFixed(3)),
+                                                   goal: Number(targetSize(i, restUnderPointer()).toFixed(3)) })) }
         engaged = wasEngaged
         pointerScene = wasAt
         wake()
