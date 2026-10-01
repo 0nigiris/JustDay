@@ -464,25 +464,35 @@ Item {
     property real edgeRoom: 0
     readonly property Item hotItem: hot
 
+    // Полоска между карточкой и краем экрана — и только она. Накрывать карточку этой зоной нельзя:
+    // наведение достаётся верхнему элементу, и накрывающая зона отбирает его у самой карточки. Так
+    // уже вышло: у края значки увеличивались, но нажимать там было нечего, а на самой карточке
+    // нажимались, но не увеличивались. Поэтому зон две, они не пересекаются, и каждая делает своё.
     Item {
         id: hot
         x: card.x
         width: card.width
-        y: dv.atTop ? card.y - dv.edgeRoom : card.y
-        height: card.height + dv.edgeRoom
+        y: dv.atTop ? card.y - dv.edgeRoom : card.y + card.height
+        height: dv.edgeRoom
 
-        // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
-        // когда полоса под ним растёт и переезжает, — и получилась бы обратная связь.
         HoverHandler {
-            id: laneHover
-            onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.wake() }
+            id: edgeHover
+            onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.engaged = true; dv.wake() }
             onHoveredChanged: {
-                dv.engaged = hovered
-                if (hovered) dv.pointerScene = point.scenePosition.x
-                else { ctxClose.restart(); tipWait.stop(); dv.tipShown = false }
+                if (hovered) { dv.engaged = true; dv.pointerScene = point.scenePosition.x }
+                else if (!cardHover.hovered) dv.leaveLane()
                 dv.wake()
             }
         }
+    }
+
+    // Уход с полосы — в одном месте: курсор может уйти и с карточки, и с приграничной полоски, а
+    // «ушёл» означает одно и то же.
+    function leaveLane() {
+        engaged = false
+        ctxClose.restart()
+        tipWait.stop()
+        tipShown = false
     }
 
     Rectangle {
@@ -497,6 +507,17 @@ Item {
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
 
+        // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
+        // когда полоса под ним растёт и переезжает, — и получилась бы обратная связь.
+        HoverHandler {
+            id: cardHover
+            onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.engaged = true; dv.wake() }
+            onHoveredChanged: {
+                if (hovered) { dv.engaged = true; dv.pointerScene = point.scenePosition.x }
+                else if (!edgeHover.hovered) dv.leaveLane()
+                dv.wake()
+            }
+        }
 
         Repeater {
             model: dv.lane
