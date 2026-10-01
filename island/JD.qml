@@ -25,7 +25,27 @@ Singleton {
         if (n === notification) { notification = null; notifExpanded = false }
         expanded = false
     }
-    function dismissNotification() { notification = null; notifExpanded = false }
+    function dismissNotification() {
+        if (liveNotification) { liveNotification.dismiss(); liveNotification = null }
+        notification = null
+        notifExpanded = false
+    }
+    // Уведомление, пришедшее к нам напрямую, а не подслушиванием: у него есть кнопки и его можно
+    // честно закрыть — программа узнает, что его увидели, и не станет показывать второй раз.
+    property var liveNotification: null
+    function takeNotification(n, live) {
+        if (island.show_notifications === false) { if (live) live.dismiss(); return }
+        liveNotification = live || null
+        notification = n
+        notifExpanded = false
+        notifTimer.restart()
+    }
+    function runNotificationAction(which) {
+        if (!liveNotification) return
+        for (const a of (liveNotification.actions || []))
+            if (a.identifier === which) { a.invoke(); break }
+        dismissNotification()
+    }
     property var alarm: null          // the timer or alarm ringing right now
     property var reminders: []        // timers, alarms and reminders still waiting, soonest first
     property var jobs: []             // background jobs: {id, title, state, started, ended, code}

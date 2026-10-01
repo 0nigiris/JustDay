@@ -13,12 +13,58 @@ import Quickshell.Widgets
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
+import Quickshell.Services.Notifications
 import QtMultimedia
 
 ShellRoot {
     id: root
 
     // `qs -p <repo>/island ipc call island expand|collapse|toggle|peek` — e.g. bind a key to open the control center
+    // ───────────── уведомления ─────────────
+    //
+    // Островок сам становится сервером уведомлений, когда это место свободно.
+    //
+    // Почему так вышло. Уведомления на фридесктопе показывает тот, кто первым занял имя на шине, и
+    // это одно место на всю систему. Плазма занимает его своей панелью — а панель мы отсюда убрали,
+    // ради чего всё и затевалось. Место осталось пустым, и его занял mako, демон уведомлений от
+    // Sway: он и рисовал те синие плашки, которые не слушались ни «не беспокоить», ни настроек
+    // плазмы, и висели часами, потому что срока жизни у них не было вовсе.
+    //
+    // Правильный ответ не «отобрать у mako», а «занять самим»: уведомления и так показывает остров,
+    // своим шрифтом и своими цветами. Теперь они приходят напрямую, а не подслушиванием шины.
+    //
+    // Берём место, только если оно свободно: отбирать его у чужого сервера — чужое дело.
+    Loader {
+        active: JD.island.notification_server !== false
+        sourceComponent: NotificationServer {
+            // Что мы умеем показать. Врать тут нельзя: программа спрашивает об этом заранее и по
+            // ответу решает, что присылать. Скажем «умеем картинки» — получим картинки, которых
+            // не нарисуем.
+            bodySupported: true
+            bodyMarkupSupported: false
+            imageSupported: true
+            actionsSupported: true
+            inlineReplySupported: false
+            persistenceSupported: true
+            keepOnReload: false
+
+            onNotification: n => {
+                n.tracked = true
+                JD.takeNotification({
+                    id: n.id,
+                    app: n.appName || "",
+                    icon: n.appIcon || "",
+                    desktop: n.desktopEntry || "",
+                    summary: n.summary || "",
+                    body: String(n.body || "").replace(/<[^>]+>/g, "").slice(0, 4000),
+                    image: n.image || "",
+                    urgency: String(n.urgency),
+                    actions: (n.actions || []).map(a => ({ id: a.identifier, text: a.text }))
+                }, n)
+            }
+        }
+    }
+
     IpcHandler {
         target: "island"
         function expand(): void { JD.expanded = true }

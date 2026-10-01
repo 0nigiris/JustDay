@@ -187,6 +187,11 @@ DEFAULTS: dict = {
         "hover_reveal": True,  # hover the top edge to show the island
         "show_weather": True,
         "show_events": True,  # last answer / new mail / Claude status in the hover view
+        # Островок сам показывает уведомления, забирая место сервера на шине, если оно свободно.
+        # Уведомления на фридесктопе показывает тот, кто занял это место первым, и оно одно на всю
+        # систему: убрав панель плазмы, мы оставили его пустым, и его занимал чужой демон. false —
+        # не занимать (тогда показывать их будет кто-то другой, со своим видом).
+        "notification_server": True,
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         "city": "",  # weather location; empty = no weather requests at all
         "screen": "",  # monitor name (e.g. DP-2); empty = the one at the top-left
