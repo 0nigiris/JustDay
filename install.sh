@@ -384,7 +384,7 @@ if ((${#need[@]})); then
     need=("${need[@]/dbus-devel/dbus-1-devel}"); need=("${need[@]/dbus-tools/dbus-1-tools}")
     need=("${need[@]/cairo-gobject-devel/cairo-devel}")
     need=("${need[@]/libnotify/libnotify-tools}"); need=("${need[@]/libsecret/libsecret-tools}")
-    need=("${need[@]/rsms-inter-fonts/google-inter-fonts}")
+    need=("${need[@]/rsms-inter-fonts/inter-fonts}")
     need=("${need[@]/xorg-x11-utils/xprop}"); need=("${need[@]/python3-tkinter/python3-tk}")
     need=("${need[@]/gtk3/gtk3-tools}")
     # Quickshell в основных репозиториях openSUSE не лежит: он собирается в OBS, и подключать чужой
@@ -421,9 +421,32 @@ if ((${#need[@]})); then
       fi
     fi
     if ((${#MISSING[@]} == 0)); then
+      # Ставим пачкой, а если пачка не прошла — по одному.
+      #
+      # Это не перестраховка. Имена пакетов у каждого дистрибутива свои, угадать все невозможно, а
+      # менеджер падает на первом же незнакомом и не ставит **ничего** — включая те двадцать, что
+      # он прекрасно знает. Так у человека на openSUSE установка легла целиком из-за одного шрифта.
+      # Поэтому: не вышло пачкой — идём по одному, и список непоставленного уходит в конец, где и
+      # так объясняется, чего без чего не будет.
       install_packages() {
         [[ -n ${COPR:-} ]] && sudo dnf copr enable -y "$COPR"
-        "${PM[@]}" "${need[@]}"; note "$(t 'поставлено' 'installed'): ${#need[@]}"; }
+        if "${PM[@]}" "${need[@]}"; then
+          note "$(t 'поставлено' 'installed'): ${#need[@]}"
+          return 0
+        fi
+        printf '\n── %s\n' "$(t 'по одному' 'one by one')" >> "$LOG"
+        local ok=0 bad=()
+        for pkg in "${need[@]}"; do
+          if "${PM[@]}" "$pkg" >> "$LOG" 2>&1; then ok=$((ok + 1)); else bad+=("$pkg"); fi
+        done
+        MISSING+=("${bad[@]}")
+        if ((${#bad[@]})); then
+          note "$(t 'поставлено' 'installed'): $ok · $(t 'не нашлось' 'not found'): ${#bad[@]}"
+        else
+          note "$(t 'поставлено' 'installed'): $ok"
+        fi
+        return 0
+      }
       step "$(t 'Системные пакеты' 'System packages')" install_packages
     fi
   else
@@ -651,6 +674,8 @@ why_missing() {
     libsecret*) t 'пароли в связке ключей' 'passwords in the keyring' ;;
     plocate|fd|fd-find|ripgrep) t 'быстрый поиск файлов' 'fast file search' ;;
     libnotify*) t 'уведомления' 'notifications' ;;
+    *inter*font*|*font*inter*) t 'шрифт островка — без него возьмётся системный' 'the island font — the system one is used instead' ;;
+    python3*-tk*|*tkinter*) t 'окно настроек при первом запуске' 'the setup window on first run' ;;
     wmctrl|xdotool|x11-utils|xorg-x11-utils|xorg-xprop) t 'переключение и закрытие окон' 'switching and closing windows' ;;
     maim|scrot) t 'снимки экрана' 'screenshots' ;;
     *) printf '' ;;
