@@ -139,9 +139,22 @@ def launch_app_id(desktop_id: str, files: list[str] | None = None) -> None:
 
 
 def launch_app(query: str) -> dict:
+    """Открыть программу по имени. Спрятавшуюся в лоток — вернуть, а не запускать заново.
+
+    Телеграм и дискорд при закрытии окна прячутся в лоток и остаются работать. Повторный запуск им
+    ничего не делает: они видят, что уже запущены, и молчат, — а со стороны это выглядит сломанной
+    командой. Возвращает окно щелчок по значку в лотке, и его-то мы и делаем первым.
+    """
     hits = find_apps(query, 1)
     if not hits:
         raise RuntimeError(f"no application matching '{query}'")
+    flat = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())  # noqa: E731
+    parts = [p for p in hits[0]["id"].split(".") if p.lower() not in ("org", "com", "io", "net", "desktop", "app")]
+    keys = [k for k in (*map(flat, parts), flat(hits[0].get("name", ""))) if len(k) > 3]
+    for item in tray_items():
+        hay = flat(item["id"]) + " " + flat(item["title"])
+        if any(k in hay for k in keys) and tray_activate(item):
+            return hits[0]
     launch_app_id(hits[0]["id"])
     return hits[0]
 
