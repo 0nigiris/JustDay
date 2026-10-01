@@ -2990,6 +2990,14 @@ ShellRoot {
                 width: dock.width
                 height: dock.height + 220
                 x: dock.x
+                // Воздух вокруг меню тоже закрывает его: эта область добавлена в маску только ради
+                // того, чтобы по самому меню можно было попасть, и щелчок мимо него не должен
+                // проваливаться в никуда.
+                TapHandler {
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: dock.closeCtx()
+                }
                 y: dockWin.atTop ? dock.y : dock.y - 220
             }
             // Окно целиком держит док открытым, пока курсор в нём, но само его не вызывает: вызов
