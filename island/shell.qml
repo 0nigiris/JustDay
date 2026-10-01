@@ -37,15 +37,15 @@ ShellRoot {
         // сойтись и отдаём получившуюся раскладку. Синтетическая мышь на вейланде врёт (ускорение
         // и вторые мониторы), а «значки расступаются» иначе никак не проверить числом.
         function dockAt(x: real): string {
-            const d = dockLoader.item ? dockLoader.item.probe(x) : null
+            const d = dockVariants.instances.length ? dockVariants.instances[0].probe(x) : null
             return JSON.stringify(d)
         }
         // Перетаскивание значка без мыши: чей порядок вышел и не наехали ли ячейки друг на друга.
         function dockWheel(from: real, to: real, steps: int): string {
-            return dockLoader.item ? dockLoader.item.wheelWalk(from, to, steps) : "null"
+            return dockVariants.instances.length ? dockVariants.instances[0].wheelWalk(from, to, steps) : "null"
         }
         function dockDrag(n: int, x: real): string {
-            return dockLoader.item ? dockLoader.item.dragProbe(n, x) : "null"
+            return dockVariants.instances.length ? dockVariants.instances[0].dragProbe(n, x) : "null"
         }
         // Что док видит: открытые окна, закреплённое и точка, из которой вырастает меню.
         // `qs -p island ipc call island dock` — этим и проверяется, что окно узнали.
@@ -2835,12 +2835,24 @@ ShellRoot {
     // Зону отнимаем честно (exclusiveZone), когда об этом просят: док, под который уезжают окна, —
     // это док, из-под которого их приходится вытаскивать. Прятать умеет тоже, и тогда зону не
     // отнимает, а оставляет полоску в два пикселя, чтобы его можно было позвать обратно.
-    Loader {
-        id: dockLoader
-        active: JD.dockOn
-        sourceComponent: PanelWindow {
+    // Док на каждом мониторе, если попросили. Квикшелл для этого и держит Variants: по экрану на
+    // окно, и переткнутый монитор не требует ничего перезапускать.
+    //
+    // Главным остаётся один — тот, где живёт островок. Он один рассказывает JD, где лежит карточка
+    // и откуда растить меню: будь этих рассказов два, они бы спорили друг с другом, и меню
+    // открывалось бы то на одном экране, то на другом, смотря кто написал последним.
+    Variants {
+        id: dockVariants
+        model: {
+            if (!JD.dockOn) return []
+            if ((JD.dockCfg.screens || "primary") !== "all") return win.screen ? [win.screen] : []
+            return Quickshell.screens
+        }
+        delegate: PanelWindow {
             id: dockWin
-            screen: win.screen
+            required property var modelData
+            screen: modelData
+            readonly property bool primary: !modelData || !win.screen || modelData === win.screen
             readonly property bool atTop: JD.dockPlace === "top"
             // Полный экран прячет док, даже если прятаться его не просили: игра и кино на то и
             // полный экран, что поверх них не должно лежать ничего. Позвать док обратно
@@ -2948,6 +2960,7 @@ ShellRoot {
 
             Binding {
                 target: JD
+                when: dockWin.primary
                 property: "dockAnchor"
                 // По месту покоя, а не по текущему: пока док выезжает, точка ползёт вместе с ним,
                 // и меню уезжало бы вниз вслед за ней — то самое «как-то более вниз уходит».
@@ -2960,6 +2973,7 @@ ShellRoot {
             // по ней и док под меню оставался живым, а не картинкой.
             Binding {
                 target: JD
+                when: dockWin.primary
                 property: "dockRect"
                 value: ({ x: dock.x, w: dock.width, h: dock.cardHeight,
                           y: dockWin.atTop ? dockWin.edgeMargin

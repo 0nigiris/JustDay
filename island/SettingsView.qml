@@ -936,6 +936,15 @@ Item {
                     subtitle: JD.tr("Док выедет на быстрое движение к краю, а не на медленное заползание. 0 — звать любым наведением")
                     SSlider { key: "dock.reveal_flick"; from: 0; to: 2500; step: 100; decimals: 0; unit: JD.tr(" тчк/с") }
                 }
+                Row {
+                    title: JD.tr("На каких экранах")
+                    subtitle: JD.tr("Главным остаётся тот, где живёт островок: из его значка растёт меню")
+                    Choice {
+                        key: "dock.screens"
+                        options: [{ value: "primary", label: JD.tr("Только на главном") },
+                                 { value: "all", label: JD.tr("На каждом") }]
+                    }
+                }
                 Row { title: JD.tr("Прятаться под полным экраном"); subtitle: JD.tr("Игра или кино во весь экран убирают док; кромка по-прежнему зовёт его обратно"); Toggle { checked: win.get("dock.hide_on_fullscreen") !== false; onToggled: v => win.set("dock.hide_on_fullscreen", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
                 Row {
