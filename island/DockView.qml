@@ -457,17 +457,19 @@ Item {
     // ───────────── карточка ─────────────
     readonly property Rectangle blurItem: card
 
-    Rectangle {
-        id: card
-        width: dv.laneLength
-        height: dv.cardHeight
-        y: dv.atTop ? 0 : dv.height - height
-        radius: Math.round(dv.cardHeight * 0.3)
-        // Без размытия под доком та же прозрачность превращается в кашу: значки читаются по тому,
-        // что за ними, а не по себе. Нет размытия — нет и прозрачности.
-        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.14)
+    // Сколько пустоты между карточкой и краем экрана. Док лежит не вплотную к краю — так он
+    // выглядит предметом, а не куском рамки, — но **чувствовать** курсор обязан до самого края.
+    // Иначе человек уводит мышь вниз до упора, что и значит «к доку», а док там уже не его: ряд
+    // пикселей у самого низа принадлежал никому, и полоса на курсор не отзывалась вовсе.
+    property real edgeRoom: 0
+    readonly property Item hotItem: hot
+
+    Item {
+        id: hot
+        x: card.x
+        width: card.width
+        y: dv.atTop ? card.y - dv.edgeRoom : card.y
+        height: card.height + dv.edgeRoom
 
         // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
         // когда полоса под ним растёт и переезжает, — и получилась бы обратная связь.
@@ -481,6 +483,20 @@ Item {
                 dv.wake()
             }
         }
+    }
+
+    Rectangle {
+        id: card
+        width: dv.laneLength
+        height: dv.cardHeight
+        y: dv.atTop ? 0 : dv.height - height
+        radius: Math.round(dv.cardHeight * 0.3)
+        // Без размытия под доком та же прозрачность превращается в кашу: значки читаются по тому,
+        // что за ними, а не по себе. Нет размытия — нет и прозрачности.
+        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.14)
+
 
         Repeater {
             model: dv.lane

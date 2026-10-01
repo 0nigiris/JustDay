@@ -2852,8 +2852,12 @@ ShellRoot {
             implicitHeight: Math.min(JD.screenHeight, dock.implicitHeight + 220)
 
             // Щелчки проходят везде, кроме самой карточки и открытого меню правой кнопки.
+            // Полоса у самого края экрана — тоже наша: док лежит отступив от края, но ловить
+            // курсор обязан до упора. Внизу экрана мышь останавливается о край, и это и значит
+            // «к доку»; без этой полосы последние пиксели принадлежали никому.
             mask: Region {
                 item: dockWin.shown ? dock : edge
+                Region { item: dockWin.shown ? dock.hotItem : null }
                 Region { item: dock.ctxEntry ? dockCtxZone : null }
             }
             // Размытие под карточкой: без него полупрозрачная полоса поверх пёстрых обоев
@@ -2925,6 +2929,7 @@ ShellRoot {
             DockView {
                 id: dock
                 awake: dockWin.shown
+                edgeRoom: dockWin.edgeMargin
                 // Полоса растёт вокруг середины экрана: центрирует её окно, а не она сама, поэтому
                 // середину надо ей сказать — без неё решение не знает, куда полоса переедет.
                 anchorCentre: parent.width / 2
