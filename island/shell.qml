@@ -62,7 +62,7 @@ ShellRoot {
         // именно то, что здесь уже один раз сломалось молча.
         // Увеличение в лотке без мыши — та же проверка, что и у дока.
         function trayAt(y: real): string {
-            return JSON.stringify(tray.probe(y))
+            return JSON.stringify(trayLoader.item ? trayLoader.item.probeAt(y) : null)
         }
         function trayOpen(n: int): string {
             const items = SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
@@ -2991,9 +2991,12 @@ ShellRoot {
     // Узкая полоса у бокового края. Пуст лоток — окна нет вовсе: пустая полоса у края экрана
     // выглядит поломкой оболочки, а не отсутствием значков.
     Loader {
+        id: trayLoader
         active: JD.trayOn
         sourceComponent: PanelWindow {
             id: trayWin
+            // Проверка увеличения живёт снаружи, а полоса — внутри окна: пробрасываем.
+            function probeAt(at) { return tray.probe(at) }
             screen: win.screen
             readonly property bool atRight: JD.trayPlace === "right"
             readonly property string align: JD.trayCfg.align || "center"
