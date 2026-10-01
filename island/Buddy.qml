@@ -2,17 +2,25 @@
 //
 // Зачем он вообще. Островок умеет говорить словами — «думаю», «слушаю», «нужно разрешение», — и
 // слова эти надо прочитать. Существо сообщает то же самое раньше слов: по тому, куда оно смотрит,
-// как дышит и в какой оно позе, состояние считывается боковым зрением, не отрываясь от работы. Это
-// та же мысль, что у кошки в доке, только про ассистента, а не про процессор.
+// какой у него глаз и в какой он позе, состояние считывается боковым зрением, не отрываясь от
+// работы. Та же мысль, что у кошки в доке, только про ассистента, а не про процессор.
 //
-// Что здесь наше. Всё: форма, глаза, цвета, повадки. Идея «существо в вырезе экрана» чужой не
-// бывает, а вот чужого персонажа брать нельзя — у тех, кто это придумал раньше, он свой и под своей
-// лицензией. Поэтому здесь не чужой зверь в наших цветах, а своё существо: круглая галька с
-// большими глазами и без рта. Рот появляется, только когда есть что им сказать.
+// ───────────── откуда это взято ─────────────
 //
-// Правило, выученное дорого: всё, что шевелится, спрашивает `visible`. Анимация в скрытом виде
-// шевелит сцену каждый кадр, окно считается изменившимся, и оболочка рисует шестьдесят кадров в
-// секунду в пустоту. Один раз это уже стоило трети процессорного ядра круглые сутки.
+// Словарь состояний и форм глаза перенесён из Coucou (Louis Raillé, MIT): одиннадцать состояний,
+// тринадцать форм глаза, семь коротких выражений и повадки при них — качается, рыщет, дышит, спит,
+// потеет. Это хорошо продуманная система, и выдумывать её заново значило бы выдумать хуже.
+//
+// Что НЕ взято и взято быть не может: сам персонаж, его имя, его значок и звуки — они у Coucou под
+// отдельной лицензией и остаются его автору. Поэтому здесь своё существо: круглая галька нашего
+// цвета, без рта, с нашим набором акцентов. Их же авторы прямо пишут, что форк приветствуется, если
+// у него своё имя, свой значок, свой персонаж и свои звуки. Так и сделано.
+//
+// ───────────── правило, выученное дорого ─────────────
+//
+// Всё, что шевелится, спрашивает `visible`. Анимация в скрытом виде шевелит сцену каждый кадр, окно
+// считается изменившимся, и оболочка рисует шестьдесят кадров в секунду в пустоту. Один раз это уже
+// стоило трети процессорного ядра круглые сутки.
 import QtQuick
 
 Item {
@@ -22,20 +30,50 @@ Item {
     // Куда смотреть: точка в координатах сцены. Меньше -9000 — смотреть некуда, глаза гуляют сами.
     property real lookX: -99999
     property real lookY: -99999
-    // Настроение приходит снаружи: островок знает про ассистента больше, чем существо.
-    property string mood: "idle"     // idle | think | listen | talk | ask | done | sleep
+    // Состояние приходит снаружи: островок знает про ассистента больше, чем нарисованное лицо.
+    property string mood: "idle"
+    // Короткое выражение поверх состояния: любовь, удивление, гордость, подмигнуть, зевнуть,
+    // радость, недовольство. Живёт полторы секунды и само снимается.
+    property string emote: ""
     property real voice: 0           // громкость голоса, 0…1 — ею шевелится рот
     signal poked()
 
     implicitWidth: size
     implicitHeight: size
 
-    readonly property bool awake: visible && mood !== "sleep"
-    readonly property color skin: mood === "ask" ? JD.accentOrange
-        : mood === "done" ? JD.accentGreen
-        : mood === "listen" ? JD.accentCyan
-        : mood === "talk" ? JD.accentBlue
-        : JD.accentPurple
+    // ───────────── таблица состояний ─────────────
+    //
+    // Одна таблица на всё: цвет, форма глаза, значок-метка и повадки. Разложить это по условиям в
+    // десяти местах — верный способ получить состояние, которое красит тело, но забывает глаза.
+    readonly property var states: ({
+        "idle":      { tint: JD.text2,        eye: "pill",   badge: "",         breathes: true },
+        "working":   { tint: JD.accentBlue,   eye: "pill",   badge: "dots" },
+        "thinking":  { tint: JD.accentPurple, eye: "pill",   badge: "dots",     look: [0.55, -0.55] },
+        "searching": { tint: "#6366f1",       eye: "pill",   badge: "dots",     scans: true },
+        "listening": { tint: JD.accentCyan,   eye: "wide",   badge: "" },
+        "talking":   { tint: JD.accentBlue,   eye: "pill",   badge: "",         mouth: true },
+        "approval":  { tint: JD.accentOrange, eye: "wide",   badge: "bang",     bounces: true },
+        "question":  { tint: JD.accentCyan,   eye: "pill",   badge: "question", tilt: 0.17 },
+        "error":     { tint: JD.accentRed,    eye: "flat",   badge: "dot" },
+        "finished":  { tint: JD.accentGreen,  eye: "happy",  badge: "dot" },
+        "ratelimit": { tint: "#fb923c",       eye: "tired",  badge: "dot",      sweat: true },
+        "sleeping":  { tint: "#94a3b8",       eye: "closed", badge: "",         breathes: true, zz: true },
+        "dizzy":     { tint: JD.accentPink,   eye: "spiral", badge: "" }
+    })
+    readonly property var emotes: ({
+        "love": "heart", "surprised": "dot", "proud": "star", "wink": "wink",
+        "yawn": "tired", "happy": "happy", "annoyed": "line"
+    })
+
+    readonly property var now: states[dizzy ? "dizzy" : mood] || states["idle"]
+    readonly property color skin: now.tint
+    readonly property string eyeShape: emote !== "" && emotes[emote] ? emotes[emote] : now.eye
+    readonly property bool awake: visible && mood !== "sleeping"
+
+    // Выражение снимается само: оно короткое по смыслу, и оставлять его висеть — значит сделать из
+    // него второе состояние, которого никто не просил.
+    onEmoteChanged: if (emote !== "") emoteOff.restart()
+    Timer { id: emoteOff; interval: 1500; onTriggered: me.emote = "" }
 
     // ───────────── куда смотрят глаза ─────────────
     //
@@ -45,14 +83,13 @@ Item {
     // Замерший взгляд выглядит сломанным, блуждающий — задумчивым.
     property real gazeX: 0
     property real gazeY: 0
-    readonly property bool watching: lookX > -9000
+    readonly property bool watching: lookX > -9000 && !now.look && !now.scans
 
-    // Своя прогулка взгляда, когда следить не за кем.
     property real wanderX: 0
     property real wanderY: 0
     Timer {
         interval: 1500 + Math.random() * 2500
-        running: me.awake && !me.watching && JD.animOn
+        running: me.awake && !me.watching && !me.now.scans && JD.animOn && me.visible
         repeat: true
         onTriggered: {
             interval = 1500 + Math.random() * 2500
@@ -61,10 +98,25 @@ Item {
         }
     }
 
-    // Думает — смотрит вверх и в сторону, как смотрят, когда вспоминают. Спит — вниз.
-    readonly property real wantX: mood === "think" ? 0.75 : mood === "sleep" ? 0 : (watching ? clampLook(lookX, me.width) : wanderX)
-    readonly property real wantY: mood === "think" ? -0.6 : mood === "sleep" ? 0.9 : (watching ? clampLook(lookY, me.height, true) : wanderY)
-    function clampLook(at, span, vertical) {
+    // Рыщет: глаза ходят из стороны в сторону ровно, как при поиске. Это единственное движение
+    // взгляда, которое должно быть равномерным, — оно и значит «перебираю, а не думаю».
+    property real scan: 0
+    SequentialAnimation on scan {
+        running: me.now.scans === true && me.visible && JD.animOn
+        loops: Animation.Infinite
+        NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+        NumberAnimation { to: -1; duration: 1400; easing.type: Easing.InOutSine }
+        NumberAnimation { to: 0; duration: 700; easing.type: Easing.InOutSine }
+    }
+
+    readonly property real wantX: now.scans ? scan
+        : now.look ? now.look[0]
+        : mood === "sleeping" ? 0
+        : (watching ? aim(lookX, false) : wanderX)
+    readonly property real wantY: now.look ? now.look[1]
+        : mood === "sleeping" ? 0.9
+        : (watching ? aim(lookY, true) : wanderY)
+    function aim(at, vertical) {
         const c = me.mapToItem(null, me.width / 2, me.height / 2)
         const d = (vertical ? (at - c.y) : (at - c.x)) / (me.size * 4)
         return Math.max(-1, Math.min(1, d))
@@ -75,42 +127,40 @@ Item {
     onWantYChanged: gazeY = wantY
     Component.onCompleted: { gazeX = wantX; gazeY = wantY }
 
-    // ───────────── дыхание ─────────────
+    // ───────────── дыхание, качание, моргание ─────────────
     property real breath: 0
     SequentialAnimation on breath {
-        running: me.awake && JD.animOn && me.visible
+        running: me.awake && me.visible && JD.animOn
         loops: Animation.Infinite
         NumberAnimation { to: 1; duration: 2100; easing.type: Easing.InOutSine }
         NumberAnimation { to: 0; duration: 2400; easing.type: Easing.InOutSine }
     }
 
-    // ───────────── моргание ─────────────
-    //
-    // Не по таймеру ровно: живое моргает неровно, и равномерное мигание читается как индикатор, а
-    // не как глаза.
-    // 0 — открыт, 1 — закрыт. Спящий закрыт почти совсем: спящее существо с открытыми глазами —
-    // это не спящее существо, а то же самое другого цвета, и в прошлой отрисовке «спит» и «спокоен»
-    // отличались только оттенком.
-    property real lid: 0
-    readonly property real lidNow: Math.max(lid, mood === "sleep" ? 0.88 : 0)
+    // Качается — когда ждёт ответа от человека. Движение в сторону человека и есть просьба.
+    property real bob: 0
+    SequentialAnimation on bob {
+        running: me.now.bounces === true && me.visible && JD.animOn
+        loops: Animation.Infinite
+        NumberAnimation { to: -1; duration: 320; easing.type: Easing.OutQuad }
+        NumberAnimation { to: 0; duration: 420; easing.type: Easing.OutBounce }
+        PauseAnimation { duration: 260 }
+    }
+
+    // Моргает неровно: ровное мигание читается как индикатор, а не как глаза.
+    property real open: 1           // 1 — глаз открыт, 0 — закрыт
     Timer {
-        id: blinkWait
         interval: 2600 + Math.random() * 3800
-        running: me.awake && me.visible && JD.animOn
+        running: me.awake && me.visible && JD.animOn && me.eyeShape !== "closed"
         repeat: true
         onTriggered: { interval = 2600 + Math.random() * 3800; blink.restart() }
     }
     SequentialAnimation {
         id: blink
-        NumberAnimation { target: me; property: "lid"; to: 1; duration: 70; easing.type: Easing.InQuad }
-        NumberAnimation { target: me; property: "lid"; to: 0; duration: 110; easing.type: Easing.OutQuad }
+        NumberAnimation { target: me; property: "open"; to: 0.06; duration: 70; easing.type: Easing.InQuad }
+        NumberAnimation { target: me; property: "open"; to: 1; duration: 110; easing.type: Easing.OutQuad }
     }
 
     // ───────────── тычок ─────────────
-    //
-    // Сжимается, а потом возвращается с перелётом: так ведёт себя мягкое. Три тычка подряд — и
-    // существу дурно; это не шутка ради шутки, а ответ на то, что человек делает: если по чему-то
-    // тычут трижды, оно обязано как-то на это отозваться.
     property real squish: 0
     property bool dizzy: false
     property int pokes: 0
@@ -126,10 +176,10 @@ Item {
         pokes++
         pokeWindow.restart()
         if (pokes >= 3) { dizzy = true; dizzyOff.restart(); pokes = 0 }
+        else if (pokes === 2) emote = "annoyed"
         me.poked()
     }
 
-    // Обрадовался: короткий подскок. Коротко — радость, которая длится, это уже не радость.
     property real hop: 0
     SequentialAnimation {
         id: jump
@@ -137,7 +187,7 @@ Item {
         NumberAnimation { target: me; property: "hop"; to: -1; duration: 160; easing.type: Easing.OutQuad }
         NumberAnimation { target: me; property: "hop"; to: 0; duration: 220; easing.type: Easing.OutBounce }
     }
-    onMoodChanged: if (mood === "done") jump.restart()
+    onMoodChanged: if (mood === "finished") jump.restart()
 
     // ───────────── тело ─────────────
     Item {
@@ -145,19 +195,18 @@ Item {
         anchors.centerIn: parent
         width: me.size
         height: me.size
-        y: me.hop * me.size * 0.22
-        rotation: me.dizzy ? wobble.value : 0
+        y: (me.hop + me.bob * 0.5) * me.size * 0.22
+        rotation: (me.dizzy ? wobble.value : 0) + (me.now.tilt || 0) * 40
 
         QtObject { id: wobble; property real value: 0 }
         SequentialAnimation {
-            running: me.dizzy && JD.animOn
+            running: me.dizzy && me.visible && JD.animOn
             loops: Animation.Infinite
             NumberAnimation { target: wobble; property: "value"; to: 9; duration: 180; easing.type: Easing.InOutSine }
             NumberAnimation { target: wobble; property: "value"; to: -9; duration: 360; easing.type: Easing.InOutSine }
             NumberAnimation { target: wobble; property: "value"; to: 0; duration: 180; easing.type: Easing.InOutSine }
         }
 
-        // Галька: круглая, чуть приплюснутая дыханием и сильно — тычком.
         Rectangle {
             id: skin
             anchors.centerIn: parent
@@ -168,9 +217,7 @@ Item {
                 GradientStop { position: 0; color: Qt.lighter(me.skin, 1.25) }
                 GradientStop { position: 1; color: me.skin }
             }
-            Behavior on gradient { enabled: false }
 
-            // Блик сверху: без него галька выглядит плоским пятном, а не чем-то округлым.
             Rectangle {
                 width: parent.width * 0.44
                 height: parent.height * 0.3
@@ -181,123 +228,280 @@ Item {
             }
 
             // ───────────── глаза ─────────────
-            //
-            // Зрачок ходит внутри глаза по кругу, а не по квадрату: по квадрату взгляд «залипает» в
-            // углах и перестаёт быть взглядом.
-            Row {
+            // Глаза стоят по тем же долям, что и в перенесённой таблице: ширина 0,25 от тела,
+            // высота 0,27, между центрами 0,37. Ряд с отступом эти доли не держит — холст шире
+            // самого глаза, — поэтому каждый глаз ставится по своей середине.
+            Item {
                 anchors.centerIn: parent
-                anchors.verticalCenterOffset: parent.height * 0.04
-                spacing: me.size * 0.16
-
-                Repeater {
-                    model: 2
-                    delegate: Item {
-                        required property int index
-                        width: me.size * 0.3
-                        height: me.size * 0.3 * (1 - me.lidNow * 0.94)
-                        clip: true
-
-                        Rectangle {
-                            id: white
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            y: -(me.size * 0.3 - parent.height) / 2
-                            width: me.size * 0.3
-                            height: me.size * 0.3
-                            radius: width / 2
-                            color: "#0d0d12"
-
-                            // Зрачок — светлая точка на тёмном глазу: так читается даже в шесть
-                            // пикселей, а тёмный зрачок на тёмном глазу не читается никак.
-                            Rectangle {
-                                width: parent.width * (me.mood === "listen" ? 0.5 : 0.42)
-                                height: width
-                                radius: width / 2
-                                color: "#ffffff"
-                                x: parent.width / 2 - width / 2 + me.gazeX * parent.width * 0.21
-                                y: parent.height / 2 - height / 2 + me.gazeY * parent.height * 0.21
-                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: 160 } }
-                            }
-                        }
-
-                        // Дурно — глаза крестиками. Проще спирали и читается мгновенно.
-                        Item {
-                            anchors.fill: parent
-                            visible: me.dizzy
-                            Rectangle { anchors.centerIn: parent; width: parent.width * 0.9; height: 1.6
-                                        radius: 1; color: "#0d0d12"; rotation: 45 }
-                            Rectangle { anchors.centerIn: parent; width: parent.width * 0.9; height: 1.6
-                                        radius: 1; color: "#0d0d12"; rotation: -45 }
-                        }
-                    }
-                }
-            }
-
-            // Брови — только когда просят разрешения. Вопрос отличается от спокойствия не цветом,
-            // а бровями: без них оранжевое лицо означает просто «оранжевый».
-            Row {
-                visible: me.mood === "ask"
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -parent.height * 0.26
-                spacing: me.size * 0.16
-                Repeater {
-                    model: 2
-                    delegate: Rectangle {
-                        required property int index
-                        width: me.size * 0.22
-                        height: Math.max(1.4, me.size * 0.045)
-                        radius: height / 2
-                        color: "#0d0d12"
-                        rotation: index === 0 ? -16 : 16
-                    }
-                }
+                anchors.verticalCenterOffset: parent.height * 0.04 + me.gazeY * me.size * 0.07
+                anchors.horizontalCenterOffset: me.gazeX * me.size * 0.09
+                width: 1
+                height: 1
+                Eye { side: -1; anchors.centerIn: parent; anchors.horizontalCenterOffset: -me.size * 0.185 }
+                Eye { side: 1; anchors.centerIn: parent; anchors.horizontalCenterOffset: me.size * 0.185 }
             }
 
             // ───────────── рот ─────────────
             //
             // Рта нет почти всегда. Лицо без рта спокойно; рот появляется тогда, когда им есть что
-            // сказать: говорит — шевелится по громкости, обрадовался — улыбается, просит
-            // разрешения — ровная черта, потому что это вопрос, а не радость.
+            // сказать: говорит — шевелится по громкости.
             Rectangle {
-                id: mouth
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: parent.height * 0.66
-                visible: me.mood === "talk" || me.mood === "ask"
-                // Говорит — рот шире, чем выше: круглый рот это «о», а не речь.
-                width: me.mood === "talk" ? me.size * (0.26 + me.voice * 0.1) : me.size * 0.2
-                height: me.mood === "talk" ? me.size * (0.05 + me.voice * 0.13) : me.size * 0.045
+                y: parent.height * 0.68
+                visible: me.now.mouth === true
+                width: me.size * (0.26 + me.voice * 0.1)
+                height: me.size * (0.05 + me.voice * 0.13)
                 radius: height / 2
                 color: "#0d0d12"
                 Behavior on width { enabled: JD.animOn; NumberAnimation { duration: 70 } }
                 Behavior on height { enabled: JD.animOn; NumberAnimation { duration: 70 } }
             }
 
-            // Улыбка — дуга, а не чёрточка. Прямая палка внизу лица читается как «ровно», а не как
-            // «рад»; разница между ними ровно в кривизне, другого способа её показать нет.
-            Canvas {
-                visible: me.mood === "done"
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: parent.height * 0.6
-                width: me.size * 0.34
-                height: me.size * 0.18
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = "#0d0d12"
-                    ctx.lineWidth = Math.max(1.5, me.size * 0.055)
-                    ctx.lineCap = "round"
-                    ctx.beginPath()
-                    ctx.arc(width / 2, 0, width / 2 - ctx.lineWidth / 2, 0.15 * Math.PI, 0.85 * Math.PI)
-                    ctx.stroke()
-                }
+            // Капля пота: не спешит и не капает — просто висит, пока неловко.
+            Rectangle {
+                visible: me.now.sweat === true
+                width: me.size * 0.1
+                height: me.size * 0.14
+                radius: width / 2
+                color: Qt.rgba(0.6, 0.85, 1, 0.9)
+                x: parent.width * 0.78
+                y: parent.height * 0.18 + me.breath * me.size * 0.04
             }
         }
     }
 
-    // Тычок принимает всё тело.
-    HoverHandler { id: petting; cursorShape: Qt.PointingHandCursor }
+    // ───────────── метка ─────────────
+    //
+    // Маленький значок у виска: три точки — работает, восклицательный знак — ждёт ответа, вопрос —
+    // спрашивает, точка — коротко о результате. Она сообщает **род** занятия, когда само занятие
+    // по лицу уже понятно; без неё «работает» и «думает» выглядят одинаково.
+    Item {
+        id: badge
+        visible: !!me.now.badge
+        width: me.size * 0.42
+        height: me.size * 0.42
+        x: me.width * 0.72
+        y: -me.size * 0.06
+
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: Qt.rgba(0, 0, 0, 0.55)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.14)
+        }
+        // Три точки бегут по очереди — это самое понятное «идёт работа» из всех придуманных.
+        Row {
+            anchors.centerIn: parent
+            spacing: me.size * 0.045
+            visible: me.now.badge === "dots"
+            Repeater {
+                model: 3
+                delegate: Rectangle {
+                    required property int index
+                    width: me.size * 0.07
+                    height: width
+                    radius: width / 2
+                    color: me.skin
+                    opacity: 0.35
+                    SequentialAnimation on opacity {
+                        running: badge.visible && me.now.badge === "dots" && me.visible && JD.animOn
+                        loops: Animation.Infinite
+                        PauseAnimation { duration: index * 170 }
+                        NumberAnimation { to: 1; duration: 230 }
+                        NumberAnimation { to: 0.35; duration: 230 }
+                        PauseAnimation { duration: 510 - index * 170 }
+                    }
+                }
+            }
+        }
+        Text {
+            anchors.centerIn: parent
+            visible: me.now.badge === "bang" || me.now.badge === "question"
+            text: me.now.badge === "bang" ? "!" : "?"
+            color: me.skin
+            font.family: JD.fontFamily
+            font.pixelSize: me.size * 0.3
+            font.weight: Font.Black
+        }
+        Rectangle {
+            anchors.centerIn: parent
+            visible: me.now.badge === "dot"
+            width: me.size * 0.13
+            height: width
+            radius: width / 2
+            color: me.skin
+        }
+    }
+
+    // ───────────── сон ─────────────
+    //
+    // Буковки «z» поднимаются и тают. Их три, и они разной величины: одинаковые читались бы как
+    // индикатор загрузки.
+    Repeater {
+        model: 3
+        delegate: Text {
+            required property int index
+            visible: me.now.zz === true && me.visible
+            text: "z"
+            color: Qt.rgba(1, 1, 1, 0.55)
+            font.family: JD.fontFamily
+            font.pixelSize: me.size * (0.22 + index * 0.06)
+            x: me.width * 0.68 + index * me.size * 0.1
+            property real rise: 0
+            y: -me.size * 0.1 - rise * me.size * 0.5
+            opacity: 1 - rise
+            SequentialAnimation on rise {
+                running: me.now.zz === true && me.visible && JD.animOn
+                loops: Animation.Infinite
+                PauseAnimation { duration: index * 600 }
+                NumberAnimation { from: 0; to: 1; duration: 1800; easing.type: Easing.OutCubic }
+                PauseAnimation { duration: 1800 - index * 600 }
+            }
+        }
+    }
+
+    HoverHandler { cursorShape: Qt.PointingHandCursor }
     TapHandler {
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: me.poke()
+    }
+
+    // ───────────── один глаз ─────────────
+    //
+    // Формы перенесены из Coucou один в один: та же геометрия, те же доли от размера. Холст
+    // перерисовывается только когда форма действительно поменялась, а не каждый кадр: спираль и
+    // звезда крутятся сами и просят перерисовку, пока крутятся, — остальные тринадцать стоят.
+    component Eye: Canvas {
+        id: eye
+        property int side: 1                     // -1 левый, +1 правый
+        readonly property real w: me.size * 0.25
+        readonly property real h: me.size * 0.27
+        readonly property bool spinning: me.eyeShape === "spiral" || me.eyeShape === "star"
+        property real spin: 0
+
+        width: me.size * 0.5
+        height: me.size * 0.5
+        antialiasing: true
+
+        Timer {
+            interval: 33
+            repeat: true
+            running: eye.spinning && me.visible && JD.animOn
+            onTriggered: { eye.spin += 0.1; eye.requestPaint() }
+        }
+        Connections {
+            target: me
+            function onEyeShapeChanged() { eye.requestPaint() }
+            function onOpenChanged() { eye.requestPaint() }
+        }
+
+        onPaint: {
+            const x = getContext("2d")
+            const ink = "#1a1412"
+            const sd = eye.side
+            const w = eye.w, h = eye.h
+            x.reset()
+            x.save()
+            x.translate(width / 2, height / 2)
+            x.fillStyle = ink
+            x.strokeStyle = ink
+
+            const pill = (pw, ph) => {
+                const hh = Math.max(ph * me.open, pw * 0.3)
+                const r = Math.min(pw / 2, hh / 2)
+                x.beginPath()
+                x.moveTo(-pw / 2 + r, -hh / 2)
+                x.arcTo(pw / 2, -hh / 2, pw / 2, hh / 2, r)
+                x.arcTo(pw / 2, hh / 2, -pw / 2, hh / 2, r)
+                x.arcTo(-pw / 2, hh / 2, -pw / 2, -hh / 2, r)
+                x.arcTo(-pw / 2, -hh / 2, pw / 2, -hh / 2, r)
+                x.closePath()
+                x.fill()
+            }
+            const bar = (bw, bh, rot) => {
+                if (rot) x.rotate(rot)
+                x.beginPath()
+                const r = bh / 2
+                x.moveTo(-bw / 2 + r, -bh / 2)
+                x.arcTo(bw / 2, -bh / 2, bw / 2, bh / 2, r)
+                x.arcTo(bw / 2, bh / 2, -bw / 2, bh / 2, r)
+                x.arcTo(-bw / 2, bh / 2, -bw / 2, -bh / 2, r)
+                x.arcTo(-bw / 2, -bh / 2, bw / 2, -bh / 2, r)
+                x.closePath()
+                x.fill()
+                if (rot) x.rotate(-rot)
+            }
+            const smile = () => {
+                x.lineWidth = w * 0.5
+                x.lineCap = "round"
+                x.beginPath()
+                x.arc(0, h * 0.18, w * 0.82, Math.PI * 1.12, Math.PI * 1.88)
+                x.stroke()
+            }
+
+            switch (me.eyeShape) {
+            case "wide": pill(w * 1.16, h * 1.12); break
+            case "pill": pill(w, h); break
+            case "dot":
+                x.beginPath(); x.arc(0, 0, w * 0.45, 0, Math.PI * 2); x.fill(); break
+            case "line": bar(w * 1.56, w * 0.42, -sd * 0.2); break
+            case "flat": bar(w * 1.44, w * 0.4, 0); break
+            case "happy": smile(); break
+            case "closed":
+                x.lineWidth = w * 0.36
+                x.lineCap = "round"
+                x.beginPath()
+                x.arc(0, -h * 0.08, w * 0.78, Math.PI * 0.15, Math.PI * 0.85)
+                x.stroke()
+                break
+            case "spiral":
+                x.lineWidth = w * 0.22
+                x.lineCap = "round"
+                x.beginPath()
+                for (let a = 0; a < 4.4 * Math.PI; a += 0.2) {
+                    const r = w * 0.06 + a * w * 0.058
+                    const aa = a + eye.spin * 9 * sd
+                    const px = Math.cos(aa) * r, py = Math.sin(aa) * r
+                    if (a === 0) x.moveTo(px, py); else x.lineTo(px, py)
+                }
+                x.stroke()
+                break
+            case "heart":
+                x.fillStyle = "#ff4d6d"
+                x.beginPath()
+                {
+                    const s = w * 1.2
+                    x.moveTo(0, s * 0.35)
+                    x.bezierCurveTo(-s * 0.9, -s * 0.25, -s * 0.35, -s * 0.85, 0, -s * 0.3)
+                    x.bezierCurveTo(s * 0.35, -s * 0.85, s * 0.9, -s * 0.25, 0, s * 0.35)
+                }
+                x.fill()
+                break
+            case "star":
+                x.fillStyle = "#f7b32b"
+                x.rotate(eye.spin * 1.5 * sd)
+                x.beginPath()
+                for (let i = 0; i < 10; i++) {
+                    const r = i % 2 ? w * 0.46 : w * 1.05
+                    const a = -Math.PI / 2 + i * Math.PI / 5
+                    const px = Math.cos(a) * r, py = Math.sin(a) * r
+                    if (i === 0) x.moveTo(px, py); else x.lineTo(px, py)
+                }
+                x.closePath()
+                x.fill()
+                break
+            case "tired":
+                bar(w, h * 0.38, 0)
+                x.translate(0, -h * 0.16)
+                bar(w * 1.24, w * 0.22, 0)
+                break
+            case "wink":
+                if (sd < 0) pill(w, h); else smile()
+                break
+            default: pill(w, h)
+            }
+            x.restore()
+        }
     }
 }

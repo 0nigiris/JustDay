@@ -52,14 +52,24 @@ Singleton {
     property real pointerX: -99999                 // курсор, пока он над полосой островка
     property real pointerY: -99999
     property bool buddyHappy: false                // короткая радость после законченного дела
+    // Состояния те же, что в перенесённой таблице. Порядок проверок — это порядок важности: то, что
+    // ждёт человека, перебивает то, что идёт само, а идущее перебивает покой.
     readonly property string buddyMood: {
-        if (dstate === "offline") return "sleep"
-        if (approvalText !== "") return "ask"
-        if (buddyHappy) return "done"
-        if (dstate === "listening") return "listen"
-        if (dstate === "thinking" || dstate === "transcribing") return "think"
-        if (dstate === "speaking") return "talk"
+        if (dstate === "offline") return "sleeping"
+        if (approvalText !== "") return "approval"
+        if (buddyHappy) return "finished"
+        if (dstate === "listening") return "listening"
+        if (dstate === "transcribing") return "thinking"
+        if (dstate === "thinking") return searchingNow ? "searching" : "thinking"
+        if (dstate === "speaking") return "talking"
+        if (workers > 0) return "working"
         return "idle"
+    }
+    // Ищет или думает — видно по тому, чем занят инструмент: поиск по файлам и в сети выглядит
+    // иначе, чем размышление, и показывать их одинаково значит потерять половину смысла.
+    readonly property bool searchingNow: {
+        const i = String(activityIcon || "").toLowerCase()
+        return i === "search" || i === "globe" || i === "folder-open"
     }
     // Радуется делу, которое кончилось, а не любому переходу в покой: молчание после «не расслышал»
     // — не повод прыгать.

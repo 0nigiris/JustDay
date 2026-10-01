@@ -10,3 +10,9 @@ Modified versions must keep this notice, credit the original author and be relea
 Third-party parts:
   island/icons/*.svg  — Lucide icons, ISC License (island/icons/LICENSE-lucide.txt)
   voice/voices/*      — reference voices generated with Qwen3-TTS (Apache License 2.0)
+  island/Buddy.qml    — the state/expression vocabulary (11 states, 13 eye shapes, 7 emotes and the
+                        habits that go with them) is ported from Coucou by Louis Raillé, MIT License
+                        <https://github.com/Louis-CFM/coucou>. The character itself, its name, icon
+                        and sounds are NOT taken: those are reserved by Coucou's own asset licence,
+                        which asks forks to use their own. JustDay's creature, name, icon and sounds
+                        are its own.
