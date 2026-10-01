@@ -431,6 +431,9 @@ Singleton {
     property var layout: null
     readonly property string layoutShort: layout ? String(layout.id || "").toUpperCase().slice(0, 2) : ""
     function layoutNext() { send({ cmd: "layout_next" }) }
+    // Спрашиваем при подключении: демон сам присылает только смены, а островок мог подключиться
+    // позже и первой смены не дождаться до вечера.
+    function layoutRefresh() { send({ cmd: "layout" }) }
 
     function trayHide(ident, on) { if (ident) send({ cmd: "tray_hide", id: String(ident), on: on === undefined ? null : on }) }
     // Чьё меню лотка открыто и от какой точки оно растёт. Меню живёт в своём окне во весь экран —
@@ -530,7 +533,7 @@ Singleton {
     function dockArrange(keys) { send({ cmd: "dock_arrange", keys: keys }) }
     function windowDo(action, id) { if (id) send({ cmd: "window_do", action: action, id: id }) }
     function dockIsPinned(key) { return (dockData.pinned || []).indexOf(key) >= 0 }
-    onLinkedChanged: if (linked) { dockRefresh(); mascotRefresh() }
+    onLinkedChanged: if (linked) { dockRefresh(); mascotRefresh(); layoutRefresh() }
 
     property bool settingsOpen: false
     property string settingsPage: "general"

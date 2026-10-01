@@ -551,10 +551,9 @@ def layout_now() -> dict:
     return {"at": at, "id": names[at]["id"], "name": names[at]["name"], "all": names}
 
 
-def layout_next() -> dict:
-    """Переключить на следующую. Возвращает уже новую — чтобы не гадать, что получилось."""
+def layout_switch() -> None:
+    """Переключить на следующую. Какая вышла — спрашивать отдельно и не сразу: плазме нужен миг."""
     _kwin_keyboard("switchToNextLayout")
-    return layout_now()
 
 
 def _kwin_keyboard(method: str, literal: bool = False) -> str:

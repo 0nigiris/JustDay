@@ -2474,8 +2474,15 @@ class Daemon:
                 drop = [str(f) for f in (req.get("files") or [])]
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", "")), drop))
+            elif cmd == "layout":  # островок спрашивает при подключении: публикуем только смены
+                got = await asyncio.get_running_loop().run_in_executor(None, desktop.layout_now)
+                if got:
+                    self._layout = got
+                resp = {"ok": True, "layout": got}
             elif cmd == "layout_next":  # нажали на раскладку в полосе лотка
-                got = await asyncio.get_running_loop().run_in_executor(None, desktop.layout_next)
+                await asyncio.get_running_loop().run_in_executor(None, desktop.layout_switch)
+                await asyncio.sleep(0.08)   # плазме нужен миг: спрошенная сразу раскладка ещё прежняя
+                got = await asyncio.get_running_loop().run_in_executor(None, desktop.layout_now)
                 if got:
                     self._layout = got
                     self.publish(layout=got)
