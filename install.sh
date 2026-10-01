@@ -12,7 +12,8 @@
 #   --debug             show what every tool prints, as it prints it
 #   --no-sudo           never ask for the admin password
 #   --help
-# Environment: JUSTDAY_PARTS, JUSTDAY_DEBUG=1, JUSTDAY_NO_SUDO=1, JUSTDAY_YES=1, JUSTDAY_HOTKEY.
+# Environment: JUSTDAY_PARTS, JUSTDAY_DEBUG=1, JUSTDAY_NO_SUDO=1, JUSTDAY_YES=1, JUSTDAY_HOTKEY,
+#              JUSTDAY_ASK=1 (ask what to install even when something is already installed).
 #
 # Re-running is safe (idempotent) and picks up where an interrupted run stopped. Everything is
 # user-level except missing system packages, for which sudo is asked once, with the list shown first.
@@ -240,7 +241,15 @@ for part in speech voice cuda; do have_part "$part" && here+=("$part"); done
 if [[ -z "$WANT" ]]; then                       # ни флага, ни переменной: спросить или решить самим
   guess="speech,voice"; [[ -n "$gpu" ]] && guess="speech,voice,cuda"
   ((${#here[@]})) && guess=$(IFS=,; printf '%s' "${here[*]}")   # уже что-то стоит — не отбирать
-  if ((ASK == 1)) && { : </dev/tty; } 2>/dev/null; then
+  # Повторный запуск — это починка или обновление, а не новая установка. Спрашивать «что
+  # установить» у того, у кого уже всё стоит, значит предлагать скачать заново то, что он скачал
+  # вчера: вопрос выглядит как требование выбрать, а любой выбор, кроме прежнего, отнимет или
+  # добавит гигабайты молча. Поэтому состав просто остаётся прежним, и сказано, как его сменить.
+  if ((${#here[@]})) && [[ -z "${JUSTDAY_ASK:-}" ]]; then
+    WANT="$guess"
+    printf '\n  %s%s %s%s\n' "$D" "$(t 'Уже стоит:' 'Already installed:')" "${here[*]}" "$N"
+    printf '  %s%s%s\n\n' "$D" "$(t 'Обновляю это же. Сменить состав: justday parts add speech · ./install.sh --everything' 'Updating the same. To change: justday parts add speech · ./install.sh --everything')" "$N"
+  elif ((ASK == 1)) && { : </dev/tty; } 2>/dev/null; then
     printf '\n  %s%s%s\n\n' "$B" "$(t 'Что установить' 'What to install')" "$N"
     def=1; [[ -n "$gpu" ]] || def=2
     printf '   %s1%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Всё' 'Everything')" 22)" "$D" "$(t '~3.5 ГБ · речь, голос, ускорение на видеокарте' '~3.5 GB · speech, voice, GPU acceleration')$N"
@@ -636,6 +645,29 @@ if ((${#MISSING[@]})); then
   printf '  %s%s%s\n' "$D" "$(t 'Остальное уже работает — всё лежит в домашней папке.' 'Everything else already works — it all lives in your home folder.')" "$N"
 fi
 
+# ───────────── did it actually start? ─────────────
+#
+# «Скачалось, но не включается» — худший из возможных концов установки: человек видит «Готово», а
+# ничего нет, и дальше ему некуда идти. Поэтому спрашиваем systemd прямо здесь и, если служба не
+# поднялась, печатаем причину её словами и готовые команды. Установщик, который не проверил
+# результат своей работы, перекладывает её на того, кто меньше всех может её сделать.
+check_services() {
+  local bad=() unit
+  systemctl --user show-environment >/dev/null 2>&1 || return 0
+  for unit in justday justday-ui; do
+    systemctl --user is-active --quiet "$unit.service" || bad+=("$unit")
+  done
+  ((${#bad[@]})) || return 0
+  printf '\n  %s%s%s\n' "$B$Y" "$(t 'Служба не поднялась' 'The service did not start')" "$N"
+  for unit in "${bad[@]}"; do
+    printf '     %s%s%s %s\n' "$(pad "$unit" 16)" "$D" "$(systemctl --user is-active "$unit.service" 2>&1)" "$N"
+    journalctl --user -u "$unit" -n 4 --no-pager -o cat 2>/dev/null | sed "s/^/       ${D}/; s/\$/${N}/"
+  done
+  printf '  %s%s%s\n' "$D" "$(t 'Что делать:' 'What to do:') justday doctor · journalctl --user -u ${bad[0]} -n 50" "$N"
+  printf '  %s%s%s\n' "$D" "$(t 'Весь журнал установки:' 'Full install log:') $LOG" "$N"
+}
+check_services
+
 # ───────────── done ─────────────
 kread=$(command -v kreadconfig6 || command -v kreadconfig5 || echo true)
 talk=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null | cut -d, -f1 | cut -f1 || true)
@@ -654,4 +686,7 @@ fi
 printf '  %s%s%s\n' "$C" "$(pad 'justday setup' 18)" "$N$D$(t 'модель, голос, микрофон, почта' 'model, voice, microphone, mail')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday parts' 18)" "$N$D$(t 'доставить речь, голос, ускорение NVIDIA' 'add speech, voice, NVIDIA acceleration')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday doctor' 18)" "$N$D$(t 'проверить, что всё работает' 'check that everything works')$N"
-printf '  %s%s%s\n\n' "$C" "$(pad "$(t 'Руководство' 'Manual')" 18)" "$N${D}https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md$N"
+printf '  %s%s%s\n' "$C" "$(pad "$(t 'Руководство' 'Manual')" 18)" "$N${D}https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md$N"
+# Путь к журналу печатается всегда, а не только когда что-то сломалось: он нужен ровно тогда, когда
+# установка прошла «успешно», а работать не стало, — и именно в этот момент его никто не помнит.
+printf '  %s%s%s\n\n' "$C" "$(pad "$(t 'Журнал' 'Log')" 18)" "$N$D$LOG$N"
