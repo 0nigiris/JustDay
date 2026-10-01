@@ -2431,8 +2431,15 @@ class Daemon:
                     None, lambda: launcher.items(req.get("query", ""), int(req.get("limit") or 40)))
                 resp = {"ok": True, "apps": found}
             elif cmd == "apps_run":
+                drop = [str(f) for f in (req.get("files") or [])]
                 resp = await asyncio.get_running_loop().run_in_executor(
-                    None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", ""))))
+                    None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", "")), drop))
+            elif cmd == "trash_put":  # бросили файлы на корзину
+                paths = [str(f) for f in (req.get("files") or []) if str(f).strip()]
+                got = await asyncio.get_running_loop().run_in_executor(None, dock.trash_put, paths)
+                self._trash_full = bool(got.get("trash_full"))
+                self.publish(trash_full=self._trash_full)
+                resp = got
             elif cmd == "models":  # что сейчас держит память и сколько
                 loop = asyncio.get_running_loop()
                 free = bool(req.get("free"))

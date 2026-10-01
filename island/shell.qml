@@ -2914,6 +2914,13 @@ ShellRoot {
                     id: edgeWatch
                     onPointChanged: if (dockWin.autohide && edge.wants(point)) { hideDock.stop(); dockWin.hovering = true }
                 }
+                // Файл, поднесённый к краю, зовёт док без всякого взмаха. Перетаскивание на
+                // вейланде идёт не движениями мыши, а своими событиями, и взмах по ним не
+                // измеришь, — но тут он и не нужен: человек с грузом в руке точно идёт к доку.
+                DropArea {
+                    anchors.fill: parent
+                    onEntered: { hideDock.stop(); dockWin.hovering = true }
+                }
             }
             Item {
                 id: dockCtxZone

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -308,6 +309,22 @@ def trash_empty() -> dict:
                 if part == "files":
                     failed += 1
     return {"ok": failed == 0, "removed": gone, "failed": failed, "trash_full": trash_full()}
+
+
+# Бросили файлы на корзину. Через `gio trash`, а не `rm`: корзина — это не «удалить», а «убрать со
+# стола», и вернуть оттуда должно быть можно. Своими руками класть файлы в ~/.local/share/Trash тоже
+# нельзя: туда полагается писать ещё и .trashinfo с исходным путём, иначе «восстановить» некуда.
+def trash_put(paths: list[str]) -> dict:
+    good = [p for p in (str(x).strip() for x in paths) if p and os.path.exists(p)]
+    if not good:
+        return {"ok": False, "error": "нечего выбрасывать", "trash_full": trash_full()}
+    try:
+        done = subprocess.run(["gio", "trash", *good], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": str(e), "trash_full": trash_full()}
+    if done.returncode != 0:
+        return {"ok": False, "error": (done.stderr or "").strip()[:200], "trash_full": trash_full()}
+    return {"ok": True, "moved": len(good), "trash_full": trash_full()}
 
 
 def hidden_tray() -> list[str]:

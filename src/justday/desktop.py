@@ -127,8 +127,14 @@ def tray_activate(item: dict) -> bool:
     return r.returncode == 0
 
 
-def launch_app_id(desktop_id: str) -> None:
-    subprocess.Popen(detached(["gtk-launch", desktop_id]), start_new_session=True,
+def launch_app_id(desktop_id: str, files: list[str] | None = None) -> None:
+    """Запустить программу, при желании отдав ей файлы.
+
+    gtk-launch принимает пути следом за именем — и это правильный путь: он читает .desktop и
+    подставляет файлы туда, куда программа просила (%f, %U), вместо того чтобы угадывать за неё.
+    """
+    args = ["gtk-launch", desktop_id, *[str(f) for f in (files or []) if str(f).strip()]]
+    subprocess.Popen(detached(args), start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(HOME))
 
 

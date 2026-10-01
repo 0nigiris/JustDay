@@ -472,6 +472,26 @@ Singleton {
     }
     function dockRefresh() { send({ cmd: "dock" }) }
     function dockRun(item) { if (item) send({ cmd: "apps_run", kind: item.kind || "app", id: item.id }) }
+    // Бросили файлы на значок — отдать их этой программе. Пути снимаются с ссылок один раз, здесь:
+    // дальше по дороге они только портятся, а программа ждёт обычный путь, а не file://.
+    function dropOn(item, urls) {
+        const files = plainPaths(urls)
+        if (!item || !files.length) return
+        send({ cmd: "apps_run", kind: item.kind || "app", id: item.id, files: files })
+    }
+    function dropToTrash(urls) {
+        const files = plainPaths(urls)
+        if (files.length) send({ cmd: "trash_put", files: files })
+    }
+    function plainPaths(urls) {
+        const out = []
+        for (const u of (urls || [])) {
+            let s = String(u)
+            if (s.startsWith("file://")) s = decodeURIComponent(s.slice(7))
+            if (s && s[0] === "/") out.push(s)
+        }
+        return out
+    }
     function dockPin(kind, ident, on) {
         if (!ident) return
         send({ cmd: "dock_pin", kind: kind || "app", id: ident, on: on === undefined ? null : on })

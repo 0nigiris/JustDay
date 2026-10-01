@@ -147,8 +147,8 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
     return out
 
 
-def run(kind: str, ident: str) -> dict:
-    """Запустить программу или игру, перейти к окну."""
+def run(kind: str, ident: str, files: list[str] | None = None) -> dict:
+    """Запустить программу или игру, перейти к окну. files — то, что на неё бросили."""
     try:
         if kind == "window":
             desktop.windows("focus", ident)
@@ -157,9 +157,9 @@ def run(kind: str, ident: str) -> dict:
             got = desktop.launch_game(ident)
             remember(kind, ident)
             return {"ok": True, "kind": kind, "name": got.get("name", ident)}
-        desktop.launch_app_id(f"{ident}.desktop" if not ident.endswith(".desktop") else ident)
+        desktop.launch_app_id(f"{ident}.desktop" if not ident.endswith(".desktop") else ident, files)
         remember("app", ident)
-        return {"ok": True, "kind": "app", "id": ident}
+        return {"ok": True, "kind": "app", "id": ident, "files": len(files or [])}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

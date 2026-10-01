@@ -571,7 +571,9 @@ Item {
                     // Та же история, что и с местом: размер под пальцем считает физика, а
                     // взятый значок просто чуть крупнее. Анимации тут нет нарочно — ей было бы
                     // где замереть на полпути.
-                    scale: slot.k * (slot.dragged ? 1.08 : 1)
+                    scale: slot.k * (slot.dragged ? 1.08 : 1) * (drop.containsDrag ? 1.14 : 1)
+                    Behavior on scale { enabled: JD.animOn && drop.containsDrag
+                                        NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
                     transformOrigin: dv.atTop ? Item.Top : Item.Bottom
                     opacity: slot.dragged ? 0.86 : slotTap.pressed ? 0.7 : 1
 
@@ -653,6 +655,17 @@ Item {
                     }
                 }
 
+                // Под грузом значок светится: цель перетаскивания обязана быть видна без сомнений.
+                Rectangle {
+                    visible: drop.containsDrag
+                    anchors.centerIn: art
+                    width: dv.icon * 1.5
+                    height: width
+                    radius: width / 2
+                    color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.3)
+                    z: -1
+                }
+
                 // Открыто — отметка под значком. Оно же и подсказка, что значок не запустит
                 // второе окно. Вид отметки — на вкус: точка, чёрточка, полоса или свечение.
                 Rectangle {
@@ -732,6 +745,22 @@ Item {
                         if (Math.abs(event.angleDelta.y) < 30) return
                         dv.cycle(slot.wins, event.angleDelta.y < 0 ? 1 : -1)
                         event.accepted = true
+                    }
+                }
+
+                // Бросить файл на значок — отдать его этой программе, на корзину — выбросить. Это
+                // то, ради чего док вообще стоит на краю экрана: до него дотягиваются, не отпуская
+                // перетаскиваемое. Значок под грузом приподнимается и светится — иначе непонятно,
+                // попал ты в него или в соседа, а попасть надо в один из тридцати.
+                DropArea {
+                    id: drop
+                    anchors.fill: parent
+                    enabled: slot.e.t === "app" || slot.e.t === "trash"
+                    onDropped: event => {
+                        if (!event.hasUrls || !event.urls.length) return
+                        if (slot.e.t === "trash") JD.dropToTrash(event.urls)
+                        else { dv.startBounce(slot.e); JD.dropOn(slot.e, event.urls) }
+                        event.accept(Qt.CopyAction)
                     }
                 }
 
