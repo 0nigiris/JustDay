@@ -324,10 +324,32 @@ Singleton {
     // Ищет тот же демон, что отвечает и ассистенту: «открой дискорд» голосом и строка в меню
     // находят одно и то же. Поиск шире сетки — в нём есть ещё и открытые окна.
     function searchMenu() { send({ cmd: "apps", query: menuQuery, limit: 60 }) }
+    // Открыть из меню. Если окно программы уже есть — перейти к нему, а не запускать заново.
+    //
+    // Из-за этого «Telegram не запускается из пуска»: он уже работал, свёрнутый в лоток. Нажатие
+    // честно звало gtk-launch, телеграм честно отвечал «я уже тут» и ничего не делал, и со стороны
+    // это выглядело как сломанная кнопка. Док эту развилку знал с самого начала, меню — нет.
     function runFromMenu(item) {
         if (!item) return
+        const open = windowsOf(item)
+        if (open.length) {
+            const up = open.find(w => !w.minimized) || open[0]
+            windowDo("focus", up.id)
+            closeMenu()
+            return
+        }
         send({ cmd: "apps_run", kind: item.kind, id: item.id })
         closeMenu()
+    }
+    // Окна этой программы: сопоставление то же самое, которым живёт док, — другого у нас нет, и
+    // заводить второе значило бы развести их в первый же день.
+    function windowsOf(item) {
+        if (!item || item.kind === "game" || !item.id) return []
+        const key = "app:" + item.id
+        return windows.filter(w => {
+            const hit = dockLookup(String(w.app || "").toLowerCase())
+            return hit && hit.key === key
+        })
     }
     // Ничего не нашлось — не тупик: строка уходит ассистенту. Ради этого меню и своё.
     function askFromMenu(text) { closeMenu(); send({ cmd: "type", text: text }) }
