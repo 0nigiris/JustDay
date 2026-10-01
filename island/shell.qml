@@ -41,6 +41,9 @@ ShellRoot {
             return JSON.stringify(d)
         }
         // Перетаскивание значка без мыши: чей порядок вышел и не наехали ли ячейки друг на друга.
+        function dockWheel(from: real, to: real, steps: int): string {
+            return dockLoader.item ? dockLoader.item.wheelWalk(from, to, steps) : "null"
+        }
         function dockDrag(n: int, x: real): string {
             return dockLoader.item ? dockLoader.item.dragProbe(n, x) : "null"
         }
@@ -2917,6 +2920,7 @@ ShellRoot {
 
             function probe(x) { return dock.probe(x) }
             function dragProbe(n, x) { return dock.dragProbe(n, x) }
+            function wheelWalk(a, b, n) { return dock.wheelWalk(a, b, n) }
 
             DockView {
                 id: dock

@@ -1175,6 +1175,35 @@ Item {
                                 cells: lane.map((s, i) => [s.t, Math.round(geom[i].x), Math.round(geom[i].w)]) })
     }
 
+    // Прогулка курсора по полосе маленькими шагами: где именно колесо щёлкает. Одной пробой этого
+    // не увидеть — гистерезис по определению зависит от того, откуда пришли, а каждая проба
+    // начинает с чистого листа. Здесь состояние живёт от шага к шагу, как под настоящей рукой.
+    function wheelWalk(from, to, steps) {
+        const was = engaged, wasAt = pointerScene, wasCommit = committed
+        engaged = true
+        committed = -1
+        const events = []
+        const n = Math.max(2, Math.min(400, steps || 60))
+        let last = -1
+        for (let k = 0; k < n; k++) {
+            const x = from + (to - from) * k / (n - 1)
+            pointerScene = anchorCentre - restLength / 2 + x
+            for (let f = 0; f < 3; f++) stepPhysics(1 / 120)
+            if (committed !== last) {
+                events.push({ x: Math.round(x), cell: committed,
+                              name: committed >= 0 && committed < lane.length
+                                    ? (lane[committed].name || lane[committed].t) : "" })
+                last = committed
+            }
+        }
+        const centres = lane.map((s, i) => ({ t: s.t, c: Math.round(restCentre(i)) }))
+        engaged = was
+        pointerScene = wasAt
+        committed = wasCommit
+        wake()
+        return JSON.stringify({ from: from, to: to, commits: events, centres: centres })
+    }
+
     // Проверка движка без мыши: поставить курсор в точку полосы, дать физике сойтись и вернуть
     // получившуюся раскладку. Синтетическая мышь на вейланде врёт, а «значки расступаются» иначе
     // никак не проверить числом. Состояние восстанавливается первым же настоящим движением мыши.
