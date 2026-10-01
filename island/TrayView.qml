@@ -221,7 +221,9 @@ Item {
                 readonly property var g: tv.geom[index] || ({ y: tv.pad + index * tv.cell, h: tv.cell, k: 1 })
                 // Ширина пятна — по тому, насколько выросла его ячейка, но не уже спокойной полосы.
                 width: Math.max(tv.implicitWidth, (tv.icon + 12) * g.k + tv.pad) + blob.bleed * 2
-                height: Math.max(g.h + tv.pad * 2, width) + blob.bleed * 2
+                // Пятна нарочно выше своей ячейки: чем сильнее они перекрываются, тем ровнее
+                // выходит их объединение. Впритык они дают зубчатый силуэт — видно каждое.
+                height: Math.max(g.h + tv.cell * 0.7, width) + blob.bleed * 2
                 radius: Math.min(width, height) / 2
                 x: (parent.width - width) / 2
                 y: g.y + g.h / 2 - height / 2
