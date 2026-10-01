@@ -481,8 +481,14 @@ Singleton {
     }
     function dropToTrash(urls) {
         const files = plainPaths(urls)
-        if (files.length) send({ cmd: "trash_put", files: files })
+        if (!files.length) return
+        send({ cmd: "trash_put", files: files })
+        // Ответ разбирается здесь же: выбросить файл можно не всегда — с временных разделов,
+        // например, система этого не позволяет нарочно. Молча проглотить отказ нельзя: человек
+        // отпустил файл над корзиной и уверен, что дело сделано.
+        trashWaiting = true
     }
+    property bool trashWaiting: false
     function plainPaths(urls) {
         const out = []
         for (const u of (urls || [])) {
@@ -735,6 +741,12 @@ Singleton {
             if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
+        if (m.moved !== undefined || (trashWaiting && m.trash_full !== undefined && m.ok !== undefined)) {
+            trashWaiting = false
+            if (m.ok) flash(m.moved === 1 ? tr("В корзину") : tr("В корзину: ") + m.moved,
+                            "user-trash-full", accentGreen)
+            else flash(flat(m.error) || tr("Не вышло выбросить"), "circle-alert", accentRed)
+        }
         if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
         if (m.cpu !== undefined) cpu = m.cpu
