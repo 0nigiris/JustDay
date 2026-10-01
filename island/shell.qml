@@ -1528,7 +1528,6 @@ ShellRoot {
                     width: parent.width
                     text: JD.answer
                     TextSwap on text {}
-                    lineHeight: 1.18
                 }
 
                 // Кнопка у самого выделения, а не только в заголовке. Выделяют в середине длинного
