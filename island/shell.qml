@@ -391,7 +391,7 @@ ShellRoot {
             Mascot {
                 visible: JD.buddyOn && !!JD.mascotSkin
                 skin: JD.mascotSkin
-                size: Math.round(22 * JD.mascotZoom)
+                size: Math.round(28 * JD.mascotZoom)
                 mood: JD.buddyMood
                 voice: JD.level
                 lookX: JD.pointerX

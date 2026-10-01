@@ -26,9 +26,8 @@ from . import config
 DIRS = (config.HOME / ".local/share/justday/mascots",
         config.REPO_DIR / "data/mascots")
 
-# Состояния, которые понимает островок. Скин может описать любое их подмножество: чего нет, то
-# берётся от тела и глаз по умолчанию — персонаж без состояния «упёрся в лимит» не ломается, он
-# просто не меняет при этом лица.
+# Состояния, которые понимает островок. Скину их описывать не надо: он задаёт, как зверь выглядит,
+# а как он при этом себя ведёт — дело движка, одинаковое для всех.
 STATES = ("idle", "working", "thinking", "searching", "listening", "talking",
           "approval", "question", "error", "finished", "ratelimit", "sleeping", "dizzy")
 
@@ -64,58 +63,30 @@ def read(folder) -> dict | None:
     except (OSError, ValueError):
         return None
 
-    body = str(raw.get("image") or "body.png")
-    body_path = folder / body
-    if not body_path.exists():
-        return None
+    def part(name: str) -> dict:
+        got = raw.get(name)
+        return dict(got) if isinstance(got, dict) else {}
 
-    eyes = raw.get("eyes") or {}
-    at = eyes.get("at") or [0.5, 0.42]
-    try:
-        eye_x, eye_y = float(at[0]), float(at[1])
-    except (TypeError, ValueError, IndexError):
-        eye_x, eye_y = 0.5, 0.42
-
-    # Кадровые состояния: файл на состояние. Чего нет — рисуется телом и глазами.
-    frames = {}
-    for state, name in (raw.get("states") or {}).items():
-        if state not in STATES:
-            continue
-        path = folder / str(name)
-        if path.exists():
-            frames[state] = str(path)
-
-    # Безделье: несколько файлов, из которых движок выбирает наугад. Это и есть «много анимаций»:
-    # одна и та же, повторяясь, перестаёт быть жизнью и становится индикатором.
-    idles = []
-    for name in (raw.get("idle") or []):
-        path = folder / str(name)
-        if path.exists():
-            idles.append(str(path))
-
-    return {
+    eyes = part("eyes")
+    out = {
         "id": folder.name,
         "name": str(raw.get("name") or folder.name),
         "author": str(raw.get("author") or ""),
         "license": str(raw.get("license") or ""),
-        "body": str(body_path),
+        "body": part("body"),
+        "ears": part("ears"),
+        "tail": part("tail"),
+        "face": part("face"),
+        "whiskers": part("whiskers"),
         "eyes": {
-            "x": _clamp(eye_x, 0, 1, 0.5),
-            "y": _clamp(eye_y, 0, 1, 0.42),
-            "spacing": _clamp(eyes.get("spacing"), 0.02, 0.9, 0.2),
-            "scale": _clamp(eyes.get("scale"), 0.1, 3, 1.0),
-            "ink": str(eyes.get("ink") or "#1a1412"),
-            "show": eyes.get("show") is not False,
+            "x": _clamp(eyes.get("x"), 0, 1, 0.5),
+            "y": _clamp(eyes.get("y"), 0, 1, 0.44),
+            "spacing": _clamp(eyes.get("spacing"), 0.02, 0.9, 0.3),
+            "scale": _clamp(eyes.get("scale"), 0.05, 3, 0.5),
+            "ink": str(eyes.get("ink") or "#2b1d14"),
         },
-        "motion": {
-            "breathe": _clamp((raw.get("motion") or {}).get("breathe"), 0, 3, 1.0),
-            "bob": _clamp((raw.get("motion") or {}).get("bob"), 0, 3, 1.0),
-            "squish": _clamp((raw.get("motion") or {}).get("squish"), 0, 3, 1.0),
-            "tilt": _clamp((raw.get("motion") or {}).get("tilt"), 0, 3, 1.0),
-        },
-        "states": frames,
-        "idle": idles,
     }
+    return out
 
 
 def catalog() -> dict:

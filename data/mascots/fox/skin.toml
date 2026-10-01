@@ -1,17 +1,39 @@
-# Лиса — скин маскота островка. Тело нарисовано локально, глаза рисует островок.
+# Лиса. Тот же шар, но уши выше и острее, а хвост пушистый и с белым кончиком — по нему её и
+# узнают с одного взгляда.
 name = "Лиса"
 author = "JustDay"
 license = "CC0"
-image = "body.png"
+
+[body]
+top = "#ff8a4c"
+bottom = "#ef4d22"
+
+[ears]
+shape = "triangle"
+fill = "#e8431c"
+inner = "#2a1410"
+size = 0.4
+spread = 0.66
+tilt = 20
+
+[tail]
+shape = "bushy"
+fill = "#ef4d22"
+tip = "#fff3e8"
+size = 1.0
+
+[whiskers]
+count = 2
+fill = "#fff3e8"
+
+[face]
+muzzle = "#fff3e8"
+nose = "#2a1410"
+blush = "#ff7a5c"
 
 [eyes]
-at = [0.5, 0.456]
-spacing = 0.312
-scale = 0.36
+x = 0.5
+y = 0.42
+spacing = 0.32
+scale = 0.44
 ink = "#2a1410"
-
-[motion]
-breathe = 1.0
-bob = 1.0
-squish = 1.0
-tilt = 1.0
