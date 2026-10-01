@@ -427,6 +427,11 @@ Singleton {
         const names = [item.id, item.title, item.tooltipTitle].filter(n => !!n).map(n => String(n).toLowerCase())
         return !names.some(n => trayHidden.indexOf(n) >= 0)
     }
+    // Раскладка клавиатуры: демон узнаёт о смене сигналом плазмы и присылает уже готовое.
+    property var layout: null
+    readonly property string layoutShort: layout ? String(layout.id || "").toUpperCase().slice(0, 2) : ""
+    function layoutNext() { send({ cmd: "layout_next" }) }
+
     function trayHide(ident, on) { if (ident) send({ cmd: "tray_hide", id: String(ident), on: on === undefined ? null : on }) }
     // Чьё меню лотка открыто и от какой точки оно растёт. Меню живёт в своём окне во весь экран —
     // иначе его нечем закрыть щелчком мимо, — а окно узнаёт о нажатии отсюда.
@@ -767,6 +772,7 @@ Singleton {
                             "user-trash-full", accentGreen)
             else flash(flat(m.error) || tr("Не вышло выбросить"), "circle-alert", accentRed)
         }
+        if (m.layout !== undefined) layout = m.layout
         if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
         if (m.cpu !== undefined) cpu = m.cpu

@@ -514,3 +514,39 @@ def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
     q("/Scripting", "org.kde.kwin.Scripting.unloadScript", name)
     os.unlink(f.name)
     return out
+
+
+# ───────────── раскладка клавиатуры ─────────────
+#
+# Плазма держит её на шине: org.kde.keyboard /Layouts. Спрашивать её опросом было бы расточительно
+# — у неё есть сигнал layoutChanged, по которому демон и узнаёт о смене.
+def layout_now() -> dict:
+    """Какая раскладка сейчас и какие есть. Пусто — плазмы нет или она ещё не ответила."""
+    if backend() != "kwin":
+        return {}
+    raw = _kwin_keyboard("getLayoutsList", literal=True)
+    names: list[dict] = []
+    for short, variant, full in re.findall(r'\(sss\) "([^"]*)", "([^"]*)", "([^"]*)"', raw):
+        names.append({"id": short, "variant": variant, "name": full})
+    if not names:
+        return {}
+    try:
+        at = int(_kwin_keyboard("getLayout").strip() or 0)
+    except ValueError:
+        at = 0
+    at = max(0, min(len(names) - 1, at))
+    return {"at": at, "id": names[at]["id"], "name": names[at]["name"], "all": names}
+
+
+def layout_next() -> dict:
+    """Переключить на следующую. Возвращает уже новую — чтобы не гадать, что получилось."""
+    _kwin_keyboard("switchToNextLayout")
+    return layout_now()
+
+
+def _kwin_keyboard(method: str, literal: bool = False) -> str:
+    args = ["qdbus-qt6"] + (["--literal"] if literal else []) + ["org.kde.keyboard", "/Layouts", method]
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""

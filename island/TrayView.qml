@@ -63,16 +63,22 @@ Item {
     property real anchorMiddle: 0        // середина, вокруг которой растёт полоса; ставит окно
 
     function resetPhysics() {
-        const n = items.length
+        const n = cells
         const s = sizes.length === n ? sizes.slice() : []
         const v = speeds.length === n ? speeds.slice() : []
         while (s.length < n) { s.push(1); v.push(0) }
         sizes = s; speeds = v; tick++
     }
-    onItemsChanged: resetPhysics()
+    onCellsChanged: resetPhysics()
     Component.onCompleted: resetPhysics()
 
-    readonly property real restLength: pad * 2 + items.length * cell
+    // Раскладка — такая же ячейка полосы, как значок: она стоит первой и живёт по тем же правилам,
+    // включая увеличение под курсором. Отдельная плашка сбоку выглядела бы приклеенной.
+    readonly property bool showLayout: JD.trayCfg.layout !== false && !!JD.layoutShort
+    readonly property int extras: showLayout ? 1 : 0
+    readonly property int cells: items.length + extras
+
+    readonly property real restLength: pad * 2 + cells * cell
 
     // Куда курсор попадает в спокойных координатах полосы. Решаем уравнение: ищем место u, которое
     // при своих же размерах рисуется ровно под курсором.
@@ -80,7 +86,7 @@ Item {
         let u = scene - anchorMiddle + restLength / 2 - pad
         for (let step = 0; step < 7; step++) {
             let total = pad * 2, before = pad
-            for (let i = 0; i < items.length; i++) {
+            for (let i = 0; i < cells; i++) {
                 const at = pad + i * cell
                 const k = targetSize(i, u), h = cell * k
                 total += h
@@ -106,7 +112,7 @@ Item {
         const omega = Math.sqrt(springK)
         const c = 2 * springDamp * omega
         let moving = false
-        for (let i = 0; i < items.length; i++) {
+        for (let i = 0; i < cells; i++) {
             const t = targetSize(i, u)
             v[i] += (-(s[i] - t) * springK - c * v[i]) * dt
             s[i] += v[i] * dt
@@ -126,7 +132,7 @@ Item {
     }
     function instantly() {
         const u = restUnderPointer()
-        for (let i = 0; i < items.length; i++) { sizes[i] = targetSize(i, u); speeds[i] = 0 }
+        for (let i = 0; i < cells; i++) { sizes[i] = targetSize(i, u); speeds[i] = 0 }
         tick++
     }
 
@@ -136,7 +142,7 @@ Item {
         tick
         const out = []
         let at = pad
-        for (let i = 0; i < items.length; i++) {
+        for (let i = 0; i < cells; i++) {
             const k = sizes[i] === undefined ? 1 : sizes[i]
             const h = cell * k
             out.push({ y: at, h: h, k: k })
@@ -195,13 +201,62 @@ Item {
 
         Item {
             anchors.fill: parent
+
+            // ───────────── раскладка ─────────────
+            //
+            // Первой ячейкой, по тем же правилам, что и значки: растёт под курсором, нажимается,
+            // живёт в той же полосе. Две буквы — всё, что нужно: «RU» и «EN» различаются с одного
+            // взгляда, а полное имя раскладки в полосу шириной с значок не влезет и не нужно.
+            Item {
+                visible: tv.showLayout
+                readonly property var g: tv.geom[0] || ({ y: tv.pad, h: tv.cell, k: 1 })
+                x: (parent.width - tv.cell) / 2
+                y: g.y
+                width: tv.cell
+                height: g.h
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: (tv.icon + 10) * parent.g.k
+                    height: width
+                    radius: width * 0.3
+                    color: layoutHover.hovered ? JD.fill2 : JD.fill1
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 120 } }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: JD.layoutShort
+                    color: JD.text1
+                    font.family: JD.fontFamily
+                    font.pixelSize: tv.icon * 0.5
+                    font.weight: Font.Bold
+                    scale: parent.g.k
+                }
+
+                HoverHandler {
+                    id: layoutHover
+                    cursorShape: Qt.PointingHandCursor
+                    onHoveredChanged: {
+                        if (!hovered) { tv.hint = ""; return }
+                        tv.hint = JD.layout ? JD.layout.name : ""
+                        tv.hintY = parent.y + parent.height / 2
+                    }
+                }
+                TapHandler {
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: JD.layoutNext()
+                }
+                WheelHandler { onWheel: event => { JD.layoutNext(); event.accepted = true } }
+            }
+
             Repeater {
                 model: tv.items
                 delegate: Item {
                     id: slot
                     required property var modelData
                     required property int index
-                    readonly property var g: tv.geom[index] || ({ y: tv.pad + index * tv.cell, h: tv.cell, k: 1 })
+                    readonly property int cell: index + tv.extras
+                    readonly property var g: tv.geom[cell] || ({ y: tv.pad + cell * tv.cell, h: tv.cell, k: 1 })
                     x: (parent.width - tv.cell) / 2
                     y: g.y
                     width: tv.cell

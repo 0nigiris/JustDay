@@ -1032,6 +1032,11 @@ Item {
                     SSlider { key: "tray.icon_size"; from: 16; to: 40; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
                 Row {
+                    title: JD.tr("Раскладка клавиатуры")
+                    subtitle: JD.tr("Первой ячейкой полосы: две буквы, нажатие переключает")
+                    Toggle { checked: win.get("tray.layout") !== false; onToggled: v => win.set("tray.layout", v) }
+                }
+                Row {
                     title: JD.tr("Увеличение под курсором")
                     subtitle: JD.tr("То же, что у дока, только повёрнутое на бок")
                     Toggle { checked: win.get("tray.magnify") !== false; onToggled: v => win.set("tray.magnify", v) }

@@ -101,6 +101,8 @@ class Daemon:
         # сервером стал сам островок, они приходят ему напрямую, и второй экземпляр того же
         # уведомления — это не подстраховка, а двоение.
         self._notify_watch = True
+        self._layout: dict = {}
+        self._layout_proc: asyncio.subprocess.Process | None = None
         self._windows_proc: asyncio.subprocess.Process | None = None
         self._windows: list[dict] = []
         self._trash_full = False
@@ -1226,6 +1228,37 @@ class Daemon:
                         if line.strip().startswith("int32"):  # expire timeout = last argument
                             self._emit_notification("".join(buf))
                             buf = []
+                await proc.wait()
+            except (OSError, asyncio.CancelledError):
+                return
+            await asyncio.sleep(5)
+
+    async def _watch_layout(self) -> None:
+        """Раскладка клавиатуры — для полосы лотка.
+
+        Опрос тут не нужен: плазма сама кричит на шине, когда раскладку сменили. Опрашивать раз в
+        секунду значило бы будить демона восемьдесят шесть тысяч раз в сутки ради события, которое
+        случается десятки раз.
+        """
+        loop = asyncio.get_running_loop()
+        if desktop.backend() != "kwin":
+            return
+        self._layout = await loop.run_in_executor(None, desktop.layout_now)
+        if self._layout:
+            self.publish(layout=self._layout)
+        rule = "type='signal',interface='org.kde.KeyboardLayouts'"
+        while True:
+            try:
+                proc = self._layout_proc = await asyncio.create_subprocess_exec(
+                    "dbus-monitor", "--session", rule, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL)
+                async for raw in proc.stdout:
+                    if b"layoutChanged" not in raw and b"layoutListChanged" not in raw:
+                        continue
+                    got = await loop.run_in_executor(None, desktop.layout_now)
+                    if got and got != self._layout:
+                        self._layout = got
+                        self.publish(layout=got)
                 await proc.wait()
             except (OSError, asyncio.CancelledError):
                 return
@@ -2441,6 +2474,12 @@ class Daemon:
                 drop = [str(f) for f in (req.get("files") or [])]
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", "")), drop))
+            elif cmd == "layout_next":  # нажали на раскладку в полосе лотка
+                got = await asyncio.get_running_loop().run_in_executor(None, desktop.layout_next)
+                if got:
+                    self._layout = got
+                    self.publish(layout=got)
+                resp = {"ok": True, "layout": got}
             elif cmd == "notify_watch":  # островок сам стал сервером — подслушивать больше незачем
                 want = bool(req.get("on", True))
                 if want != self._notify_watch:
@@ -2594,6 +2633,7 @@ class Daemon:
         if shutil.which("dbus-monitor"):
             spawn(self._watch_notifications())
         spawn(self._watch_windows())
+        spawn(self._watch_layout())
         spawn(self._cpu_loop())
         # Остров — единственное место для уведомлений, если так попросили.
         want_popups = bool(self.cfg["island"].get("system_popups", False))

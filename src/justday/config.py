@@ -313,7 +313,9 @@ DEFAULTS: dict = {
              # поведения у двух соседних полос — верный способ получить оболочку, которая ведёт
              # себя по настроению. Лоток растёт скромнее дока: значки там чужие и мельче.
              # Пружина и затухание общие с доком — это не вкус полосы, а нрав всей оболочки.
-             "magnify": True, "magnify_scale": 60, "magnify_spread": 160},
+             "magnify": True, "magnify_scale": 60, "magnify_spread": 160,
+             # Раскладка клавиатуры первой ячейкой полосы: две буквы, нажатие переключает.
+             "layout": True},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
     # Local model for private data (mail). Ollama listens on localhost only.
