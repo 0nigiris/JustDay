@@ -914,6 +914,16 @@ Item {
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row { title: JD.tr("Прятаться под полным экраном"); subtitle: JD.tr("Игра или кино во весь экран убирают док; кромка по-прежнему зовёт его обратно"); Toggle { checked: win.get("dock.hide_on_fullscreen") !== false; onToggled: v => win.set("dock.hide_on_fullscreen", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
+                Row {
+                    title: JD.tr("Колесо: защёлки под курсором")
+                    subtitle: JD.tr("У полосы появляются дискретные положения. Выбор меняется не на середине между значками, а при заходе в соседа — поэтому не дрожит, когда рука на границе")
+                    Toggle { checked: win.get("dock.wheel") === true; onToggled: v => win.set("dock.wheel", v) }
+                }
+                Row {
+                    title: JD.tr("Сила щелчка")
+                    subtitle: JD.tr("Насколько заметен толчок при переходе на соседнюю защёлку")
+                    SSlider { key: "dock.detent"; from: 0; to: 200; step: 10; decimals: 0; unit: JD.tr("%") }
+                }
                 Row { title: JD.tr("Порядок значков перетаскиванием"); subtitle: JD.tr("Потянуть закреплённый значок вдоль дока и отпустить на новом месте"); Toggle { checked: win.get("dock.reorder") !== false; onToggled: v => win.set("dock.reorder", v) } }
                 Row { title: JD.tr("Окна программы при наведении"); subtitle: JD.tr("Заголовки открытых окон под подписью. Картинок нет: снимать чужие окна на KWin умеет только композитор"); Toggle { checked: win.get("dock.preview") !== false; onToggled: v => win.set("dock.preview", v) } }
                 Row {

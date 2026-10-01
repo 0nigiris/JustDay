@@ -61,6 +61,28 @@ Item {
     readonly property real sepThick: Math.max(1, Math.min(6, JD.dockCfg.separator_width === undefined ? 1 : JD.dockCfg.separator_width))
     readonly property real sepHeight: Math.max(0.1, Math.min(1, (JD.dockCfg.separator_height === undefined ? 62 : JD.dockCfg.separator_height) / 100))
     readonly property real sepInk: Math.max(0, Math.min(1, (JD.dockCfg.separator_opacity === undefined ? 16 : JD.dockCfg.separator_opacity) / 100))
+    // ───────────── «колесо» ─────────────
+    //
+    // Отдельный нрав полосы, на выбор. Обычный док — сплошное поле: под курсором растёт то, что
+    // ближе, и никакого «выбранного» нет вовсе. Колесо добавляет под это поле **защёлки**: у полосы
+    // появляются дискретные положения, как у хорошего переключателя, и переход между ними —
+    // короткий механический щелчок.
+    //
+    // Зачем так. Выбор, который меняется ровно на геометрической середине между значками, дрожит:
+    // рука стоит на границе, и выбранное прыгает туда-сюда от дрожания кисти. Поэтому середина не
+    // переключает ничего: переключает только заход в соседа достаточно глубоко (0,58), а обратно —
+    // такой же заход назад. Это и есть гистерезис, и он тут не украшение, а то, что делает выбор
+    // устойчивым.
+    //
+    // Что НЕ меняется: увеличение остаётся непрерывным и считается от курсора, как прежде. Защёлка
+    // добавляет толчок пружине, а не подменяет собой поле. Логическое состояние меняется мгновенно,
+    // инерция есть только у картинки.
+    readonly property bool wheel: JD.dockCfg.wheel === true
+    readonly property real detent: Math.max(0, Math.min(3, (JD.dockCfg.detent === undefined ? 90 : JD.dockCfg.detent) / 100))
+    property int committed: -1           // ячейка, на которой колесо стоит сейчас
+    property var nudges: []              // сдвиг ячейки в точках: короткий толчок вбок при щелчке
+    property var nudgeSpeeds: []
+
     readonly property bool showRunning: JD.dockCfg.show_running !== false
     readonly property bool showTrash: JD.dockCfg.show_trash !== false
     // Док уехал за край — кошке незачем перебирать лапами в пустоту: под нагрузкой это тридцать
@@ -291,6 +313,7 @@ Item {
         const omega = Math.sqrt(springK)          // собственная частота
         const c = 2 * springDamp * omega          // критическое затухание — при springDamp = 1
         let moving = false
+        if (wheel) moving = settleWheel(u, dt) || moving
         for (let i = 0; i < n; i++) {
             const t = targetSize(i, u)
             v[i] += (-(s[i] - t) * springK - c * v[i]) * dt
@@ -301,6 +324,85 @@ Item {
         return moving
     }
 
+    // Выбираемые ячейки: черта и промежуток защёлок не имеют — на них колесо не стоит.
+    function pickable() {
+        const out = []
+        for (let i = 0; i < lane.length; i++) {
+            const t = lane[i].t
+            if (t !== "sep" && t !== "space") out.push(i)
+        }
+        return out
+    }
+    function restCentre(i) { return lane[i].at + lane[i].w / 2 }
+
+    // Защёлки и сдвиги. Возвращает true, пока что-то ещё движется.
+    function settleWheel(u, dt) {
+        const spots = pickable()
+        if (!spots.length) return false
+        if (nudges.length !== lane.length) {
+            const z = [], zv = []
+            for (let i = 0; i < lane.length; i++) { z.push(0); zv.push(0) }
+            nudges = z; nudgeSpeeds = zv
+        }
+        if (u > -9000) {
+            if (committed < 0 || committed >= lane.length || spots.indexOf(committed) < 0)
+                commitTo(nearestSpot(u, spots), 0)
+            else {
+                const here = restCentre(committed)
+                const at = spots.indexOf(committed)
+                // Бросок через несколько значков не отыгрывается по одному: цель берётся сразу от
+                // курсора, а толчок даётся один. Иначе быстрый проход вдоль полосы превращается в
+                // очередь из пяти анимаций, и полоса ещё секунду живёт своей жизнью.
+                const far = nearestSpot(u, spots)
+                if (Math.abs(spots.indexOf(far) - at) > 1) commitTo(far, u > here ? 1 : -1)
+                else {
+                    const step = u > here ? 1 : -1
+                    const nextAt = at + step
+                    if (nextAt >= 0 && nextAt < spots.length) {
+                        const next = spots[nextAt]
+                        const span = restCentre(next) - here
+                        const part = span === 0 ? 0 : (u - here) / span
+                        if (part >= 0.58) commitTo(next, step)
+                    }
+                }
+            }
+        }
+        // Сдвиг вбок возвращается своей пружиной, жёстче основной: он обязан кончиться раньше, чем
+        // человек успеет заметить его как движение.
+        let moving = false
+        const w = Math.sqrt(520), cc = 2 * 0.85 * w
+        for (let i = 0; i < lane.length; i++) {
+            nudgeSpeeds[i] += (-nudges[i] * 520 - cc * nudgeSpeeds[i]) * dt
+            nudges[i] += nudgeSpeeds[i] * dt
+            if (Math.abs(nudges[i]) > 0.02 || Math.abs(nudgeSpeeds[i]) > 0.02) moving = true
+        }
+        return moving
+    }
+    function nearestSpot(u, spots) {
+        let best = spots[0], bestD = Infinity
+        for (const i of spots) {
+            const d = Math.abs(restCentre(i) - u)
+            if (d < bestD) { bestD = d; best = i }
+        }
+        return best
+    }
+    // Щелчок защёлки: новой ячейке — толчок пружине вверх, прежней — короткий отпуск вниз, обеим —
+    // крошечный сдвиг по ходу движения. Всё это толчки, а не анимации поверх физики: вторая
+    // анимация поверх пружины — ровно то, из-за чего значки однажды застыли внахлёст.
+    function commitTo(i, dir) {
+        const was = committed
+        committed = i
+        if (was === i || !detent) return
+        const push = detent * 1.1
+        if (speeds[i] !== undefined) speeds[i] += push
+        if (was >= 0 && speeds[was] !== undefined) speeds[was] -= push * 0.35
+        if (nudges.length === lane.length && dir !== 0) {
+            nudgeSpeeds[i] += dir * 26 * detent
+            if (was >= 0) nudgeSpeeds[was] -= dir * 13 * detent
+        }
+        tick++
+    }
+
     FrameAnimation {
         id: physics
         running: false
@@ -308,6 +410,10 @@ Item {
     }
     // «Сразу» — это не «без пружины с прежними настройками», а вовсе без физики: размер равен цели
     // в тот же кадр. Раньше этот стиль не делал ничего и молча оставался пружиной.
+    // Курсор ушёл с полосы — защёлка не щёлкает: уход это не выбор. Спецификация просит об этом
+    // отдельно, и правильно: подпрыгнувший на прощание док выглядит капризным.
+    onEngagedChanged: if (!engaged) committed = -1
+
     function wake() {
         if (JD.animOn && animStyle !== "instant") physics.running = true
         else { physics.running = false; instantly() }
@@ -335,9 +441,13 @@ Item {
     }
     readonly property real laneLength: geom.length ? geom[geom.length - 1].x + geom[geom.length - 1].w + pad : restLength
 
+    // Кто сейчас «выбран». В обычном доке это просто ячейка под курсором. В режиме колеса — та, на
+    // которой стоит защёлка: иначе подпись меняется на геометрической середине, а увеличение и
+    // щелчок — позже, и выходит, что подписано одно, а нажмётся другое.
     readonly property var focused: {
         tick
         if (!engaged) return null
+        if (wheel && committed >= 0 && committed < lane.length) return lane[committed]
         const local = pointerScene - dv.x - card.x
         for (let i = 0; i < lane.length; i++)
             if (lane[i].t !== "sep" && local >= geom[i].x && local < geom[i].x + geom[i].w) return lane[i]
@@ -392,7 +502,8 @@ Item {
                 // ещё летела. Qt в этом случае animation останавливает, значение оставляет на
                 // полпути, и привязка молчит, пока не поменяется то, от чего она зависит. Значки
                 // так и замирали внахлёст. Место значка считает физика полосы — и только она.
-                x: dragged ? dv.dragLocal - g.w / 2 : g.x
+                x: (dragged ? dv.dragLocal - g.w / 2 : g.x)
+                   + (dv.wheel && dv.nudges.length === dv.lane.length ? dv.nudges[index] : 0)
                 z: dragged ? 2 : 0
                 y: 0
                 width: g.w
@@ -592,7 +703,14 @@ Item {
                     id: slotTap
                     enabled: slot.e.t !== "sep"
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: dv.press(slot.e, slot.wins)
+                    // В режиме колеса нажимается то, что защёлкнуто, а не то, под чем курсор: иначе
+                    // бывает случай, когда увеличено одно, а запускается другое, — а этого не
+                    // должно быть никогда.
+                    onTapped: {
+                        const e = dv.wheel && dv.committed >= 0 && dv.committed < dv.lane.length
+                                ? dv.lane[dv.committed] : slot.e
+                        dv.press(e, e.wins || [])
+                    }
                 }
                 TapHandler {
                     enabled: slot.e.t !== "sep"
@@ -1068,6 +1186,8 @@ Item {
         pointerScene = anchorCentre - restLength / 2 + x
         for (let n = 0; n < 400 && stepPhysics(1 / 120); n++) { /* до схождения */ }
         const out = { at: x, u: Math.round(restUnderPointer()), length: Math.round(laneLength), rest: Math.round(restLength),
+                      wheel: wheel, committed: committed,
+                      committedName: wheel && committed >= 0 && committed < lane.length ? (lane[committed].name || lane[committed].t) : "",
                       amp: amp, spread: spread, centre: Math.round(anchorCentre),
                       cells: lane.map((s, i) => ({ t: s.t, x: Math.round(geom[i].x), rest: s.at,
                                                    w: Math.round(geom[i].w), k: Number(geom[i].k.toFixed(3)),
