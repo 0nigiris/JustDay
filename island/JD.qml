@@ -53,6 +53,12 @@ Singleton {
     property var mascots: ({})
     readonly property var mascotSkin: mascots.picked || null
     function mascotRefresh() { send({ cmd: "mascots" }) }
+    // Сменили скин в настройках — список надо перечитать: выбранного в нём ещё нет, и островок
+    // продолжал бы рисовать прежнего. Сравниваем с тем, что демон сам считает выбранным.
+    onSettingsChanged: {
+        const want = String((island && island.mascot) || "")
+        if (mascots.want !== undefined && mascots.want !== want) mascotRefresh()
+    }
     // Насколько крупно показывать зверя. У нарисованного тела своя плотность: кот с большой головой
     // при том же размере читается мельче, чем голый шарик, поэтому размер отдельной настройкой.
     readonly property real mascotZoom: Math.max(0.5, Math.min(3, (island.mascot_size || 100) / 100))
