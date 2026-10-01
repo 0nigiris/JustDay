@@ -1495,27 +1495,70 @@ ShellRoot {
                     visible: JD.dstate === "listening"
                     Layout.preferredWidth: 40; Layout.preferredHeight: 20
                 }
+                // Выделено что-то — кнопка забирает выделенное и остаётся на месте: человек
+                // продолжает читать. Не выделено — забирает весь ответ и уходит, как раньше.
                 IconButton {
                     icon: "edit-copy"; size: 26
-                    onClicked: { Quickshell.execDetached(["wl-copy", "--", JD.answer]); JD.flash(JD.tr("Скопировано"), "edit-copy", JD.accentGreen); JD.answerOpen = false }
+                    onClicked: {
+                        answerText.take()
+                        if (!answerText.picked) JD.answerOpen = false
+                    }
                 }
             }
             Flickable {
+                id: answerScroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentHeight: answerText.implicitHeight
                 clip: true
-                Text {
-                    font.family: JD.fontFamily
+                // Тянуть мышью здесь значит выделять, а не листать: иначе Flickable перехватывает
+                // движение на полпути, и выделение обрывается ровно там, где человек разогнался.
+                // Листать остаётся колесо — им тут и листают.
+                interactive: false
+                WheelHandler {
+                    onWheel: event => {
+                        const room = Math.max(0, answerScroll.contentHeight - answerScroll.height)
+                        answerScroll.contentY = Math.max(0, Math.min(room,
+                            answerScroll.contentY - event.angleDelta.y))
+                        event.accepted = true
+                    }
+                }
+                SelectableText {
                     id: answerText
                     width: parent.width
                     text: JD.answer
                     TextSwap on text {}
-                    wrapMode: Text.Wrap
-                    color: JD.text1
-                    font.pixelSize: 15
                     lineHeight: 1.18
-                    textFormat: Text.PlainText
+                }
+
+                // Кнопка у самого выделения, а не только в заголовке. Выделяют в середине длинного
+                // ответа, и путь «выдели — доведи курсор до угла карточки — нажми» длиннее самого
+                // выделения. Так это сделано везде, где текст выделяют мышью, и по той же причине.
+                Rectangle {
+                    id: pickCopy
+                    parent: answerScroll
+                    visible: answerText.picked
+                    width: pickRow.implicitWidth + 20
+                    height: 28
+                    radius: 14
+                    z: 3
+                    color: Qt.rgba(0, 0, 0, 0.92)
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, 0.16)
+                    x: Math.max(0, Math.min(answerScroll.width - width, answerText.pickRect.x - 10))
+                    y: Math.max(0, answerText.pickRect.y - answerScroll.contentY - height - 6)
+                    Row {
+                        id: pickRow
+                        anchors.centerIn: parent
+                        spacing: 7
+                        Icon { anchors.verticalCenter: parent.verticalCenter; name: "edit-copy"; implicitSize: 14 }
+                        Label1 { anchors.verticalCenter: parent.verticalCenter; text: JD.tr("Скопировать"); font.pixelSize: 12 }
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: answerText.take()
+                    }
                 }
             }
             // reply: opens the text field (or press the shortcut)
