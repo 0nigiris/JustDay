@@ -1022,6 +1022,21 @@ Item {
                     title: JD.tr("Размер значков")
                     SSlider { key: "tray.icon_size"; from: 16; to: 40; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
+                Row {
+                    title: JD.tr("Увеличение под курсором")
+                    subtitle: JD.tr("То же, что у дока, только повёрнутое на бок")
+                    Toggle { checked: win.get("tray.magnify") !== false; onToggled: v => win.set("tray.magnify", v) }
+                }
+                Row {
+                    title: JD.tr("Насколько вырастает")
+                    subtitle: JD.tr("Лоток растёт скромнее дока: значки там чужие и мельче")
+                    SSlider { key: "tray.magnify_scale"; from: 0; to: 150; step: 5; decimals: 0; unit: JD.tr("%") }
+                }
+                Row {
+                    title: JD.tr("Ширина волны")
+                    subtitle: JD.tr("Сколько соседей подхватывает увеличение")
+                    SSlider { key: "tray.magnify_spread"; from: 80; to: 500; step: 20; decimals: 0; unit: JD.tr("%") }
+                }
                 Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("tray.autohide") === true; onToggled: v => win.set("tray.autohide", v) } }
             }
             GroupTitle { text: JD.tr("Какие значки показывать") }

@@ -3040,6 +3040,10 @@ ShellRoot {
 
             TrayView {
                 id: tray
+                // Середина, вокруг которой полоса растёт: её центрирует окно, а не она сама,
+                // поэтому середину надо ей сказать — без неё обратный перевод курсора не знает,
+                // куда полоса переедет, увеличившись.
+                anchorMiddle: y + height / 2
                 x: {
                     const rest = trayWin.atRight ? parent.width - width - 10 : 10
                     const away = trayWin.atRight ? width + 16 : -width - 16
