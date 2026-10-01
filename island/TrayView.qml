@@ -158,6 +158,16 @@ Item {
     // Проверка движка без мыши: поставить курсор в точку спокойной полосы, дать физике сойтись и
     // вернуть получившуюся раскладку. Синтетическая мышь на вейланде врёт, а «значки расступаются»
     // иначе никак не проверить числом.
+    // Задержать курсор в точке, чтобы можно было посмотреть на полосу глазами (снимком экрана).
+    // Снимается первым же настоящим движением мыши. Нужна потому, что синтетической мыши на
+    // вейланде нет, а «красиво ли обтекает» числом не проверишь.
+    function hold(at) {
+        engaged = true
+        pointerScene = anchorMiddle - restLength / 2 + at
+        wake()
+        return JSON.stringify({ held: at, u: Math.round(restUnderPointer()) })
+    }
+
     function probe(at) {
         const wasEngaged = engaged, wasAt = pointerScene
         engaged = true
@@ -176,15 +186,59 @@ Item {
         return out
     }
 
-    readonly property Rectangle blurItem: strip
-
+    // Размытие кладём под спокойный прямоугольник полосы: Region умеет прямоугольник с одним
+    // радиусом, а наш силуэт теперь сложнее. Разницу видно только в тот миг, когда значок вырос.
+    readonly property Rectangle blurItem: blurShape
     Rectangle {
-        id: strip
+        id: blurShape
+        visible: false
         anchors.fill: parent
         radius: Math.round(tv.implicitWidth * 0.34)
-        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.12)
+    }
+
+    // ───────────── полоса обтекает значки ─────────────
+    //
+    // Раньше значок под курсором рос, а полоса оставалась прежней ширины — и подложка значка
+    // вылезала за её край. На главном меню такое читается как «значок поднялся над поверхностью», а
+    // здесь — как «рамка не поспевает за содержимым», потому что полоса узкая и край рядом.
+    //
+    // Поэтому края у неё больше нет как прямоугольника. Полоса собирается из круглых пятен — по
+    // одному на ячейку, каждое по размеру своей, — и соседние перекрываются. Их объединение и есть
+    // её силуэт: там, где значок вырос, полоса раздувается вокруг него и смыкается с соседями.
+    //
+    // Рисуется это слоем (`layer.enabled`), и прозрачность задаётся **слою**, а не каждому пятну:
+    // иначе в местах перекрытия она складывалась бы, и по полосе шли бы тёмные пояса.
+    component Blob: Item {
+        id: blob
+        property color ink: "#000000"
+        property real bleed: 0          // насколько пятна больше ячейки — для каймы
+        anchors.fill: parent
+        layer.enabled: true
+        Repeater {
+            model: tv.cells
+            delegate: Rectangle {
+                required property int index
+                readonly property var g: tv.geom[index] || ({ y: tv.pad + index * tv.cell, h: tv.cell, k: 1 })
+                // Ширина пятна — по тому, насколько выросла его ячейка, но не уже спокойной полосы.
+                width: Math.max(tv.implicitWidth, (tv.icon + 12) * g.k + tv.pad) + blob.bleed * 2
+                height: Math.max(g.h + tv.pad * 2, width) + blob.bleed * 2
+                radius: Math.min(width, height) / 2
+                x: (parent.width - width) / 2
+                y: g.y + g.h / 2 - height / 2
+                color: blob.ink
+            }
+        }
+    }
+
+    Item {
+        id: strip
+        anchors.fill: parent
+
+        // Кайма — то же объединение, на волосок больше и цветом каймы. Нарисовать настоящую рамку
+        // вокруг объединения нечем: у слоя нет контура, а обводить каждое пятно значило бы видеть
+        // швы там, где они смыкаются.
+        Blob { ink: Qt.rgba(1, 1, 1, 0.14); bleed: 1 }
+        Blob { ink: "#000000"; opacity: JD.blurOn ? 0.4 : 0.82 }
 
         // Курсор берём в координатах сцены нарочно: в координатах полосы он «двигался» бы сам,
         // когда она под ним растёт и переезжает, — и получилась бы обратная связь.

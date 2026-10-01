@@ -115,6 +115,9 @@ ShellRoot {
         function trayAt(y: real): string {
             return JSON.stringify(trayLoader.item ? trayLoader.item.probeAt(y) : null)
         }
+        function trayHold(y: real): string {
+            return trayLoader.item ? trayLoader.item.holdAt(y) : "null"
+        }
         function trayOpen(n: int): string {
             const items = SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
             const it = items[Math.max(0, Math.min(items.length - 1, n))]
@@ -3077,6 +3080,7 @@ ShellRoot {
             id: trayWin
             // Проверка увеличения живёт снаружи, а полоса — внутри окна: пробрасываем.
             function probeAt(at) { return tray.probe(at) }
+            function holdAt(at) { return tray.hold(at) }
             screen: win.screen
             readonly property bool atRight: JD.trayPlace === "right"
             readonly property string align: JD.trayCfg.align || "center"
