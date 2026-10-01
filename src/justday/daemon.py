@@ -97,6 +97,10 @@ class Daemon:
         self.jobs = jobs.Jobs(on_change=lambda: self.publish(jobs=self.jobs.state()), on_done=self._job_done)
         self._subs: set[asyncio.StreamWriter] = set()
         self._notify_proc: asyncio.subprocess.Process | None = None
+        # Подслушивать уведомления на шине нужно, только когда их показывает кто-то другой. Когда
+        # сервером стал сам островок, они приходят ему напрямую, и второй экземпляр того же
+        # уведомления — это не подстраховка, а двоение.
+        self._notify_watch = True
         self._windows_proc: asyncio.subprocess.Process | None = None
         self._windows: list[dict] = []
         self._trash_full = False
@@ -1205,6 +1209,9 @@ class Daemon:
         They stay on this computer: nothing is passed to the brain."""
         rule = "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
         while True:
+            if not self._notify_watch:
+                await asyncio.sleep(1)
+                continue
             try:
                 proc = self._notify_proc = await asyncio.create_subprocess_exec(
                     "dbus-monitor", "--session", rule, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
@@ -2434,6 +2441,14 @@ class Daemon:
                 drop = [str(f) for f in (req.get("files") or [])]
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", "")), drop))
+            elif cmd == "notify_watch":  # островок сам стал сервером — подслушивать больше незачем
+                want = bool(req.get("on", True))
+                if want != self._notify_watch:
+                    self._notify_watch = want
+                    if not want and self._notify_proc and self._notify_proc.returncode is None:
+                        self._notify_proc.kill()
+                    log.info("уведомления: %s", "слушаем шину" if want else "их показывает островок")
+                resp = {"ok": True, "watch": self._notify_watch}
             elif cmd == "trash_put":  # бросили файлы на корзину
                 paths = [str(f) for f in (req.get("files") or []) if str(f).strip()]
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.trash_put, paths)

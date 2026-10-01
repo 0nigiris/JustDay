@@ -48,6 +48,11 @@ ShellRoot {
             persistenceSupported: true
             keepOnReload: false
 
+            // Демону больше незачем подслушивать шину: уведомления приходят к нам напрямую, и
+            // второй их экземпляр был бы не подстраховкой, а двоением.
+            Component.onCompleted: JD.send({ cmd: "notify_watch", on: false })
+            Component.onDestruction: JD.send({ cmd: "notify_watch", on: true })
+
             onNotification: n => {
                 n.tracked = true
                 JD.takeNotification({
