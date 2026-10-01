@@ -44,6 +44,33 @@ Singleton {
         return m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") + ":" + String(s).padStart(2, "0")
                        : m + ":" + String(s).padStart(2, "0")
     }
+    // ───────────── существо ─────────────
+    //
+    // Настроение считается здесь, а не в самом существе: про ассистента островок знает больше, чем
+    // нарисованное лицо, и знание это нужно ещё в двух местах. Само существо только показывает.
+    readonly property bool buddyOn: island.buddy !== false
+    property real pointerX: -99999                 // курсор, пока он над полосой островка
+    property real pointerY: -99999
+    property bool buddyHappy: false                // короткая радость после законченного дела
+    readonly property string buddyMood: {
+        if (dstate === "offline") return "sleep"
+        if (approvalText !== "") return "ask"
+        if (buddyHappy) return "done"
+        if (dstate === "listening") return "listen"
+        if (dstate === "thinking" || dstate === "transcribing") return "think"
+        if (dstate === "speaking") return "talk"
+        return "idle"
+    }
+    // Радуется делу, которое кончилось, а не любому переходу в покой: молчание после «не расслышал»
+    // — не повод прыгать.
+    property string buddyWas: "idle"
+    onDstateChanged: {
+        const was = buddyWas
+        buddyWas = dstate
+        if (dstate === "idle" && (was === "speaking" || was === "thinking")) { buddyHappy = true; happyOff.restart() }
+    }
+    property Timer happyOff: Timer { interval: 1800; onTriggered: jd.buddyHappy = false }
+
     property real tick: Date.now() / 1000          // one clock for every countdown on screen
     Timer { running: jd.reminders.length > 0 || !!jd.runningJob; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
     function dismissAlarm(id) { send({ cmd: "alarm_dismiss", id: id || "" }) }

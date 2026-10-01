@@ -208,7 +208,19 @@ ShellRoot {
             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             Behavior on scale { enabled: JD.animOn; SpringAnimation { spring: JD.springK - 0.2; damping: Math.max(0.42, JD.springDamping); epsilon: 0.005 } }
 
-            HoverHandler { onHoveredChanged: JD.islandHovered = hovered }
+            HoverHandler {
+                onHoveredChanged: {
+                    JD.islandHovered = hovered
+                    if (!hovered) { JD.pointerX = -99999; JD.pointerY = -99999 }
+                }
+                // Где курсор — нужно существу: оно провожает его глазами. На вейланде чужого
+                // указателя не видно вовсе, положение дают только над своим окном, — и этого
+                // хватает: пока человек рядом с островком, глаза следят, а ушёл — гуляют сами.
+                onPointChanged: {
+                    JD.pointerX = point.scenePosition.x
+                    JD.pointerY = point.scenePosition.y
+                }
+            }
 
             // бросьте на остров файл или ссылку — они заиграют прямо здесь
             DropArea {
@@ -353,7 +365,23 @@ ShellRoot {
             id: peekRow
             anchors.centerIn: parent
             spacing: 12
-            Ring { size: 18; tint: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.accentCyan; spinning: JD.workers > 0 }
+            Ring {
+                visible: !JD.buddyOn
+                size: 18
+                tint: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.accentCyan
+                spinning: JD.workers > 0
+            }
+            // Существо вместо кольца: кольцо сообщает состояние цветом и вращением, и это надо
+            // знать заранее. Существо сообщает тем же, чем сообщают живые, — взглядом и позой, и
+            // объяснять это не нужно никому.
+            Buddy {
+                visible: JD.buddyOn
+                size: 22
+                mood: JD.buddyMood
+                voice: JD.level
+                lookX: JD.pointerX
+                lookY: JD.pointerY
+            }
             Text { text: Qt.formatTime(clock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 16; font.weight: Font.Bold; font.features: { "tnum": 1 } }
             Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM") }
             Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
