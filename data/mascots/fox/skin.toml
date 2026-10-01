@@ -1,0 +1,17 @@
+# Лиса — скин маскота островка. Тело нарисовано локально, глаза рисует островок.
+name = "Лиса"
+author = "JustDay"
+license = "CC0"
+image = "body.png"
+
+[eyes]
+at = [0.5, 0.456]
+spacing = 0.312
+scale = 0.36
+ink = "#2a1410"
+
+[motion]
+breathe = 1.0
+bob = 1.0
+squish = 1.0
+tilt = 1.0

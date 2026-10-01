@@ -203,6 +203,10 @@ DEFAULTS: dict = {
         # Существо в островке: оно показывает состояние ассистента взглядом и позой — спит, думает,
         # слушает, просит разрешения. false возвращает на его место прежнее кольцо.
         "buddy": True,
+        # Скин маскота: имя папки из ~/.local/share/justday/mascots или из data/mascots. Пусто —
+        # рисуем своего, кодом. Список: `justday mascots`.
+        "mascot": "",
+        "mascot_size": 100,     # насколько крупно показывать зверя, в процентах
         "menu_width": 760,
         "menu_height": 620,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here

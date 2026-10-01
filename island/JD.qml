@@ -49,6 +49,13 @@ Singleton {
     // Настроение считается здесь, а не в самом существе: про ассистента островок знает больше, чем
     // нарисованное лицо, и знание это нужно ещё в двух местах. Само существо только показывает.
     readonly property bool buddyOn: island.buddy !== false
+    // Скины маскота: список от демона и выбранный. Пусто — рисуем своего, кодом.
+    property var mascots: ({})
+    readonly property var mascotSkin: mascots.picked || null
+    function mascotRefresh() { send({ cmd: "mascots" }) }
+    // Насколько крупно показывать зверя. У нарисованного тела своя плотность: кот с большой головой
+    // при том же размере читается мельче, чем голый шарик, поэтому размер отдельной настройкой.
+    readonly property real mascotZoom: Math.max(0.5, Math.min(3, (island.mascot_size || 100) / 100))
     property real pointerX: -99999                 // курсор, пока он над полосой островка
     property real pointerY: -99999
     property bool buddyHappy: false                // короткая радость после законченного дела
@@ -466,7 +473,7 @@ Singleton {
     function dockArrange(keys) { send({ cmd: "dock_arrange", keys: keys }) }
     function windowDo(action, id) { if (id) send({ cmd: "window_do", action: action, id: id }) }
     function dockIsPinned(key) { return (dockData.pinned || []).indexOf(key) >= 0 }
-    onLinkedChanged: if (linked) dockRefresh()
+    onLinkedChanged: if (linked) { dockRefresh(); mascotRefresh() }
 
     property bool settingsOpen: false
     property string settingsPage: "general"
@@ -702,6 +709,7 @@ Singleton {
             if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
+        if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
         if (m.cpu !== undefined) cpu = m.cpu
         if (m.trash_full !== undefined) trashFull = m.trash_full

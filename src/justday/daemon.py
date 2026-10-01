@@ -37,6 +37,7 @@ from . import (
     jobs,
     launcher,
     mail,
+    mascot,
     media,
     namespot,
     notifications,
@@ -2472,6 +2473,9 @@ class Daemon:
                     self.cfg = config.load()
                     self.publish(settings=island.settings_snapshot(self.cfg))
                 resp = got
+            elif cmd == "mascots":  # какие маскоты есть и какой выбран
+                got = await asyncio.get_running_loop().run_in_executor(None, mascot.catalog)
+                resp = {"ok": True, "mascots": got}
             elif cmd == "trash_empty":  # очистить корзину: подтверждение спрашивает тот, кто просит
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.trash_empty)
                 self._trash_full = bool(got.get("trash_full"))

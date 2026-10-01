@@ -16,3 +16,5 @@ Third-party parts:
                         and sounds are NOT taken: those are reserved by Coucou's own asset licence,
                         which asks forks to use their own. JustDay's creature, name, icon and sounds
                         are its own.
+  data/mascots/*       — mascot artwork generated locally with FLUX.1 [schnell] (Apache 2.0) and
+                         released under CC0 by this project. Replace freely: a skin is a folder.

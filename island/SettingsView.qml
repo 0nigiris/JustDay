@@ -807,6 +807,20 @@ Item {
                                  { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
                     }
                 }
+                Row {
+                    title: JD.tr("Маскот")
+                    subtitle: JD.tr("Живое существо слева в полосе. Свои скины кладутся в ~/.local/share/justday/mascots")
+                    Choice {
+                        key: "island.mascot"
+                        options: [{ value: "", label: JD.tr("Свой, нарисованный кодом") }].concat(
+                            (JD.mascots.skins || []).map(s => ({ value: s.id, label: s.name })))
+                    }
+                }
+                Row {
+                    title: JD.tr("Размер маскота")
+                    subtitle: JD.tr("У нарисованного тела своя плотность: кот с большой головой читается мельче шарика")
+                    SSlider { key: "island.mascot_size"; from: 60; to: 260; step: 10; decimals: 0; unit: JD.tr("%") }
+                }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
                     title: JD.tr("Отступ сверху")

@@ -377,9 +377,21 @@ ShellRoot {
             // Существо вместо кольца: кольцо сообщает состояние цветом и вращением, и это надо
             // знать заранее. Существо сообщает тем же, чем сообщают живые, — взглядом и позой, и
             // объяснять это не нужно никому.
+            //
+            // Выбран скин — показываем нарисованного зверя, нет — своего, нарисованного кодом.
+            // Оба живут по одной таблице состояний и носят одни и те же глаза.
             Buddy {
-                visible: JD.buddyOn
+                visible: JD.buddyOn && !JD.mascotSkin
                 size: 22
+                mood: JD.buddyMood
+                voice: JD.level
+                lookX: JD.pointerX
+                lookY: JD.pointerY
+            }
+            Mascot {
+                visible: JD.buddyOn && !!JD.mascotSkin
+                skin: JD.mascotSkin
+                size: Math.round(22 * JD.mascotZoom)
                 mood: JD.buddyMood
                 voice: JD.level
                 lookX: JD.pointerX
