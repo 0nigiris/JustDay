@@ -368,6 +368,28 @@ if ((${#need[@]})); then
     need=("${need[@]/libsecret/libsecret-tools}"); need=("${need[@]/rsms-inter-fonts/fonts-inter}")
     need=("${need[@]/xorg-x11-utils/x11-utils}"); need=("${need[@]/python3-tkinter/python3-tk}")
     need=("${need[@]/quickshell/}")   # not packaged for Debian/Ubuntu yet: see the note at the end
+  elif command -v zypper >/dev/null; then
+    # `--ignore-unknown` есть не у всякой версии zypper, а без него один неугаданный пакет валит
+    # установку остальных. Поэтому спрашиваем у самого zypper, знает ли он такой ключ.
+    if zypper --help install 2>&1 | grep -q -- --ignore-unknown; then
+      PM=(sudo zypper --non-interactive install --no-recommends --ignore-unknown)
+    else
+      PM=(sudo zypper --non-interactive install --no-recommends)
+    fi
+    # openSUSE. `--ignore-unknown` здесь не лень, а осознанный выбор: имена пакетов у них свои, и
+    # один неугаданный не должен валить установку остального. Чего не нашлось — перечислится в
+    # конце, вместе с тем, что без него не работает.
+    need=("${need[@]/pipewire-utils/pipewire-tools}"); need=("${need[@]/fd-find/fd}")
+    need=("${need[@]/qt6-qttools/qt6-tools}"); need=("${need[@]/pkgconf-pkg-config/pkgconf-pkg-config}")
+    need=("${need[@]/dbus-devel/dbus-1-devel}"); need=("${need[@]/dbus-tools/dbus-1-tools}")
+    need=("${need[@]/cairo-gobject-devel/cairo-devel}")
+    need=("${need[@]/libnotify/libnotify-tools}"); need=("${need[@]/libsecret/libsecret-tools}")
+    need=("${need[@]/rsms-inter-fonts/google-inter-fonts}")
+    need=("${need[@]/xorg-x11-utils/xprop}"); need=("${need[@]/python3-tkinter/python3-tk}")
+    need=("${need[@]/gtk3/gtk3-tools}")
+    # Quickshell в основных репозиториях openSUSE не лежит: он собирается в OBS, и подключать чужой
+    # репозиторий за человека нельзя — это его система. Скажем прямо и оставим выбор ему.
+    need=("${need[@]/quickshell/}")
   elif command -v pacman >/dev/null; then PM=(sudo pacman -S --needed --noconfirm)
     need=("${need[@]/pipewire-utils/pipewire}"); need=("${need[@]/fd-find/fd}"); need=("${need[@]/ImageMagick/imagemagick}"); need=("${need[@]/libnotify/libnotify}")
     need=("${need[@]/qt6-qttools/qt6-tools}"); need=("${need[@]/gcc/base-devel}"); need=("${need[@]/pkgconf-pkg-config/pkgconf}"); need=("${need[@]/dbus-devel/dbus}")
