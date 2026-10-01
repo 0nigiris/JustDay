@@ -912,6 +912,16 @@ Item {
                     }
                 }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
+                Row {
+                    title: JD.tr("Зона вызова у края")
+                    subtitle: JD.tr("Насколько высоко от края экрана док слышит курсор")
+                    SSlider { key: "dock.reveal_zone"; from: 2; to: 120; step: 2; decimals: 0; unit: JD.tr(" точек") }
+                }
+                Row {
+                    title: JD.tr("Вызывать взмахом")
+                    subtitle: JD.tr("Док выедет на быстрое движение к краю, а не на медленное заползание. 0 — звать любым наведением")
+                    SSlider { key: "dock.reveal_flick"; from: 0; to: 2500; step: 100; decimals: 0; unit: JD.tr(" тчк/с") }
+                }
                 Row { title: JD.tr("Прятаться под полным экраном"); subtitle: JD.tr("Игра или кино во весь экран убирают док; кромка по-прежнему зовёт его обратно"); Toggle { checked: win.get("dock.hide_on_fullscreen") !== false; onToggled: v => win.set("dock.hide_on_fullscreen", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
                 Row {

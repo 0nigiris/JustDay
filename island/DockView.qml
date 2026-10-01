@@ -728,6 +728,21 @@ Item {
                         dv.press(e, e.wins || [])
                     }
                 }
+                // Средняя кнопка закрывает окно. Это самый короткий путь из всех: до «закрыть» в
+                // меню правой кнопки три движения, до крестика в чужом заголовке — прицеливание, а
+                // здесь значок уже под курсором и уже увеличен. Одно окно — закроется оно; несколько
+                // — то, что сейчас наверху, по одному на нажатие, а не все разом: «закрыть всё»
+                // средней кнопкой было бы ловушкой.
+                TapHandler {
+                    enabled: slot.wins.length > 0
+                    acceptedButtons: Qt.MiddleButton
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: {
+                        const wins = slot.wins
+                        const front = wins.find(w => w.active && !w.minimized) || wins.find(w => !w.minimized) || wins[0]
+                        if (front) JD.windowDo("close", front.id)
+                    }
+                }
                 TapHandler {
                     enabled: slot.e.t !== "sep"
                     acceptedButtons: Qt.RightButton

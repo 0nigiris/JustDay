@@ -2876,8 +2876,28 @@ ShellRoot {
             Item {
                 id: edge
                 width: parent.width
-                height: 2
+                // Зона вызова шире двух пикселей, но входа в неё мало: док выезжает на **взмах**
+                // — на быстрое движение к краю. Так и широкая зона не мешает: мимо неё ходят
+                // медленно, к доку — быстро, и случайно его больше не вызвать. Медленный путь
+                // тоже остался: упереться в самый край экрана. Это тот случай, когда человек
+                // точно знает, чего хочет, и требовать от него резкости было бы придиркой.
+                height: Math.max(2, Math.min(200, JD.dockCfg.reveal_zone === undefined ? 28 : JD.dockCfg.reveal_zone))
                 y: dockWin.atTop ? 0 : parent.height - height
+
+                readonly property real flick: Math.max(0, JD.dockCfg.reveal_flick === undefined ? 900 : JD.dockCfg.reveal_flick)
+                function wants(point) {
+                    if (!dockWin.autohide) return true
+                    if (flick <= 0) return true
+                    const v = point.velocity.y
+                    if (dockWin.atTop ? v < -flick : v > flick) return true
+                    // Уткнулись в самый край — этого достаточно и без взмаха.
+                    const at = point.position.y
+                    return dockWin.atTop ? at <= 3 : at >= height - 3
+                }
+                HoverHandler {
+                    id: edgeWatch
+                    onPointChanged: if (dockWin.autohide && edge.wants(point)) { hideDock.stop(); dockWin.hovering = true }
+                }
             }
             Item {
                 id: dockCtxZone
@@ -2886,8 +2906,10 @@ ShellRoot {
                 x: dock.x
                 y: dockWin.atTop ? dock.y : dock.y - 220
             }
+            // Окно целиком держит док открытым, пока курсор в нём, но само его не вызывает: вызов
+            // — дело кромки, и только она решает, был ли это взмах.
             HoverHandler {
-                onHoveredChanged: if (dockWin.autohide) { if (hovered) { hideDock.stop(); dockWin.hovering = true } else hideDock.restart() }
+                onHoveredChanged: if (dockWin.autohide) { if (hovered) hideDock.stop(); else hideDock.restart() }
             }
             Timer { id: hideDock; interval: 600; onTriggered: if (dockWin.autohide) dockWin.hovering = false }
 
