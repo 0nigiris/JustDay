@@ -60,6 +60,10 @@ ShellRoot {
         // Меню лотка без мыши: открыть меню значка под номером и сказать, что в нём получилось.
         // Правая кнопка на вейланде синтетически не воспроизводится, а «меню не открывается» —
         // именно то, что здесь уже один раз сломалось молча.
+        // Увеличение в лотке без мыши — та же проверка, что и у дока.
+        function trayAt(y: real): string {
+            return JSON.stringify(tray.probe(y))
+        }
         function trayOpen(n: int): string {
             const items = SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
             const it = items[Math.max(0, Math.min(items.length - 1, n))]

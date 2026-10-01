@@ -149,6 +149,27 @@ Item {
     implicitWidth: icon + pad * 2
     implicitHeight: Math.max(cell, laneLength)
 
+    // Проверка движка без мыши: поставить курсор в точку спокойной полосы, дать физике сойтись и
+    // вернуть получившуюся раскладку. Синтетическая мышь на вейланде врёт, а «значки расступаются»
+    // иначе никак не проверить числом.
+    function probe(at) {
+        const wasEngaged = engaged, wasAt = pointerScene
+        engaged = true
+        pointerScene = anchorMiddle - restLength / 2 + at
+        for (let n = 0; n < 400 && stepPhysics(1 / 120); n++) { /* до схождения */ }
+        let overlap = 0
+        for (let i = 1; i < geom.length; i++)
+            if (geom[i].y + 0.5 < geom[i - 1].y + geom[i - 1].h) overlap++
+        const out = { at: at, u: Math.round(restUnderPointer()), rest: Math.round(restLength),
+                      length: Math.round(laneLength), amp: amp, overlap: overlap,
+                      cells: geom.map((g, i) => ({ y: Math.round(g.y), h: Math.round(g.h),
+                                                   k: Number(g.k.toFixed(3)) })) }
+        engaged = wasEngaged
+        pointerScene = wasAt
+        wake()
+        return out
+    }
+
     readonly property Rectangle blurItem: strip
 
     Rectangle {
