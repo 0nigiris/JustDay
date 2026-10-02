@@ -80,7 +80,27 @@ export const JustDayLadder = async ({ client }) => {
 
   const here = () => split(cfg.ladder[Math.min(step, cfg.ladder.length - 1)])
 
-  const down = async (why) => {
+  // Ту, что приходит на смену, надо ввести в курс дела. Она не видела ничего из того, что здесь
+  // происходило, и начинать с «продолжай» — всё равно что не начинать. Заметка кладётся в разговор
+  // без ответа: это контекст, а не реплика, и человеку отвечать на неё не надо.
+  const handoff = async (sessionID, from, to) => {
+    if (!sessionID) return
+    const text = [
+      `Модель сменилась: ${from} → ${to}. У верхней кончился лимит, работу продолжаешь ты.`,
+      "Прочитай ПЕРЕДАЧА.md в корне проекта — там что делалось, что уже сделано, что дальше и чего",
+      "делать нельзя. Веди этот файл дальше сам: отключиться можно в любую секунду.",
+    ].join(" ")
+    try {
+      await client.session.prompt({
+        path: { id: sessionID },
+        body: { noReply: true, parts: [{ type: "text", text }] },
+      })
+    } catch {
+      // Не вышло — не беда: заметка на диске всё равно лежит, и человек о смене уже знает.
+    }
+  }
+
+  const down = async (why, sessionID) => {
     if (step >= cfg.ladder.length - 1) {
       await say("Лимит, а спускаться больше некуда — жду.")
       return false
@@ -90,6 +110,7 @@ export const JustDayLadder = async ({ client }) => {
     probedAt = Date.now()
     const now = cfg.ladder[step]
     await say(`Лимит у ${cfg.ladder[step - 1]} — перешёл на ${now}.`)
+    await handoff(sessionID, cfg.ladder[step - 1], now)
     return true
   }
 
@@ -150,7 +171,7 @@ export const JustDayLadder = async ({ client }) => {
       if (event.type === "session.error") {
         const said = JSON.stringify(event.properties || event)
         if (NETWORK.test(said)) return      // внизу тот же оборванный интернет
-        if (LIMIT.test(said)) await down(said)
+        if (LIMIT.test(said)) await down(said, (event.properties || {}).sessionID)
         return
       }
       // Подниматься обратно можно только между делами: забрать работу у того, кто её делает,

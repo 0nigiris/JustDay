@@ -16,7 +16,9 @@ PLUGIN = Path(__file__).resolve().parent.parent / "shell" / "opencode" / "justda
 
 SCRIPT = """
 const said = []
-const client = { tui: { showToast: async ({ body }) => said.push(body.message) } }
+const sent = []
+const client = { tui: { showToast: async ({ body }) => said.push(body.message) },
+                 session: { prompt: async (o) => sent.push(o) } }
 const { JustDayLadder } = await import(process.env.PLUGIN)
 const h = await JustDayLadder({ client })
 const pick = async (text) => {
@@ -25,10 +27,11 @@ const pick = async (text) => {
   return o.message.model.providerID + '/' + o.message.model.modelID
 }
 const out = { }
+out.sent = sent
 out.trivial = await pick('который час')
 out.work = await pick('напиши скрипт для переименования файлов')
 out.short_but_doing = await pick('открой дискорд')
-await h.event({ event: { type: 'session.error', properties: { error: 'Error 429: usage limit reached' } } })
+await h.event({ event: { type: 'session.error', properties: { sessionID: 'ses_1', error: 'Error 429: usage limit reached' } } })
 out.after_limit = await pick('напиши скрипт')
 await h.event({ event: { type: 'session.error', properties: { error: 'connection refused' } } })
 out.after_network = await pick('напиши скрипт')
@@ -114,3 +117,16 @@ def test_the_plugin_is_put_in_place_and_the_ladder_gets_a_default(tmp_path, monk
     (conf / "justday-ladder.json").write_text(json.dumps({"ladder": ["ollama/своя"]}), encoding="utf-8")
     shell.ensure()
     assert json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))["ladder"] == ["ollama/своя"]
+
+
+def test_the_next_model_is_told_where_to_read_up(ladder) -> None:
+    """Пришедшей на смену нужен не приказ «продолжай», а то, что делалось до неё.
+
+    Заметка кладётся в разговор без ответа: это контекст, а не реплика, и отвечать на неё человеку
+    не надо. В ней — имя файла, где лежит всё остальное.
+    """
+    sent = ladder["sent"]
+    assert sent, "смена модели прошла молча — следующая не узнает, что здесь было"
+    body = sent[0]["body"]
+    assert body["noReply"] is True
+    assert "ПЕРЕДАЧА.md" in body["parts"][0]["text"]
