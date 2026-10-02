@@ -40,6 +40,15 @@ SEED: tuple[tuple[str, ...], ...] = (
 SKIP: tuple[str, ...] = ("xwaylandvideobridge", "quickshell", "plasmashell", "org.kde.plasmashell",
                          "kwin_wayland", "ksplashqml", "xdg-desktop-portal-kde")
 
+# Soft alias only: give child WM_CLASS the parent's name/icon, but DO NOT merge
+# them into one dock key. Anti-detect browsers (Octo/octium, etc.) need each
+# profile window separately switchable — hard-merging hid every profile under one icon.
+ALIAS_CLASSES: dict[str, str] = {
+    "octium": "octobrowser",
+}
+# Running windows with these classes get one dock slot per window (not per app).
+SEPARATE_INSTANCES: frozenset[str] = frozenset({"octium"})
+
 _FLATPAK = re.compile(r"\b([A-Za-z][\w-]*(?:\.[\w-]+){2,})\b")
 
 
@@ -52,9 +61,17 @@ def _exec_key(line: str) -> str:
     words = [w for w in str(line or "").split() if not w.startswith("%")]
     if not words:
         return ""
-    head = words[0].rsplit("/", 1)[-1]
+    # `env VAR=1 /path/App.AppImage` — настоящее имя после переменных окружения.
+    i = 0
+    if words[0] == "env":
+        i = 1
+        while i < len(words) and "=" in words[i] and not words[i].startswith("/"):
+            i += 1
+    if i >= len(words):
+        return ""
+    head = words[i].rsplit("/", 1)[-1]
     if head in ("flatpak", "flatpak-spawn"):
-        for word in words[1:]:
+        for word in words[i + 1:]:
             if _FLATPAK.fullmatch(word):
                 return word.lower()
         return ""
@@ -63,7 +80,13 @@ def _exec_key(line: str) -> str:
     if head in ("env", "sh", "bash", "gtk-launch", "kioclient", "systemd-run", "steam", "lutris",
                 "heroic", "wine", "wine64", "python", "python3", "electron", "java", "bottles-cli"):
         return ""
-    return head.lower()
+    key = head.lower()
+    # AppImageLauncher: KanekiRapt_<hash>.appimage → окно зовёт себя KanekiRapt.
+    if key.endswith(".appimage"):
+        stem = key[: -len(".appimage")]
+        stem = re.sub(r"_[0-9a-f]{8,}$", "", stem)
+        return stem or key
+    return key
 
 
 def match_keys(app: dict, *, weak: bool = False) -> list[str]:
@@ -79,6 +102,14 @@ def match_keys(app: dict, *, weak: bool = False) -> list[str]:
         out = [ident.lower(), str(app.get("wmclass", "")).lower()]
         if "." in ident:                  # org.kde.dolphin → dolphin: так окно зовут в половине случаев
             out.append(ident.rsplit(".", 1)[-1].lower())
+        # AppImageLauncher: appimagekit_<hash>-KanekiRapt → KanekiRapt (resourceClass окна).
+        m = re.match(r"appimagekit_[^-]+-(.+)$", ident, re.I)
+        if m:
+            out.append(m.group(1).lower())
+        # Однословное имя программы часто совпадает с WM_CLASS, когда StartupWMClass пуст.
+        name = str(app.get("name", "")).strip().lower()
+        if name and " " not in name and "/" not in name:
+            out.append(name)
     seen: set[str] = set()
     return [k for k in out if k and not (k in seen or seen.add(k))]
 
@@ -127,6 +158,25 @@ def pin(kind: str, ident: str, on: bool | None = None) -> dict:
     on = key not in have if on is None else bool(on)
     save(([k for k in have if k != key] + [key]) if on else [k for k in have if k != key])
     return {"ok": True, "on": on} | catalog()
+
+
+def pin_focused(on: bool | None = None) -> dict:
+    """Закрепить программу активного окна (или открепить / переключить).
+
+    Горячая клавиша зовёт именно это: человек смотрит на окно и жмёт сочетание — док
+    должен понять, какая это программа, без имени из настроек.
+    """
+    wins = desktop.windows("active")
+    if not wins:
+        return {"ok": False, "error": "нет активного окна"}
+    app = str(wins[0].get("app") or "").lower()
+    if not app:
+        return {"ok": False, "error": "у окна нет имени программы"}
+    match = catalog()["match"]
+    hit = match.get(app) or (match.get(app.rsplit(".", 1)[-1]) if "." in app else None)
+    if not hit:
+        return {"ok": False, "error": f"не нашёл программу для «{app}»"}
+    return pin(hit["kind"], hit["id"], on) | {"name": hit.get("name", hit["id"]), "app": app}
 
 
 def arrange(keys: list[str]) -> dict:
@@ -422,9 +472,21 @@ def catalog() -> dict:
             for k in row[field]:
                 match.setdefault(k, short)
 
+    # Soft aliases: octium gets Octo Browser's name/icon, but keeps its own match key
+    # so DockView can still split profile windows into separate slots.
+    for child, parent in ALIAS_CLASSES.items():
+        parent_hit = match.get(parent)
+        if not parent_hit:
+            continue
+        soft = dict(parent_hit)
+        soft["key"] = f"win:{child}"          # not parent key — no hard merge
+        soft["alias_of"] = parent_hit["key"]
+        soft["separate"] = child in SEPARATE_INSTANCES
+        match.setdefault(child, soft)
+
     launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
     want = pinned()
     return {"launcher": launcher, "cat": cat_frames(), "items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
                       for k in want if k in known],
             "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP),
-            "trash_full": trash_full()}
+            "separate": sorted(SEPARATE_INSTANCES), "trash_full": trash_full()}

@@ -696,17 +696,91 @@ if ! command -v kwriteconfig6 >/dev/null && ! command -v kwriteconfig5 >/dev/nul
   step "$(t 'Горячие клавиши' 'Hotkeys')" gnome_hotkeys
 elif command -v kwriteconfig6 >/dev/null || command -v kwriteconfig5 >/dev/null; then
   hotkeys() {
-    local current
+    local current menu_now emoji_now apps_now extras=()
     local kread; kread=$(command -v kreadconfig6 || command -v kreadconfig5)
     current=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null || true)
+    menu_now=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday-menu.desktop --key _launch 2>/dev/null || true)
+    emoji_now=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday-emoji.desktop --key _launch 2>/dev/null || true)
+    apps_now=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday-apps.desktop --key _launch 2>/dev/null || true)
     if [[ -z "$current" || -n "${JUSTDAY_HOTKEY:-}" ]]; then   # keep shortcuts the user changed in Settings
       "$APP_DIR/scripts/setup-hotkey.sh" --talk "$HOTKEY"
-      note "$HOTKEY $(t 'говорить' 'talk') · Meta+K $(t 'написать' 'type')"
+      # setup-hotkey пишет desktop-файлы; justday hotkey set отбирает Meta у plasmashell
+      # и Alt+Space у KRunner, оставляя Alt+F1 / Alt+F2, и вешает сочетания живьём (без перезахода).
+      # Meta → меню JustDay; Meta+. → эмодзи; Alt+Space → поиск программ.
+      "$HOME/.local/bin/justday" hotkey set >/dev/null 2>&1 || true
+      note "$HOTKEY $(t 'говорить' 'talk') · Meta $(t 'меню' 'menu') · Meta+. $(t 'эмодзи' 'emoji') · Alt+Space $(t 'поиск' 'spotlight') · Meta+K $(t 'написать' 'type')"
     else
-      note "$(t 'ваши, без изменений' 'yours, unchanged')"
+      # Upgrade path: talk already set, but older installs lacked Meta→menu, Meta+.→emoji,
+      # and/or never stole Alt+Space from KRunner for apps search.
+      if [[ -z "$menu_now" || "$menu_now" == "none" ]]; then
+        extras+=(--menu Meta)
+      fi
+      if [[ -z "$emoji_now" || "$emoji_now" == "none" ]]; then
+        extras+=(--emoji "Meta+.")
+      fi
+      # Apps: unset, or still co-owned by KRunner (builtin Alt+Space often missing from the file).
+      # Qt key code for Alt+Space is 134217760.
+      if [[ -z "$apps_now" || "$apps_now" == "none" ]]; then
+        extras+=(--apps "Alt+Space")
+      elif gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel \
+             --method org.kde.KGlobalAccel.getGlobalShortcutsByKey 134217760 2>/dev/null \
+             | grep -q 'org.kde.krunner.desktop'; then
+        extras+=(--apps "Alt+Space")
+      fi
+      if ((${#extras[@]})); then
+        "$HOME/.local/bin/justday" hotkey set "${extras[@]}" >/dev/null 2>&1 \
+          || "$APP_DIR/scripts/setup-hotkey.sh" "${extras[@]}" >/dev/null 2>&1 || true
+        note "$(t 'ваши +' 'yours +')${extras[*]}"
+      else
+        note "$(t 'ваши, без изменений' 'yours, unchanged')"
+      fi
     fi
   }
   step "$(t 'Горячие клавиши' 'Hotkeys')" hotkeys
+fi
+
+# ───────────── notifications: JustDay owns the toasts (+ mute Plasma OSD) ─────────────
+#
+# Architecture: plasmashell usually keeps org.freedesktop.Notifications on the bus (history,
+# tray). JustDay mirrors Notify via dbus-monitor (or becomes the server if the name is free)
+# and draws its own toast. Plasma's popup is silenced with Do-Not-Disturb for ~50 years
+# (`justday popups island` → island.system_popups = false). Tray history stays.
+# Volume/brightness/keyboard OSD: plasmarc [OSD] Enabled=false + plasmaparc VolumeOsd=false
+# when island.show_osd is on, so only the JustDay island HUD shows (no duplicate Plasma OSD).
+# Manual undo: justday popups system  (and/or island.show_osd=false to restore Plasma OSD)
+# If a toast still doubles: System Settings → Notifications → application → disable popups,
+# or confirm Do Not Disturb is on.
+if command -v kwriteconfig6 >/dev/null || command -v kwriteconfig5 >/dev/null; then
+  claim_notifs() {
+    if "$HOME/.local/bin/justday" popups island >/dev/null 2>&1; then
+      note "$(t 'всплывашки Plasma выкл — показывает JustDay' 'Plasma popups off — JustDay shows them')"
+      note "$(t 'OSD Plasma выкл — громкость/яркость на острове' 'Plasma OSD off — volume/brightness on island')"
+    else
+      # Daemon may not be up yet during a fresh install; write the same keys directly.
+      local kw; kw=$(command -v kwriteconfig6 || command -v kwriteconfig5)
+      local until
+      until=$(date -d '+50 years' '+%Y,%-m,%-d,%-H,%-M,%-S.000' 2>/dev/null \
+           || date -v+50y '+%Y,%-m,%-d,%-H,%-M,%-S.000' 2>/dev/null || true)
+      if [[ -n "$until" ]]; then
+        "$kw" --file plasmanotifyrc --group DoNotDisturb --key Until "$until" || true
+        "$kw" --file plasmanotifyrc --group Notifications --key CriticalInDndMode false || true
+      fi
+      # Durable Plasma 6 OSD mute (Workspace Behavior → visual feedback + Sound volume OSD).
+      "$kw" --file plasmarc --group OSD --key Enabled false || true
+      "$kw" --file plasmarc --group OSD --key kbdLayoutChangedEnabled false || true
+      for _osd_key in VolumeOsd MuteOsd MicrophoneSensitivityOsd PushToTalkOsd \
+                      MutedMicrophoneReminderOsd DefaultOutputDeviceOsd; do
+        "$kw" --file plasmaparc --group General --key "$_osd_key" false || true
+      done
+      "$HOME/.local/bin/justday" config set island.system_popups false >/dev/null 2>&1 || true
+      "$HOME/.local/bin/justday" config set island.show_notifications true >/dev/null 2>&1 || true
+      "$HOME/.local/bin/justday" config set island.show_osd true >/dev/null 2>&1 || true
+      note "$(t 'всплывашки Plasma выкл (DND) — показывает JustDay' 'Plasma popups off (DND) — JustDay shows them')"
+      note "$(t 'OSD Plasma выкл (plasmarc) — показывает JustDay' 'Plasma OSD off (plasmarc) — JustDay shows it')"
+    fi
+    printf '     %s%s%s\n' "$D" "$(t 'Вернуть Plasma: justday popups system' 'Restore Plasma: justday popups system')" "$N"
+  }
+  step "$(t 'Уведомления' 'Notifications')" claim_notifs
 fi
 
 # ───────────── first run: a few questions ─────────────
@@ -790,6 +864,7 @@ fi
 printf '  %s%s%s\n' "$C" "$(pad 'justday setup' 18)" "$N$D$(t 'модель, голос, микрофон, почта' 'model, voice, microphone, mail')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday parts' 18)" "$N$D$(t 'доставить речь, голос, ускорение NVIDIA' 'add speech, voice, NVIDIA acceleration')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday doctor' 18)" "$N$D$(t 'проверить, что всё работает' 'check that everything works')$N"
+printf '  %s%s%s\n' "$C" "$(pad 'justday popups' 18)" "$N$D$(t 'island = только JustDay · system = ещё Plasma' 'island = JustDay only · system = Plasma too')$N"
 printf '  %s%s%s\n' "$C" "$(pad "$(t 'Руководство' 'Manual')" 18)" "$N${D}https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md$N"
 # Путь к журналу печатается всегда, а не только когда что-то сломалось: он нужен ровно тогда, когда
 # установка прошла «успешно», а работать не стало, — и именно в этот момент его никто не помнит.

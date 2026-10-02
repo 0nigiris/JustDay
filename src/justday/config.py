@@ -222,6 +222,17 @@ DEFAULTS: dict = {
         "work_quiet": True,
         "notification_server": True,
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
+        # Where toast/shade notifications appear (Telegram-style), independent of the island pill:
+        # screen: "" = same monitor as the island; "primary" | "secondary" | output name (HDMI-A-1, DP-2…)
+        # position: top-left | top-center | top-right | bottom-left | bottom-center | bottom-right
+        # (empty position = follow island.position)
+        "notification_screen": "secondary",
+        "notification_position": "top-right",
+        # Transient system HUD (volume / layout / brightness) — Noctalia-style OSD.
+        # Separate from Telegram-style app toasts (notification_*). Empty position = near island.
+        "show_osd": True,
+        "osd_screen": "island",  # primary | secondary | island | output name
+        "osd_position": "top-center",  # top|bottom + -left|-center|-right; empty = follow island
         "city": "",  # weather location; empty = no weather requests at all
         "screen": "",  # monitor name (e.g. DP-2); empty = the one at the top-left
         # Где висит сам остров и где открывается меню приложений:
@@ -261,7 +272,7 @@ DEFAULTS: dict = {
         "system_popups": False,
     },
     # Док: полоса программ у края экрана. Закреплённое и открытое, увеличение под курсором,
-    # значок меню в начале. position: bottom | top; reserve — отнимать место у развёрнутых окон.
+    # значок меню в начале. position: bottom | top; reserve — exclusiveZone-магнит (по умолч. выкл.).
     "dock": {
         "enabled": True,
         "position": "bottom",
@@ -281,8 +292,11 @@ DEFAULTS: dict = {
         "spring": 180,
         "damping": 0.8,
         "autohide": False,
-        # Отнимать место у окон плазма понимает буквально: обои тоже сжимаются, и под доком
-        # остаётся чёрная полоса. Поэтому по умолчанию док просто лежит поверх — как на макоси.
+        # exclusiveZone / strut (магнит): развёрнутые окна останавливаются над доком.
+        # По умолчанию выкл.: окна могут наезжать на полосу дока, а hide_on_fullscreen тогда
+        # прячет док по геометрии (перекрытие нижней/верхней полосы или полный экран). Позвать
+        # обратно — наведением на край, как у островка/лотка. true = Plasma-панель + чёрная
+        # полоса под обоями как цена магнита.
         "reserve": False,
         "show_running": True,   # открытые окна незакреплённых программ
         "show_trash": True,
@@ -292,8 +306,8 @@ DEFAULTS: dict = {
         # Чем отмечено открытое: dot (точка), line (чёрточка), bar (полоса), glow (свечение за
         # значком), none (ничем).
         "indicator": "dot",
-        # Окно во весь экран прячет док, даже если прятаться его не просили: игра и кино на то и
-        # полный экран. Позвать обратно — кромкой, как любой прячущийся док.
+        # Прятать док, когда окно наезжает на его полосу или уходит в полный экран — даже без
+        # autohide. Позвать обратно наведением на край (как островок/лоток).
         "hide_on_fullscreen": True,
         # Как прячущийся док зовут обратно. Зона у края широкая, но входа в неё мало: док выезжает
         # на взмах — на быстрое движение к краю. Так широкая зона не мешает: мимо ходят медленно, к
@@ -394,8 +408,17 @@ def _merge(base: dict, over: dict) -> dict:
 def load() -> dict:
     cfg = DEFAULTS
     if CONFIG_FILE.exists():
-        with CONFIG_FILE.open("rb") as f:
-            cfg = _merge(DEFAULTS, tomllib.load(f))
+        try:
+            with CONFIG_FILE.open("rb") as f:
+                cfg = _merge(DEFAULTS, tomllib.load(f))
+        except tomllib.TOMLDecodeError as e:
+            # Settings UI writing `[island] # comment` used to miss the header and append a
+            # second `[island]` — tomllib then refuses the file and Settings never opens.
+            if "twice" in str(e).lower() and heal_duplicate_tables():
+                with CONFIG_FILE.open("rb") as f:
+                    cfg = _merge(DEFAULTS, tomllib.load(f))
+            else:
+                raise
     return cfg
 
 
@@ -416,22 +439,114 @@ def _toml_value(v) -> str:
 _HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*(?:#.*)?$")
 
 
+def _section_header_index(lines: list[str], section: str) -> int | None:
+    """Index of `[section]` — trailing comments allowed (`[island]  # …`).
+
+    Must not match a longer table name: `[island.extra]` is not `[island]`.
+    Prefer exact section name via _HEADER when possible.
+    """
+    for i, raw in enumerate(lines):
+        m = _HEADER.match(raw)
+        if m and m.group(1).strip() == section:
+            return i
+    # Fallback: prefix match that rejects `[island.extra]` for section `island`.
+    head = f"[{section}]"
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if s == head:
+            return i
+        if not s.startswith(head):
+            continue
+        rest = s[len(head):]
+        if not rest or rest.lstrip().startswith("#"):
+            return i
+    return None
+
+
+def _header_name(line: str) -> str | None:
+    m = _HEADER.match(line)
+    return m.group(1).strip() if m else None
+
+
+def heal_duplicate_tables() -> bool:
+    """Merge later duplicate `[table]` blocks into the first (last key wins). Returns True if rewritten."""
+    if not CONFIG_FILE.exists():
+        return False
+    lines = CONFIG_FILE.read_text(encoding="utf-8").splitlines()
+    by: dict[str, list[int]] = {}
+    for i, raw in enumerate(lines):
+        name = _header_name(raw)
+        if name:
+            by.setdefault(name, []).append(i)
+    dupes = {n: idxs for n, idxs in by.items() if len(idxs) > 1}
+    if not dupes:
+        return False
+
+    # Rebuild: keep first occurrence of each table; fold keys from later ones over it.
+    out: list[str] = []
+    i = 0
+    seen: set[str] = set()
+    pending_keys: dict[str, dict[str, str]] = {n: {} for n in dupes}  # name -> key -> full line
+    # First pass: collect key overrides from duplicate blocks (later wins)
+    for name, idxs in dupes.items():
+        for start in idxs[1:]:
+            end = next((j for j in range(start + 1, len(lines)) if _header_name(lines[j])), len(lines))
+            for j in range(start + 1, end):
+                m = re.match(r"\s*([A-Za-z0-9_]+)\s*=", lines[j])
+                if m and not lines[j].lstrip().startswith("#"):
+                    pending_keys[name][m.group(1)] = lines[j]
+
+    while i < len(lines):
+        name = _header_name(lines[i])
+        if name and name in dupes and name in seen:
+            # skip this duplicate block entirely
+            i = next((j for j in range(i + 1, len(lines)) if _header_name(lines[j])), len(lines))
+            continue
+        if name and name in dupes:
+            seen.add(name)
+            start = i
+            end = next((j for j in range(start + 1, len(lines)) if _header_name(lines[j])), len(lines))
+            block = lines[start:end]
+            # apply overrides into the first block
+            overrides = pending_keys.get(name) or {}
+            present: set[str] = set()
+            new_block = [block[0]]
+            for raw in block[1:]:
+                m = re.match(r"\s*([A-Za-z0-9_]+)\s*=", raw)
+                if m and m.group(1) in overrides:
+                    new_block.append(overrides[m.group(1)])
+                    present.add(m.group(1))
+                else:
+                    new_block.append(raw)
+                    if m:
+                        present.add(m.group(1))
+            for key, raw in overrides.items():
+                if key not in present:
+                    new_block.insert(1, raw)
+            out.extend(new_block)
+            i = end
+            continue
+        out.append(lines[i])
+        i += 1
+
+    CONFIG_FILE.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return True
+
+
 def set_value(section: str, key: str, value) -> None:
     """Set one key in config.toml, keeping the user's comments and layout."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if CONFIG_FILE.exists():
+        heal_duplicate_tables()
     lines = CONFIG_FILE.read_text(encoding="utf-8").splitlines() if CONFIG_FILE.exists() else []
     line = f"{key} = {_toml_value(value)}"
 
-    def head(i: int) -> str | None:
-        m = _HEADER.match(lines[i])
-        return m.group(1).strip() if m else None
-
-    try:
-        start = next(i for i in range(len(lines)) if head(i) == section)
-    except StopIteration:
-        lines += ["", f"[{section}]", line]
+    header = f"[{section}]"
+    start = _section_header_index(lines, section)
+    if start is None:
+        lines += ["", header, line]
     else:
-        end = next((i for i in range(start + 1, len(lines)) if head(i) is not None), len(lines))
+        end = next((i for i in range(start + 1, len(lines)) if _header_name(lines[i])), len(lines))
         for i in range(start + 1, end):
             if re.match(rf"\s*{re.escape(key)}\s*=", lines[i]):
                 lines[i] = line

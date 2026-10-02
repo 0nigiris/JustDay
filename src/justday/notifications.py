@@ -161,3 +161,79 @@ def _quiet_now() -> bool:
     except ValueError:
         return False
     return until > datetime.now()
+
+
+# ───────────── системный OSD плазмы (громкость / яркость / раскладка) ─────────────
+#
+# Остров рисует свой HUD по island.show_osd. Плазма при этом всё равно показывает свой OSD —
+# получается два одинаковых попапа. Отдельного D-Bus inhibit (типа osdProgressInhibit) в Plasma 6
+# нет: plasmashell смотрит plasmarc [OSD] Enabled (то же «Display visual feedback for status
+# changes» в Workspace Behavior) через KConfigWatcher — запись липкая и подхватывается без
+# перезапуска. Дополнительно глушим plasmaparc VolumeOsd/MuteOsd/…, чтобы AudioShortcutsService
+# даже не звал org.kde.osdService.
+#
+# Правило: JustDay show_osd включён → Plasma OSD выкл. show_osd выкл → Plasma OSD снова вкл,
+# чтобы человек не остался без индикатора. То же применяет установщик и `justday popups island`.
+
+# Keys under plasmaparc [General] that gate volume-related Plasma OSDs (plasma-pa GlobalConfig).
+_PLASMA_VOLUME_OSD_KEYS = (
+    "VolumeOsd",
+    "MuteOsd",
+    "MicrophoneSensitivityOsd",
+    "PushToTalkOsd",
+    "MutedMicrophoneReminderOsd",
+    "DefaultOutputDeviceOsd",
+)
+
+
+def _kwrite(file: str, group: str, key: str, value: str) -> None:
+    subprocess.run(["kwriteconfig6", "--file", file, "--group", group, "--key", key, value],
+                   capture_output=True, timeout=5, check=False)
+
+
+def _kread(file: str, group: str, key: str) -> str:
+    return subprocess.run(["kreadconfig6", "--file", file, "--group", group, "--key", key],
+                          capture_output=True, text=True, timeout=5).stdout.strip()
+
+
+def plasma_osd(on: bool | None = None) -> dict:
+    """Показывает ли плазма свой volume/brightness/keyboard OSD. on=None — только узнать."""
+    if on is None:
+        raw = ""
+        try:
+            raw = _kread("plasmarc", "OSD", "Enabled")
+        except (OSError, subprocess.SubprocessError):
+            pass
+        # Empty / missing = Plasma default (enabled).
+        enabled = raw.lower() not in ("false", "0", "no", "off")
+        return {"ok": True, "osd": enabled}
+    try:
+        _kwrite("plasmarc", "OSD", "Enabled", "true" if on else "false")
+        # Extra gate inside osd.cpp for layout changes (still blocked by Enabled=false, but keeps
+        # System Settings / future callers consistent when Enabled is toggled elsewhere).
+        _kwrite("plasmarc", "OSD", "kbdLayoutChangedEnabled", "true" if on else "false")
+        for key in _PLASMA_VOLUME_OSD_KEYS:
+            _kwrite("plasmaparc", "General", key, "true" if on else "false")
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": str(e), "osd": bool(on)}
+    return {"ok": True, "osd": bool(on)}
+
+
+def sync_plasma_osd(show_osd: bool | None = None, system_popups: bool | None = None) -> dict:
+    """Mute Plasma OSD when JustDay owns the HUD (island.show_osd).
+
+    Call from installer / `justday popups island|system` / settings reload so it sticks.
+    `system_popups` is accepted for those call sites (island mode pairs with show_osd on
+    install) but mute itself follows show_osd: on → Plasma off; explicit false → Plasma back
+    so volume keys still have an indicator.
+    """
+    try:
+        from . import config as cfgmod
+        island = cfgmod.load().get("island") or {}
+    except Exception:
+        island = {}
+    if show_osd is None:
+        show_osd = island.get("show_osd", True)
+    # system_popups kept so popups/install call sites stay explicit; mute is show_osd-driven.
+    _ = system_popups if system_popups is not None else island.get("system_popups", False)
+    return plasma_osd(show_osd is False)  # Plasma on only when JustDay OSD is off

@@ -25,6 +25,8 @@
 
     justday clip                 # что в истории
     justday clip use 3           # третью запись — в буфер и в то окно, где курсор
+    justday clip pin 3           # закрепить заметку сверху
+    justday clip edit 3 "текст"  # править скопированное
     justday clip forget 3        # забыть одну
     justday clip wipe            # забыть всё
     justday clip pause           # не запоминать, пока не вернут
@@ -49,6 +51,18 @@ MAX_ENTRIES = 300          # больше листать всё равно не 
 MAX_TEXT = 64 * 1024       # длиннее — это уже файл, а не то, что копируют читать
 MAX_IMAGE = 8 * 1024 * 1024
 PREVIEW = 220              # сколько символов показывать в списке
+
+# Текст, который программы кладут в буфер вместе со снимком экрана. Сам снимок уже
+# лежит как kind=image — эта строка в истории только мешает и выглядит как «screenshot copied».
+SCREENSHOT_TEXT = re.compile(
+    r"""(?ix)
+    ^\s*(?:
+        screenshot\s+(?:copied|saved|stored)(?:\s+to\s+clipboard)?
+      | (?:снимок|скриншот)\s+(?:скопирован|сохранён|сохранен)(?:\s+в\s+буфер(?:\s+обмена)?)?
+      | image\s+copied\s+to\s+clipboard
+    )\.?\s*$
+    """,
+)
 
 # То, что выглядит ключом. Список заведомо неполон — он второй уровень защиты, не первый.
 SECRETS = re.compile(
@@ -162,6 +176,8 @@ def store(text: str = "", *, image: bytes = b"", kind: str = "") -> dict:
         body = text
         if not body.strip():
             return {"ok": False, "why": "пусто"}
+        if SCREENSHOT_TEXT.match(body.strip()):
+            return {"ok": False, "why": "подпись к снимку экрана — картинка уже в истории"}
         if len(body) > MAX_TEXT:
             return {"ok": False, "why": "слишком длинно"}
         if looks_secret(body):
@@ -171,12 +187,16 @@ def store(text: str = "", *, image: bytes = b"", kind: str = "") -> dict:
         entry = {"id": digest, "at": time.time(), "kind": kind or "text", "size": len(body),
                  "text": body}
 
+    prev = next((i for i in _read() if i.get("id") == digest), None)
+    if prev and prev.get("pinned"):
+        entry["pinned"] = True
     items = [i for i in _read() if i.get("id") != digest]     # повтор поднимается наверх, а не копится
     items.insert(0, entry)
+    items = _sorted(items)
     for extra in items[MAX_ENTRIES:]:
         _forget_blob(extra)
     _write(items[:MAX_ENTRIES])
-    return {"ok": True, "id": digest, "kind": entry["kind"]}
+    return {"ok": True, "id": digest, "kind": entry["kind"], "pinned": bool(entry.get("pinned"))}
 
 
 SKIPPED = config.STATE_DIR / "clipboard-skipped.json"
@@ -206,26 +226,28 @@ def skipped() -> dict:
 
 
 def preview(item: dict) -> str:
-    """Одна строка про запись — то, что видно в списке."""
+    """Одна строка про запись — то, что видно в списке (у картинок подпись под миниатюрой)."""
     if item.get("kind") == "image":
-        return f"картинка, {item.get('size', 0) // 1024} КБ"
+        kb = max(1, int(item.get("size", 0)) // 1024)
+        return f"снимок · {kb} КБ"
     body = " ".join(str(item.get("text", "")).split())
     return body[:PREVIEW] + ("…" if len(body) > PREVIEW else "")
 
 
 def items(limit: int = 60, query: str = "") -> list[dict]:
-    """История: самое свежее первым. С запросом — только подходящее.
+    """История: закреплённое сверху, затем самое свежее. С запросом — только подходящее.
 
-    Текст в ответ не кладём целиком: список рисуется по строке-предпросмотру, а полное содержимое
-    нужно только в момент вставки. Так история не расходится по журналам и по памяти островка."""
+    Текст в ответ не кладём целиком: список рисуется по строке-предпросмотру (у картинок — путь
+    к файлу для миниатюры), а полное содержимое нужно только в момент вставки или правки."""
     words = [w for w in query.lower().split() if w]
     out = []
-    for item in _read():
+    for item in _sorted(_read()):
         if words and not all(w in str(item.get("text", "")).lower() for w in words):
             continue
         out.append({"id": item["id"], "at": item["at"], "kind": item.get("kind", "text"),
                     "size": item.get("size", 0), "preview": preview(item),
-                    "file": item.get("file", ""), "lines": str(item.get("text", "")).count("\n") + 1})
+                    "file": item.get("file", ""), "pinned": bool(item.get("pinned")),
+                    "lines": str(item.get("text", "")).count("\n") + 1})
         if len(out) >= limit:
             break
     return out
@@ -259,7 +281,12 @@ def wipe() -> int:
 
 
 def put_back(which: str, *, paste: bool = True) -> dict:
-    """Запись — снова в буфер обмена и, если есть чем, сразу в то окно, где курсор."""
+    """Запись — снова в буфер обмена и сразу в то окно, где курсор (как ⌘V на macOS).
+
+    Короткий однострочный текст печатаем напрямую; длинный / многострочный / картинку —
+    кладём в буфер и шлём Ctrl+V. Панель перед этим закрывается, PASTE_DELAY даёт
+    композитору вернуть фокус в прежнее окно.
+    """
     from . import face, glyphs
 
     item = get(which)
@@ -270,19 +297,31 @@ def put_back(which: str, *, paste: bool = True) -> dict:
         if not path or not Path(path).is_file():
             return {"ok": False, "error": "картинка потерялась"}
         ok = _copy_image(path)
-        return {"ok": ok, "kind": "image", "note": "картинка в буфере — вставьте Ctrl+V" if ok
-                else "нечем положить картинку в буфер"}
+        pasted = False
+        how = ""
+        if paste and ok:
+            time.sleep(glyphs.PASTE_DELAY)
+            pasted, how = glyphs.paste_chord()
+        return {"ok": ok, "kind": "image", "pasted": pasted, "how": how,
+                "note": "" if pasted else ("картинка в буфере — вставьте Ctrl+V" if ok
+                                           else "нечем положить картинку в буфер"),
+                "session": face.session()}
     text = str(item.get("text", ""))
     copied = glyphs.to_clipboard(text)
     typed = False
-    # Печатаем только короткое и в одну строку: «вставить» многострочный текст набором символов
-    # означает, что редактор получит переводы строк как нажатия Enter — с отступами и автодополнением.
-    if paste and copied and len(text) <= 400 and "\n" not in text:
+    pasted = False
+    how = ""
+    if paste and copied:
         time.sleep(glyphs.PASTE_DELAY)
-        typed, _ = glyphs.type_out(text)
-    return {"ok": copied or typed, "kind": "text", "typed": typed,
-            "note": "" if typed else ("в буфере обмена — вставьте Ctrl+V" if copied
-                                      else "нечем положить в буфер"),
+        # Печатаем только короткое и в одну строку: иначе Enter на каждый \n ломает правку.
+        if len(text) <= 400 and "\n" not in text:
+            typed, how = glyphs.type_out(text)
+        if not typed:
+            pasted, how = glyphs.paste_chord()
+    return {"ok": copied or typed or pasted, "kind": "text", "typed": typed, "pasted": pasted,
+            "how": how,
+            "note": "" if (typed or pasted) else ("в буфере обмена — вставьте Ctrl+V" if copied
+                                                  else "нечем положить в буфер"),
             "session": face.session()}
 
 
@@ -299,6 +338,76 @@ def _copy_image(path: str) -> bool:
         return True
     except (OSError, subprocess.SubprocessError):
         return False
+
+
+
+
+def _sorted(items: list[dict]) -> list[dict]:
+    """Pinned notes stay on top (newest pinned first), then the rest by recency."""
+    pinned = [i for i in items if i.get("pinned")]
+    rest = [i for i in items if not i.get("pinned")]
+    pinned.sort(key=lambda i: float(i.get("at") or 0), reverse=True)
+    rest.sort(key=lambda i: float(i.get("at") or 0), reverse=True)
+    return pinned + rest
+
+
+def pin(which: str, on: bool | None = None) -> dict:
+    """Закрепить или открепить запись. Без on — переключить."""
+    item = get(which)
+    if not item:
+        return {"ok": False, "error": "такой записи нет"}
+    want = (not bool(item.get("pinned"))) if on is None else bool(on)
+    items = _read()
+    for i in items:
+        if i["id"] == item["id"]:
+            if want:
+                i["pinned"] = True
+            else:
+                i.pop("pinned", None)
+            break
+    _write(_sorted(items))
+    return {"ok": True, "id": item["id"], "pinned": want}
+
+
+def edit(which: str, text: str) -> dict:
+    """Править текст записи. Картинку править нельзя — только текст."""
+    item = get(which)
+    if not item:
+        return {"ok": False, "error": "такой записи нет"}
+    if item.get("kind") == "image":
+        return {"ok": False, "error": "картинку так не правят — скопируйте заново"}
+    body = str(text)
+    if not body.strip():
+        return {"ok": False, "error": "пусто"}
+    if len(body) > MAX_TEXT:
+        return {"ok": False, "error": "слишком длинно"}
+    if looks_secret(body):
+        return {"ok": False, "error": "похоже на пароль или ключ — не сохраняем"}
+    digest = hashlib.sha256(body.encode()).hexdigest()[:16]
+    items = _read()
+    out = []
+    for i in items:
+        if i["id"] != item["id"]:
+            if i.get("id") == digest:
+                continue  # drop duplicate of new text
+            out.append(i)
+            continue
+        out.append({**i, "id": digest, "text": body, "size": len(body), "kind": "text",
+                    "at": time.time()})
+    _write(_sorted(out))
+    return {"ok": True, "id": digest, "preview": preview({"kind": "text", "text": body})}
+
+
+def text_of(which: str) -> dict:
+    """Полный текст записи — для правки в панели. Картинкам отдаём путь к файлу."""
+    item = get(which)
+    if not item:
+        return {"ok": False, "error": "такой записи нет"}
+    if item.get("kind") == "image":
+        return {"ok": True, "id": item["id"], "kind": "image", "file": item.get("file", ""),
+                "pinned": bool(item.get("pinned")), "text": ""}
+    return {"ok": True, "id": item["id"], "kind": item.get("kind", "text"),
+            "text": str(item.get("text", "")), "pinned": bool(item.get("pinned"))}
 
 
 # ───────────────────────────── наблюдатель ─────────────────────────────
@@ -366,6 +475,8 @@ def stats() -> dict:
     """Что в истории — для `justday test clip` и настроек."""
     all_items = _read()
     images = sum(1 for i in all_items if i.get("kind") == "image")
-    return {"entries": len(all_items), "images": images, "paused": paused(), "skipped": skipped()["count"],
+    pinned = sum(1 for i in all_items if i.get("pinned"))
+    return {"entries": len(all_items), "images": images, "pinned": pinned, "paused": paused(),
+            "skipped": skipped()["count"],
             "store": str(STORE), "watch": "wl-paste" if watch_argv() else "опрос xclip",
             "size_kb": (STORE.stat().st_size // 1024 if STORE.is_file() else 0)}

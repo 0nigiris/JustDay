@@ -157,7 +157,11 @@ def t_desktop():
             raise RuntimeError("kwin-mcp not installed (uv tool install git+https://github.com/VibeProgramm/kwin-mcp)")
         # Дешёвый вопрос вместо supportInformation: тот выгружает килобайты текста о всей системе,
         # а нам нужно ровно «KWin на шине и отвечает».
-        wins = subprocess.run(["qdbus-qt6", "org.kde.KWin", "/KWin", "org.kde.KWin.currentDesktop"],
+        from .desktop import qdbus_bin
+        bin = qdbus_bin()
+        if not bin:
+            raise RuntimeError("qdbus not found (qdbus-qt6/qdbus6)")
+        wins = subprocess.run([bin, "org.kde.KWin", "/KWin", "org.kde.KWin.currentDesktop"],
                               capture_output=True, text=True, timeout=10)
         if wins.returncode:
             raise RuntimeError("KWin D-Bus not reachable")
@@ -192,12 +196,15 @@ def _unit_active(name: str) -> bool:
 
 
 def t_files():
-    from . import desktop
-
+    from . import desktop, filesearch
+    import shutil
     apps = desktop.list_apps()
     rec = desktop.recent(48, 5)
+    fs = filesearch.stats()
     return f"{len(apps)} apps, {len(desktop.list_games())} games, {len(rec['files'])} recent files, " \
-           f"{len(rec['claude_projects'])} recent Claude projects, plocate={'yes' if shutil.which('plocate') else 'no'}"
+           f"{fs.get('indexed', 0)} indexed, {len(rec['claude_projects'])} recent Claude projects, " \
+           f"plocate={'yes' if fs.get('plocate') else 'no'}, fd={'yes' if fs.get('fd') else 'no'}"
+
 
 
 def t_browser():
@@ -540,13 +547,13 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--copy", action="store_true", help="только в буфер обмена, не печатать")
     sp = sub.add_parser("clip", help="история буфера обмена; пароли в неё не попадают")
     sp.add_argument("action", nargs="?", default="list",
-                    choices=["list", "use", "forget", "wipe", "pause", "resume", "store"])
+                    choices=["list", "use", "forget", "wipe", "pause", "resume", "store", "pin", "unpin", "edit", "show"])
     sp.add_argument("which", nargs="?", default="", help="номер в списке или id записи")
     sp.add_argument("--search", default="", help="искать по содержимому")
     sp.add_argument("--image", action="store_true", help="для store: на входе картинка, а не текст")
     sp.add_argument("--copy", action="store_true", help="только в буфер, не печатать")
     # Имя не «panel»: так уже зовётся запасная полоска на Tk для машин без острова.
-    sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps | emoji | clip | load")
+    sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps (Spotlight) | emoji | clip | load")
     sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "mixer", "plans", "claude", "load"])
     sp = sub.add_parser("models", help="что держит память: слух, голос; free — отпустить сейчас")
     sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
@@ -556,7 +563,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("where", nargs="?", default="show", choices=["show", "island", "system"])
     sp = sub.add_parser("dock", help="док: что в нём лежит, закрепить и открепить")
     sp.add_argument("action", nargs="?", default="show", choices=["show", "pin", "unpin"])
-    sp.add_argument("what", nargs="*", help="идентификатор программы (как в `justday apps --list`)")
+    sp.add_argument("what", nargs="*", help="идентификатор программы; пусто у pin/unpin — активное окно")
     sp = sub.add_parser("launch", help="поиск программ: без запроса открывает лаунчер в островке, "
                                       "с запросом запускает первое подходящее")
     sp.add_argument("query", nargs="*")
@@ -662,8 +669,13 @@ def main(argv: list[str] | None = None) -> None:
             notif.system_popups(a.where == "system")
             config.set_value("island", "system_popups", a.where == "system")
         got = notif.system_popups()
+        # Keep Plasma volume/brightness/keyboard OSD in sync with island.show_osd
+        # (island mode / installer path — durable plasmarc + plasmaparc mute).
+        osd = notif.sync_plasma_osd(system_popups=got.get("popups"))
         print("всплывашки плазмы показываются" if got.get("popups")
               else "всплывашки плазмы молчат — уведомления только на острове")
+        print("OSD плазмы показывается" if osd.get("osd")
+              else "OSD плазмы выкл — громкость/яркость/раскладка только на острове")
     elif a.cmd == "dock":
         sys.exit(_dock_cmd(a.action, " ".join(a.what)))
     elif a.cmd == "launch":
@@ -1351,6 +1363,51 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
         print(got.get("note") or got.get("error") or "вставлено")
         return 0 if got.get("ok") else 1
 
+    if action == "pin":
+        if not which:
+            print("что закрепить? justday clip pin 3")
+            return 2
+        got = clipboard.pin(which, True)
+        print("закреплено" if got.get("ok") else got.get("error", "не вышло"))
+        return 0 if got.get("ok") else 1
+    if action == "unpin":
+        if not which:
+            print("что открепить? justday clip unpin 3")
+            return 2
+        got = clipboard.pin(which, False)
+        print("откреплено" if got.get("ok") else got.get("error", "не вышло"))
+        return 0 if got.get("ok") else 1
+    if action == "edit":
+        if not which:
+            print("что править? justday clip edit 3 новый текст")
+            return 2
+        # remaining words after `which` — or JUSTDAY_TEXT / stdin
+        text = os.environ.get("JUSTDAY_TEXT", "")
+        if not text:
+            # cli passes only one which; extra args live in which if quoted wrongly —
+            # prefer env, else stdin.
+            import sys as _sys
+            if not _sys.stdin.isatty():
+                text = _sys.stdin.read()
+        if not text:
+            print("текст: JUSTDAY_TEXT='...' justday clip edit 3   или через stdin")
+            return 2
+        got = clipboard.edit(which, text)
+        print(got.get("preview") if got.get("ok") else got.get("error", "не вышло"))
+        return 0 if got.get("ok") else 1
+    if action == "show":
+        if not which:
+            which = "1"
+        got = clipboard.text_of(which)
+        if not got.get("ok"):
+            print(got.get("error", "нет"))
+            return 1
+        if got.get("kind") == "image":
+            print(got.get("file", ""))
+        else:
+            print(got.get("text", ""), end="" if str(got.get("text", "")).endswith("\n") else "\n")
+        return 0
+
     items = clipboard.items(int(os.environ.get("JUSTDAY_CLIP_LIMIT", "25")), search)
     if not items:
         print("история пуста" + (f" — по «{search}» ничего" if search else ""))
@@ -1360,7 +1417,7 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
         ago = now - item["at"]
         when = (f"{int(ago)}с" if ago < 60 else f"{int(ago // 60)}м" if ago < 3600
                 else f"{int(ago // 3600)}ч" if ago < 86400 else f"{int(ago // 86400)}д")
-        mark = "🖼" if item["kind"] == "image" else " "
+        mark = ("📌" if item.get("pinned") else " ") + ("🖼" if item["kind"] == "image" else " ")
         print(f"{n:>3} {when:>4} {mark} {item['preview']}")
     if clipboard.paused():
         print("\n(на паузе: новое не запоминается — justday clip resume)")
@@ -1370,7 +1427,10 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
 
 
 def _dock_cmd(action: str, what: str) -> int:
-    """Показать док или изменить его состав. Ключ — идентификатор .desktop-файла без расширения."""
+    """Показать док или изменить его состав. Ключ — идентификатор .desktop-файла без расширения.
+
+    Без идентификатора `pin`/`unpin` действует на программу активного окна (горячая клавиша).
+    """
     from . import dock
 
     if action == "show":
@@ -1380,13 +1440,34 @@ def _dock_cmd(action: str, what: str) -> int:
         for item in got["items"]:
             print(f"  {item['name']:28} {item['id']}")
         return 0
+    # Через демон — островок сразу увидит новый состав (publish), а не только файл на диске.
     if not what:
-        return print("нужен идентификатор программы, например: justday dock pin org.kde.dolphin") or 1
+        on = None if action == "pin" else False
+        got = control("dock_pin", kind="app", id="", on=on, timeout=8)
+        # Демон не запущен — сделаем сами; UI обновится при следующем dockRefresh.
+        if not got.get("ok") and "daemon is not running" in str(got.get("error") or ""):
+            got = dock.pin_focused(on)
+        if not got.get("ok"):
+            msg = got.get("error") or "не вышло"
+            print(msg)
+            subprocess.run(["notify-send", "-a", "JustDay", "Док", str(msg)], check=False)
+            return 1
+        name = got.get("name") or got.get("id") or ""
+        line = ("закреплено: " if got.get("on") else "откреплено: ") + str(name)
+        print(line)
+        subprocess.run(["notify-send", "-a", "JustDay", "Док", line], check=False)
+        return 0
     kind, _, ident = what.partition(":")
     if not ident:
         kind, ident = "app", what
-    got = dock.pin(kind, ident, action == "pin")
-    print(("закреплено: " if got["on"] else "откреплено: ") + ident)
+    on = True if action == "pin" else False
+    got = control("dock_pin", kind=kind, id=ident, on=on, timeout=8)
+    if not got.get("ok") and "daemon is not running" in str(got.get("error") or ""):
+        got = dock.pin(kind, ident, on)
+    if not got.get("ok"):
+        print(got.get("error") or "не вышло")
+        return 1
+    print(("закреплено: " if got.get("on") else "откреплено: ") + ident)
     return 0
 
 
@@ -1516,6 +1597,9 @@ def _config_cmd(a) -> None:
         elif re.fullmatch(r"-?\d+\.\d+", a.value):
             value = float(a.value)
     config.set_value(section, key, value)
+    if section == "island" and key == "show_osd":
+        from . import notifications as notif
+        notif.sync_plasma_osd(show_osd=bool(value))
     control("reload_settings", timeout=5)
     print(f"{a.key} = {value}")
 

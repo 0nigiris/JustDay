@@ -20,6 +20,13 @@ Item {
     // «app-window», и без этого признака все приложения выглядели одинаковым окошком, потому что
     // запасное имя application-x-executable само есть в нашем наборе и перебивало настоящий значок.
     property bool theme: false
+    // Icon= in .desktop is often an absolute path (AppImage, custom PNG). Quickshell.iconPath
+    // only resolves theme names — a path was treated as a missing name and every such app
+    // collapsed to the same fallback gear. Paths go straight to Image as file://.
+    readonly property bool fileIcon: {
+        const n = String(name || "")
+        return n.startsWith("/") || n.startsWith("file:") || n.startsWith("image:")
+    }
     readonly property string glyph: theme ? "" : (JD.glyph(name) || JD.glyph(fallback))
     implicitWidth: implicitSize
     implicitHeight: implicitSize
@@ -46,7 +53,14 @@ Item {
     Image {
         anchors.fill: parent
         visible: !ic.glyph
-        source: Quickshell.iconPath(ic.name || ic.fallback, ic.fallback)
+        source: {
+            if (ic.fileIcon) {
+                const n = String(ic.name || "")
+                if (n.startsWith("file:") || n.startsWith("image:")) return n
+                return "file://" + n
+            }
+            return Quickshell.iconPath(ic.name || ic.fallback, ic.fallback)
+        }
         sourceSize: Qt.size(ic.renderSize, ic.renderSize)
         fillMode: Image.PreserveAspectFit
         mipmap: true

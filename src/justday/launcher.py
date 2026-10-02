@@ -4,8 +4,8 @@
 программы — строка уходит ассистенту, и «поставь таймер на десять минут» работает там же, где
 «открой дискорд». Поэтому лаунчер и живёт внутри островка, а не рядом с ним.
 
-Что он ищет: установленные программы, игры (Steam, Lutris, Heroic — их знает desktop.list_games)
-и открытые окна. Порядок ответов — как у эмодзи: сначала ровное совпадение, потом начало слова,
+Что он ищет: установленные программы, игры (Steam, Lutris, Heroic — их знает desktop.list_games),
+открытые окна и файлы (недавние + лёгкий индекс домашних папок, см. filesearch). Порядок ответов — как у эмодзи: сначала ровное совпадение, потом начало слова,
 потом вхождение; при равенстве выше то, что запускали недавно.
 
 Недавние важнее любой хитрой оценки: человек открывает одно и то же, и пустое поле должно
@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import time
 
-from . import config, desktop
+from . import config, desktop, filesearch
 
 RECENT_FILE = config.STATE_DIR / "launcher-recent.json"
 FAV_FILE = config.STATE_DIR / "launcher-favourites.json"
@@ -134,6 +134,18 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
         except Exception:
             pass    # окнами может быть нечем управлять — это не повод ломать поиск программ
 
+    # Файлы: недавние всегда; по запросу — ещё индекс домашних папок / plocate / fd.
+    # Программы важнее файлов при равном совпадении (score одинаков → order у файла 500+).
+    try:
+        file_limit = min(limit, 20) if words else min(8, limit)
+        for f in filesearch.search(query, limit=file_limit):
+            score = _score(words, f["name"], [f.get("sub", ""), f["id"]]) if words else 2
+            if score >= 99:
+                continue
+            rows.append((score, 500 + order.get(f"file:{f['id']}", 50), _flat(f["name"]), f))
+    except Exception:
+        pass
+
     rows.sort(key=lambda r: (r[0], r[1], r[2]))
     out, seen = [], set()
     for _, _, _, row in rows:
@@ -148,11 +160,16 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
 
 
 def run(kind: str, ident: str, files: list[str] | None = None) -> dict:
-    """Запустить программу или игру, перейти к окну. files — то, что на неё бросили."""
+    """Запустить программу или игру, перейти к окну, открыть файл. files — то, что на неё бросили."""
     try:
         if kind == "window":
             desktop.windows("focus", ident)
             return {"ok": True, "kind": kind, "id": ident}
+        if kind == "file":
+            got = filesearch.open_path(ident)
+            if got.get("ok"):
+                remember("file", ident)
+            return got
         if kind == "game":
             got = desktop.launch_game(ident)
             remember(kind, ident)
@@ -166,8 +183,10 @@ def run(kind: str, ident: str, files: list[str] | None = None) -> dict:
 
 def stats() -> dict:
     """Что лаунчер видит — для `justday test launcher`."""
+    fs = filesearch.stats()
     return {"apps": len(desktop.list_apps()), "games": len(desktop.list_games()),
-            "recent": len(recents()), "at": time.time()}
+            "recent": len(recents()), "files_indexed": fs.get("indexed", 0),
+            "plocate": fs.get("plocate"), "at": time.time()}
 
 
 # ──────────────────────────── разделы меню ────────────────────────────

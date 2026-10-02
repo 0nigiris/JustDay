@@ -14,6 +14,7 @@
 // два поиска по одному набору расходятся в тот же день, когда их становится два.
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 
 // Корень — Item, а не View: показом и растворением заведует держатель в shell.qml, а у View своя
 // прозрачность, завязанная на его собственный `shown`. Вложенный View остался бы невидимым.
@@ -115,8 +116,25 @@ Item {
                         onTextChanged: if (text !== JD.toolsQuery) { JD.toolsQuery = text; searchDelay.restart() }
                         Keys.onPressed: (e) => {
                             if (e.key === Qt.Key_Escape) { JD.closeTools(); e.accepted = true; return }
-                            if (e.key === Qt.Key_Down || e.key === Qt.Key_Up) {
-                                const step = e.key === Qt.Key_Down ? 1 : -1
+                            // Стрелки выбирают строку / клетку; Enter — скопировать и вставить в то окно, где курсор.
+                            if (e.key === Qt.Key_Down || e.key === Qt.Key_Up
+                                || e.key === Qt.Key_Left || e.key === Qt.Key_Right) {
+                                let step = 0
+                                if (tv.page === "emoji") {
+                                    const cols = Math.max(1, Math.floor(grid.width / grid.cellWidth))
+                                    if (e.key === Qt.Key_Down) step = cols
+                                    else if (e.key === Qt.Key_Up) step = -cols
+                                    else if (e.key === Qt.Key_Right) step = 1
+                                    else if (e.key === Qt.Key_Left) {
+                                        // Влево двигает каретку, пока есть куда; иначе — по сетке.
+                                        if (field.cursorPosition > 0) return
+                                        step = -1
+                                    }
+                                } else {
+                                    if (e.key === Qt.Key_Down) step = 1
+                                    else if (e.key === Qt.Key_Up) step = -1
+                                    else return
+                                }
                                 JD.toolsPick = Math.max(0, Math.min(tv.items.length - 1, JD.toolsPick + step))
                                 e.accepted = true
                                 return
@@ -127,7 +145,7 @@ Item {
                             const item = tv.items[JD.toolsPick] || tv.items[0]
                             if (!item) return
                             if (tv.page === "emoji") JD.useEmoji(item.c)
-                            else JD.useClip(item.id)
+                            else JD.useClip(item.id)   // copy + paste (macOS-like)
                         }
                         Text {
                             anchors.fill: parent
@@ -193,8 +211,18 @@ Item {
             cellWidth: 56
             cellHeight: 56
             model: tv.page === "emoji" ? tv.items : []
+            currentIndex: JD.toolsPick
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, GridView.Contain)
+            Connections {
+                target: JD
+                function onToolsPickChanged() {
+                    if (tv.page === "emoji")
+                        grid.positionViewAtIndex(JD.toolsPick, GridView.Contain)
+                }
+            }
             delegate: Item {
                 required property var modelData
+                required property int index
                 width: grid.cellWidth
                 height: grid.cellHeight
                 Rectangle {
@@ -202,9 +230,12 @@ Item {
                     width: 48
                     height: 48
                     radius: 12
-                    color: cellHover.hovered ? JD.fill2 : "transparent"
+                    color: index === JD.toolsPick ? JD.fill2 : (cellHover.hovered ? JD.fill1 : "transparent")
+                    border.width: index === JD.toolsPick ? 1 : 0
+                    border.color: JD.accentBlue
                     scale: cellTap.pressed ? 0.9 : 1
                     Behavior on scale { NumberAnimation { duration: 110 } }
+                    Behavior on color { ColorAnimation { duration: 100 } }
                     Text {
                         anchors.centerIn: parent
                         // Эмодзи рисует шрифт эмодзи, а не Inter: у Inter их нет, и вместо кота
@@ -231,7 +262,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             color: JD.text3
             text: {
-                const item = tv.items[grid.currentIndex] || tv.items[0]
+                const item = tv.items[JD.toolsPick] || tv.items[0]
                 return item ? item.c + "   " + item.n : ""
             }
         }
@@ -239,51 +270,188 @@ Item {
         // ───────────── программы, игры, окна ─────────────
         // ───────────── буфер обмена ─────────────
         ListView {
+            id: clipList
             visible: tv.page === "clip"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            spacing: 4
+            spacing: 6
             model: tv.page === "clip" ? tv.items : []
+            currentIndex: JD.toolsPick
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+            Connections {
+                target: JD
+                function onToolsPickChanged() {
+                    if (tv.page === "clip")
+                        clipList.positionViewAtIndex(JD.toolsPick, ListView.Contain)
+                }
+            }
             delegate: Rectangle {
+                id: row
                 required property var modelData
+                required property int index
                 width: ListView.view.width
-                implicitHeight: 46
+                readonly property bool isImage: modelData.kind === "image"
+                readonly property bool isPinned: !!modelData.pinned
+                readonly property bool editing: JD.clipEditing === modelData.id
+                readonly property bool selected: !editing && index === JD.toolsPick
+                implicitHeight: editing ? Math.max(120, editBox.implicitHeight + 58)
+                                        : (isImage ? 72 : 46)
                 radius: 10
-                color: rowHover.hovered ? JD.fill1 : "transparent"
+                color: editing || selected || rowHover.hovered ? JD.fill1 : "transparent"
+                border.width: selected ? 1 : 0
+                border.color: JD.accentBlue
+                Behavior on implicitHeight { NumberAnimation { duration: 140 } }
+                Behavior on color { ColorAnimation { duration: 100 } }
+
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 12
+                    anchors.leftMargin: 10
                     anchors.rightMargin: 8
+                    anchors.topMargin: 6
+                    anchors.bottomMargin: 6
                     spacing: 10
+
+                    // Миниатюра снимка вместо подписи «screenshot copied» / «картинка, N КБ».
+                    Rectangle {
+                        visible: row.isImage && !row.editing
+                        Layout.preferredWidth: 56
+                        Layout.preferredHeight: 56
+                        radius: 8
+                        color: JD.fill2
+                        clip: true
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            source: row.modelData.file ? ("file://" + row.modelData.file) : ""
+                        }
+                    }
                     Icon {
-                        name: modelData.kind === "image" ? "image" : "file-text"
+                        visible: !row.isImage && !row.editing
+                        name: "file-text"
                         implicitSize: 15
                         tint: JD.text3
                     }
+
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
-                        Label1 { Layout.fillWidth: true; text: modelData.preview }
+                        Layout.fillHeight: true
+                        spacing: 2
+                        visible: !row.editing
+
+                        Label1 {
+                            Layout.fillWidth: true
+                            text: row.modelData.preview
+                        }
                         Label2 {
                             color: JD.text3
-                            text: tv.ago(modelData.at)
-                                  + (modelData.lines > 1 ? " · " + modelData.lines + " строк" : "")
-                                  + (modelData.kind === "image" ? "" : " · " + tv.fmtSize(modelData.size))
+                            text: (row.isPinned ? "📌 · " : "")
+                                  + tv.ago(row.modelData.at)
+                                  + (row.modelData.lines > 1 ? " · " + row.modelData.lines + " строк" : "")
+                                  + (row.isImage ? "" : " · " + tv.fmtSize(row.modelData.size))
                         }
                     }
-                    IconButton {
-                        icon: "trash-2"
-                        size: 26
-                        opacity: rowHover.hovered ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 120 } }
-                        onClicked: JD.forgetClip(modelData.id)
+
+                    // Inline editor for copied text.
+                    Rectangle {
+                        id: editBox
+                        visible: row.editing
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        implicitHeight: Math.min(220, Math.max(72, editInput.contentHeight + 20))
+                        radius: 8
+                        color: JD.fill2
+                        border.width: 1
+                        border.color: JD.accentBlue
+                        Flickable {
+                            id: editFlick
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            contentHeight: editInput.implicitHeight
+                            clip: true
+                            interactive: contentHeight > height
+                            TextArea {
+                                id: editInput
+                                width: editFlick.width
+                                wrapMode: TextArea.Wrap
+                                selectByMouse: true
+                                color: JD.text1
+                                font.pixelSize: 14
+                                text: JD.clipEditDraft
+                                onTextChanged: if (row.editing) JD.clipEditDraft = text
+                                background: null
+                                Keys.onPressed: event => {
+                                    if (event.key === Qt.Key_Escape) {
+                                        JD.clipEditing = ""; JD.clipEditDraft = ""
+                                        event.accepted = true
+                                    } else if (event.key === Qt.Key_Return
+                                               && (event.modifiers & Qt.ControlModifier)) {
+                                        JD.editClip(row.modelData.id, JD.clipEditDraft)
+                                        JD.clipEditing = ""; JD.clipEditDraft = ""
+                                        event.accepted = true
+                                    }
+                                }
+                            }
+                        }
+                        Component.onCompleted: if (row.editing) editInput.forceActiveFocus()
+                    }
+
+                    RowLayout {
+                        spacing: 2
+                        IconButton {
+                            visible: row.editing
+                            icon: "check"
+                            size: 26
+                            onClicked: {
+                                JD.editClip(row.modelData.id, JD.clipEditDraft)
+                                JD.clipEditing = ""; JD.clipEditDraft = ""
+                            }
+                        }
+                        IconButton {
+                            visible: row.editing
+                            icon: "x"
+                            size: 26
+                            onClicked: { JD.clipEditing = ""; JD.clipEditDraft = "" }
+                        }
+                        IconButton {
+                            visible: !row.editing
+                            icon: "star"
+                            size: 26
+                            opacity: rowHover.hovered || row.isPinned ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            // Закреплённая звезда всегда видна; цвет задаёт сама кнопка через акцент.
+                            onClicked: JD.pinClip(row.modelData.id, !row.isPinned)
+                        }
+                        IconButton {
+                            visible: !row.editing && !row.isImage
+                            icon: "pencil"
+                            size: 26
+                            opacity: rowHover.hovered ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            onClicked: {
+                                JD.clipEditing = row.modelData.id
+                                // Полный текст подгрузим запросом; пока — preview как черновик.
+                                JD.clipEditDraft = row.modelData.preview || ""
+                                JD.send({ cmd: "clip_text", which: String(row.modelData.id) })
+                            }
+                        }
+                        IconButton {
+                            visible: !row.editing
+                            icon: "trash-2"
+                            size: 26
+                            opacity: rowHover.hovered ? 1 : 0
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            onClicked: JD.forgetClip(row.modelData.id)
+                        }
                     }
                 }
-                HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
+                HoverHandler { id: rowHover; cursorShape: row.editing ? Qt.IBeamCursor : Qt.PointingHandCursor }
                 TapHandler {
+                    enabled: !row.editing
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: JD.useClip(modelData.id)
+                    onTapped: JD.useClip(row.modelData.id)
                 }
             }
         }
@@ -295,11 +463,9 @@ Item {
             Label2 {
                 Layout.fillWidth: true
                 color: JD.text3
-                // Главное про эту историю: пароли в неё не попадают. Говорим это прямо в панели, а
-                // не только в руководстве — иначе первый вопрос к ней будет именно этот.
                 text: JD.clipPaused ? "на паузе: новое не запоминается"
                      : JD.clipSkipped ? "пароли и ключи сюда не попадают — пропущено: " + JD.clipSkipped
-                     : "пароли и ключи сюда не попадают"
+                     : "пароли и ключи сюда не попадают · 📌 закрепляет · карандаш правит"
             }
             PillButton {
                 label: JD.clipPaused ? "Продолжить" : "Пауза"

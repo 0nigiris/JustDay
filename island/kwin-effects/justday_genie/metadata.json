@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Authors": [{"Name": "JustDay"}],
+        "Category": "Appearance",
+        "Description": "Minimize windows toward the JustDay dock (genie/scale)",
+        "EnabledByDefault": false,
+        "Id": "justday_genie",
+        "License": "GPL-2.0+",
+        "Name": "JustDay Genie"
+    },
+    "X-KDE-Ordering": 55,
+    "X-KWin-Exclusive-Category": "minimize",
+    "X-Plasma-API": "javascript"
+}

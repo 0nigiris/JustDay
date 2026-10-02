@@ -92,11 +92,31 @@ def detached(cmd: list[str]) -> list[str]:
     return cmd
 
 
+
+def qdbus_bin() -> str:
+    """Имя утилиты qdbus для Plasma 6.
+
+    В Debian/Fedora это `qdbus-qt6`, в openSUSE — `qdbus6`, иногда лежит в libexec Qt.
+    Без неё backend() ошибочно падает в X11 на живом Wayland-сеансе KDE, и док не узнаёт
+    ни окон, ни полного экрана.
+    """
+    for name in ("qdbus-qt6", "qdbus6", "qdbus"):
+        if shutil.which(name):
+            return name
+    for cand in ("/usr/lib64/qt6/bin/qdbus", "/usr/lib/qt6/bin/qdbus"):
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return ""
+
+
 def tray_items() -> list[dict]:
     """Apps that live in the system tray (StatusNotifierItem): Telegram and Discord usually have no window at all."""
     out: list[dict] = []
     try:
-        raw = subprocess.run(["qdbus-qt6", "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
+        bin = qdbus_bin()
+        if not bin:
+            return out
+        raw = subprocess.run([bin, "org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher",
                               "org.kde.StatusNotifierWatcher.RegisteredStatusNotifierItems"],
                              capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
@@ -109,7 +129,7 @@ def tray_items() -> list[dict]:
         try:
             def prop(name: str, service: str = service, path: str = path) -> str:
                 return subprocess.run(
-                    ["qdbus-qt6", service, path, "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierItem", name],
+                    [bin, service, path, "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierItem", name],
                     capture_output=True, text=True, timeout=5).stdout.strip()
             out.append({"service": service, "path": path, "id": prop("Id"), "title": prop("Title")})
         except (OSError, subprocess.SubprocessError):
@@ -120,7 +140,10 @@ def tray_items() -> list[dict]:
 def tray_activate(item: dict) -> bool:
     """The same as a left click on the tray icon: the app unhides its window."""
     try:
-        r = subprocess.run(["qdbus-qt6", item["service"], item["path"], "org.kde.StatusNotifierItem.Activate", "0", "0"],
+        bin = qdbus_bin()
+        if not bin:
+            return False
+        r = subprocess.run([bin, item["service"], item["path"], "org.kde.StatusNotifierItem.Activate", "0", "0"],
                            capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
         return False
@@ -319,6 +342,7 @@ for (const w of workspace.windowList()) {
   const g = w.frameGeometry;
   console.warn(tag + JSON.stringify({id: String(w.internalId), app: w.resourceClass, title: w.caption, pid: w.pid,
                                      active: workspace.activeWindow === w, minimized: w.minimized,
+                                     full: !!w.fullScreen && !w.minimized,
                                      x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.width), h: Math.round(g.height)}));
   if (action === "focus") break;
 }
@@ -335,34 +359,91 @@ WATCH_TAG = "JustDayDOCK "
 WATCH_NAME = "justday-windows"
 _WATCH_JS = """
 const tag = "JustDayDOCK ";
-function snap() {
+// Debounce + skip-unchanged: frameGeometryChanged fires many times per drag/animation.
+// Emitting a multi-KB journal line each time made the dock stutter and burned CPU in qs+daemon.
+var _last = "";
+var _timer = null;
+function build() {
   const out = [];
   for (const w of workspace.windowList()) {
     if (!w.normalWindow || w.skipTaskbar) continue;
+    const g = w.frameGeometry;
+    let screen = "", ox = 0, oy = 0, ow = 0, oh = 0;
+    try {
+      const o = w.output;
+      if (o) {
+        screen = String(o.name || "");
+        const og = o.geometry;
+        ox = Math.round(og.x); oy = Math.round(og.y);
+        ow = Math.round(og.width); oh = Math.round(og.height);
+      }
+    } catch (e) {}
     out.push({id: String(w.internalId), app: w.resourceClass, title: w.caption, pid: w.pid,
-              active: workspace.activeWindow === w, minimized: w.minimized,
-              full: !!w.fullScreen && !w.minimized});
+              active: workspace.activeWindow === w, minimized: !!w.minimized,
+              full: !w.minimized && !!w.fullScreen,
+              x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.width), h: Math.round(g.height),
+              screen: screen, ox: ox, oy: oy, ow: ow, oh: oh});
   }
-  console.warn(tag + JSON.stringify(out));
+  return JSON.stringify(out);
+}
+function flush() {
+  const payload = build();
+  if (payload === _last) return;
+  _last = payload;
+  console.warn(tag + payload);
+}
+function armTimer() {
+  if (_timer) return;
+  try {
+    _timer = new QTimer();
+    _timer.interval = 200;
+    _timer.singleShot = true;
+    _timer.timeout.connect(function () { _timer = null; flush(); });
+  } catch (e) {
+    // Old KWin without QTimer — emit immediately (still skip-unchanged).
+    _timer = null;
+    flush();
+    return;
+  }
+  _timer.start();
+}
+function snap() {
+  // Coalesce geometry spam: one journal line ~200ms after the last event.
+  if (_timer) {
+    try { _timer.stop(); _timer.start(); } catch (e) { _timer = null; armTimer(); }
+    return;
+  }
+  armTimer();
+}
+function snapNow() {
+  if (_timer) {
+    try { _timer.stop(); } catch (e) {}
+    _timer = null;
+  }
+  flush();
 }
 function hook(w) {
   if (!w) return;
-  if (w.minimizedChanged) w.minimizedChanged.connect(snap);
-  // Игра вошла в полный экран — док обязан уйти с дороги, и узнать об этом надо сразу, а не
-  // когда в следующий раз кто-нибудь откроет окно.
-  if (w.fullScreenChanged) w.fullScreenChanged.connect(snap);
+  try { if (w.minimizedChanged) w.minimizedChanged.connect(snap); } catch (e) {}
+  try { if (w.fullScreenChanged) w.fullScreenChanged.connect(snap); } catch (e) {}
+  try { if (w.maximizedChanged) w.maximizedChanged.connect(snap); } catch (e) {}
+  // Borderless resize / drag to edges — without this, dock only learns on focus change.
+  try { if (w.frameGeometryChanged) w.frameGeometryChanged.connect(snap); } catch (e) {}
 }
 workspace.windowAdded.connect(function (w) { hook(w); snap(); });
 workspace.windowRemoved.connect(snap);
 workspace.windowActivated.connect(snap);
 for (const w of workspace.windowList()) hook(w);
-snap();
+snapNow();
 """
 
 
 def _kwin(*args: str) -> str:
+    bin = qdbus_bin()
+    if not bin:
+        return ""
     try:
-        return subprocess.run(["qdbus-qt6", "org.kde.KWin", *args],
+        return subprocess.run([bin, "org.kde.KWin", *args],
                               capture_output=True, text=True, timeout=10).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -372,6 +453,10 @@ def watch_start() -> bool:
     """Поселить в KWin скрипт, который сам рассказывает об окнах. Идемпотентно."""
     if backend() != "kwin":
         return False
+    try:
+        ensure_genie_effect()
+    except Exception:
+        pass
     watch_stop()
     path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-kwin-windows.js"
     try:
@@ -381,7 +466,10 @@ def watch_start() -> bool:
     sid = _kwin("/Scripting", "org.kde.kwin.Scripting.loadScript", str(path), WATCH_NAME)
     if not sid:
         return False
+    # Script.run on some KWin builds is a no-op until Scripting.start() pumps pending scripts
+    # (openSUSE Tumbleweed / KWin 6: load+run alone never emits console.warn).
     _kwin(f"/Scripting/Script{sid}", "org.kde.kwin.Script.run")
+    _kwin("/Scripting", "org.kde.kwin.Scripting.start")
     return True
 
 
@@ -398,7 +486,7 @@ def backend() -> str:
     global _BACKEND
     if _BACKEND is None:
         kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "")
-        if kde and shutil.which("qdbus-qt6"):
+        if kde and qdbus_bin():
             _BACKEND = "kwin"
         elif os.environ.get("DISPLAY") and shutil.which("wmctrl"):
             _BACKEND = "x11"
@@ -486,8 +574,15 @@ def _x11_windows(action: str, query: str) -> list[dict]:
             subprocess.run(["wmctrl", "-i", "-a", wid], timeout=5, check=False)
         elif action == "minimize" and shutil.which("xdotool"):
             subprocess.run(["xdotool", "windowminimize", wid], timeout=5, check=False)
+        full = False
+        try:
+            st = subprocess.run(["xprop", "-id", wid, "_NET_WM_STATE"],
+                                capture_output=True, text=True, timeout=2).stdout
+            full = "_NET_WM_STATE_FULLSCREEN" in st
+        except (OSError, subprocess.SubprocessError):
+            pass
         out.append({"app": app, "title": title, "pid": int(pid) if pid.isdigit() else 0,
-                    "active": int(wid, 16) == active, "minimized": False,
+                    "active": int(wid, 16) == active, "minimized": False, "full": full,
                     "x": int(x), "y": int(y), "w": int(w), "h": int(h)})
         if action == "focus":
             break
@@ -512,9 +607,13 @@ def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
         f.write(js)
     name = tag.strip()
     since = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - 1))
-    q = lambda *a: subprocess.run(["qdbus-qt6", "org.kde.KWin", *a], capture_output=True, text=True, timeout=10).stdout.strip()  # noqa: E731
+    bin = qdbus_bin()
+    if not bin:
+        return []
+    q = lambda *a: subprocess.run([bin, "org.kde.KWin", *a], capture_output=True, text=True, timeout=10).stdout.strip()  # noqa: E731
     sid = q("/Scripting", "org.kde.kwin.Scripting.loadScript", f.name, name)
     q(f"/Scripting/Script{sid}", "org.kde.kwin.Script.run")
+    q("/Scripting", "org.kde.kwin.Scripting.start")
     out: list[dict] = []
     for _ in range(20):
         time.sleep(0.1)
@@ -557,8 +656,241 @@ def layout_switch() -> None:
 
 
 def _kwin_keyboard(method: str, literal: bool = False) -> str:
-    args = ["qdbus-qt6"] + (["--literal"] if literal else []) + ["org.kde.keyboard", "/Layouts", method]
+    bin = qdbus_bin()
+    if not bin:
+        return ""
+    args = [bin] + (["--literal"] if literal else []) + ["org.kde.keyboard", "/Layouts", method]
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
+
+
+_thumb_lock = None
+
+
+def _get_thumb_lock():
+    global _thumb_lock
+    if _thumb_lock is None:
+        import threading
+        _thumb_lock = threading.Lock()
+    return _thumb_lock
+
+
+def _capture_for_thumb(png: str) -> None:
+    """Screen grab for dock hover JPEG previews — only tools that do not coredump.
+
+    Why Spectacle was (and stays) out of this path:
+      On KWin/Wayland, `spectacle -b -n -f -o …` often writes a PNG then aborts in
+      tesseract teardown (KCrash / free()). Spawning it on every dock hover filled
+      the journal with coredumps. Interactive Spectacle (hotkey / menu) is unrelated
+      and may still crash on its own — that is not the dock thumb path.
+    KWin ScreenShot2 needs a portal / restricted D-Bus auth the daemon does not have
+    (`NoAuthorized`). grim needs wlr-screencopy, which KWin does not speak.
+    Without a safe grabber we raise no_safe_capture and the dock tip falls back to a
+    clean macOS-style name / window-title list (no empty thumbnail frames).
+    """
+    import shutil
+    from pathlib import Path
+
+    errors: list[str] = []
+    tools: list[tuple[str, list[str]]] = []
+    # Never call spectacle here — even if present on PATH.
+    if shutil.which("grim"):
+        tools.append(("grim", ["grim", png]))
+    # X11-style grabbers only off Wayland (maim/scrot/import are fine there).
+    if not os.environ.get("WAYLAND_DISPLAY"):
+        for exe, cmd in (
+            ("maim", ["maim", png]),
+            ("scrot", ["scrot", "-o", png]),
+            ("import", ["import", "-window", "root", png]),
+        ):
+            if shutil.which(exe):
+                tools.append((exe, cmd))
+    if not tools:
+        raise RuntimeError("no_safe_capture")
+    for exe, cmd in tools:
+        try:
+            r = subprocess.run(cmd, check=False, capture_output=True, timeout=8)
+            if Path(png).exists() and Path(png).stat().st_size > 0 and r.returncode == 0:
+                return
+            err = (r.stderr or b"").decode("utf-8", "replace").strip()[:120]
+            errors.append(f"{exe}: rc={r.returncode} {err}")
+        except (OSError, subprocess.SubprocessError) as e:
+            errors.append(f"{exe}: {e}")
+    raise RuntimeError("no_safe_capture: " + "; ".join(errors)[:160])
+
+
+def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
+    """Crop a small JPEG of one window for dock hover previews.
+
+    Uses a full-screen capture + geometry crop (KWin ScreenShot2 needs a portal
+    token we do not hold). Minimized / missing windows return ok=False.
+    Serialized: parallel hover requests must not stampede capture tools.
+    """
+    import shutil
+    import time
+    from pathlib import Path
+
+    wid = str(wid or "")
+    if not wid:
+        return {"ok": False, "error": "empty id"}
+    wins = windows("list")
+    hit = next((w for w in wins if str(w.get("id")) == wid), None)
+    if not hit:
+        return {"ok": False, "error": "window gone"}
+    if hit.get("minimized"):
+        return {"ok": False, "error": "minimized", "minimized": True}
+    ww, wh = int(hit.get("w") or 0), int(hit.get("h") or 0)
+    ox, oy = int(hit.get("x") or 0), int(hit.get("y") or 0)
+    if ww < 16 or wh < 16:
+        return {"ok": False, "error": "tiny geometry"}
+
+    cache = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-thumbs"
+    cache.mkdir(parents=True, exist_ok=True)
+    safe = "".join(c if c.isalnum() else "_" for c in wid)[:80]
+    out = cache / f"{safe}.jpg"
+    # Reuse a fresh-enough cache (4s) so hovering along the tip does not re-shoot.
+    try:
+        if out.exists() and time.time() - out.stat().st_mtime < 4.0 and out.stat().st_size > 400:
+            return {"ok": True, "path": str(out), "id": wid, "cached": True}
+    except OSError:
+        pass
+
+    png = str(cache / f"{safe}-full.png")
+    with _get_thumb_lock():
+        # Re-check cache inside the lock (another request may have just finished).
+        try:
+            if out.exists() and time.time() - out.stat().st_mtime < 4.0 and out.stat().st_size > 400:
+                return {"ok": True, "path": str(out), "id": wid, "cached": True}
+        except OSError:
+            pass
+        try:
+            _capture_for_thumb(png)
+        except Exception as e:
+            err = str(e)[:200]
+            permanent = "no_safe_capture" in err
+            return {"ok": False, "error": err, "permanent": permanent}
+        if not shutil.which("magick"):
+            return {"ok": False, "error": "magick missing"}
+        try:
+            # Clamp crop to image bounds; multi-monitor: geometry is already absolute.
+            subprocess.run(
+                ["magick", png, "-crop", f"{ww}x{wh}+{max(0, ox)}+{max(0, oy)}", "+repage",
+                 "-resize", f"{int(max_edge)}x{int(max_edge)}>", "-quality", "80", str(out)],
+                check=True, timeout=12, capture_output=True)
+        except (OSError, subprocess.SubprocessError) as e:
+            return {"ok": False, "error": str(e)[:200]}
+        try:
+            Path(png).unlink(missing_ok=True)
+        except OSError:
+            pass
+        if not out.exists() or out.stat().st_size < 200:
+            return {"ok": False, "error": "empty thumb"}
+        return {"ok": True, "path": str(out), "id": wid, "cached": False}
+
+
+_last_icons_json = ""
+_last_icons_reconfigure = 0.0
+
+
+def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | None = None) -> dict:
+    """Write dock icon screen rects for the JustDay genie KWin effect.
+
+    replace=True (default): the dock's full map replaces the file.
+    replace=False: merge a partial patch into the existing map.
+
+    Writing kwinrc + reconfigureEffect on every hover/magnify tick made Plasma hitch
+    and briefly blanked dock icons. We always update the JSON file; kwinrc is updated
+    only when the payload changes, and reconfigureEffect is debounced (~1.2s) unless
+    reconfigure=True (e.g. right before a genie minimize).
+    """
+    import json
+    import time
+    from pathlib import Path
+
+    global _last_icons_json, _last_icons_reconfigure
+
+    path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-dock-icons.json"
+    merged: dict = {}
+    if not replace:
+        try:
+            if path.exists():
+                prev = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(prev, dict):
+                    merged.update(prev)
+        except (OSError, ValueError):
+            pass
+    if isinstance(icons, dict):
+        merged.update(icons)
+    try:
+        path.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
+        icons = merged
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+    try:
+        raw = json.dumps(icons or {}, ensure_ascii=False, separators=(",", ":"))
+        if len(raw) >= 12000 or not shutil.which("kwriteconfig6"):
+            return {"ok": True, "path": str(path), "n": len(icons or {})}
+        if raw == _last_icons_json and reconfigure is not True:
+            return {"ok": True, "path": str(path), "n": len(icons or {}), "skipped": True}
+        _last_icons_json = raw
+        subprocess.run(
+            ["kwriteconfig6", "--file", "kwinrc", "--group", "Effect-justday_genie",
+             "--key", "IconsJson", raw],
+            timeout=5, check=False, capture_output=True)
+        now = time.monotonic()
+        force = reconfigure is True
+        if force or (reconfigure is not False and now - _last_icons_reconfigure >= 1.2):
+            if qdbus_bin():
+                _kwin("/Effects", "org.kde.kwin.Effects.reconfigureEffect", "justday_genie")
+            _last_icons_reconfigure = now
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+    return {"ok": True, "path": str(path), "n": len(icons or {})}
+
+
+def ensure_genie_effect() -> dict:
+    """Install/enable the JustDay genie minimize effect (squash-compatible exclusive group).
+
+    Idempotent: skip copy+reload when installed sources already match. Reloading the
+    effect on every window-watch start briefly blanked Plasma/dock chrome.
+    """
+    import filecmp
+    import shutil
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "island" / "kwin-effects" / "justday_genie"
+    dst = Path.home() / ".local/share/kwin/effects/justday_genie"
+    if not src.is_dir():
+        return {"ok": False, "error": "effect sources missing"}
+    need_install = True
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        marker = "contents/code/main.js"
+        if dst.is_dir() and (dst / marker).is_file() and (src / marker).is_file():
+            if filecmp.cmp(src / marker, dst / marker, shallow=False):
+                need_install = False
+        if need_install:
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+    # Prefer our genie over stock squash (same exclusive minimize group).
+    try:
+        if shutil.which("kwriteconfig6"):
+            subprocess.run(["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                            "--key", "justday_genieEnabled", "true"], timeout=5, check=False)
+            subprocess.run(["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                            "--key", "squashEnabled", "false"], timeout=5, check=False)
+        if backend() == "kwin" and qdbus_bin():
+            # Only unload/load when we actually replaced files — otherwise Plasma flickers.
+            if need_install:
+                _kwin("/Effects", "org.kde.kwin.Effects.unloadEffect", "squash")
+                loaded = _kwin("/Effects", "org.kde.kwin.Effects.loadEffect", "justday_genie")
+                return {"ok": True, "loaded": loaded.lower() in ("true", "1", ""), "installed": True}
+            return {"ok": True, "loaded": True, "installed": False}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"ok": True, "loaded": False, "installed": need_install}

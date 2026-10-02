@@ -193,6 +193,27 @@ def type_out(text: str) -> tuple[bool, str]:
         return False, how
 
 
+def paste_chord() -> tuple[bool, str]:
+    """Вставить из буфера: Ctrl+V в то окно, где курсор (как ⌘V на macOS).
+
+    Нужно для длинного и многострочного текста: набирать его посимвольно через
+    type_out нельзя — редактор получит Enter на каждый перевод строки.
+    """
+    from . import face
+
+    if face.session() == "wayland" and shutil.which("wtype"):
+        cmd, how = ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"], "wtype-ctrl-v"
+    elif face.session() == "x11" and shutil.which("xdotool"):
+        cmd, how = ["xdotool", "key", "--clearmodifiers", "ctrl+v"], "xdotool-ctrl-v"
+    else:
+        return False, ""
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=5)
+        return p.returncode == 0, how
+    except (OSError, subprocess.SubprocessError):
+        return False, how
+
+
 def use(ch: str, *, paste: bool = True) -> dict:
     """Выбрали символ: запомнить, положить в буфер и напечатать, если есть чем.
 

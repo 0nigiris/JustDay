@@ -11,8 +11,12 @@ TIMEOUT = 10
 
 
 def _qdbus(*args: str) -> str:
+    from .desktop import qdbus_bin
+    bin = qdbus_bin()
+    if not bin:
+        return ""
     try:
-        return subprocess.run(["qdbus-qt6", "org.kde.kdeconnect", *args],
+        return subprocess.run([bin, "org.kde.kdeconnect", *args],
                               capture_output=True, text=True, timeout=TIMEOUT).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
