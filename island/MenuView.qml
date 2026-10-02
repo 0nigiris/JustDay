@@ -15,6 +15,7 @@
 // одно и то же. Второй поиск на QML разошёлся бы с первым в тот же день.
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 
 Item {
     id: mv
@@ -531,6 +532,14 @@ Item {
                 }
 
                 ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
+                // Настройки самой плазмы: оболочка заменила панель и меню, но плазма под ней
+                // осталась, и за обоями, экранами и клавишами человек идёт туда. Искать их через
+                // поиск программ, когда меню уже открыто, — лишний круг.
+                ToolDot {
+                    icon: "sliders-horizontal"
+                    note: "Настройки системы (KDE)"
+                    onPicked: { JD.closeMenu(); Quickshell.execDetached(["systemsettings"]) }
+                }
 
                 // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
                 // краснеет и подписывается «точно?». Блокировка и сон не теряют ничего и спрашивать

@@ -82,13 +82,37 @@ Item {
                     p.destroy()
                 }
             }
+            // Молчаливый отказ хуже ошибки: окно оставалось на «Загружаю настройки…» навсегда, и
+            // человеку оставалось гадать, сломалось оно или просто думает. Теперь причина видна.
+            stderr: StdioCollector { id: perr }
+            onExited: (code) => {
+                if (code !== 0 && p.callback) p.callback({ __failed: true, code: code,
+                                                           why: String(perr.text || "").slice(0, 200) })
+            }
         }
     }
     function run(args, callback, env) {
         procComponent.createObject(win, { command: ["justday"].concat(args), callback: callback || null, environment: env || {} })
     }
+    property string loadError: ""
     function reload() {
-        run(["settings-data"], v => { if (typeof v === "object") { d = v; loading = false } })
+        loadError = ""
+        loading = true
+        waitTooLong.restart()
+        run(["settings-data"], v => {
+            waitTooLong.stop()
+            if (v && typeof v === "object" && !v.__failed && v.config) { d = v; loading = false; return }
+            // Ответ пришёл, но не тот: команда не нашлась, упала или вернула не настройки.
+            loadError = v && v.why ? String(v.why)
+                      : v && v.__failed ? JD.tr("команда вернула ошибку ") + v.code
+                      : JD.tr("ответ не похож на настройки")
+        })
+    }
+    // Если за шесть секунд не ответили — это уже не «думает», а «не отвечает».
+    Timer {
+        id: waitTooLong
+        interval: 6000
+        onTriggered: if (win.loading && !win.loadError) win.loadError = JD.tr("не отвечает")
     }
     Component.onCompleted: reload()
     Timer { id: toastTimer; interval: 2600; onTriggered: win.toast = "" }
@@ -231,9 +255,36 @@ Item {
 
             Text {
                 anchors.centerIn: parent
-                visible: win.loading
+                visible: win.loading && !win.loadError
                 text: JD.tr("Загружаю настройки…")
                 color: win.t2; font.family: win.font; font.pixelSize: 14
+            }
+
+            // Не загрузилось — сказать, что именно, и дать нажать ещё раз. Пустое окно с
+            // «загружаю» навсегда — это не ожидание, это тупик.
+            Column {
+                anchors.centerIn: parent
+                visible: !!win.loadError
+                spacing: 10
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: JD.tr("Настройки не открылись")
+                    color: win.t1; font.family: win.font; font.pixelSize: 15; font.weight: Font.DemiBold
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(460, win.width - 120)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    text: "justday settings-data: " + win.loadError
+                    color: win.t2; font.family: win.font; font.pixelSize: 12
+                }
+                Btn {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: JD.tr("Попробовать снова")
+                    primary: true
+                    onClicked: win.reload()
+                }
             }
 
             Flickable {
