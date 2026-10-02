@@ -371,7 +371,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("test", help="test one component")
     sp.add_argument("component", choices=sorted(TESTS))
     sp = sub.add_parser("memory", help="show where JustDay's memory lives / print it")
-    sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new"],
+    sp.add_argument("action", nargs="?",
+                    choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new", "size"],
                     default="show")
     sp.add_argument("target", nargs="?", help="memory file for `forget`")
 
@@ -673,6 +674,17 @@ def main(argv: list[str] | None = None) -> None:
         from .brain import BRAIN_DIR
 
         mem = memory_dir()
+        if a.action == "size":
+            # Сколько памяти накопилось и что в ней давно не пригождалось. Нужно и человеку, и
+            # самому ассистенту: он обязан замечать, что раздулся, а не ждать, пока заметят его.
+            from . import memory as memory_mod
+
+            st = memory_mod.state()
+            print(memory_mod.summary(st))
+            print(f"  {st['path']}")
+            for item in st["stale"]:
+                print(f"  {item['name']:44} {item['days']:>6.0f} дней назад")
+            return
         if a.action in ("list", "forget", "clear-journal", "read", "write", "new"):
             from . import manage
 
