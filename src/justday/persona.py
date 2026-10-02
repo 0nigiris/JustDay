@@ -91,6 +91,10 @@ ABILITIES: list[tuple[str, str, str]] = [
      "Memory: `justday memory` — files on disk; it survives a restart."),
     ("", "Напоминания и таймеры: `justday timer`, `justday alarm`, `justday reminders`.",
      "Reminders and timers: `justday timer`, `justday alarm`, `justday reminders`."),
+    ("", "Дотянуться до него, когда его нет за компьютером: `justday reach \"текст\"` — письмо; "
+         "`--urgent` — ещё и звонок на телефон. Звонок только ради того, что правда не ждёт.",
+     "Reach him when he is away from the computer: `justday reach \"text\"` — email; "
+     "`--urgent` also rings the phone. Ring only for what truly cannot wait."),
 ]
 
 

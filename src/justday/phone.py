@@ -76,3 +76,63 @@ def send(what: str, which: str = "") -> dict:
 
 if __name__ == "__main__":  # a quick look without the CLI
     print(json.dumps(devices(), ensure_ascii=False, indent=1))
+
+
+def ring(which: str = "") -> dict:
+    """Позвонить на телефон: он зазвонит, даже если стоит на беззвучном.
+
+    Это и есть «срочно». Уведомление человек увидит, когда возьмёт телефон в руки, — то есть
+    когда-нибудь; звонок слышно из другой комнаты. Поэтому звонок стоит дороже уведомления, и
+    тратить его можно только на то, ради чего не жалко оторвать человека от дела.
+    """
+    dev = _target(which)
+    r = subprocess.run(["kdeconnect-cli", "-d", dev["id"], "--ring"],
+                       capture_output=True, text=True, timeout=TIMEOUT)
+    if r.returncode:
+        raise RuntimeError(r.stderr.strip() or "KDE Connect refused to ring")
+    return {"ok": True, "to": dev["name"], "rang": True}
+
+
+def reach(text: str, urgent: bool = False, subject: str = "", which: str = "") -> dict:
+    """Дотянуться до человека, когда его нет за компьютером.
+
+    Обычное дело — письмо: оно подождёт, пока он сам до него дойдёт, и ничего не прервёт. Срочное —
+    звонок: телефон звонит, и он узнаёт об этом сразу.
+
+    Почему не всегда звонок. Ассистент, который звонит по каждому поводу, перестаёт звонить вовсе —
+    его отключают. Разделение существует ровно для того, чтобы звонок остался слышным.
+
+    Что бы ни вышло со звонком, письмо всё равно уходит: телефон может быть выключен, не в сети,
+    или KDE Connect не запущен, и тогда единственный след разговора — письмо.
+    """
+    from . import config, mail
+
+    out: dict = {"ok": False, "urgent": bool(urgent), "sent": []}
+    text = str(text or "").strip()
+    if not text:
+        return {"ok": False, "error": "нечего передавать"}
+
+    if urgent:
+        try:
+            ring(which)
+            out["sent"].append("звонок")
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            out["ring_error"] = str(e)
+        try:
+            notify(text[:200], which)
+            out["sent"].append("уведомление")
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            out["notify_error"] = str(e)
+
+    to = (config.load().get("mail") or {}).get("address") or ""
+    if to:
+        try:
+            mail.send(to, subject or ("Срочно" if urgent else "JustDay"), text)
+            out["sent"].append("письмо")
+        except Exception as e:          # почта ломается десятью разными способами, и каждый — повод сказать
+            out["mail_error"] = str(e)[:200]
+    else:
+        out["mail_error"] = "почта не настроена"
+
+    out["ok"] = bool(out["sent"])
+    return out

@@ -423,10 +423,17 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
     sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
-    sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL")
-    sp.add_argument("action", choices=["list", "notify", "send"])
+    sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL | ring")
+    sp.add_argument("action", choices=["list", "notify", "send", "ring"])
     sp.add_argument("args", nargs="*")
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
+    sp = sub.add_parser("reach", help="дотянуться до человека, когда его нет за компьютером: "
+                                     "письмо — обычное, --urgent — ещё и звонок на телефон")
+    sp.add_argument("text", nargs="+")
+    sp.add_argument("--urgent", action="store_true", help="телефон зазвонит: только для того, "
+                                                         "ради чего не жалко оторвать человека от дела")
+    sp.add_argument("--subject", default="", help="тема письма")
+    sp.add_argument("--to", default="", help="имя устройства, если их несколько")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
     sp = sub.add_parser("scene", help="сценарии: list | run <имя> | add <имя> | forget <имя>")
@@ -870,12 +877,18 @@ def main(argv: list[str] | None = None) -> None:
             _print(session.save())
         else:
             _print(session.close(a.keep) if a.action == "close" else session.restore())
+    elif a.cmd == "reach":
+        from . import phone
+
+        _print(phone.reach(" ".join(a.text), urgent=a.urgent, subject=a.subject, which=a.to))
     elif a.cmd == "phone":
         from . import phone
 
         try:
             if a.action == "list":
                 _print(phone.devices())
+            elif a.action == "ring":
+                _print(phone.ring(a.to))
             else:
                 what = " ".join(a.args)
                 _print(phone.notify(what, a.to) if a.action == "notify" else phone.send(what, a.to))

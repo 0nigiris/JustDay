@@ -633,3 +633,42 @@ def test_he_is_told_only_about_what_is_switched_on() -> None:
     # Язык человека: английскому незачем читать список по-русски.
     said = persona.abilities({**cfg, "user": {**cfg["user"], "language": "en"}})
     assert "Clipboard" in said or "Emoji" in said
+
+
+# ──────────────────────────── дотянуться до человека ────────────────────────────
+def test_the_letter_goes_out_even_when_the_phone_is_unreachable(monkeypatch) -> None:
+    """Телефон может быть выключен или не в сети — и тогда письмо единственный след разговора.
+
+    Поэтому письмо уходит всегда, а звонок — это добавка к нему, а не замена.
+    """
+    from justday import phone
+
+    sent: list[tuple] = []
+    monkeypatch.setattr(phone, "ring", lambda which="": (_ for _ in ()).throw(RuntimeError("не в сети")))
+    monkeypatch.setattr(phone, "notify", lambda text, which="": (_ for _ in ()).throw(RuntimeError("не в сети")))
+    import justday.mail as mail_mod
+    monkeypatch.setattr(mail_mod, "send", lambda to, subject, body, **kw: sent.append((to, subject, body)))
+
+    import justday.config as config_mod
+    monkeypatch.setattr(config_mod, "load", lambda: {"mail": {"address": "oni@example.com"}})
+
+    got = phone.reach("пора вынести мусор", urgent=True)
+    assert got["ok"] is True
+    assert sent and sent[0][0] == "oni@example.com"
+    assert "ring_error" in got and "письмо" in got["sent"]
+
+
+def test_ordinary_matters_do_not_ring(monkeypatch) -> None:
+    """Ассистент, который звонит по каждому поводу, перестаёт звонить вовсе: его отключают."""
+    from justday import phone
+
+    rang: list[str] = []
+    monkeypatch.setattr(phone, "ring", lambda which="": rang.append("да"))
+    import justday.config as config_mod
+    import justday.mail as mail_mod
+    monkeypatch.setattr(mail_mod, "send", lambda *a, **kw: None)
+    monkeypatch.setattr(config_mod, "load", lambda: {"mail": {"address": "oni@example.com"}})
+
+    got = phone.reach("пришло письмо из банка")
+    assert not rang, "обычное дело не должно звонить"
+    assert got["sent"] == ["письмо"]
