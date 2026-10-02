@@ -22,8 +22,18 @@
 
 ```sh
 npm install -g opencode-ai
-mkdir -p ~/.config/opencode/plugin
-ln -s "$PWD/shell/opencode/justday-ladder.js" ~/.config/opencode/plugin/justday-ladder.js
+justday shell
+```
+
+`justday shell` кладёт плагин на место, заводит ему настройку, если её ещё нет, и открывает окно.
+Ключи он берёт из связки ключей рабочего стола и отдаёт окну переменными окружения: в настройках
+OpenCode им не место — это обычный файл, который читается кем угодно и уезжает вместе с резервной
+копией. Всё, что после `justday shell`, уходит самому OpenCode: `justday shell run "..."`.
+
+Верхние ступени — подписка Claude: вход одной командой, по OAuth, без ключей в файлах.
+
+```sh
+opencode providers login      # выбрать anthropic
 ```
 
 Настройка лежит рядом, в `~/.config/opencode/justday-ladder.json`:

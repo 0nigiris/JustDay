@@ -384,6 +384,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("-f", "--follow", action="store_true")
     sp.add_argument("-n", type=int, default=40)
     sub.add_parser("panel", help="the fallback panel for desktops without the island (X11, Plasma 5, GNOME)")
+    sp = sub.add_parser("shell", help="open the OpenCode window with the JustDay provider ladder")
+    sp.add_argument("rest", nargs=argparse.REMAINDER, help="arguments passed on to opencode")
     sub.add_parser("ui", help="show the assistant on screen: the island on Wayland, the fallback panel elsewhere "
                              "(decided at every login; ui.face pins it)")
     sp = sub.add_parser("doctor", help="check every component")
@@ -755,6 +757,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "panel":
         from . import panel
         sys.exit(panel.main())
+    elif a.cmd == "shell":
+        from . import shell as shell_mod
+        sys.exit(shell_mod.run(a.rest))
     elif a.cmd == "ui":
         from . import face
         sys.exit(face.run())

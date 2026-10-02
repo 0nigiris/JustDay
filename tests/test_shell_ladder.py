@@ -78,3 +78,39 @@ def test_a_limit_steps_down_and_says_so(ladder) -> None:
 def test_a_broken_connection_does_not_step_down(ladder) -> None:
     """Внизу тот же самый оборванный интернет — спускаться туда незачем."""
     assert ladder["after_network"] == "openrouter/deepseek/deepseek-chat"
+
+
+# ──────────────────────────── ключи и место плагина ────────────────────────────
+def test_keys_reach_the_window_through_the_environment_only(monkeypatch) -> None:
+    """Ключам не место в настройках оболочки: это обычный файл, он читается и копируется.
+
+    Связка ключей отдаёт их нам, мы отдаём их дочернему процессу переменными окружения — и ни одна
+    строка ключа при этом не ложится на диск.
+    """
+    from justday import shell
+
+    monkeypatch.setattr(shell.providers, "secret_get",
+                        lambda name: "ключ-" + name if name in ("openrouter", "groq") else "")
+    got = shell.env()
+    assert got["OPENROUTER_API_KEY"] == "ключ-openrouter"
+    assert got["GROQ_API_KEY"] == "ключ-groq"
+    assert "DEEPSEEK_API_KEY" not in got      # ключа нет — и переменной быть не должно
+
+
+def test_the_plugin_is_put_in_place_and_the_ladder_gets_a_default(tmp_path, monkeypatch) -> None:
+    """Поставить оболочку — значит поставить и руль: без плагина это чужая программа, а не наша."""
+    from justday import shell
+
+    conf = tmp_path / "opencode"
+    monkeypatch.setattr(shell, "CONF_DIR", conf)
+    monkeypatch.setattr(shell, "PLUGIN", conf / "plugin" / "justday-ladder.js")
+    monkeypatch.setattr(shell, "LADDER", conf / "justday-ladder.json")
+    shell.ensure()
+    assert (conf / "plugin" / "justday-ladder.js").resolve() == shell.source()
+    first = json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))
+    assert first["ladder"][0].startswith("anthropic/")
+
+    # Второй запуск не должен затирать то, что человек поправил под себя.
+    (conf / "justday-ladder.json").write_text(json.dumps({"ladder": ["ollama/своя"]}), encoding="utf-8")
+    shell.ensure()
+    assert json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))["ladder"] == ["ollama/своя"]
