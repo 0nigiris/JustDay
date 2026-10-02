@@ -106,3 +106,56 @@ def test_a_local_rung_needs_no_login(line, yes, monkeypatch) -> None:
     выбросить единственную ступень, которая работает без интернета вовсе."""
     monkeypatch.setattr(terminal.shutil, "which", lambda name: "/usr/bin/" + name)
     assert terminal.reachable(terminal.parse_rung(line)) is yes
+
+
+def test_the_window_opens_and_its_commands_do_what_they_say() -> None:
+    """Окно должно открываться и слушаться с первого раза: в него человек будет писать задачи.
+
+    Беда, которую этот тест ловит, — опечатка в разметке или в имени свойства: окно собирается,
+    падает на первом же `/help`, и человек видит красный след вместо оболочки.
+    """
+    textual = pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    assert textual
+    from justday import terminal_ui
+
+    async def go() -> tuple[int, str, str]:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            for cmd in ("/ladder", "/help", "/model sonnet", "/effort high", "/up", "/new", "/мусор"):
+                app.command(cmd)
+            await pilot.pause()
+            return len(app.query_one("#log").lines), app.work.now.model, app.cfg["terminal"]["effort"]
+
+    lines, model, effort = asyncio.run(go())
+    assert lines > 5, "окно открылось пустым"
+    assert model == "sonnet", "/model не сменил модель на этой ступени"
+    assert effort == "high", "/effort не дошёл до движка"
+
+
+def test_a_task_typed_into_the_window_reaches_the_ladder() -> None:
+    """Задача из строки ввода должна дойти до движка и вернуться в окно ответом.
+
+    Это самый частый путь во всей оболочке, и ломается он молча: ответ уходит в никуда, а человек
+    смотрит на «думает» и ждёт.
+    """
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import terminal_ui
+
+    async def go() -> str:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.work.rungs = app.work.all = rungs("claude:opus")
+            app.work.engines = {"claude": engine([terminal.Said(text="сделал")])}
+            app.query_one("#ask").value = "почини док"
+            await pilot.press("enter")
+            for _ in range(40):                 # ход идёт своей задачей: ждём, пока он закончится
+                await pilot.pause()
+                if not app.busy:
+                    break
+            return "\n".join(str(line) for line in app.query_one("#log").lines)
+
+    said = asyncio.run(go())
+    assert "почини док" in said, "задача не попала в журнал окна"
+    assert "сделал" in said, "ответ движка не дошёл до окна"
