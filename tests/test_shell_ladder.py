@@ -216,3 +216,28 @@ console.log(JSON.stringify({ model: o.message.model.providerID + '/' + o.message
     assert got["model"] == "ollama/qwen3.5:9b", "работа ушла на ступень, куда нечем войти"
     assert any("anthropic/claude-opus-5-5" in m for m in got["said"]), \
         "ступени пропущены молча — человек не поймёт, почему отвечает не тот"
+
+
+def test_sitting_down_to_work_should_not_start_with_a_refusal(monkeypatch, capsys) -> None:
+    """Выбирать оболочку руками значило каждый раз сначала наткнуться на «лимит кончился».
+
+    Подписка Claude работает только в Claude Code, а когда она кончилась — работать всё равно
+    надо, уже в оболочке. `justday work` спрашивает Claude одним крошечным вопросом и садится
+    туда, где сегодня можно: человек при этом ничего не выбирает и ни на что не натыкается.
+    """
+    from justday import shell
+
+    opened = []
+    monkeypatch.setattr(shell.os, "execve", lambda cli, argv, env: opened.append(cli))
+    monkeypatch.setattr(shell.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(shell, "run", lambda args=None: opened.append("opencode") or 0)
+
+    monkeypatch.setattr(shell, "claude_answers", lambda timeout=45.0: True)
+    shell.work([])
+    assert opened == ["/usr/bin/claude"], "Claude отвечает, а работа ушла не к нему"
+
+    opened.clear()
+    monkeypatch.setattr(shell, "claude_answers", lambda timeout=45.0: False)
+    shell.work([])
+    assert opened == ["opencode"], "лимит кончился, а работа всё равно пошла в Claude"
+    assert "ПЕРЕДАЧА.md" in capsys.readouterr().out, "пришедшей на смену не сказали, что читать"

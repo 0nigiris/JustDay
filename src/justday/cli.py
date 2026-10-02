@@ -386,6 +386,12 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("panel", help="the fallback panel for desktops without the island (X11, Plasma 5, GNOME)")
     sp = sub.add_parser("shell", help="open the OpenCode window with the JustDay provider ladder")
     sp.add_argument("rest", nargs=argparse.REMAINDER, help="arguments passed on to opencode")
+    # Одна команда на «сесть за работу»: пока подписка Claude отвечает — Claude Code (только в нём
+    # она и разрешена), кончился лимит — оболочка на живой ступени лестницы.
+    sp = sub.add_parser("work", help="сесть за работу: Claude Code, пока он отвечает, иначе оболочка")
+    sp.add_argument("--shell", action="store_true", help="сразу оболочка, не спрашивая Claude")
+    sp.add_argument("--claude", action="store_true", help="сразу Claude Code")
+    sp.add_argument("rest", nargs=argparse.REMAINDER, help="остальное уходит выбранной оболочке")
     sub.add_parser("ui", help="show the assistant on screen: the island on Wayland, the fallback panel elsewhere "
                              "(decided at every login; ui.face pins it)")
     sp = sub.add_parser("doctor", help="check every component")
@@ -778,6 +784,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "shell":
         from . import shell as shell_mod
         sys.exit(shell_mod.run(a.rest))
+    elif a.cmd == "work":
+        from . import shell as shell_mod
+        sys.exit(shell_mod.work(a.rest, force="shell" if a.shell else "claude" if a.claude else ""))
     elif a.cmd == "ui":
         from . import face
         sys.exit(face.run())

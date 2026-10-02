@@ -213,6 +213,38 @@ def report(out) -> None:
                   "  и claude.ai. Для anthropic здесь нужен ключ API: justday secret set anthropic.")
 
 
+def claude_answers(timeout: float = 45.0) -> bool:
+    """Отвечает ли Claude Code прямо сейчас — один крошечный вопрос его же программой.
+
+    Спрашиваем официальным `claude`: подписка разрешена только в нём, и ответ на этот вопрос
+    решает, за какую оболочку человеку садиться.
+    """
+    from . import fallback
+
+    cfg = config.load()
+    return fallback.probe(cfg, str(cfg["brain"].get("home_provider") or "claude"), timeout=timeout)
+
+
+def work(args: list[str] | None = None, *, force: str = "") -> int:
+    """Сесть за работу: Claude Code, пока он отвечает, и оболочка, когда у него кончился лимит.
+
+    Зачем это одной командой. Одной оболочкой на всё обойтись нельзя: подписка Claude работает
+    только в Claude Code, а когда она кончилась, работать всё равно надо. Выбирать руками значит
+    каждый раз сначала наткнуться на отказ. Поэтому выбирает команда, а человек просто садится.
+    """
+    if force != "shell" and (force == "claude" or claude_answers()):
+        cli = shutil.which("claude")
+        if cli:
+            print("Claude отвечает — работаем в Claude Code.")
+            os.execve(cli, [cli, *(args or [])], dict(os.environ))
+            return 0
+        print("Claude Code не установлен — открываю оболочку.")
+    else:
+        print("У Claude кончился лимит (или он не отвечает) — открываю оболочку.\n"
+              "Прочитай ПЕРЕДАЧА.md: там что делалось до тебя и что дальше.")
+    return run(args)
+
+
 def run(args: list[str] | None = None) -> int:
     ensure()
     cli = shutil.which("opencode") or str(Path.home() / ".local" / "bin" / "opencode")
