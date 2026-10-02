@@ -424,9 +424,11 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
     sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
     sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL | ring")
-    sp.add_argument("action", choices=["list", "notify", "send", "ring"])
+    sp.add_argument("action", choices=["list", "notify", "send", "ring", "commands"])
     sp.add_argument("args", nargs="*")
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
+    sp.add_argument("--install", action="store_true",
+                    help="для commands: записать команды в KDE Connect, чтобы телефон мог их запускать")
     sp = sub.add_parser("portable", help="собрать флешку: воткнул в чужой компьютер, поработал, "
                                         "вынул — следов не осталось")
     sp.add_argument("action", choices=["init"])
@@ -924,6 +926,8 @@ def main(argv: list[str] | None = None) -> None:
                 _print(phone.devices())
             elif a.action == "ring":
                 _print(phone.ring(a.to))
+            elif a.action == "commands":
+                _print(phone.commands(a.install))
             else:
                 what = " ".join(a.args)
                 _print(phone.notify(what, a.to) if a.action == "notify" else phone.send(what, a.to))

@@ -757,3 +757,34 @@ def test_keys_on_the_stick_never_touch_the_host_keyring(tmp_path, monkeypatch) -
 
     assert providers.secret_get("groq") == "gsk_со_флешки"
     assert "secret-tool" not in called, "полезли в связку ключей, хотя ключ лежал на флешке"
+
+
+# ──────────────────────────── кнопка на телефоне вместо Bixby ────────────────────────────
+def test_phone_commands_do_not_wipe_what_the_person_already_had(tmp_path, monkeypatch) -> None:
+    """У человека могут быть свои команды, и стереть их ради своих — хамство.
+
+    Дописываем своё, чужое оставляем как было.
+    """
+    import configparser
+    import json as json_mod
+
+    from justday import phone
+
+    dev = tmp_path / ("a" * 32)
+    dev.mkdir()
+    conf = dev / "kdeconnect_runcommand"
+    mine = {"его-команда": {"name": "Свет на кухне", "command": "/usr/bin/light kitchen"}}
+    conf.write_text("[General]\ncommands=" + json_mod.dumps(mine, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(phone, "_runcommand_files", lambda: [conf])
+
+    got = phone.commands(install=True)
+    assert got["ok"] and got["written"] == 1
+
+    ini = configparser.ConfigParser()
+    ini.optionxform = str
+    ini.read(conf, encoding="utf-8")
+    now = json_mod.loads(ini.get("General", "commands"))
+    assert "его-команда" in now, "чужая команда пропала"
+    assert now["его-команда"]["name"] == "Свет на кухне"
+    assert "justday-listen" in now
+    assert now["justday-listen"]["command"].endswith("justday toggle")

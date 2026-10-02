@@ -136,3 +136,69 @@ def reach(text: str, urgent: bool = False, subject: str = "", which: str = "") -
 
     out["ok"] = bool(out["sent"])
     return out
+
+
+# ──────────────────────────── кнопка на телефоне ────────────────────────────
+#
+# Боковая кнопка на самсунге зовёт Bixby — ассистента, который на этом компьютере ничего не умеет.
+# Заменить его целиком мы не можем: это чужая прошивка. Но можем сделать так, чтобы на телефоне
+# появились наши команды, а человек повесил кнопку на них — через KDE Connect, который у него уже
+# связан с компьютером.
+#
+# Команды живут в конфиге KDE Connect, по одному файлу на устройство. Формат его — ini с одним
+# ключом, внутри которого JSON; мы дописываем своё и не трогаем чужое: у человека могут быть свои
+# команды, и стереть их ради своих было бы хамством.
+COMMANDS = [
+    ("justday-listen", "JustDay: слушай", "justday toggle"),
+    ("justday-stop", "JustDay: стоп", "justday stop"),
+    ("justday-server-on", "JustDay: режим сервера", "justday server on"),
+    ("justday-server-off", "JustDay: вернуть экраны", "justday server off"),
+]
+
+
+def _runcommand_files() -> list:
+    from pathlib import Path
+
+    root = Path.home() / ".config" / "kdeconnect"
+    # Папка устройства называется его идентификатором — тридцать два знака; рядом с ней лежат
+    # сертификаты и общий конфиг, которые устройствами не являются.
+    return [p / "kdeconnect_runcommand" for p in root.glob("*") if p.is_dir() and len(p.name) == 32]
+
+
+def commands(install: bool = False) -> dict:
+    """Показать или добавить команды, которые телефон сможет запускать на компьютере."""
+    import configparser
+    from pathlib import Path
+
+    where = _runcommand_files()
+    if not where:
+        return {"ok": False, "error": "KDE Connect ещё не связан ни с одним телефоном"}
+    out: dict = {"ok": True, "devices": len(where), "commands": [c[1] for c in COMMANDS], "written": 0}
+    if not install:
+        return out
+
+    home_bin = str(Path.home() / ".local" / "bin" / "justday")
+    for path in where:
+        ini = configparser.ConfigParser()
+        ini.optionxform = str
+        try:
+            ini.read(path, encoding="utf-8")
+        except (OSError, configparser.Error):
+            continue
+        if not ini.has_section("General"):
+            ini.add_section("General")
+        try:
+            have = json.loads(ini.get("General", "commands", fallback="") or "{}")
+        except ValueError:
+            have = {}
+        for key, name, cmd in COMMANDS:
+            have[key] = {"name": name, "command": cmd.replace("justday", home_bin, 1)}
+        ini.set("General", "commands", json.dumps(have, ensure_ascii=False))
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8") as f:
+                ini.write(f, space_around_delimiters=False)
+            out["written"] += 1
+        except OSError as e:
+            out["error"] = str(e)
+    return out
