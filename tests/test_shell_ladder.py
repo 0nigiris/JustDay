@@ -108,6 +108,7 @@ def test_the_plugin_is_put_in_place_and_the_ladder_gets_a_default(tmp_path, monk
     monkeypatch.setattr(shell, "CONF_DIR", conf)
     monkeypatch.setattr(shell, "PLUGIN", conf / "plugin" / "justday-ladder.js")
     monkeypatch.setattr(shell, "LADDER", conf / "justday-ladder.json")
+    monkeypatch.setattr(shell, "SETTINGS", conf / "opencode.json")
     shell.ensure()
     assert (conf / "plugin" / "justday-ladder.js").resolve() == shell.source()
     first = json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))
@@ -130,3 +131,44 @@ def test_the_next_model_is_told_where_to_read_up(ladder) -> None:
     body = sent[0]["body"]
     assert body["noReply"] is True
     assert "ПЕРЕДАЧА.md" in body["parts"][0]["text"]
+
+
+def test_a_last_years_model_name_dropped_the_whole_ladder(tmp_path, monkeypatch) -> None:
+    """Устаревшее имя модели на верхней ступени уводило думать самую слабую.
+
+    Поставщик на переименованную модель отвечает не «такой больше нет», а просто ошибкой, а
+    лестница любую ошибку считает кончившимся лимитом — и спускается. Верх умирал молча: человек
+    видел только, что отвечает кто-то не тот. Теперь имена подновляются при запуске оболочки.
+    """
+    from justday import shell
+
+    conf = tmp_path / "opencode"
+    conf.mkdir()
+    monkeypatch.setattr(shell, "CONF_DIR", conf)
+    monkeypatch.setattr(shell, "PLUGIN", conf / "plugin" / "justday-ladder.js")
+    monkeypatch.setattr(shell, "LADDER", conf / "justday-ladder.json")
+    monkeypatch.setattr(shell, "SETTINGS", conf / "opencode.json")
+    (conf / "justday-ladder.json").write_text(json.dumps({
+        "ladder": ["anthropic/claude-opus-4-5", "anthropic/claude-sonnet-4-5", "ollama/своя"],
+        "tiny": "anthropic/claude-3-5-haiku",
+        "probeMinutes": 7,
+    }, ensure_ascii=False), encoding="utf-8")
+
+    shell.ensure()
+
+    got = json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))
+    assert got["ladder"] == ["anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5", "ollama/своя"]
+    assert got["tiny"] == "anthropic/claude-haiku-4-5"
+    assert got["probeMinutes"] == 7        # своё человек правил не для того, чтобы мы это стёрли
+
+
+def test_renaming_two_rungs_into_one_does_not_leave_a_double() -> None:
+    """Две ступени после переименования могли стать одной и той же моделью.
+
+    Лестница из одинаковых ступеней не спускается: кончился лимит — пробуем того же самого,
+    получаем ту же ошибку, и так до самого низа впустую.
+    """
+    from justday import shell
+
+    assert shell.fresh(["anthropic/claude-opus-4-5", "anthropic/claude-opus-4-1"]) \
+        == ["anthropic/claude-opus-5-5"]

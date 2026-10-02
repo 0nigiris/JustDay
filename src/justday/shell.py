@@ -30,12 +30,33 @@ CLAUDE_HOME = Path.home() / ".claude"
 
 DEFAULT_LADDER = {
     # Порядок — это и есть приоритет: сверху тот, кем хочется думать всегда.
-    "ladder": ["anthropic/claude-opus-4-5", "anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5"],
+    "ladder": ["anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-4-5"],
     "tiny": "",
     "probeMinutes": 15,
     "tinyMaxChars": 80,
     "quiet": False,
 }
+
+# Переименованные модели. Поставщик на прошлогоднее имя не отвечает «такой больше нет» — он
+# отвечает ошибкой, а лестница считает любую ошибку кончившимся лимитом и спускается на ступень
+# ниже. Один устаревший верх — и думает кто угодно, кроме того, кем просили.
+RENAMED = {
+    "anthropic/claude-opus-4-5": "anthropic/claude-opus-5-5",
+    "anthropic/claude-opus-4-1": "anthropic/claude-opus-5-5",
+    "anthropic/claude-sonnet-4-5": "anthropic/claude-sonnet-5-5",
+    "anthropic/claude-3-5-haiku": "anthropic/claude-haiku-4-5",
+}
+
+
+def fresh(rungs: list[str]) -> list[str]:
+    """Заменить переименованные модели нынешними, порядок и всё остальное не трогая."""
+    out, seen = [], set()
+    for rung in rungs:
+        name = RENAMED.get(rung, rung)
+        if name not in seen:        # после замены две ступени могут совпасть
+            seen.add(name)
+            out.append(name)
+    return out
 
 
 def source() -> Path:
@@ -101,6 +122,17 @@ def ensure() -> None:
         PLUGIN.symlink_to(src)
     if not LADDER.exists():
         LADDER.write_text(json.dumps(DEFAULT_LADDER, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    else:
+        try:
+            got = json.loads(LADDER.read_text(encoding="utf-8"))
+        except ValueError:
+            got = None
+        if isinstance(got, dict) and isinstance(got.get("ladder"), list):
+            rungs = fresh([str(r) for r in got["ladder"]])
+            tiny = RENAMED.get(str(got.get("tiny") or ""), got.get("tiny"))
+            if rungs != got["ladder"] or tiny != got.get("tiny"):
+                got["ladder"], got["tiny"] = rungs, tiny
+                LADDER.write_text(json.dumps(got, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     try:
         conf = json.loads(SETTINGS.read_text(encoding="utf-8")) if SETTINGS.exists() else {}
