@@ -204,8 +204,21 @@ class MailAssistant:
     last_letter: Letter | None = None
     last_sent: dict | None = None
 
+    # Просьба о почте коротка: «проверь почту», «напиши письмо маме, что задержусь», «отправляй»,
+    # «второе». Длинный рассказ — это работа для мозга, даже если в нём попалось слово «письмо»:
+    # человек полчаса объяснял спор с GitHub и просил разобраться, а дорожка начинала составлять
+    # письмо. Та же беда, что была с календарём, который отвечал «сегодня ничего не запланировано»
+    # на рассказ.
+    SHORT_ENOUGH = 14
+    # А в открытом разговоре о почте от человека ждут ответа, а не новой задачи: «да», «второе»,
+    # «отправляй». Всё, что длиннее, — уже другая просьба, и окно её глотать не должно.
+    ANSWER_ENOUGH = 5
+
     def wants(self, text: str) -> bool:
-        return bool(MAIL_WORDS.search(text)) or time.monotonic() < self.active_until
+        words = len(text.split())
+        if MAIL_WORDS.search(text):
+            return words <= self.SHORT_ENOUGH
+        return time.monotonic() < self.active_until and words <= self.ANSWER_ENOUGH
 
     def handle(self, text: str) -> tuple[str, bool] | None:
         """Returns (spoken reply, expects an answer) or None if the utterance is not about mail."""
@@ -221,6 +234,12 @@ class MailAssistant:
         self.last_action = action
         events.emit("mail_intent", action=action)  # the command text is already in the journal; no mail content
         if action == "not_mail" and not MAIL_WORDS.search(text):
+            self.active_until = 0
+            return None
+        if action == "compose" and not MAIL_WORDS.search(text):
+            # Новое письмо — это всегда «напиши письмо»: без слова о почте «compose» значит, что
+            # местная модель приняла за письмо обычную просьбу. Так и было: человек просил своё, а
+            # Джарвис начинал составлять письмо.
             self.active_until = 0
             return None
         self.active_until = time.monotonic() + 120

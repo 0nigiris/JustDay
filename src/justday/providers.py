@@ -145,14 +145,38 @@ def ensure_cloud_model(model: str) -> None:
 _RULE = re.compile(r"^Bash\((.+?)(?::\*)?\)$")
 
 
+def _pieces(cmd: str) -> list[str]:
+    return [p.strip() for p in re.split(r"&&|\|\||;|\||\n|\$\(|`", cmd) if p.strip()]
+
+
 def risky(tool: str, inp: dict, ask_rules: list[str]) -> bool:
     """True if a call matches one of the `ask` rules (destructive shell commands, publishing…)."""
     if tool != "Bash":
         return False
     cmd = inp.get("command", "")
-    parts = [p.strip() for p in re.split(r"&&|\|\||;|\||\n|\$\(|`", cmd) if p.strip()]
+    parts = _pieces(cmd)
     for rule in ask_rules:
         m = _RULE.match(rule)
         if m and any(p.startswith(m.group(1)) or p.startswith("sudo " + m.group(1)) for p in parts):
             return True
     return bool(re.search(r"\brm\s+-[a-zA-Z]*[rf]", cmd))
+
+
+def all_allowed(tool: str, inp: dict, allow_rules: list[str]) -> bool:
+    """True, если команда целиком собрана из того, что человек уже разрешил.
+
+    Зачем это нужно. Разрешение `Bash(cat:*)` работает, пока команда одна. Стоит склеить две
+    разрешённые — `cat /sys/... && echo ---` — и статический разбор сдаётся: «содержит подстановку
+    команды», «содержит синтаксис (&), который нельзя разобрать», — и человека дёргают вопросом
+    про `cat`. Здесь мы смотрим **каждый** кусок: разрешены все — вопроса нет; хоть один нет
+    (`sudo`, `rm`) — вопрос как обычно.
+    """
+    if tool != "Bash":
+        return False
+    parts = _pieces(inp.get("command", ""))
+    if not parts:
+        return False
+    heads = [m.group(1) for r in allow_rules if (m := _RULE.match(r))]
+    if not heads:
+        return False
+    return all(any(p.startswith(h) for h in heads) for p in parts)

@@ -296,6 +296,18 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ThinBar {}
 
+                // Колёсико настройки не листало — тянуть приходилось мышью за страницу. Событие
+                // колеса до Flickable не доходило, поэтому берём его сами и двигаем содержимое,
+                // с упором в края: дальше края листать некуда, и пружинить здесь незачем.
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: function (ev) {
+                        const step = ev.pixelDelta.y !== 0 ? ev.pixelDelta.y : ev.angleDelta.y / 120 * 90
+                        const far = Math.max(0, scroller.contentHeight - scroller.height)
+                        scroller.contentY = Math.max(0, Math.min(far, scroller.contentY - step))
+                    }
+                }
+
                 Loader {
                     id: pageLoader
                     x: 32

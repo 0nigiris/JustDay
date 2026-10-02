@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -107,10 +108,10 @@ def reachable(rung: Rung) -> bool:
     return bool(os.environ.get(name) or providers.secret_get(provider))
 
 
-# Какое усилие какой задаче. «Который час» не стоит высокого: оно стоит времени и лимита, а
-# ответ от него не меняется. А «разберись, почему док лагает» без высокого усилия кончается
-# правдоподобной догадкой вместо разбора.
-EFFORT = {dispatch.TINY: "low", dispatch.LIGHT: "low", dispatch.STRONG: "high"}
+# Какое усилие какой задаче — одна таблица на оболочку и на голосового Джарвиса (`dispatch`):
+# «который час» не становится точнее от высокого усилия, а «разберись, почему док лагает» без
+# него кончается правдоподобной догадкой вместо разбора.
+EFFORT = dispatch.EFFORT
 
 
 @dataclass
@@ -369,6 +370,25 @@ def handoff_note(task: str, was: Rung, said: str) -> str:
     ])
 
 
+# Слабая модель должна уметь сказать «это серьёзнее меня»: судья ошибается, и «почини док» он
+# принимает за одно дело, хотя это разбор на час. Один дешёвый ход вместо часа работы не той
+# моделью — обмен выгодный.
+HAND_UP = ("\n\n[Если эта задача серьёзнее, чем выглядит, — нужен разбор, код или проектирование, —"
+           " не берись за неё сама: ответь ровно одной строкой «НУЖНА: sonnet» или «НУЖНА: opus»"
+           " и больше ничего не пиши. Если справишься — просто делай, про это не упоминай.]")
+_HAND_UP = re.compile(r"^НУЖНА:\s*([\w.\-/]+)\s*\.?$", re.I)
+
+
+def hands_up(text: str) -> str:
+    """Какую модель позвала слабая. Пусто — не звала.
+
+    Просьбой считается только вся реплика целиком. «Там, где НУЖНА: opus, я уже сделал сам» —
+    это рассказ о работе оболочки, и принимать его за передачу значит делать задачу дважды.
+    """
+    m = _HAND_UP.match((text or "").strip())
+    return m.group(1) if m else ""
+
+
 def restart_note(task: str) -> str:
     """Чем начинается разговор, начатый заново: место кончилось, а сжать его не удалось."""
     return "\n".join([
@@ -400,6 +420,7 @@ class Work:
         self.wait_until = 0.0          # до каких пор ждать, если кончились все ступени (0 — не ждать)
         self.why = ""                  # чем решили усилие на последней задаче — для строки состояния
         self.effort = ""               # и какое оно вышло
+        self.forced = ""               # модель, которую позвала слабая: на один ход её слово верх
         # Сессия помнится по ступени лестницы, а не по модели: мелочь, взятую облегчённой моделью,
         # следующий вопрос должен продолжать, а не начинать заново.
         self.sessions: dict[str, str] = {}
@@ -427,14 +448,26 @@ class Work:
         и потраченный на «спасибо» лимит не вернётся к вечеру, когда понадобится разбор.
         """
         rung, effort = self.now, str(self.opts.get("effort") or "")
+        if self.forced and rung.engine == CLAUDE:
+            # Слабая модель сама позвала сильную — её слово важнее мнения судьи: она эту задачу
+            # уже видела, а судья видел только первую строку.
+            back = {m: lvl for lvl, m in self.models().items()}
+            return Rung(CLAUDE, self.forced), dispatch.EFFORT.get(back.get(self.forced, ""), "high"), \
+                "позвала слабая модель"
         if not self.opts.get("auto", True):
             return rung, effort, "как задано"
         level, why = dispatch.level_for(task)
-        effort = EFFORT.get(level, effort)
-        light = str(self.opts.get("light_model") or "")
-        if level != dispatch.STRONG and rung.engine == CLAUDE and light and rung.model != light:
-            rung = Rung(CLAUDE, light)
+        effort = dispatch.EFFORT.get(level, effort)
+        if rung.engine == CLAUDE and (model := self.models().get(level, "")):
+            rung = Rung(CLAUDE, model)
         return rung, effort, why
+
+    def models(self) -> dict[str, str]:
+        """Какой моделью брать какой уровень. Старое `light_model` тоже понимаем — конфиг живой."""
+        got = dict(self.opts.get("models") or {})
+        if not got and (light := str(self.opts.get("light_model") or "")):
+            got = {dispatch.TINY: light, dispatch.LIGHT: light}
+        return {k: str(v) for k, v in got.items() if v}
 
     # ───────────── место в разговоре ─────────────
 
@@ -531,6 +564,7 @@ class Work:
         on_note = on_note or (lambda _t: None)
         on_pick = on_pick or (lambda _r, _e, _w: None)
         text = task
+        self.forced = ""
         await self.climb(on_note)
         if await self.tidy(on_note) == "заново":
             text = restart_note(task)
@@ -540,13 +574,21 @@ class Work:
             on_pick(rung, self.effort, self.why)
             turn = {**self.cfg, "terminal": {**self.opts, "effort": self.effort}}
             engine = self.engines[rung.engine]
-            said = await engine(rung, text, self.sessions.get(seat, ""), turn, on_text, on_tool)
+            ask = text
+            if not self.forced and self.opts.get("hand_up", True) and rung.engine == CLAUDE \
+                    and rung.model and rung.model == self.models().get(dispatch.LIGHT, ""):
+                ask += HAND_UP
+            said = await engine(rung, ask, self.sessions.get(seat, ""), turn, on_text, on_tool)
             self.spent += said.cost
             if said.session:
                 self.sessions[seat] = said.session
             if said.used:
                 self.used[seat] = said.used
             if not self.hopeless(said):
+                if not self.forced and (want := hands_up(said.text)) and want != rung.model:
+                    self.forced = want
+                    on_note(f"{rung.label}: это серьёзнее — беру {want}.")
+                    continue
                 return said
             was, why = rung, "кончился лимит" if said.limit else f"не ответила: {said.error[:120]}"
             if not self.down():

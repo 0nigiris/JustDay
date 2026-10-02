@@ -546,6 +546,13 @@ Item {
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
+                // Проверить обновление быстро, не уходя в настройки: кнопка там была, но на самом
+                // дне страницы «О программе», и человек её попросту не находил.
+                ToolDot {
+                    icon: "refresh-cw"
+                    note: "Проверить обновление"
+                    onPicked: { JD.closeMenu(); JD.checkUpdate() }
+                }
                 ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
                 // Настройки самой плазмы: оболочка заменила панель и меню, но плазма под ней
                 // осталась, и за обоями, экранами и клавишами человек идёт туда. Искать их через

@@ -417,9 +417,13 @@ class Brain:
 
     # ---------- permissions ----------
     @staticmethod
-    def _ask_rules() -> list[str]:
+    def _rules(which: str = "ask") -> list[str]:
         settings = json.loads((config.REPO_DIR / "brain" / "settings.json").read_text(encoding="utf-8"))
-        return settings["permissions"]["ask"]
+        return settings["permissions"].get(which) or []
+
+    @staticmethod
+    def _ask_rules() -> list[str]:
+        return Brain._rules("ask")
 
     async def _can_use_tool(self, name: str, inp: dict, ctx) -> PermissionResultAllow | PermissionResultDeny:
         if name == "AskUserQuestion":  # a question card on the island, answered by click or voice
@@ -431,6 +435,11 @@ class Brain:
         hard = providers.risky(name, inp, self._ask_rules())  # an ask-rule (rm -rf, sudo…), not a classifier doubt
         if not providers.is_claude(self.cfg) and not hard:
             return PermissionResultAllow(updated_input=inp)  # no classifier: everything but the ask-rules runs
+        # Команда, собранная целиком из разрешённого, вопроса не стоит — даже если статический
+        # разбор об неё споткнулся. Человека дёргали вопросом про `cat /sys/... && echo ---`:
+        # «содержит синтаксис, который нельзя разобрать». Он просил этого не делать.
+        if not hard and providers.all_allowed(name, inp, self._rules("allow")):
+            return PermissionResultAllow(updated_input=inp)
         desc = getattr(ctx, "title", None) or describe_tool(name, inp)
         reason = getattr(ctx, "decision_reason", None) or ""
         events.emit("approval_request", tool=name, desc=desc, reason=reason)

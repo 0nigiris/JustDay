@@ -171,19 +171,42 @@ def test_a_trifle_was_taking_the_strongest_model_and_the_highest_effort(monkeypa
     садится за настоящую работу. Поэтому усилие и модель выбираются по самой задаче, а лестница
     при этом не трогается: ступень остаётся той же.
     """
-    work = terminal.Work({"terminal": {"auto": True, "light_model": "sonnet"}, "brain": {}},
+    models = {"tiny": "haiku", "light": "haiku", "strong": "sonnet", "big": "opus"}
+    work = terminal.Work({"terminal": {"auto": True, "models": models}, "brain": {}},
                          rungs=rungs("claude:opus"), engines={})
 
-    monkeypatch.setattr(terminal.dispatch, "level_for",
-                        lambda text, **kw: (terminal.dispatch.LIGHT, "местная модель"))
-    rung, effort, _ = work.shape("который час")
-    assert (rung.model, effort) == ("sonnet", "low")
-
-    monkeypatch.setattr(terminal.dispatch, "level_for",
-                        lambda text, **kw: (terminal.dispatch.STRONG, "местная модель"))
-    rung, effort, _ = work.shape("разберись, почему док лагает")
-    assert (rung.model, effort) == ("opus", "high")
+    # Его правило словами: мелочь — хайку; надо программировать — сонет; большой проект — опус.
+    for level, want in (("light", ("haiku", "low")), ("strong", ("sonnet", "medium")),
+                        ("big", ("opus", "high"))):
+        monkeypatch.setattr(terminal.dispatch, "level_for",
+                            lambda text, lvl=level, **kw: (lvl, "местная модель"))
+        rung, effort, _ = work.shape("задача")
+        assert (rung.model, effort) == want, f"уровень {level} взят не тем"
     assert work.rungs[0].model == "opus", "выбор модели на один ход переписал саму лестницу"
+
+
+def test_the_judge_guessing_light_used_to_mean_an_hour_of_work_by_the_wrong_model() -> None:
+    """Судья видит одну строку и ошибается: «почини док» для него одно дело, а это разбор на час.
+
+    Поэтому лёгкая модель может позвать сильную сама — одной строкой, одним дешёвым ходом.
+    """
+    models = {"light": "haiku", "strong": "sonnet", "big": "opus"}
+    ask = engine([terminal.Said(text="НУЖНА: opus"), terminal.Said(text="разобрался и починил")])
+    work = terminal.Work({"terminal": {"auto": False, "models": models, "hand_up": True},
+                          "brain": {}}, rungs=rungs("claude:haiku"), engines={"claude": ask})
+
+    notes = []
+    said = asyncio.run(work.send("почини док", on_note=notes.append))
+
+    assert said.text == "разобрался и починил", "задачу так и доделала слабая модель"
+    assert terminal.HAND_UP.strip()[:10] in ask.heard[0][1], \
+        "слабой не сказали, что она может передать задачу выше"
+    assert ask.heard[1][0] == "claude:opus", "позвала opus, а задачу взял кто-то другой"
+    assert terminal.HAND_UP.strip()[:10] not in ask.heard[1][1], \
+        "сильной тоже предложили передать задачу выше — так можно ходить по кругу"
+    assert any("серьёзнее" in n for n in notes), "передача выше прошла молча"
+    assert not terminal.hands_up("Готово. Там, где НУЖНА: opus, я уже сделал сам."), \
+        "рассказ про передачу принят за просьбу о передаче"
 
 
 def test_nobody_was_asking_the_top_rung_whether_the_limit_came_back() -> None:

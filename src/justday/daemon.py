@@ -1007,6 +1007,7 @@ class Daemon:
         if not b.get("auto_model", True) or b.get("provider", "claude") != home:
             return was
         light, strong = b.get("light_model") or "haiku", b.get("strong_model") or "sonnet"
+        huge = str(b.get("huge_model") or "").strip()
         tiny_model = str(b.get("tiny_model") or "").strip()
         tiny_where = str(b.get("tiny_provider") or "ollama")
         tiny_ok = bool(tiny_model) and fallback.usable(tiny_where)
@@ -1014,13 +1015,21 @@ class Daemon:
             None, functools.partial(dispatch.level_for, text, tiny=tiny_ok))
         if level == dispatch.TINY and tiny_ok:
             want = (tiny_where, tiny_model)
+        elif level == dispatch.BIG:
+            # Самая сильная — только за настоящую работу: спроектировать, переписать, разобраться
+            # в большом. Лимит у подписки один на всё, и потраченный на мелочь не вернётся.
+            want = (home, huge or strong)
         elif level == dispatch.STRONG:
             want = (home, strong)
         else:
             want = (home, light)
-        if want == was:
+        # Усилие тоже выбирается само, по той же мерке: он просил, чтобы решала нейросеть, а не
+        # настройка. Пустое `brain.effort` значит «как решит Claude Code», и его мы не трогаем.
+        effort = dispatch.EFFORT.get(level, "") if b.get("auto_effort", True) else b.get("effort", "")
+        if want == was and effort == b.get("effort", ""):
             return was
         b["provider"], b["model"] = want
+        b["effort"] = effort
         try:
             await self.brain.reconnect()
         except Exception:

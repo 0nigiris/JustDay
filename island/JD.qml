@@ -181,6 +181,31 @@ Singleton {
     property var update: null      // {behind, changes} when GitHub has a newer version
     function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
 
+    // Быстрая проверка обновления из меню: кнопка в настройках была, но на самом дне страницы
+    // «О программе» — человек её не находил. Здесь ответ приходит сразу всплывашкой на островке.
+    function checkUpdate() {
+        flash(tr("Проверяю обновления…"), "refresh-cw")
+        updProbe.running = true
+    }
+    Process {
+        id: updProbe
+        command: ["justday", "update", "--check"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let got = null
+                try { got = JSON.parse(text) } catch (e) {}
+                if (!got || !got.ok)
+                    jd.flash(jd.tr("Не удалось проверить обновления"), "alert-triangle", jd.accentRed)
+                else if (got.behind)
+                    jd.flash(jd.tr("Есть обновление — открываю"), "download")
+                else
+                    jd.flash(jd.tr("Установлена последняя версия"), "check")
+                if (got && got.ok && got.behind)
+                    jd.openSettings("about")
+            }
+        }
+    }
+
     property string activity: ""           // one line of what is happening (heard text, tool, draft)
     // the status line is one line by definition: a pasted script would otherwise stretch the island
     function flat(s) { return String(s || "").replace(/\s+/g, " ").trim().slice(0, 160) }
