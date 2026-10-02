@@ -567,6 +567,14 @@ Singleton {
         send({ cmd: "dock_pin", kind: kind || "app", id: ident, on: on === undefined ? null : on })
     }
     function dockArrange(keys) { send({ cmd: "dock_arrange", keys: keys }) }
+    // Содержимое закреплённой папки: спрашивается при каждом открытии стопки, потому что за минуту
+    // между двумя нажатиями папка могла и поменяться — показать вчерашнее содержимое хуже, чем
+    // подождать полкадра.
+    property var folderItems: []
+    property string folderPath: ""
+    property int folderMore: 0
+    function folderList(path) { send({ cmd: "folder_list", path: String(path) }) }
+    function folderOpen(path) { send({ cmd: "folder_open", path: String(path) }) }
     function windowDo(action, id) { if (id) send({ cmd: "window_do", action: action, id: id }) }
     function dockIsPinned(key) { return (dockData.pinned || []).indexOf(key) >= 0 }
     onLinkedChanged: if (linked) { dockRefresh(); mascotRefresh(); layoutRefresh() }
@@ -832,6 +840,9 @@ Singleton {
         if (m.layout !== undefined) layout = m.layout
         if (m.items !== undefined && m.file !== undefined) plans = m.items
         if (m.sessions !== undefined) sessions = m.sessions
+        if (m.items !== undefined && m.path !== undefined) {
+            folderPath = m.path; folderItems = m.items; folderMore = m.more || 0
+        }
         if (m.brain_model !== undefined) { brainModel = m.brain_model; brainWhy = m.brain_why || "" }
         if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }

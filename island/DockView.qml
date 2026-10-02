@@ -512,7 +512,7 @@ Item {
         TapHandler {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             gesturePolicy: TapHandler.ReleaseWithinBounds
-            onTapped: dv.closeCtx()
+            onTapped: { dv.closeCtx(); dv.closeStack() }
         }
 
         // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
@@ -909,6 +909,28 @@ Item {
     // остальное у программы есть в её собственном окне.
     DockAudio { id: audio }
 
+    // ───────────── стопка ─────────────
+    property var stackEntry: null
+    property var stackItems: []
+    property real stackAt: 0
+    function openStack(e) {
+        if (!e || !e.id) return
+        closeCtx()
+        if (stackEntry && stackEntry.id === e.id) { closeStack(); return }
+        stackEntry = e
+        stackItems = []
+        const i = lane.findIndex(s => s.key === e.key)
+        stackAt = i >= 0 && geom[i] ? geom[i].x + geom[i].w / 2 : dv.width / 2
+        JD.folderList(e.id)
+    }
+    function closeStack() { stackEntry = null; stackItems = [] }
+    Connections {
+        target: JD
+        function onFolderItemsChanged() {
+            if (dv.stackEntry && JD.folderPath === dv.stackEntry.id) dv.stackItems = JD.folderItems
+        }
+    }
+
     property var ctxEntry: null
     property var ctxWins: []
     property string ctxConfirm: ""     // пункт, который ждёт второго щелчка
@@ -925,6 +947,91 @@ Item {
     }
     function closeCtx() { ctxEntry = null; ctxWins = []; ctxConfirm = "" }
     Timer { id: ctxClose; interval: 1400; onTriggered: dv.closeCtx() }
+
+    // ───────────── стопка: что лежит в папке ─────────────
+    //
+    // Решёткой, а не списком: у файлов есть имена, но узнают их по значкам, и в решётке за один
+    // взгляд видно вдвое больше. Папки первыми — это то, куда идут дальше, а файлы то, что берут.
+    Rectangle {
+        id: stack
+        visible: !!dv.stackEntry
+        width: Math.min(dv.width - 24, 92 * Math.max(1, Math.min(5, dv.stackItems.length)) + 24)
+        height: Math.min(360, stackGrid.contentHeight + (stackMore.visible ? 46 : 22))
+        radius: 18
+        color: Qt.rgba(0, 0, 0, 0.92)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.12)
+        x: Math.max(0, Math.min(dv.width - width, dv.stackAt - width / 2))
+        y: dv.atTop ? card.height + 10 : dv.height - card.height - height - 10
+        HoverHandler { }
+
+        GridView {
+            id: stackGrid
+            anchors { fill: parent; margins: 11; bottomMargin: stackMore.visible ? 34 : 11 }
+            clip: true
+            cellWidth: 92
+            cellHeight: 84
+            model: dv.stackItems
+            boundsBehavior: Flickable.StopAtBounds
+            delegate: Item {
+                required property var modelData
+                width: 92
+                height: 84
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    radius: 10
+                    color: cellHover.hovered ? JD.fill1 : "transparent"
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 110 } }
+                }
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 5
+                    Icon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        name: modelData.dir ? "folder" : "file"
+                        fallback: modelData.dir ? "folder" : "text-x-generic"
+                        implicitSize: 30
+                        theme: true
+                    }
+                    Text {
+                        width: 82
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideMiddle
+                        maximumLineCount: 2
+                        wrapMode: Text.Wrap
+                        font.family: JD.fontFamily
+                        font.pixelSize: 10
+                        color: JD.text2
+                        text: modelData.name
+                    }
+                }
+                HoverHandler { id: cellHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: { JD.folderOpen(modelData.path); dv.closeStack() }
+                }
+            }
+        }
+
+        // Папка может быть большой, и честнее сказать, сколько осталось за краем, чем молча
+        // показать первые сорок и сделать вид, что это всё.
+        Label2 {
+            id: stackMore
+            visible: JD.folderMore > 0
+            anchors { left: parent.left; bottom: parent.bottom; leftMargin: 14; bottomMargin: 10 }
+            font.pixelSize: 11
+            color: JD.text3
+            text: JD.tr("…и ещё ") + JD.folderMore
+        }
+        PillButton {
+            visible: !!dv.stackEntry
+            anchors { right: parent.right; bottom: parent.bottom; rightMargin: 11; bottomMargin: 7 }
+            height: 24
+            label: JD.tr("Открыть папку")
+            onClicked: { JD.folderOpen(dv.stackEntry.id); dv.closeStack() }
+        }
+    }
 
     Rectangle {
         id: ctx
@@ -1240,6 +1347,9 @@ Item {
         // Нажали в доке при открытом меню — меню своё дело сделало и уходит.
         if (JD.menuOpen) JD.closeMenu()
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
+        // Папка в доке — стопка: показать, что внутри, а не открывать файловый менеджер. За самим
+        // менеджером человек пойдёт сам, если ему нужна именно папка, а не файл из неё.
+        if (e.kind === "dir") { dv.openStack(e); return }
         if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
         if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
         const front = wins.find(w => w.active && !w.minimized)

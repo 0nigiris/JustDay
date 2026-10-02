@@ -2974,7 +2974,7 @@ ShellRoot {
             mask: Region {
                 item: dockWin.shown ? dock : edge
                 Region { item: dockWin.shown ? dock.hotItem : null }
-                Region { item: dock.ctxEntry ? dockCtxZone : null }
+                Region { item: dock.ctxEntry || dock.stackEntry ? dockCtxZone : null }
             }
             // Размытие под карточкой: без него полупрозрачная полоса поверх пёстрых обоев
             // превращается в кашу, а значки в ней перестают читаться.
