@@ -349,6 +349,42 @@ def hide_tray(ident: str, on: bool | None = None) -> dict:
     return {"ok": True, "on": on, "hidden": keep}
 
 
+# ───────────── папки-стопки ─────────────
+#
+# Папка в доке — это не ярлык на файловый менеджер, а стопка: нажал — видно, что внутри, и можно
+# открыть нужное, не заходя никуда. На макоси это самая используемая часть дока после программ, и
+# ровно по этой причине: чаще всего от папки нужен один файл из неё, а не она сама.
+FOLDER_MAX = 40
+
+
+def folder_items(path: str) -> dict:
+    """Что лежит в закреплённой папке. Папки первыми, потом файлы, и те и другие по алфавиту."""
+    import os
+
+    base = pathlib.Path(os.path.expanduser(str(path or ""))).resolve()
+    if not base.is_dir():
+        return {"ok": False, "error": "это не папка", "path": str(base), "items": []}
+    out = []
+    try:
+        with os.scandir(base) as it:
+            for entry in it:
+                if entry.name.startswith("."):
+                    continue
+                try:
+                    is_dir = entry.is_dir()
+                    size = 0 if is_dir else entry.stat().st_size
+                    when = entry.stat().st_mtime
+                except OSError:
+                    continue
+                out.append({"name": entry.name, "path": str(base / entry.name),
+                            "dir": is_dir, "bytes": size, "at": when})
+    except OSError as e:
+        return {"ok": False, "error": str(e), "path": str(base), "items": []}
+    out.sort(key=lambda i: (not i["dir"], i["name"].lower()))
+    return {"ok": True, "path": str(base), "name": base.name or str(base),
+            "items": out[:FOLDER_MAX], "more": max(0, len(out) - FOLDER_MAX)}
+
+
 def catalog() -> dict:
     """Всё, что доку нужно от этой половины, одним куском.
 
@@ -363,7 +399,19 @@ def catalog() -> dict:
     games = {f"game:{g['id']}": {"kind": "game", "id": str(g["id"]), "strong": [], "weak": [],
                                  "name": g["name"], "icon": "applications-games"}
              for g in desktop.list_games()}
-    known = rows | games
+    # Папки-стопки: ключ dir:<путь>, имя — имя папки. Проверять существование здесь обязательно:
+    # папку могли удалить или отмонтировать, и значок, ведущий в никуда, хуже отсутствующего.
+    folders = {}
+    for key in pinned():
+        if not key.startswith("dir:"):
+            continue
+        path = pathlib.Path(key[4:])
+        if not path.is_dir():
+            continue
+        folders[key] = {"kind": "dir", "id": str(path), "strong": [], "weak": [],
+                        "name": path.name or str(path), "icon": "folder"}
+
+    known = rows | games | folders
 
     # Два прохода: сначала точные ключи (идентификатор, StartupWMClass), потом догадки по имени
     # двоичного файла. Иначе случайная программа, запускаемая тем же файлом, забирает окна себе.

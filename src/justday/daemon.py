@@ -2702,6 +2702,17 @@ class Daemon:
             elif cmd == "mascots":  # какие маскоты есть и какой выбран
                 got = await asyncio.get_running_loop().run_in_executor(None, mascot.catalog)
                 resp = {"ok": True, "mascots": got}
+            elif cmd == "folder_list":  # что внутри закреплённой папки
+                got = await asyncio.get_running_loop().run_in_executor(
+                    None, dock.folder_items, str(req.get("path", "")))
+                resp = got
+            elif cmd == "folder_open":  # открыть файл или папку из стопки
+                path = str(req.get("path", "")).strip()
+                if path:
+                    await asyncio.get_running_loop().run_in_executor(
+                        None, lambda: subprocess.Popen(["xdg-open", path], start_new_session=True,
+                                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                resp = {"ok": bool(path)}
             elif cmd == "trash_empty":  # очистить корзину: подтверждение спрашивает тот, кто просит
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.trash_empty)
                 self._trash_full = bool(got.get("trash_full"))
