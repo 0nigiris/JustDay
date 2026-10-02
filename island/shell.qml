@@ -34,6 +34,11 @@ ShellRoot {
     // своим шрифтом и своими цветами. Теперь они приходят напрямую, а не подслушиванием шины.
     //
     // Берём место, только если оно свободно: отбирать его у чужого сервера — чужое дело.
+    // plasmashell almost always owns org.freedesktop.Notifications (history + tray). Quickshell's
+    // NotificationServer only receives Notify when that name is free. The daemon's dbus-monitor
+    // eavesdrop is therefore the reliable path on Plasma — keep it always on. Turning it off
+    // after a flaky ownership probe used to kill the monitor and leave JustDay with zero toasts.
+    // If we ever do own the bus, takeNotification dedupes against the eavesdrop copy.
     Loader {
         active: JD.island.notification_server !== false
         sourceComponent: NotificationServer {
@@ -48,9 +53,7 @@ ShellRoot {
             persistenceSupported: true
             keepOnReload: false
 
-            // Демону больше незачем подслушивать шину: уведомления приходят к нам напрямую, и
-            // второй их экземпляр был бы не подстраховкой, а двоением.
-            Component.onCompleted: JD.send({ cmd: "notify_watch", on: false })
+            Component.onCompleted: JD.send({ cmd: "notify_watch", on: true })
             Component.onDestruction: JD.send({ cmd: "notify_watch", on: true })
 
             onNotification: n => {
@@ -106,7 +109,10 @@ ShellRoot {
                                     known: Object.keys(JD.dockMatch).length,
                                     hover: JD.dockHover,
                                     menu: [menuWin.x, menuWin.y, menuWin.width, menuWin.height],
-                                    card: [menuCard.x, menuCard.y, menuCard.width, menuCard.height] })
+                                    card: [menuCard.x, menuCard.y, menuCard.width, menuCard.height],
+                                    dockRect: JD.dockRect, trayRect: JD.trayRect,
+                                    dockWin: dockVariants.instances.length ? dockVariants.instances[0].geom() : null,
+                                    trayWin: trayLoader.item ? trayLoader.item.geom() : null })
         }
         // Меню лотка без мыши: открыть меню значка под номером и сказать, что в нём получилось.
         // Правая кнопка на вейланде синтетически не воспроизводится, а «меню не открывается» —
@@ -115,19 +121,29 @@ ShellRoot {
         function trayAt(y: real): string {
             return JSON.stringify(trayLoader.item ? trayLoader.item.probeAt(y) : null)
         }
-        function trayHold(y: real): string {
-            return trayLoader.item ? trayLoader.item.holdAt(y) : "null"
-        }
         function trayOpen(n: int): string {
             const items = SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
             const it = items[Math.max(0, Math.min(items.length - 1, n))]
             if (!it) return JSON.stringify({ items: items.length })
-            JD.openTrayMenu(it, 60, 400)
-            return JSON.stringify({ items: items.length, id: it.id, title: it.title, hasMenu: it.hasMenu })
+            // Attach beside the nth icon using trayRect (screen-local), not hardcoded 60,400.
+            // Use x/y even while autohidden — live only means the strip is currently shown.
+            const tr = JD.trayRect || ({})
+            const extras = (JD.trayCfg.layout !== false && !!JD.layoutShort) ? 1 : 0
+            const cell = JD.trayIconSize + 14
+            const idx = Math.max(0, Math.min(items.length - 1, n)) + extras
+            const baseY = (tr.y !== undefined ? tr.y : Math.round((JD.screenHeight - (tr.h || 0)) / 2))
+            const baseX = (tr.x !== undefined ? tr.x : (JD.trayPlace === "right" ? JD.screenWidth - 48 : 10))
+            const baseW = tr.w !== undefined ? tr.w : 38
+            const ay = baseY + 8 + idx * cell + cell / 2
+            const ax = JD.trayPlace === "right" ? baseX : baseX + baseW + 8
+            JD.openTrayMenu(it, Math.round(ax), Math.round(ay))
+            return JSON.stringify({ items: items.length, id: it.id, title: it.title, hasMenu: it.hasMenu,
+                                    at: [Math.round(ax), Math.round(ay)] })
         }
         // Что в открытом меню видно: имена пунктов, галочки и подменю.
         function trayRows(): string { return trayMenu.report() }
         function traySub(n: int): string { return trayMenu.poke(n) }
+        function trayClose(): void { JD.closeTrayMenu() }
     }
 
     // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1 or a picture path): a "wallpaper" so the black island is visible in headless sessions
@@ -154,6 +170,182 @@ ShellRoot {
                 fillMode: Image.PreserveAspectCrop
             }
         }
+    }
+
+    // ───────────── notification toast (Telegram-style corner on a chosen monitor) ─────────────
+    // Independent of the island pill: Settings → Виджеты → monitor + corner. Default: secondary,
+    // top-right. The island mode "notification" is suppressed while this window shows the toast.
+    PanelWindow {
+        id: notifWin
+        property bool show: !!JD.notification && JD.island.show_notifications !== false
+        visible: show
+        screen: JD.resolveNotifScreen()
+        readonly property string nplace: JD.notifPlace
+        readonly property bool natTop: !nplace.startsWith("bottom")
+        readonly property string nside: nplace.split("-")[1] || "center"
+        anchors {
+            left: true
+            right: true
+            top: natTop
+            bottom: !natTop
+        }
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "justday-notification"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        color: "transparent"
+        implicitHeight: Math.min(screen ? screen.height : 800, 280)
+        mask: Region { item: notifIsland }
+
+        Rectangle {
+            id: notifIsland
+            anchors.top: notifWin.natTop ? parent.top : undefined
+            anchors.bottom: notifWin.natTop ? undefined : parent.bottom
+            anchors.topMargin: notifWin.natTop ? JD.topMargin : 0
+            anchors.bottomMargin: notifWin.natTop ? 0 : JD.topMargin
+            x: notifWin.nside === "left" ? JD.sideMargin
+             : notifWin.nside === "right" ? parent.width - width - JD.sideMargin
+             : (parent.width - width) / 2
+            width: Math.max(120, notifToast.implicitWidth)
+            height: notifToast.implicitHeight
+            radius: Math.min(height / 2, 30)
+            color: JD.ink
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.06)
+            clip: true
+            NotificationView {
+                id: notifToast
+                shown: notifWin.show
+            }
+        }
+    }
+
+
+    // ───────────── system OSD (volume / layout / brightness) — Noctalia-like, not app toasts ─────────────
+    // Own monitor + corner (island.osd_screen / osd_position). Telegram toasts stay on notification_*.
+    PanelWindow {
+        id: osdWin
+        property bool show: JD.osdShow && JD.island.show_osd !== false
+        visible: show
+        screen: JD.resolveOsdScreen()
+        readonly property string oplace: JD.osdPlace
+        readonly property bool oatTop: !oplace.startsWith("bottom")
+        readonly property string oside: oplace.split("-")[1] || "center"
+        anchors {
+            left: true
+            right: true
+            top: oatTop
+            bottom: !oatTop
+        }
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "justday-osd"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        color: "transparent"
+        implicitHeight: Math.min(screen ? screen.height : 800, 160)
+        mask: Region { item: osdCard }
+
+        Rectangle {
+            id: osdCard
+            anchors.top: osdWin.oatTop ? parent.top : undefined
+            anchors.bottom: osdWin.oatTop ? undefined : parent.bottom
+            anchors.topMargin: osdWin.oatTop ? JD.topMargin : 0
+            anchors.bottomMargin: osdWin.oatTop ? 0 : JD.topMargin
+            x: osdWin.oside === "left" ? JD.sideMargin
+             : osdWin.oside === "right" ? parent.width - width - JD.sideMargin
+             : (parent.width - width) / 2
+            width: Math.max(168, osdInner.implicitWidth + 28)
+            height: osdInner.implicitHeight + 20
+            radius: Math.min(height / 2, 22)
+            color: JD.ink
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+            opacity: osdWin.show ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: JD.dur(140); easing.type: Easing.OutCubic } }
+
+            Column {
+                id: osdInner
+                anchors.centerIn: parent
+                spacing: 8
+                width: Math.max(140, layoutRow.implicitWidth, barRow.visible ? 180 : 0)
+
+                Row {
+                    id: layoutRow
+                    spacing: 10
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    Icon {
+                        name: JD.osdIcon || (JD.osdKind === "layout" ? "keyboard"
+                                          : JD.osdKind === "brightness" ? "sun"
+                                          : (JD.osdMuted || JD.osdValue <= 0.001) ? "volume-x" : "volume-1")
+                        implicitSize: 22
+                        tint: JD.text1
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: JD.osdLabel || (JD.osdKind === "layout" ? JD.layoutShort : Math.round(JD.osdValue * 100) + "%")
+                        color: JD.text1
+                        font.family: JD.fontFamily
+                        font.pixelSize: JD.osdKind === "layout" ? 18 : 14
+                        font.weight: Font.DemiBold
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+                Row {
+                    id: barRow
+                    visible: JD.osdKind === "volume" || JD.osdKind === "brightness"
+                    spacing: 0
+                    width: 180
+                    height: 6
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    Rectangle {
+                        width: parent.width
+                        height: parent.height
+                        radius: 3
+                        color: Qt.rgba(1, 1, 1, 0.12)
+                        Rectangle {
+                            width: parent.width * (JD.osdMuted ? 0 : JD.osdValue)
+                            height: parent.height
+                            radius: 3
+                            color: JD.osdKind === "brightness" ? JD.accentOrange : JD.accentBlue
+                            Behavior on width { NumberAnimation { duration: JD.dur(120); easing.type: Easing.OutCubic } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Volume OSD: Pipewire default sink (hardware keys / mixer). Debounced; skips first snapshot.
+    Item {
+        id: osdVolWatch
+        readonly property var sink: Pipewire.defaultAudioSink
+        PwObjectTracker { objects: osdVolWatch.sink ? [osdVolWatch.sink] : [] }
+        property real _lastVol: -1
+        property bool _muted: false
+        readonly property real sinkVol: sink && sink.audio ? Number(sink.audio.volume) || 0 : 0
+        readonly property bool sinkMuted: !!(sink && sink.audio && sink.audio.muted)
+        onSinkVolChanged: osdVolDebounce.restart()
+        onSinkMutedChanged: osdVolDebounce.restart()
+        onSinkChanged: Qt.callLater(osdVolWatch.push)
+        function push() {
+            if (!sink || !sink.audio) return
+            const muted = sinkMuted
+            const vol = muted ? 0 : Math.max(0, Math.min(1, sinkVol))
+            if (!JD._osdPrimed) {
+                JD._osdPrimed = true
+                _lastVol = vol
+                _muted = muted
+                return
+            }
+            if (Math.abs(vol - _lastVol) < 0.004 && muted === _muted) return
+            _lastVol = vol
+            _muted = muted
+            const pct = Math.round(vol * 100)
+            const icon = muted || vol <= 0.001 ? "volume-x" : (vol < 0.5 ? "volume-1" : "volume-2")
+            JD.showOsd("volume", vol, (muted ? JD.tr("Без звука") : (pct + "%")), icon, muted)
+        }
+        Timer { id: osdVolDebounce; interval: 60; onTriggered: osdVolWatch.push() }
+        Component.onCompleted: Qt.callLater(osdVolWatch.push)
     }
 
     // ───────────── window ─────────────
@@ -199,7 +391,7 @@ ShellRoot {
         Item {
             id: hotZone
             width: 420
-            height: island.mode === "hidden" && JD.island.hover_reveal !== false ? 3 : 0
+            height: island.mode === "hidden" ? JD.islandPeekHeight(JD.island.hover_reveal) : 0
             x: JD.side === "left" ? 0
              : JD.side === "right" ? parent.width - width
              : (parent.width - width) / 2
@@ -251,7 +443,7 @@ ShellRoot {
             // corners follow the *animated* height every frame (a pill stays a pill while it grows);
             // only the pill ↔ card transition itself is eased
             property real pill: compact ? 1 : 0
-            Behavior on pill { enabled: JD.animOn; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on pill { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
             // Вырез скруглён только снизу, полоса не скруглена вовсе, капсула — как была.
             readonly property real soft: Math.min(height / 2, pill * height / 2 + (1 - pill) * (mode === "settings" ? 34 : 30))
             radius: JD.islandStyle === "bar" ? 0 : soft
@@ -276,11 +468,13 @@ ShellRoot {
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, win.big ? 0.10 : 0.06)
 
-            Behavior on width { enabled: JD.animOn && !JD.videoResizing; SpringAnimation { spring: JD.springK; damping: JD.springDamping; epsilon: 0.3 } }
-            Behavior on height { enabled: JD.animOn && !JD.videoResizing; SpringAnimation { spring: JD.springK; damping: JD.springDamping; epsilon: 0.3 } }
-            Behavior on y { enabled: JD.animOn; SpringAnimation { spring: JD.springK - 0.2; damping: Math.max(0.4, JD.springDamping); epsilon: 0.2 } }
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-            Behavior on scale { enabled: JD.animOn; SpringAnimation { spring: JD.springK - 0.2; damping: Math.max(0.42, JD.springDamping); epsilon: 0.005 } }
+            // Size morphs + reveal/hide: short OutCubic only. Soft SpringAnimation sampled
+            // poorly on high-Hz panels and fought notification open/close + EdgeReveal hide.
+            Behavior on width { enabled: JD.animOn && !JD.videoResizing; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
+            Behavior on height { enabled: JD.animOn && !JD.videoResizing; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
+            Behavior on y { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: JD.slideEase } }
+            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
 
             HoverHandler {
                 onHoveredChanged: {
@@ -354,9 +548,8 @@ ShellRoot {
             Item {
                 id: stage
                 anchors.fill: parent
-                layer.enabled: JD.animOn
-                layer.smooth: true
-                layer.effect: MultiEffect { maskEnabled: true; maskSource: islandMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+                clip: true
+                layer.enabled: false
                 PeekView { id: peekView; shown: island.mode === "peek" }
                 MusicView { id: musicView; shown: island.mode === "music" }
                 PlayerView { id: playerView; shown: island.mode === "player" }
@@ -410,16 +603,16 @@ ShellRoot {
             visible: false
             layer.enabled: true
         }
-        MultiEffect {
-            source: shadowShape
+        // No MultiEffect shadow — enabling it at ease end caused the hitch you see.
+        // Soft plate under island is enough without a post-animation GPU effect.
+        Rectangle {
             anchors.fill: island
-            scale: island.scale
+            anchors.margins: -2
             z: -1
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, 0.55)
-            shadowBlur: 0.9
-            shadowVerticalOffset: 6
-            opacity: island.opacity
+            radius: island.radius + 2
+            color: Qt.rgba(0, 0, 0, 0.35)
+            scale: island.scale
+            opacity: island.opacity * 0.5
             visible: island.mode !== "hidden"
         }
     }
@@ -666,7 +859,9 @@ ShellRoot {
         implicitHeight: nCol.implicitHeight + 26
         MouseArea {
             anchors.fill: parent
+            z: 0
             cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton
             onClicked: JD.openNotification(JD.notification)
         }
         ColumnLayout {
@@ -706,6 +901,12 @@ ShellRoot {
                     onClicked: JD.notifExpanded = !JD.notifExpanded
                 }
                 RoundKey { Layout.alignment: Qt.AlignTop; icon: "window-close"; onClicked: JD.dismissNotification() }
+            }
+            Label2 {
+                visible: !nv.open
+                text: JD.tr("Нажмите, чтобы открыть ") + (nv.n.app || JD.tr("приложение"))
+                color: JD.text3; font.pixelSize: 11
+                Layout.alignment: Qt.AlignHCenter
             }
             // unfolded: the whole message, like a long-press preview on a phone
             Rectangle {
@@ -1058,7 +1259,7 @@ ShellRoot {
                 Layout.preferredHeight: JD.artOpen ? plCol.width : 0
                 visible: Layout.preferredHeight > 1
                 clip: true
-                Behavior on Layout.preferredHeight { NumberAnimation { duration: JD.dur(340); easing.type: Easing.OutCubic } }
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: JD.dur(JD.slideMs); easing.type: Easing.OutCubic } }
                 Art {
                     width: plCol.width; height: plCol.width
                     size: plCol.width
@@ -1066,7 +1267,7 @@ ShellRoot {
                     opacity: JD.artOpen ? 1 : 0
                     scale: JD.artOpen ? 1 : 0.92
                     Behavior on opacity { NumberAnimation { duration: JD.dur(240) } }
-                    Behavior on scale { NumberAnimation { duration: JD.dur(340); easing.type: Easing.OutCubic } }
+                    Behavior on scale { NumberAnimation { duration: JD.dur(JD.slideMs); easing.type: Easing.OutCubic } }
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: JD.artOpen = false }
@@ -1356,7 +1557,7 @@ ShellRoot {
                     implicitHeight: 5; radius: 2.5
                     color: Qt.rgba(1, 1, 1, 0.18)
                     Rectangle { width: parent.width * (vv.v.progress || 0); height: parent.height; radius: 2.5; color: JD.text1
-                                Behavior on width { NumberAnimation { duration: 300 } } }
+                                Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } } }
                 }
                 Label2 { text: JD.tr("Загружаю видео…") + " " + Math.round((vv.v.progress || 0) * 100) + "%"; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
             }
@@ -2914,21 +3115,15 @@ ShellRoot {
         }
     }
 
-    // ───────────── док ─────────────
+    // ───────────── dock ─────────────
     //
-    // Своё окно у нижнего края. Маска — только карточка: увеличенный значок и подпись выходят за её
-    // пределы, но щелчки там проходят насквозь, иначе полоса пустого воздуха над доком отбирала бы
-    // нажатия у окон под ней.
-    //
-    // Зону отнимаем честно (exclusiveZone), когда об этом просят: док, под который уезжают окна, —
-    // это док, из-под которого их приходится вытаскивать. Прятать умеет тоже, и тогда зону не
-    // отнимает, а оставляет полоску в два пикселя, чтобы его можно было позвать обратно.
-    // Док на каждом мониторе, если попросили. Квикшелл для этого и держит Variants: по экрану на
-    // окно, и переткнутый монитор не требует ничего перезапускать.
-    //
-    // Главным остаётся один — тот, где живёт островок. Он один рассказывает JD, где лежит карточка
-    // и откуда растить меню: будь этих рассказов два, они бы спорили друг с другом, и меню
-    // открывалось бы то на одном экране, то на другом, смотря кто написал последним.
+    // THREE layers (KWin maximize/border magnet follows PanelWindow geometry):
+    //   1) paint — full-screen, ExclusionMode.Ignore, exclusiveZone 0. Holds DockView so
+    //      hover/magnify/tips are not clipped. Never advertises a strut / magnet. NO blur.
+    //   2) fence — thin PanelWindow matching the visible card outline only. Exclusive /
+    //      magnet when reserve is on; Ignore otherwise. Click-through (empty mask).
+    //   3) blur — card-sized PanelWindow only. BackgroundEffect must NOT sit on paint.
+    // One primary screen reports dockRect / dockAnchor to JD (menus punch a hole there).
     Variants {
         id: dockVariants
         model: {
@@ -2936,254 +3131,470 @@ ShellRoot {
             if ((JD.dockCfg.screens || "primary") !== "all") return win.screen ? [win.screen] : []
             return Quickshell.screens
         }
-        delegate: PanelWindow {
-            id: dockWin
+        delegate: Item {
+            id: dockHost
             required property var modelData
-            screen: modelData
+
             readonly property bool primary: !modelData || !win.screen || modelData === win.screen
             readonly property bool atTop: JD.dockPlace === "top"
-            // Полный экран прячет док, даже если прятаться его не просили: игра и кино на то и
-            // полный экран, что поверх них не должно лежать ничего. Позвать док обратно
-            // по-прежнему можно кромкой — как и любой прячущийся док.
-            readonly property bool autohide: JD.dockCfg.autohide === true
-                                             || (JD.dockCfg.hide_on_fullscreen !== false && JD.fullscreen)
-            onAutohideChanged: hovering = !autohide
-            // Меню держит док на виду. Иначе клавиша Windows открывает меню, растущее из значка,
-            // которого на экране нет, — и оно появляется ниоткуда и не там.
-            property bool hovering: !autohide
-            readonly property bool shown: hovering || JD.menuOpen
-            anchors { left: true; right: true; top: atTop; bottom: !atTop }
-            exclusionMode: ExclusionMode.Normal
-            // Прячущийся док места не отнимает: он затем и прячется.
             readonly property real edgeMargin: 8
-            // Через «=== true», а не «!== false»: до прихода настроек свойства нет вовсе, а зона,
-            // отнятая на секунду при запуске, остаётся отнятой — окно под ней уже сжалось.
-            exclusiveZone: JD.dockCfg.reserve === true && !autohide ? Math.round(dock.cardHeight + edgeMargin) : 0
-            WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.namespace: "justday-dock"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            color: "transparent"
-            implicitWidth: JD.screenWidth
-            // Место под увеличенный значок, подпись и меню правой кнопки — всё это выходит за карточку.
-            implicitHeight: Math.min(JD.screenHeight, dock.implicitHeight + 220)
 
-            // Щелчки проходят везде, кроме самой карточки и открытого меню правой кнопки.
-            // Полоса у самого края экрана — тоже наша: док лежит отступив от края, но ловить
-            // курсор обязан до упора. Внизу экрана мышь останавливается о край, и это и значит
-            // «к доку»; без этой полосы последние пиксели принадлежали никому.
-            mask: Region {
-                item: dockWin.shown ? dock : edge
-                Region { item: dockWin.shown ? dock.hotItem : null }
-                Region { item: dock.ctxEntry || dock.stackEntry ? dockCtxZone : null }
-            }
-            // Размытие под карточкой: без него полупрозрачная полоса поверх пёстрых обоев
-            // превращается в кашу, а значки в ней перестают читаться.
-            // Не `item:`, а прямоугольник с радиусом. Маска по элементу — это его habitual
-            // прямоугольник, и размытие торчало за скруглёнными углами карточки четырьмя острыми
-            // уголками. Радиус у Region свой, и он обязан совпадать с радиусом карточки.
-            BackgroundEffect.blurRegion: Region {
-                x: Math.round(dock.x + dock.blurItem.x)
-                y: Math.round(dock.y + dock.blurItem.y)
-                width: dockWin.shown && JD.blurOn ? Math.round(dock.blurItem.width) : 0
-                height: dockWin.shown && JD.blurOn ? Math.round(dock.blurItem.height) : 0
-                radius: Math.round(dock.blurItem.radius)
-            }
-            // Полоска у самого края: ею прячущийся док зовут обратно.
-            Item {
-                id: edge
-                width: parent.width
-                // Зона вызова шире двух пикселей, но входа в неё мало: док выезжает на **взмах**
-                // — на быстрое движение к краю. Так и широкая зона не мешает: мимо неё ходят
-                // медленно, к доку — быстро, и случайно его больше не вызвать. Медленный путь
-                // тоже остался: упереться в самый край экрана. Это тот случай, когда человек
-                // точно знает, чего хочет, и требовать от него резкости было бы придиркой.
-                height: Math.max(2, Math.min(200, JD.dockCfg.reveal_zone === undefined ? 28 : JD.dockCfg.reveal_zone))
-                y: dockWin.atTop ? 0 : parent.height - height
+            function probe(x) { return dockWin.probe(x) }
+            function dragProbe(n, x) { return dockWin.dragProbe(n, x) }
+            function wheelWalk(a, b, n) { return dockWin.wheelWalk(a, b, n) }
+            function geom() { return dockWin.geom() }
 
-                readonly property real flick: Math.max(0, JD.dockCfg.reveal_flick === undefined ? 900 : JD.dockCfg.reveal_flick)
-                function wants(point) {
-                    if (!dockWin.autohide) return true
-                    if (flick <= 0) return true
-                    const v = point.velocity.y
-                    if (dockWin.atTop ? v < -flick : v > flick) return true
-                    // Уткнулись в самый край — этого достаточно и без взмаха.
-                    const at = point.position.y
-                    return dockWin.atTop ? at <= 3 : at >= height - 3
+            // ── paint layer: full-screen, no magnet ──
+            PanelWindow {
+                id: dockWin
+                screen: modelData
+                anchors { top: true; bottom: true; left: true; right: true }
+                exclusionMode: ExclusionMode.Ignore
+                exclusiveZone: 0
+                WlrLayershell.layer: WlrLayer.Top
+                WlrLayershell.namespace: "justday-dock"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+
+                readonly property real stripPx: dock.cardHeight + dockHost.edgeMargin
+                // Overlap (window bites the island) or true-fullscreen → hide; edge still summons.
+                readonly property bool overlapRaw: JD.dockCoveredOn(modelData, stripPx, dockHost.atTop, dock.x, dock.width)
+                readonly property bool reserveLive: JD.dockCfg.reserve === true && !dockReveal.needHide
+
+                EdgeReveal {
+                    id: dockReveal
+                    autohide: JD.dockCfg.autohide === true
+                    overlapRaw: dockWin.overlapRaw
+                    // Stay up while pointer is on dock / tip / ctx / launcher menu.
+                    keepVisible: JD.menuOpen || dock.dockUiActive
+                    edge: dockHost.atTop ? "top" : "bottom"
+                    edgeOnly: true
+                    hideDelay: 1400
+                    revealZone: Math.max(2, Math.min(200, JD.dockCfg.reveal_zone === undefined ? 28 : JD.dockCfg.reveal_zone))
+                    flickSpeed: Math.max(0, JD.dockCfg.reveal_flick === undefined ? 900 : JD.dockCfg.reveal_flick)
+                }
+                readonly property bool shown: dockReveal.shown
+
+                // Clicks pass everywhere except the card, tip, ctx menu, and the edge summon strip.
+                mask: Region {
+                    item: dockWin.shown ? dock : edge
+                    Region { item: dockWin.shown ? dock.hotItem : null }
+                    Region { item: dockWin.shown && dock.tipShown ? dock.tipItem : null }
+                    Region { item: dock.ctxEntry ? dockCtxZone : null }
+                }
+
+                Item {
+                    id: edge
+                    width: parent.width
+                    height: dockReveal.revealZone
+                    y: dockHost.atTop ? 0 : parent.height - height
+                    HoverHandler {
+                        id: edgeWatch
+                        onPointChanged: if (dockReveal.needHide) dockReveal.onEdgePoint(point, edge.height)
+                    }
+                    DropArea {
+                        anchors.fill: parent
+                        onEntered: if (dockReveal.needHide) dockReveal.onEdgeEntered()
+                    }
+                }
+                Item {
+                    id: dockCtxZone
+                    width: dock.width
+                    height: dock.height + 220
+                    x: dock.x
+                    TapHandler {
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: dock.closeCtx()
+                    }
+                    y: dockHost.atTop ? dock.y : dock.y - 220
                 }
                 HoverHandler {
-                    id: edgeWatch
-                    onPointChanged: if (dockWin.autohide && edge.wants(point)) { hideDock.stop(); dockWin.hovering = true }
+                    onHoveredChanged: dockReveal.onBodyHover(hovered)
                 }
-                // Файл, поднесённый к краю, зовёт док без всякого взмаха. Перетаскивание на
-                // вейланде идёт не движениями мыши, а своими событиями, и взмах по ним не
-                // измеришь, — но тут он и не нужен: человек с грузом в руке точно идёт к доку.
-                DropArea {
-                    anchors.fill: parent
-                    onEntered: { hideDock.stop(); dockWin.hovering = true }
+
+                Binding {
+                    target: JD
+                    property: "dockHover"
+                    value: [Math.round(dock.pointerScene), dock.engaged ? 1 : 0, dock.focused ? dock.focused.t : "",
+                            Math.round(dock.laneLength), Math.round(dock.restLength)]
+                }
+                Binding {
+                    target: JD
+                    when: dockHost.primary
+                    property: "dockAnchor"
+                    value: ({ x: dock.x + dock.launcherCenter,
+                              gap: dock.cardHeight + dockHost.edgeMargin,
+                              top: dockHost.atTop, shown: dockWin.shown })
+                }
+                Binding {
+                    target: JD
+                    when: dockHost.primary
+                    property: "dockRect"
+                    value: ({ x: dock.x, w: dock.width, h: dock.cardHeight,
+                              y: dockHost.atTop ? dockHost.edgeMargin
+                                               : JD.screenHeight - dock.cardHeight - dockHost.edgeMargin,
+                              live: dockWin.shown })
+                }
+
+                function probe(x) { return dock.probe(x) }
+                function dragProbe(n, x) { return dock.dragProbe(n, x) }
+                function wheelWalk(a, b, n) { return dock.wheelWalk(a, b, n) }
+                function geom() {
+                    return ({ paint: { w: Math.round(width), h: Math.round(height) },
+                              fence: { w: Math.round(dockFence.width), h: Math.round(dockFence.height),
+                                       iw: Math.round(dockFence.implicitWidth),
+                                       ih: Math.round(dockFence.implicitHeight),
+                                       ml: Math.round(dockFence.margins.left),
+                                       excl: dockFence.exclusiveZone,
+                                       mode: dockWin.reserveLive ? "normal" : "ignore" },
+                              card: Math.round(dock.cardHeight), rest: Math.round(dock.restLength),
+                              head: Math.round(dock.headroom), dx: Math.round(dock.x), dy: Math.round(dock.y),
+                              dw: Math.round(dock.width), dh: Math.round(dock.height) })
+                }
+
+                DockView {
+                    id: dock
+                    awake: dockWin.shown
+                    edgeRoom: dockHost.edgeMargin
+                    // Full-screen paint: centre is screen midpoint.
+                    anchorCentre: parent.width / 2
+                    x: Math.max(0, Math.round((parent.width - width) / 2))
+                    // DockView = card + headroom. Card sits on the screen edge inside it
+                    // (top: card at y=0 of view; bottom: card at bottom of view).
+                    y: {
+                        const rest = dockHost.atTop
+                            ? dockHost.edgeMargin
+                            : parent.height - height - dockHost.edgeMargin
+                        const away = dockHost.atTop ? -cardHeight - 20 : cardHeight + 20
+                        return rest + (dockWin.shown ? 0 : away)
+                    }
+                    opacity: 1
+                    Behavior on y { enabled: JD.animOn
+                                    NumberAnimation { duration: dockReveal.slideMs; easing.type: Easing.OutCubic } }
                 }
             }
-            Item {
-                id: dockCtxZone
-                width: dock.width
-                height: dock.height + 220
-                x: dock.x
-                // Воздух вокруг меню тоже закрывает его: эта область добавлена в маску только ради
-                // того, чтобы по самому меню можно было попасть, и щелчок мимо него не должен
-                // проваливаться в никуда.
-                TapHandler {
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: dock.closeCtx()
+
+            // ── fence layer: visible card outline only — magnet / exclusive ──
+            PanelWindow {
+                id: dockFence
+                screen: modelData
+                // One edge only — never left+right (would be a full-width bottom fence on 4K/8K).
+                anchors {
+                    top: dockHost.atTop
+                    bottom: !dockHost.atTop
                 }
-                y: dockWin.atTop ? dock.y : dock.y - 220
-            }
-            // Окно целиком держит док открытым, пока курсор в нём, но само его не вызывает: вызов
-            // — дело кромки, и только она решает, был ли это взмах.
-            HoverHandler {
-                onHoveredChanged: if (dockWin.autohide) { if (hovered) hideDock.stop(); else hideDock.restart() }
-            }
-            Timer { id: hideDock; interval: 600; onTriggered: if (dockWin.autohide) dockWin.hovering = false }
-
-            // Откуда вырастает меню приложений. Считается здесь, потому что только это окно знает
-            // и где стоит карточка, и где у окна край экрана: у самого дока в его координатах нет
-            // ни того, ни другого.
-            Binding {
-                target: JD
-                property: "dockHover"
-                value: [Math.round(dock.pointerScene), dock.engaged ? 1 : 0, dock.focused ? dock.focused.t : "",
-                        Math.round(dock.laneLength), Math.round(dock.restLength)]
+                exclusionMode: dockWin.reserveLive ? ExclusionMode.Normal : ExclusionMode.Ignore
+                exclusiveZone: dockWin.reserveLive ? Math.round(dockWin.stripPx) : 0
+                WlrLayershell.layer: WlrLayer.Bottom
+                WlrLayershell.namespace: "justday-dock-fence"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+                // Calm card outline (+ edge margin baked into stripPx height). Not magExtra/headroom.
+                implicitWidth: Math.max(160, Math.round(dock.restLength))
+                implicitHeight: Math.round(dockWin.stripPx)
+                margins.left: Math.max(0, Math.round(((screen ? screen.width : JD.screenWidth) - implicitWidth) / 2))
+                // Click-through — paint layer owns input.
+                mask: Region {}
+                // Invisible; only exists so KWin magnet / exclusive match the real card, not paint headroom.
+                visible: JD.dockOn
             }
 
-            Binding {
-                target: JD
-                when: dockWin.primary
-                property: "dockAnchor"
-                // По месту покоя, а не по текущему: пока док выезжает, точка ползёт вместе с ним,
-                // и меню уезжало бы вниз вслед за ней — то самое «как-то более вниз уходит».
-                value: ({ x: dock.x + dock.launcherCenter,
-                          gap: dock.cardHeight + dockWin.edgeMargin,
-                          top: dockWin.atTop, shown: dockWin.shown })
-            }
-
-            // Где карточка лежит на экране — чтобы меню прорезало в своём перекрытии дырку ровно
-            // по ней и док под меню оставался живым, а не картинкой.
-            Binding {
-                target: JD
-                when: dockWin.primary
-                property: "dockRect"
-                value: ({ x: dock.x, w: dock.width, h: dock.cardHeight,
-                          y: dockWin.atTop ? dockWin.edgeMargin
-                                           : JD.screenHeight - dock.cardHeight - dockWin.edgeMargin,
-                          live: dockWin.shown })
-            }
-
-            function probe(x) { return dock.probe(x) }
-            function dragProbe(n, x) { return dock.dragProbe(n, x) }
-            function wheelWalk(a, b, n) { return dock.wheelWalk(a, b, n) }
-
-            DockView {
-                id: dock
-                awake: dockWin.shown
-                edgeRoom: dockWin.edgeMargin
-                // Полоса растёт вокруг середины экрана: центрирует её окно, а не она сама, поэтому
-                // середину надо ей сказать — без неё решение не знает, куда полоса переедет.
-                anchorCentre: parent.width / 2
-                x: (parent.width - width) / 2
-                // Спрятанный док уезжает за край целиком, оставляя полоску: это и есть «его нет».
-                y: {
-                    const rest = dockWin.atTop ? dockWin.edgeMargin : parent.height - height - dockWin.edgeMargin
-                    const away = dockWin.atTop ? -cardHeight - 20 : cardHeight + 20
-                    return rest + (dockWin.shown ? 0 : away)
+            // ── blur layer: card strip ONLY (never on full-screen paint) ──
+            // KWin blurs the whole layer-shell surface when BackgroundEffect sits on a
+            // full-screen PanelWindow — even with a small blurRegion. Keep blur on a
+            // separate window sized to the live card so games/desktop stay sharp.
+            PanelWindow {
+                id: dockBlur
+                screen: modelData
+                anchors {
+                    top: dockHost.atTop
+                    bottom: !dockHost.atTop
                 }
-                opacity: dockWin.shown ? 1 : 0
-                Behavior on y { enabled: JD.animOn
-                                NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 180 } }
+                exclusionMode: ExclusionMode.Ignore
+                exclusiveZone: 0
+                WlrLayershell.layer: WlrLayer.Bottom
+                WlrLayershell.namespace: "justday-dock-blur"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+                visible: JD.dockOn && JD.blurOn && dockWin.shown
+                implicitWidth: Math.max(1, Math.round(dock.blurItem.width))
+                implicitHeight: Math.max(1, Math.round(dock.blurItem.height))
+                margins.left: Math.max(0, Math.round(dock.x + dock.blurItem.x))
+                margins.top: dockHost.atTop
+                    ? Math.max(0, Math.round(dock.y + dock.blurItem.y)) : 0
+                margins.bottom: dockHost.atTop ? 0 : Math.max(0, Math.round(
+                    ((screen ? screen.height : JD.screenHeight)
+                     - (dock.y + dock.blurItem.y + dock.blurItem.height))))
+                mask: Region {}
+                BackgroundEffect.blurRegion: Region {
+                    x: 0
+                    y: 0
+                    width: Math.round(dockBlur.width)
+                    height: Math.round(dockBlur.height)
+                    radius: Math.round(dock.blurItem.radius)
+                }
             }
         }
     }
 
-    // ───────────── трей ─────────────
+    // ───────────── tray ─────────────
     //
-    // Узкая полоса у бокового края. Пуст лоток — окна нет вовсе: пустая полоса у края экрана
-    // выглядит поломкой оболочки, а не отсутствием значков.
+    // Same THREE-layer split as the dock (KWin magnet follows PanelWindow geometry):
+    //   1) paint — full-screen, ExclusionMode.Ignore, exclusiveZone 0. Holds TrayView so
+    //      hover/magnify/hints/menus are not clipped. Never advertises a strut / magnet. NO blur.
+    //   2) fence — thin PanelWindow matching the visible strip outline only. Exclusive /
+    //      magnet when reserve is on; Ignore otherwise. Click-through (empty mask).
+    //   3) blur — strip-sized PanelWindow only. BackgroundEffect must NOT sit on paint.
     Loader {
         id: trayLoader
         active: JD.trayOn
-        sourceComponent: PanelWindow {
-            id: trayWin
-            // Проверка увеличения живёт снаружи, а полоса — внутри окна: пробрасываем.
-            function probeAt(at) { return tray.probe(at) }
-            function holdAt(at) { return tray.hold(at) }
-            screen: win.screen
+        sourceComponent: Item {
+            id: trayHost
+            function probeAt(at) { return trayWin.probeAt(at) }
+            function geom() { return trayWin.geom() }
+
             readonly property bool atRight: JD.trayPlace === "right"
             readonly property string align: JD.trayCfg.align || "center"
-            visible: !tray.empty
-            anchors { top: true; bottom: true; left: !atRight; right: atRight }
-            exclusionMode: ExclusionMode.Normal
-            exclusiveZone: JD.trayCfg.reserve === true && !JD.trayAutohide && !tray.empty
-                           ? Math.round(tray.implicitWidth + 10) : 0
-            WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.namespace: "justday-tray"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            color: "transparent"
-            // Шире полосы: подпись всплывает рядом с ней и обязана поместиться в окно.
-            implicitWidth: Math.round(tray.implicitWidth + 260)
-            implicitHeight: JD.screenHeight
+            readonly property real edgeMargin: 10
 
-            readonly property bool autohide: JD.trayAutohide
-            property bool shown: !autohide
-
-            // Спрятанная полоса оставляет у края тонкую кромку: ею её и зовут обратно.
-            Item {
-                id: trayEdge
-                width: 3
-                height: parent.height
-                x: trayWin.atRight ? parent.width - width : 0
-            }
-            HoverHandler {
-                onHoveredChanged: if (trayWin.autohide) { if (hovered) { hideTray.stop(); trayWin.shown = true } else hideTray.restart() }
-            }
-            Timer { id: hideTray; interval: 600; onTriggered: if (trayWin.autohide) trayWin.shown = false }
-
-            mask: Region { item: trayWin.shown ? tray : trayEdge }
-            BackgroundEffect.blurRegion: Region {
-                x: Math.round(tray.x + tray.blurItem.x)
-                y: Math.round(tray.y + tray.blurItem.y)
-                width: trayWin.shown && JD.blurOn ? Math.round(tray.blurItem.width) : 0
-                height: trayWin.shown && JD.blurOn ? Math.round(tray.blurItem.height) : 0
-                radius: Math.round(tray.blurItem.radius)
+            // Align strip along the edge (center / start / end), shared by paint + fence.
+            function stripTop(stripH, screenH) {
+                const topPad = JD.atTop ? JD.topMargin + 60 : 20
+                if (align === "start") return topPad
+                if (align === "end") return Math.max(0, Math.round(screenH - stripH - 20))
+                return Math.max(0, Math.round((screenH - stripH) / 2))
             }
 
-            // То же, что у дока: меню прорежет по этому месту дырку в своём перекрытии.
-            Binding {
-                target: JD
-                property: "trayRect"
-                value: ({ x: trayWin.atRight ? JD.screenWidth - tray.width - 10 : tray.x,
-                          y: tray.y, w: tray.width, h: tray.height, live: trayWin.shown && !tray.empty })
-            }
-
-            TrayView {
-                id: tray
-                // Середина, вокруг которой полоса растёт: её центрирует окно, а не она сама,
-                // поэтому середину надо ей сказать — без неё обратный перевод курсора не знает,
-                // куда полоса переедет, увеличившись.
-                anchorMiddle: y + height / 2
-                x: {
-                    const rest = trayWin.atRight ? parent.width - width - 10 : 10
-                    const away = trayWin.atRight ? width + 16 : -width - 16
-                    return rest + (trayWin.shown ? 0 : away)
+            // ── paint layer: full-screen, no magnet ──
+            PanelWindow {
+                id: trayWin
+                function probeAt(at) { return tray.probe(at) }
+                function geom() {
+                    return ({ paint: { w: Math.round(width), h: Math.round(height) },
+                              fence: { w: Math.round(trayFence.width), h: Math.round(trayFence.height),
+                                       iw: Math.round(trayFence.implicitWidth),
+                                       ih: Math.round(trayFence.implicitHeight),
+                                       mt: Math.round(trayFence.margins.top),
+                                       excl: trayFence.exclusiveZone,
+                                       mode: trayWin.reserveLive ? "normal" : "ignore" },
+                              tw: Math.round(tray.width), th: Math.round(tray.height),
+                              tx: Math.round(tray.x), ty: Math.round(tray.y),
+                              restW: Math.round(tray.restWidth), restL: Math.round(tray.restLength) })
                 }
-                opacity: trayWin.shown ? 1 : 0
-                Behavior on x { enabled: JD.animOn; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 180 } }
-                y: {
-                    const top = JD.atTop ? JD.topMargin + 60 : 20
-                    if (trayWin.align === "start") return top
-                    if (trayWin.align === "end") return parent.height - height - 20
-                    return (parent.height - height) / 2
+                screen: win.screen
+                readonly property bool atRight: trayHost.atRight
+                readonly property string align: trayHost.align
+                visible: !tray.empty
+                anchors { top: true; bottom: true; left: true; right: true }
+                readonly property bool reserveLive: JD.trayCfg.reserve === true && !JD.trayAutohide && !tray.empty
+                exclusionMode: ExclusionMode.Ignore
+                exclusiveZone: 0
+                WlrLayershell.layer: WlrLayer.Top
+                WlrLayershell.namespace: "justday-tray"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+
+                EdgeReveal {
+                    id: trayReveal
+                    autohide: JD.trayAutohide
+                    overlapRaw: false
+                    // Stay up while the tray menu is open (same idea as dock keepVisible).
+                    keepVisible: !!JD.trayMenu
+                    edge: trayWin.atRight ? "right" : "left"
+                    // Full-screen paint: only the edge strip summons — body hover must not
+                    // reveal from anywhere on the screen (mask already limits input).
+                    edgeOnly: true
+                    hideDelay: 1800
+                    revealZone: Math.max(2, Math.min(200, JD.trayCfg.reveal_zone === undefined ? 28 : JD.trayCfg.reveal_zone))
+                    flickSpeed: 0
                 }
-                Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                readonly property bool shown: trayReveal.shown
+
+                Item {
+                    id: trayEdge
+                    width: trayReveal.revealZone
+                    height: parent.height
+                    x: trayWin.atRight ? parent.width - width : 0
+                    HoverHandler {
+                        onPointChanged: if (trayReveal.needHide) trayReveal.onEdgePoint(point, trayEdge.width)
+                        onHoveredChanged: if (hovered && trayReveal.needHide) trayReveal.onEdgeEntered()
+                    }
+                }
+                HoverHandler {
+                    onHoveredChanged: trayReveal.onBodyHover(hovered)
+                }
+
+                // Clicks pass everywhere except the strip and the edge summon strip.
+                mask: Region { item: trayWin.shown ? tray : trayEdge }
+
+                // Rest footprint for trayRect / fence align (blur lives on trayBlur window).
+                readonly property real trayRestX: trayWin.atRight
+                    ? Math.round(width - tray.restWidth - trayHost.edgeMargin)
+                    : trayHost.edgeMargin
+                readonly property real trayRestY: {
+                    const sh = height
+                    return trayHost.stripTop(tray.restLength, sh)
+                }
+
+                Binding {
+                    target: JD
+                    property: "trayRect"
+                    value: ({ x: trayWin.trayRestX,
+                              y: trayWin.trayRestY,
+                              w: tray.restWidth, h: tray.restLength,
+                              live: trayWin.shown && !tray.empty })
+                }
+
+                TrayView {
+                    id: tray
+                    // Full-screen paint: scene Y is screen-local; middle of the live strip.
+                    anchorMiddle: y + height / 2
+                    x: {
+                        const rest = trayWin.atRight
+                            ? parent.width - width - trayHost.edgeMargin
+                            : trayHost.edgeMargin
+                        const away = trayWin.atRight ? width + 16 : -width - 16
+                        return rest + (trayWin.shown ? 0 : away)
+                    }
+                    opacity: 1
+                    Behavior on x { enabled: JD.animOn; NumberAnimation { duration: trayReveal.slideMs; easing.type: Easing.OutCubic } }
+                    // Pin to restLength, then offset so magnify grows symmetrically.
+                    // Do NOT Behavior-animate y: that lagged physics and made the strip jitter.
+                    y: {
+                        const sh = parent.height
+                        const align = trayWin.align
+                        const topPad = JD.atTop ? JD.topMargin + 60 : 20
+                        const restH = tray.restLength
+                        let base
+                        if (align === "start") base = topPad
+                        else if (align === "end") base = Math.max(0, Math.round(sh - restH - 20))
+                        else base = Math.max(0, Math.round((sh - restH) / 2))
+                        return base - Math.round((height - restH) / 2)
+                    }
+                }
+            }
+
+            // ── fence layer: visible strip outline only — magnet / exclusive ──
+            PanelWindow {
+                id: trayFence
+                screen: win.screen
+                visible: JD.trayOn && !tray.empty
+                // One edge only — never top+bottom (would be a full-height left fence on 4K/8K).
+                anchors {
+                    left: !trayHost.atRight
+                    right: trayHost.atRight
+                }
+                exclusionMode: trayWin.reserveLive ? ExclusionMode.Normal : ExclusionMode.Ignore
+                exclusiveZone: trayWin.reserveLive ? Math.round(tray.restWidth + trayHost.edgeMargin) : 0
+                WlrLayershell.layer: WlrLayer.Bottom
+                WlrLayershell.namespace: "justday-tray-fence"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+                // Calm strip outline (+ edge margin). Not sideExtra/magExtra headroom.
+                implicitWidth: Math.round(tray.restWidth + trayHost.edgeMargin)
+                implicitHeight: Math.round(tray.restLength)
+                margins.top: {
+                    const sh = screen ? screen.height : JD.screenHeight
+                    return trayHost.stripTop(implicitHeight, sh)
+                }
+                // Click-through — paint layer owns input.
+                mask: Region {}
+            }
+
+            // ── blur layer: strip ONLY (never on full-screen paint) ──
+            PanelWindow {
+                id: trayBlur
+                screen: win.screen
+                visible: JD.trayOn && JD.blurOn && !tray.empty && trayWin.shown
+                anchors {
+                    left: !trayHost.atRight
+                    right: trayHost.atRight
+                }
+                exclusionMode: ExclusionMode.Ignore
+                exclusiveZone: 0
+                WlrLayershell.layer: WlrLayer.Bottom
+                WlrLayershell.namespace: "justday-tray-blur"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+                implicitWidth: Math.max(1, Math.round(tray.blurItem.width))
+                implicitHeight: Math.max(1, Math.round(tray.blurItem.height))
+                margins.top: Math.max(0, Math.round(tray.y + tray.blurItem.y))
+                margins.left: trayHost.atRight ? 0 : Math.max(0, Math.round(tray.x + tray.blurItem.x))
+                margins.right: trayHost.atRight ? Math.max(0, Math.round(
+                    ((screen ? screen.width : JD.screenWidth)
+                     - (tray.x + tray.blurItem.x + tray.blurItem.width)))) : 0
+                mask: Region {}
+                BackgroundEffect.blurRegion: Region {
+                    x: 0
+                    y: 0
+                    width: Math.round(trayBlur.width)
+                    height: Math.round(trayBlur.height)
+                    radius: Math.round(tray.blurItem.radius)
+                }
+            }
+        }
+    }
+
+
+    // ───────────── genie minimize overlay ─────────────
+    // Scales a card from the window rect toward the dock icon, then the real window is
+    // minimized underneath. Avoids depending on KWin iconGeometry (empty without Plasma panel).
+    PanelWindow {
+        id: genieWin
+        visible: !!JD.genie
+        screen: win.screen
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "justday-genie"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        color: "transparent"
+        mask: Region {}   // click-through
+
+        property real t: 0
+        onVisibleChanged: {
+            if (visible) {
+                t = 0
+                genieAnim.restart()
+            } else {
+                t = 0
+            }
+        }
+        NumberAnimation {
+            id: genieAnim
+            target: genieWin
+            property: "t"
+            from: 0; to: 1
+            duration: JD.animOn ? 320 : 1
+            easing.type: Easing.InCubic
+            onFinished: JD.genie = null
+        }
+
+        readonly property var g: JD.genie
+        readonly property real sx: g ? g.from.x + (g.to.x - g.from.x) * t : 0
+        readonly property real sy: g ? g.from.y + (g.to.y - g.from.y) * t : 0
+        readonly property real sw: g ? g.from.w + (g.to.w - g.from.w) * t : 0
+        readonly property real sh: g ? g.from.h + (g.to.h - g.from.h) * t : 0
+
+        Rectangle {
+            visible: !!genieWin.g
+            x: genieWin.sx - (win.screen ? win.screen.x : 0)
+            y: genieWin.sy - (win.screen ? win.screen.y : 0)
+            width: Math.max(8, genieWin.sw)
+            height: Math.max(8, genieWin.sh)
+            radius: Math.min(18, Math.min(width, height) * 0.18)
+            color: Qt.rgba(0.08, 0.08, 0.1, 0.92 * (1 - genieWin.t * 0.35))
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.14 * (1 - genieWin.t))
+            opacity: 1 - Math.pow(genieWin.t, 2.2)
+            Icon {
+                anchors.centerIn: parent
+                theme: true
+                name: genieWin.g ? (genieWin.g.icon || "") : ""
+                implicitSize: Math.max(16, Math.min(parent.width, parent.height) * 0.42)
+                opacity: 0.95
             }
         }
     }
@@ -3234,8 +3645,29 @@ ShellRoot {
             Region { item: trayMenuHole; intersection: Intersection.Subtract }
         }
 
-        // Размытия под карточкой нет намеренно: она почти непрозрачная — как меню дока, — и
-        // размывать под ней нечего. Лишний слой на каждый щелчок правой кнопкой того не стоит.
+        // Frosted glass under the menu card, same chrome as dock/tray (armed after open settle).
+        property bool blurLive: false
+        onOpenChanged: {
+            if (open) {
+                blurLive = false
+                trayMenuBlurArm.restart()
+            } else {
+                trayMenuBlurArm.stop()
+                blurLive = false
+            }
+        }
+        Timer {
+            id: trayMenuBlurArm
+            interval: JD.dur(140) + 16
+            onTriggered: trayMenuWin.blurLive = trayMenuWin.open
+        }
+        BackgroundEffect.blurRegion: Region {
+            x: Math.round(trayMenu.blurRect.x)
+            y: Math.round(trayMenu.blurRect.y)
+            width: trayMenuWin.blurLive && JD.blurOn ? Math.round(trayMenu.blurRect.w) : 0
+            height: trayMenuWin.blurLive && JD.blurOn ? Math.round(trayMenu.blurRect.h) : 0
+            radius: 14
+        }
         TrayMenu {
             id: trayMenu
             anchors.fill: parent
@@ -3261,9 +3693,8 @@ ShellRoot {
         readonly property bool want: JD.menuOpen
         property bool alive: false
         // Окно гаснет не мгновенно: иначе исчезновение выглядит обрывом, а не закрытием.
-        onWantChanged: { if (want) { alive = true; fadeOut.stop() } else fadeOut.restart() }
-        Timer { id: fadeOut; interval: JD.dur(170); onTriggered: menuWin.alive = false }
-
+        // Blur only when fully open (no rebuild during open/close slide).
+        property bool blurLive: false
         visible: alive
         screen: win.screen
         anchors { top: true; bottom: true; left: true; right: true }
@@ -3276,10 +3707,24 @@ ShellRoot {
         BackgroundEffect.blurRegion: Region {
             x: Math.round(menuCard.x)
             y: Math.round(menuCard.y)
-            width: JD.menuOpen && JD.blurOn ? Math.round(menuCard.width) : 0
-            height: JD.menuOpen && JD.blurOn ? Math.round(menuCard.height) : 0
+            width: menuWin.blurLive && JD.blurOn ? Math.round(menuCard.width) : 0
+            height: menuWin.blurLive && JD.blurOn ? Math.round(menuCard.height) : 0
             radius: Math.round(menuCard.radius)
         }
+        onWantChanged: {
+            if (want) {
+                alive = true
+                menuFadeOut.stop()
+                blurLive = false
+                menuBlurArm.restart()
+            } else {
+                menuFadeOut.restart()
+                menuBlurArm.stop()
+                blurLive = false
+            }
+        }
+        Timer { id: menuFadeOut; interval: JD.dur(JD.slideMs); onTriggered: menuWin.alive = false }
+        Timer { id: menuBlurArm; interval: JD.dur(JD.slideMs) + 16; onTriggered: menuWin.blurLive = menuWin.want }
 
         // «dock» — меню вырастает из значка в доке и садится в него же. Иначе — свой угол экрана.
         // Нет дока — нет и значка: тогда меню ведёт себя как «снизу слева», а не исчезает.
@@ -3364,8 +3809,14 @@ ShellRoot {
         function fitCard() {
             const roomW = (width > 200 ? width : JD.screenWidth) - 24
             const roomH = (height > 200 ? height : JD.screenHeight) - 24
-            cardW = Math.max(520, Math.min(roomW, JD.menuWidth))
-            cardH = Math.max(360, Math.min(roomH, JD.menuHeight))
+            if (JD.menuSearchMode) {
+                // Spotlight: узкая плавающая карточка, не 760×620 пуск.
+                cardW = Math.max(420, Math.min(roomW, 560))
+                cardH = Math.max(280, Math.min(roomH, 480))
+            } else {
+                cardW = Math.max(520, Math.min(roomW, JD.menuWidth))
+                cardH = Math.max(360, Math.min(roomH, JD.menuHeight))
+            }
         }
         // Пересчитывать надо и когда окно узнало свой размер. При запуске его ширина ещё ноль,
         // и «не больше экрана» превращается в «не больше минус двадцати четырёх»: карточка
@@ -3378,6 +3829,7 @@ ShellRoot {
             target: JD
             function onMenuWidthChanged() { menuWin.fitCard() }
             function onMenuHeightChanged() { menuWin.fitCard() }
+            function onMenuSearchModeChanged() { menuWin.fitCard() }
         }
 
         Rectangle {
@@ -3386,7 +3838,10 @@ ShellRoot {
             width: Math.min(menuWin.width - 24, menuWin.cardW)
             height: Math.min(menuWin.height - 24, menuWin.cardH)
             // От значка: меню стоит над ним, но не левее края экрана и не правее его.
-            x: menuWin.fromDock
+            // Spotlight — по центру сверху, как macOS Spotlight, а не из дока.
+            x: JD.menuSearchMode
+                 ? (menuWin.width - width) / 2
+                 : menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
                  : menuWin.side === "left" ? 12
                  : menuWin.side === "right" ? menuWin.width - width - 12
@@ -3394,12 +3849,17 @@ ShellRoot {
             // Док, который отнимает место, уже сдвинул край этого окна — считать его высоту второй
             // раз значит отодвинуть меню от значка на его же толщину. Прячущийся док места не
             // отнимает, и тогда отступ нужен полный.
-            readonly property real fromEdge: menuWin.fromDock && (JD.dockCfg.reserve === false || JD.dockCfg.autohide === true)
+            // exclusiveZone=0 when reserve off OR dock hidden (overlap/autohide) → need full gap.
+            readonly property real fromEdge: menuWin.fromDock && (JD.dockCfg.reserve !== true
+                                             || JD.dockCfg.autohide === true
+                                             || !(menuWin.anchor && menuWin.anchor.shown))
                                              ? menuWin.anchor.gap + 10 : 12
-            y: menuWin.fromDock
+            y: JD.menuSearchMode
+                 ? Math.max(48, Math.round(menuWin.height * 0.14))
+                 : menuWin.fromDock
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
-            radius: 22
+            radius: JD.menuSearchMode ? 16 : 22
             // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
             // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
             // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
@@ -3409,14 +3869,14 @@ ShellRoot {
             clip: true
 
             // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.
-            transformOrigin: menuWin.atTop
+            transformOrigin: JD.menuSearchMode ? Item.Top
+                : menuWin.atTop
                 ? (menuWin.side === "left" ? Item.TopLeft : menuWin.side === "right" ? Item.TopRight : Item.Top)
                 : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
             opacity: JD.menuOpen ? 1 : 0
             scale: JD.menuOpen ? 1 : 0.94
             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-            Behavior on scale { enabled: JD.animOn
-                                SpringAnimation { spring: JD.springK; damping: Math.max(0.5, JD.springDamping); epsilon: 0.004 } }
+            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
 
             // Щелчок по самой карточке её не закрывает — только мимо.
             MouseArea { id: menuCardBody; anchors.fill: parent; hoverEnabled: true }
@@ -3428,6 +3888,7 @@ ShellRoot {
             // карточку, а она стоит там, откуда её открыли, и стоять обязана.
             Item {
                 id: menuGrip
+                visible: !JD.menuSearchMode
                 readonly property bool atLeft: menuWin.side === "right"
                 readonly property bool atTop: !menuWin.atTop
                 width: 26

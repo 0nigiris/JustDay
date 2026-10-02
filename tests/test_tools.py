@@ -213,6 +213,7 @@ def apps(monkeypatch, tmp_path):
 
     monkeypatch.setattr(launcher, "RECENT_FILE", tmp_path / "recent.json")
     monkeypatch.setattr(launcher.config, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(launcher.filesearch, "search", lambda *a, **k: [])
     monkeypatch.setattr(launcher.desktop, "list_apps", lambda: [
         {"id": "discord", "name": "Discord", "name_ru": "", "generic": "Messenger",
          "keywords": "chat;vencord;", "icon": "discord"},
@@ -255,6 +256,23 @@ def test_recently_launched_come_first(apps) -> None:
 def test_nothing_matches_means_nothing_and_not_noise(apps) -> None:
     """Пустой ответ — это сигнал островку предложить спросить ассистента, а не показать мусор."""
     assert apps.items("поставь таймер на десять минут") == []
+
+
+
+def test_launcher_includes_files_from_index(apps, monkeypatch, tmp_path):
+    """Меню ищет и файлы: недавние + лёгкий индекс, не только .desktop."""
+    sample = [{"kind": "file", "id": str(tmp_path / "notes.txt"), "name": "notes.txt",
+               "icon": "text-x-generic", "sub": str(tmp_path), "dir": False}]
+    monkeypatch.setattr(apps.filesearch, "search",
+                        lambda q, limit=24: sample if "note" in q.lower() else [])
+    got = apps.items("notes")
+    assert any(i["kind"] == "file" and i["name"] == "notes.txt" for i in got)
+
+
+def test_launcher_opens_file_kind(apps, monkeypatch):
+    monkeypatch.setattr(apps.filesearch, "open_path",
+                        lambda path: {"ok": True, "kind": "file", "id": path, "name": "x"})
+    assert apps.run("file", "/tmp/x")["ok"] is True
 
 
 # ──────────────────────── меню приложений ────────────────────────
@@ -337,6 +355,9 @@ def docked(monkeypatch, tmp_path):
         {"id": "discord", "name": "Discord", "name_ru": "", "generic": "", "keywords": "", "icon": "discord",
          "categories": "Network;InstantMessaging;",
          "exec": "flatpak run --branch=stable com.discordapp.Discord", "wmclass": ""},
+        {"id": "octobrowser", "name": "Octo Browser", "name_ru": "", "generic": "", "keywords": "",
+         "icon": "octobrowser", "categories": "Internet;",
+         "exec": "env /home/x/OctoBrowser.AppImage", "wmclass": "octobrowser"},
     ])
     monkeypatch.setattr(desktop, "list_games", lambda: [])
     return dock
@@ -348,6 +369,17 @@ def test_a_window_is_matched_to_the_app_that_owns_it(docked) -> None:
     assert match["org.kde.dolphin"]["name"] == "Dolphin"
     assert match["dolphin"]["name"] == "Dolphin"              # так окно зовут в половине случаев
     assert match["com.discordapp.discord"]["name"] == "Discord"   # обёртка flatpak, а не «flatpak»
+
+
+
+def test_octo_profile_windows_keep_separate_keys(docked) -> None:
+    """Octo profiles (octium) share the Octo name/icon but must NOT hard-merge into one dock key."""
+    match = docked.catalog()["match"]
+    assert match["octobrowser"]["name"] == "Octo Browser"
+    assert match["octium"]["name"] == "Octo Browser"
+    assert match["octium"]["icon"] == match["octobrowser"]["icon"]
+    assert match["octium"]["key"] != match["octobrowser"]["key"]
+    assert "octium" in docked.catalog()["separate"]
 
 
 def test_a_game_shim_does_not_steal_the_windows_of_its_launcher(docked) -> None:
@@ -432,6 +464,21 @@ def test_hiding_a_tray_icon_is_case_blind(tmp_path, monkeypatch) -> None:
     assert "blueman" in dock.hidden_tray()
     assert dock.hide_tray("BLUEMAN", False)["on"] is False
     assert "blueman" not in dock.hidden_tray()
+
+
+def test_showing_tray_icon_clears_alias_family(tmp_path, monkeypatch) -> None:
+    """Enabling Discord must clear both "discord" and "discord-tray" leftovers."""
+    from justday import config, dock
+
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    config.set_value("tray", "hidden", ["discord", "discord-tray", "xwayland video bridge"])
+    got = dock.hide_tray("Discord", False, aliases=["discord", "Discord", "discord-tray"])
+    assert got["on"] is False
+    hidden = dock.hidden_tray()
+    assert "discord" not in hidden
+    assert "discord-tray" not in hidden
+    assert "xwayland video bridge" in hidden
 
 
 # ──────────────────────────── запасная модель ────────────────────────────

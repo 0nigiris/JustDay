@@ -24,7 +24,17 @@ import socket
 import subprocess
 from pathlib import Path
 
+
 # id, подпись, значок, теряет ли несохранённое
+def _qdbus_bin() -> str:
+    import shutil
+    for name in ("qdbus-qt6", "qdbus6", "qdbus"):
+        if shutil.which(name):
+            return name
+    return ""
+
+
+
 ACTIONS: tuple[tuple[str, str, str, bool], ...] = (
     ("lock", "Заблокировать", "lock", False),
     ("sleep", "Сон", "moon", False),
@@ -38,9 +48,10 @@ DANGEROUS = frozenset(a for a, _, _, danger in ACTIONS if danger)
 _WAYS: dict[str, tuple[list[str], list[str]]] = {
     "lock": (["loginctl", "lock-session"], ["loginctl", "lock-session"]),
     "sleep": (["systemctl", "suspend"], ["systemctl", "suspend"]),
-    "logout": (["qdbus-qt6", "org.kde.Shutdown", "/Shutdown", "logout"], ["loginctl", "terminate-user", ""]),
-    "reboot": (["qdbus-qt6", "org.kde.Shutdown", "/Shutdown", "logoutAndReboot"], ["systemctl", "reboot"]),
-    "poweroff": (["qdbus-qt6", "org.kde.Shutdown", "/Shutdown", "logoutAndShutdown"], ["systemctl", "poweroff"]),
+    # Первый аргумент «qdbus» подставляется из _qdbus_bin() в run()/_kde_alive().
+    "logout": (["qdbus", "org.kde.Shutdown", "/Shutdown", "logout"], ["loginctl", "terminate-user", ""]),
+    "reboot": (["qdbus", "org.kde.Shutdown", "/Shutdown", "logoutAndReboot"], ["systemctl", "reboot"]),
+    "poweroff": (["qdbus", "org.kde.Shutdown", "/Shutdown", "logoutAndShutdown"], ["systemctl", "poweroff"]),
 }
 
 
@@ -50,10 +61,11 @@ def actions() -> list[dict]:
 
 
 def _kde_alive() -> bool:
-    if not shutil.which("qdbus-qt6"):
+    bin = _qdbus_bin()
+    if not bin:
         return False
     try:
-        got = subprocess.run(["qdbus-qt6", "org.kde.Shutdown"], capture_output=True, timeout=4)
+        got = subprocess.run([bin, "org.kde.Shutdown"], capture_output=True, timeout=4)
         return got.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
@@ -67,6 +79,12 @@ def run(what: str, *, confirm: bool = False) -> dict:
         return {"ok": False, "error": "нужно подтверждение", "confirm": True}
     kde, plain = _WAYS[what]
     cmd = kde if _kde_alive() else plain
+    if cmd and cmd[0] == "qdbus":
+        bin = _qdbus_bin()
+        if not bin:
+            cmd = plain
+        else:
+            cmd = [bin, *cmd[1:]]
     if cmd[-1] == "":                                   # loginctl terminate-user <кто>
         import getpass
         cmd = [*cmd[:-1], getpass.getuser()]

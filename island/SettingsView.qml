@@ -114,6 +114,7 @@ Item {
                         { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
                         { id: "dock", title: JD.tr("Док и лоток"), icon: "layout-grid", tint: "#5e5ce6" },
                         { id: "widgets", title: JD.tr("Виджеты"), icon: "cloud-sun", tint: "#32ade6" },
+                        { id: "notifications", title: JD.tr("Уведомления"), icon: "bell", tint: "#bf5af2" },
                         { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
                         { id: "media", title: JD.tr("Музыка и видео"), icon: "music", tint: "#fc3c44" },
                         { id: "buttons", title: JD.tr("Кнопки"), icon: "keyboard", tint: "#0a84ff" },
@@ -212,14 +213,14 @@ Item {
                     y: 26
                     width: Math.min(700, scroller.width - 64)
                     active: !win.loading
-                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage, dock: dockPage, widgets: widgetsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
+                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage, dock: dockPage, widgets: widgetsPage, notifications: notificationsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
                                         people: peoplePage, memory: memoryPage, privacy: privacyPage, diagnostics: diagnosticsPage,
                                         about: aboutPage })[win.page]
                     onLoaded: { scroller.contentY = 0; pageIn.restart() }
                     ParallelAnimation {
                         id: pageIn
-                        NumberAnimation { target: pageLoader; property: "opacity"; from: 0; to: 1; duration: JD.dur(240); easing.type: Easing.OutCubic }
-                        NumberAnimation { target: pageLoader; property: "x"; from: 56; to: 32; duration: JD.dur(360); easing.type: JD.animStyle === "smooth" ? Easing.OutCubic : Easing.OutBack; easing.overshoot: 0.9 }
+                        NumberAnimation { target: pageLoader; property: "opacity"; from: 0; to: 1; duration: JD.dur(180); easing.type: Easing.OutCubic }
+                        NumberAnimation { target: pageLoader; property: "x"; from: 56; to: 32; duration: JD.dur(220); easing.type: Easing.OutCubic }
                     }
                 }
             }
@@ -231,7 +232,7 @@ Item {
                 anchors.bottomMargin: win.toast ? 22 : 6
                 visible: opacity > 0.01
                 opacity: win.toast ? 1 : 0
-                Behavior on anchors.bottomMargin { enabled: JD.animOn; SpringAnimation { spring: 4; damping: JD.springDamping + 0.05 } }
+                Behavior on anchors.bottomMargin { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 180 } }
                 implicitWidth: toastText.implicitWidth + 36
                 implicitHeight: 38
@@ -346,7 +347,7 @@ Item {
             y: 2
             x: tg.checked ? 20 : 2
             color: "white"
-            Behavior on x { enabled: JD.animOn; SpringAnimation { spring: 6; damping: JD.animStyle === "smooth" ? 0.9 : 0.45 } }
+            Behavior on x { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
         }
         TapHandler { onTapped: tg.toggled(!tg.checked) }
         HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -965,7 +966,7 @@ Item {
                                  { value: "all", label: JD.tr("На каждом") }]
                     }
                 }
-                Row { title: JD.tr("Прятаться под полным экраном"); subtitle: JD.tr("Игра или кино во весь экран убирают док; кромка по-прежнему зовёт его обратно"); Toggle { checked: win.get("dock.hide_on_fullscreen") !== false; onToggled: v => win.set("dock.hide_on_fullscreen", v) } }
+                Row { title: JD.tr("Прятаться под окнами"); subtitle: JD.tr("Окно, которое наезжает на островок дока, или полный экран — док уезжает; наведение на край возвращает"); Toggle { checked: win.get("dock.hide_on_fullscreen") !== false; onToggled: v => win.set("dock.hide_on_fullscreen", v) } }
                 Row { title: JD.tr("Корзина"); Toggle { checked: win.get("dock.show_trash") !== false; onToggled: v => win.set("dock.show_trash", v) } }
                 Row {
                     title: JD.tr("Колесо: защёлки под курсором")
@@ -978,7 +979,7 @@ Item {
                     SSlider { key: "dock.detent"; from: 0; to: 200; step: 10; decimals: 0; unit: JD.tr("%") }
                 }
                 Row { title: JD.tr("Порядок значков перетаскиванием"); subtitle: JD.tr("Потянуть закреплённый значок вдоль дока и отпустить на новом месте"); Toggle { checked: win.get("dock.reorder") !== false; onToggled: v => win.set("dock.reorder", v) } }
-                Row { title: JD.tr("Окна программы при наведении"); subtitle: JD.tr("Заголовки открытых окон под подписью. Картинок нет: снимать чужие окна на KWin умеет только композитор"); Toggle { checked: win.get("dock.preview") !== false; onToggled: v => win.set("dock.preview", v) } }
+                Row { title: JD.tr("Окна программы при наведении"); subtitle: JD.tr("Миниатюры и заголовки открытых окон; щелчок по карточке поднимает это окно"); Toggle { checked: win.get("dock.preview") !== false; onToggled: v => win.set("dock.preview", v) } }
                 Row {
                     title: JD.tr("Состав полосы")
                     subtitle: JD.tr("Порядок слов — порядок на экране. launcher, pinned, running, trash, cat, clock, sep (черта), space (промежуток)")
@@ -1027,7 +1028,7 @@ Item {
                 Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("dock.autohide") === true; onToggled: v => win.set("dock.autohide", v) } }
                 Row {
                     title: JD.tr("Отнимать место у окон")
-                    subtitle: JD.tr("Развёрнутые окна перестанут уезжать под док — но плазма сожмёт заодно и обои, и под доком останется чёрная полоса")
+                    subtitle: JD.tr("Магнит exclusive zone: развёрнутые окна останавливаются над доком. Выкл. — окна могут наезжать на полосу, док сам прячется и зовётся с края")
                     Toggle { checked: win.get("dock.reserve") === true; onToggled: v => win.set("dock.reserve", v) }
                 }
             }
@@ -1072,6 +1073,54 @@ Item {
                     SSlider { key: "tray.magnify_spread"; from: 80; to: 500; step: 20; decimals: 0; unit: JD.tr("%") }
                 }
                 Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("tray.autohide") === true; onToggled: v => win.set("tray.autohide", v) } }
+                Row {
+                    title: JD.tr("Отнимать место у окон")
+                    subtitle: JD.tr("Магнит exclusive zone только по контуру полосы, не на весь край экрана. Выкл. — окна могут наезжать")
+                    Toggle { checked: win.get("tray.reserve") === true; onToggled: v => win.set("tray.reserve", v) }
+                }
+            }
+            GroupTitle { text: JD.tr("Палитра значков") }
+            Group {
+                Note { text: JD.tr("По умолчанию — как есть (чёткие Steam/Discord). «Авто» в лотке высветляет только почти чёрные (Spotify). «Светлая / Clear» — матовое стекло (цвет сохраняется, не Ч/Б). «Tinted» — цветная заливка. «Моно» — серое.") }
+                Row {
+                    title: JD.tr("Стиль лотка")
+                    subtitle: JD.tr("original · auto · light · clear · tinted · mono")
+                    Choice {
+                        key: "tray.icon_style"
+                        options: [
+                            { value: "original", label: JD.tr("Как есть") },
+                            { value: "auto", label: JD.tr("Авто (чёрные)") },
+                            { value: "light", label: JD.tr("Светлая (glass)") },
+                            { value: "clear", label: JD.tr("Clear (glass)") },
+                            { value: "tinted", label: JD.tr("Tinted") },
+                            { value: "mono", label: JD.tr("Моно") }
+                        ]
+                    }
+                }
+                Row {
+                    title: JD.tr("Цвет Tinted (лоток)")
+                    subtitle: JD.tr("HEX, например #7AC8FF — только для режима Tinted")
+                    Field { key: "tray.icon_tint"; implicitWidth: 160 }
+                }
+                Row {
+                    title: JD.tr("Стиль дока")
+                    subtitle: JD.tr("Та же палитра поверх значков программ в доке. По умолчанию — как есть")
+                    Choice {
+                        key: "dock.icon_style"
+                        options: [
+                            { value: "original", label: JD.tr("Как есть") },
+                            { value: "light", label: JD.tr("Светлая (glass)") },
+                            { value: "clear", label: JD.tr("Clear (glass)") },
+                            { value: "tinted", label: JD.tr("Tinted") },
+                            { value: "mono", label: JD.tr("Моно") }
+                        ]
+                    }
+                }
+                Row {
+                    title: JD.tr("Цвет Tinted (док)")
+                    subtitle: JD.tr("HEX для режима Tinted у дока")
+                    Field { key: "dock.icon_tint"; implicitWidth: 160 }
+                }
             }
             GroupTitle { text: JD.tr("Какие значки показывать") }
             Group {
@@ -1084,7 +1133,7 @@ Item {
                         subtitle: modelData.tooltipTitle && modelData.tooltipTitle !== title ? modelData.tooltipTitle : ""
                         Toggle {
                             checked: JD.trayShows(modelData)
-                            onToggled: v => { JD.trayHide(ident, !v); win.notify(JD.tr("Сохранено")) }
+                            onToggled: v => { JD.trayHideItem(modelData, !v); win.notify(JD.tr("Сохранено")) }
                         }
                     }
                 }
@@ -1107,9 +1156,82 @@ Item {
                 Row { title: JD.tr("Погода"); subtitle: JD.tr("Open-Meteo, без ключей; в сеть уходит только название города"); Toggle { checked: win.get("island.show_weather") !== false; onToggled: v => win.set("island.show_weather", v) } }
                 Row { title: JD.tr("Город"); subtitle: JD.tr("Пусто — погода не запрашивается"); Field { key: "island.city"; placeholderText: JD.tr("Москва") } }
                 Row { title: JD.tr("Последние события"); subtitle: JD.tr("Последний ответ ассистента, работа Клода"); Toggle { checked: win.get("island.show_events") !== false; onToggled: v => win.set("island.show_events", v) } }
-                Row { title: JD.tr("Уведомления на острове"); subtitle: JD.tr("Копия системных уведомлений (Plasma показывает их как обычно). Никуда не отправляются"); Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
             }
-            Note { text: JD.tr("В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет.") }
+            Note { text: JD.tr("Погода и последние события появляются при наведении на верхний край. В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет. Тосты приложений и системный OSD — в разделе «Уведомления».") }
+        }
+    }
+
+    Component {
+        id: notificationsPage
+        ColumnLayout {
+            spacing: 6
+            PageTitle { title: JD.tr("Уведомления"); subtitle: JD.tr("Тосты JustDay, всплывашки Plasma и системный OSD") }
+            Group {
+                Row { title: JD.tr("Уведомления на острове"); subtitle: JD.tr("Показывать всплывашки JustDay (Plasma при этом молчит, если включён режим «только остров»). Никуда не отправляются"); Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
+                Row {
+                    title: JD.tr("Всплывашки Plasma")
+                    subtitle: win.get("island.system_popups") ? JD.tr("Plasma и JustDay показывают одно и то же") : JD.tr("Только JustDay — Plasma в «не беспокоить», история в трее остаётся")
+                    Toggle {
+                        checked: !!win.get("island.system_popups")
+                        onToggled: v => {
+                            win.set("island.system_popups", v)
+                            win.run(["popups", v ? "system" : "island"], () => {})
+                        }
+                    }
+                }
+                Row {
+                    title: JD.tr("Монитор уведомлений")
+                    subtitle: JD.tr("Как в Telegram: на каком экране появляется всплывашка. «Второй» — не основной (слева сверху)")
+                    Choice {
+                        key: "island.notification_screen"
+                        options: [
+                            { value: "secondary", label: JD.tr("Второй монитор") },
+                            { value: "primary", label: JD.tr("Основной монитор") },
+                            { value: "island", label: JD.tr("Там же, где остров") }
+                        ].concat(Quickshell.screens.map(s => ({ value: s.name, label: s.name + " · " + s.width + "×" + s.height })))
+                    }
+                }
+                Row {
+                    title: JD.tr("Угол уведомлений")
+                    subtitle: JD.tr("Край и угол экрана, как у Telegram Desktop")
+                    Choice {
+                        key: "island.notification_position"
+                        options: [{ value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
+                                 { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
+                                 { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
+                    }
+                }
+            }
+            Group {
+                Row {
+                    title: JD.tr("Системный OSD")
+                    subtitle: JD.tr("Громкость, раскладка и яркость на острове; Plasma OSD при этом глушится (plasmarc)")
+                    Toggle { checked: win.get("island.show_osd") !== false; onToggled: v => win.set("island.show_osd", v) }
+                }
+                Row {
+                    title: JD.tr("Монитор OSD")
+                    subtitle: JD.tr("На каком экране показывать системный HUD. «У острова» — тот же монитор, что у пилюли")
+                    Choice {
+                        key: "island.osd_screen"
+                        options: [
+                            { value: "island", label: JD.tr("Там же, где остров") },
+                            { value: "primary", label: JD.tr("Основной монитор") },
+                            { value: "secondary", label: JD.tr("Второй монитор") }
+                        ].concat(Quickshell.screens.map(s => ({ value: s.name, label: s.name + " · " + s.width + "×" + s.height })))
+                    }
+                }
+                Row {
+                    title: JD.tr("Положение OSD")
+                    subtitle: JD.tr("Угол или край — как у Noctalia; по умолчанию сверху по центру у острова")
+                    Choice {
+                        key: "island.osd_position"
+                        options: [{ value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
+                                 { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
+                                 { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
+                    }
+                }
+            }
+            Note { text: JD.tr("Всплывашки JustDay — на выбранном мониторе и углу. Установщик и `justday popups island` выключают всплывашки Plasma через «Не беспокоить» (история в трее сохраняется; вернуть: `justday popups system`). Системный OSD острова (island.show_osd) глушит OSD Plasma через plasmarc [OSD] Enabled и plasmaparc VolumeOsd — только остров, без дубля.") }
         }
     }
 
@@ -1389,7 +1511,7 @@ Item {
                             Rectangle {
                                 width: parent.width * (vpGroup.step + (vpGroup.heard.startsWith("✓") ? 1 : 0)) / Math.max(1, vpGroup.steps.length)
                                 height: 4; radius: 2; color: win.blue
-                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                             }
                         }
                         Text {
@@ -1550,7 +1672,7 @@ Item {
             Group {
                 Row { title: JD.tr("Меню приложений"); subtitle: JD.tr("Разделы, значки, поиск и кнопка питания — вместо меню KDE");
                       Field { id: menuKey; text: win.d.hotkeys ? win.d.hotkeys.menu : ""; implicitWidth: 180 } }
-                Row { title: JD.tr("То же меню, вторая клавиша"); subtitle: JD.tr("Программы, игры и открытые окна; не нашлось — уходит ассистенту");
+                Row { title: JD.tr("Spotlight / поиск"); subtitle: JD.tr("Узкий поиск программ, файлов и окон (как Spotlight); не нашлось — уходит ассистенту");
                       Field { id: appsKey; text: win.d.hotkeys ? win.d.hotkeys.apps : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Буфер обмена"); subtitle: JD.tr("История скопированного; пароли в неё не попадают");
                       Field { id: clipKey; text: win.d.hotkeys ? win.d.hotkeys.clip : ""; implicitWidth: 180 } }
@@ -1558,6 +1680,29 @@ Item {
                       Field { id: emojiKey; text: win.d.hotkeys ? win.d.hotkeys.emoji : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Нагрузка машины"); subtitle: JD.tr("Процессор, память, видеокарта, тяжёлые программы");
                       Field { id: loadKey; text: win.d.hotkeys ? win.d.hotkeys.load : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Закрепить в доке"); subtitle: JD.tr("Программу активного окна; повторно — открепить. По умолчанию Meta+P");
+                      Field { id: pinKey; text: win.d.hotkeys ? win.d.hotkeys.pin : ""; implicitWidth: 180 } }
+            }
+            PageTitle { title: JD.tr("Док · Meta+1…9"); subtitle: JD.tr("Как на macOS: Meta+N открывает N-ю программу слева направо. Забирает слоты у панели задач Plasma.") }
+            Group {
+                Row { title: JD.tr("Док · слот 1"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock1Key; text: win.d.hotkeys ? (win.d.hotkeys.dock1 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 2"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock2Key; text: win.d.hotkeys ? (win.d.hotkeys.dock2 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 3"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock3Key; text: win.d.hotkeys ? (win.d.hotkeys.dock3 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 4"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock4Key; text: win.d.hotkeys ? (win.d.hotkeys.dock4 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 5"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock5Key; text: win.d.hotkeys ? (win.d.hotkeys.dock5 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 6"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock6Key; text: win.d.hotkeys ? (win.d.hotkeys.dock6 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 7"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock7Key; text: win.d.hotkeys ? (win.d.hotkeys.dock7 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 8"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock8Key; text: win.d.hotkeys ? (win.d.hotkeys.dock8 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 9"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock9Key; text: win.d.hotkeys ? (win.d.hotkeys.dock9 || "") : ""; implicitWidth: 180 } }
                 Row {
                     title: ""
                     Btn {
@@ -1566,7 +1711,16 @@ Item {
                         onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text,
                                             "--type", typeKey.text, "--yes", yesKey.text, "--no", noKey.text,
                                             "--apps", appsKey.text, "--clip", clipKey.text, "--emoji", emojiKey.text,
-                                            "--load", loadKey.text, "--menu", menuKey.text],
+                                            "--load", loadKey.text, "--menu", menuKey.text, "--pin", pinKey.text,
+                                            "--dock1", dock1Key.text,
+                                            "--dock2", dock2Key.text,
+                                            "--dock3", dock3Key.text,
+                                            "--dock4", dock4Key.text,
+                                            "--dock5", dock5Key.text,
+                                            "--dock6", dock6Key.text,
+                                            "--dock7", dock7Key.text,
+                                            "--dock8", dock8Key.text,
+                                            "--dock9", dock9Key.text],
                                            r => win.notify(r.ok ? JD.tr("Сочетания обновлены") : JD.tr("Не получилось")))
                     }
                 }
@@ -1575,8 +1729,9 @@ Item {
                 text: JD.tr("<b>Кнопка на мыши Logitech (G502 и др.)</b>: назначьте ей клавишу F19 через libratbag, например<br>") +
                       JD.tr("<tt>ratbagctl &lt;мышь&gt; profile 0 button 5 action set key KEY_F19</tt>. F13 не подходит: в KDE она открывает Системные настройки.<br><br>") +
                       JD.tr("<b>Пустое поле</b> снимает сочетание совсем.<br><br>") +
-                      JD.tr("<b>Клавиша Windows</b> одна, без букв, — это тоже сочетание: впишите <tt>Meta</tt>. Её держит меню KDE, ") +
-                      JD.tr("и JustDay забирает её у него; вернуть — кнопкой «По умолчанию» в Параметрах системы → Комбинации клавиш.<br><br>") +
+                      JD.tr("<b>Клавиша Windows</b> по умолчанию открывает меню JustDay (<tt>Meta</tt>), а не лаунчер Plasma: JustDay забирает её при установке. ") +
+                      JD.tr("Вернуть лаунчеру KDE — очистите поле «Меню приложений» или «По умолчанию» в Параметрах системы → Комбинации клавиш. ") +
+                      JD.tr("Закрепить в доке — <tt>Meta+P</tt>. <tt>Meta+1…9</tt> — слоты дока (не панель задач Plasma).<br><br>") +
                       JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».<br><br>") +
                       JD.tr("<b>В поле ввода</b>: Enter — отправить, Shift+Enter — новая строка, ↑/↓ — прошлые просьбы, Tab — подсказка команды, Esc — закрыть. Начните с <tt>/</tt>, чтобы увидеть быстрые команды. Пустое поле убрать выделенный текст: Backspace.")
             }
@@ -1642,36 +1797,18 @@ Item {
                         }
                     }
                 }
-                // Имя у строки обязательно, и это не придирка к стилю. Без него `acc` видно только
-                // прямым детям, а кнопка лежит внуком — через RowLayout. Привязка в ней падала с
-                // «acc is not defined», и дальше начиналось самое неприятное: сломанная привязка
-                // `visible` оставляет элемент видимым, а сломанное нажатие не делает ничего. Кнопка
-                // была на экране, выглядела рабочей и молчала.
                 Row {
-                    id: ollamaRow
                     visible: !!mp.info.account
                     readonly property var acc: mp.info.account || ({})
                     title: JD.tr("Аккаунт Ollama")
-                    subtitle: ollamaRow.acc.signed_in
-                            ? JD.tr("Вход выполнен") + (ollamaRow.acc.user ? ": " + ollamaRow.acc.user : "")
-                            : ollamaRow.acc.error ? ollamaRow.acc.error
-                            : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
+                    subtitle: acc.signed_in ? JD.tr("Вход выполнен") + (acc.user ? ": " + acc.user : "")
+                            : acc.error ? acc.error : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
                     RowLayout {
                         spacing: 8
                         Btn {
-                            visible: !ollamaRow.acc.signed_in && !!ollamaRow.acc.signin_url
+                            visible: !acc.signed_in && !!acc.signin_url
                             text: JD.tr("Войти"); primary: true
-                            onClicked: Quickshell.execDetached(["xdg-open", ollamaRow.acc.signin_url])
-                        }
-                        // Ссылку можно забрать с собой: в неё удобнее зайти с телефона, да и если
-                        // браузер по какой-то причине не откроется, у человека остаётся путь.
-                        Btn {
-                            visible: !ollamaRow.acc.signed_in && !!ollamaRow.acc.signin_url
-                            glyph: "edit-copy"; text: JD.tr("Скопировать ссылку")
-                            onClicked: {
-                                Quickshell.execDetached(["wl-copy", "--", ollamaRow.acc.signin_url])
-                                JD.flash(JD.tr("Ссылка скопирована"), "edit-copy", JD.accentGreen)
-                            }
+                            onClicked: Quickshell.execDetached(["xdg-open", acc.signin_url])
                         }
                         Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
                     }

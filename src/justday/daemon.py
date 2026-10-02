@@ -33,6 +33,7 @@ from . import (
     events,
     fallback,
     fastpath,
+    filesearch,
     glyphs,
     inbox,
     island,
@@ -108,6 +109,9 @@ class Daemon:
         self._layout_proc: asyncio.subprocess.Process | None = None
         self._windows_proc: asyncio.subprocess.Process | None = None
         self._windows: list[dict] = []
+        self._dock: dict = {}
+        self._windows_debounce: asyncio.Task | None = None
+        self._windows_pending: list[dict] | None = None
         self._trash_full = False
         self._state = "idle"
         self._workers_active = 0
@@ -912,6 +916,16 @@ class Daemon:
         names = lambda c: (c["user"]["assistant_name"], c["user"].get("assistant_aliases"))  # noqa: E731
         if self._names and names(new) != names(old):  # the name spotter was built with the old names
             restart.append("wakeword")
+        # Plasma system OSD ↔ island.show_osd (and popups island mode via sync call sites).
+        if (new["island"].get("show_osd", True) != old["island"].get("show_osd", True)
+                or new["island"].get("system_popups", False) != old["island"].get("system_popups", False)):
+            try:
+                notifications.sync_plasma_osd(
+                    show_osd=new["island"].get("show_osd", True),
+                    system_popups=new["island"].get("system_popups", False),
+                )
+            except Exception:
+                log.exception("plasma OSD sync")
         self.publish(settings=island.settings_snapshot(new))
         events.emit("settings_reloaded", restart_needed=restart)
         return restart
@@ -1344,6 +1358,54 @@ class Daemon:
                 return
             await asyncio.sleep(5)
 
+
+    async def _watch_brightness(self) -> None:
+        """Brightness changes → island OSD (separate from app notifications)."""
+        loop = asyncio.get_running_loop()
+        bin = desktop.qdbus_bin()
+        if not bin:
+            return
+
+        def _read() -> tuple[int, int] | None:
+            try:
+                cur = subprocess.run(
+                    [bin, "org.kde.Solid.PowerManagement",
+                     "/org/kde/Solid/PowerManagement/Actions/BrightnessControl",
+                     "org.kde.Solid.PowerManagement.Actions.BrightnessControl.brightness"],
+                    capture_output=True, text=True, timeout=3).stdout.strip()
+                mx = subprocess.run(
+                    [bin, "org.kde.Solid.PowerManagement",
+                     "/org/kde/Solid/PowerManagement/Actions/BrightnessControl",
+                     "org.kde.Solid.PowerManagement.Actions.BrightnessControl.brightnessMax"],
+                    capture_output=True, text=True, timeout=3).stdout.strip()
+                return int(cur or 0), int(mx or 0)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                return None
+
+        last: tuple[int, int] | None = await loop.run_in_executor(None, _read)
+        if last and last[1] > 0:
+            self.publish(brightness=last[0], brightness_max=last[1])
+        rule = ("type='signal',interface='org.kde.Solid.PowerManagement.Actions.BrightnessControl',"
+                "member='brightnessChanged'")
+        while True:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "dbus-monitor", "--session", rule,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                async for raw in proc.stdout:
+                    if b"brightnessChanged" not in raw and b"int32" not in raw:
+                        continue
+                    got = await loop.run_in_executor(None, _read)
+                    if not got or got[1] <= 0:
+                        continue
+                    if got != last:
+                        last = got
+                        self.publish(brightness=got[0], brightness_max=got[1])
+                await proc.wait()
+            except (OSError, asyncio.CancelledError):
+                return
+            await asyncio.sleep(5)
+
     async def _watch_layout(self) -> None:
         """Раскладка клавиатуры — для полосы лотка.
 
@@ -1374,6 +1436,28 @@ class Daemon:
             except (OSError, asyncio.CancelledError):
                 return
             await asyncio.sleep(5)
+
+    async def _publish_windows_debounced(self) -> None:
+        await asyncio.sleep(0.18)
+        got = self._windows_pending
+        self._windows_pending = None
+        if got is None or got == self._windows:
+            return
+        # Empty flash during KWin script reload blanked the dock; keep last list
+        # for ~1s, then accept a real empty desktop.
+        if isinstance(got, list) and len(got) == 0 and self._windows:
+            started = getattr(self, "_empty_windows_since", None)
+            now = time.monotonic()
+            if started is None:
+                self._empty_windows_since = now
+                return
+            if now - started < 1.0:
+                return
+            self._empty_windows_since = None
+        else:
+            self._empty_windows_since = None
+        self._windows = got
+        self.publish(windows=got)
 
     async def _watch_windows(self) -> None:
         """Живой список окон — для дока.
@@ -1407,9 +1491,14 @@ class Daemon:
                         got = json.loads(payload)
                     except ValueError:
                         continue
-                    if got != self._windows:
-                        self._windows = got
-                        self.publish(windows=got)
+                    if got == self._windows or got == self._windows_pending:
+                        continue
+                    # Coalesce bursts: geometry storms used to republish the full list
+                    # to the island many times per second and made Quickshell hitch.
+                    self._windows_pending = got
+                    if self._windows_debounce and not self._windows_debounce.done():
+                        continue
+                    self._windows_debounce = asyncio.create_task(self._publish_windows_debounced())
                 await proc.wait()
             except (OSError, asyncio.CancelledError):
                 return
@@ -2238,7 +2327,30 @@ class Daemon:
                 self._trash_full = full
                 self.publish(trash_full=full)
 
+    async def _file_index_loop(self) -> None:
+        """Keep the lightweight home-file index warm for menu Spotlight search.
+
+        Rebuilds in a worker thread every few minutes. First pass runs soon after
+        start so the first typed query already has Documents/Downloads indexed.
+        Skips while a fullscreen window is up (games / video) — the walk + 1.8MB
+        rewrite was a visible hitch on an already busy machine.
+        """
+        await asyncio.sleep(8.0)
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                busy = any(w.get("full") for w in (self._windows or []) if isinstance(w, dict))
+                if busy:
+                    await asyncio.sleep(30.0)
+                    continue
+                got = await loop.run_in_executor(None, filesearch.ensure_fresh)
+                log.info("file index: %s entries", got.get("n") or len(got.get("items") or []))
+            except Exception:
+                log.debug("file index refresh failed", exc_info=True)
+            await asyncio.sleep(float(filesearch.INDEX_TTL))
+
     async def _clip_watch(self) -> None:
+
         """Следить за буфером обмена.
 
         На Wayland работу делает `wl-paste --watch`: он запускает `justday clip store` на каждое
@@ -2383,10 +2495,21 @@ class Daemon:
             cmd = req.get("cmd")
             if cmd == "subscribe":
                 self._subs.add(writer)
+                # dock from disk cache so the first UI paint has real icon paths (not empty slots)
+                try:
+                    dock_hello = dock.catalog_cached()
+                except Exception:
+                    dock_hello = {}
+                # Prefer last in-memory dock if cache somehow has no items (race during rebuild).
+                if (not isinstance(dock_hello, dict) or not (dock_hello.get("items") or [])) and getattr(self, "_dock", None):
+                    dock_hello = self._dock
+                elif isinstance(dock_hello, dict) and (dock_hello.get("items") or []):
+                    self._dock = dock_hello
                 hello = {"state": self.state, "workers": self._workers_active, "settings": island.settings_snapshot(self.cfg),
                          "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
                          "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
-                         "reminders": self._reminders_state(), "jobs": self.jobs.state()}
+                         "reminders": self._reminders_state(), "jobs": self.jobs.state(),
+                         "dock": dock_hello or {}, "windows": self._windows}
                 try:
                     writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
                     await writer.drain()
@@ -2680,6 +2803,8 @@ class Daemon:
                 resp = launcher.pin(str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
             elif cmd == "dock":  # что закреплено в доке и чем ловить открытые окна
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.catalog)
+                if isinstance(got, dict) and (got.get("items") or []):
+                    self._dock = got
                 resp = {"ok": True, "dock": got, "windows": self._windows}
             elif cmd == "window_do":  # поднять, свернуть или закрыть окно по его номеру
                 what, wid = str(req.get("action", "focus")), str(req.get("id", ""))
@@ -2688,13 +2813,54 @@ class Daemon:
                 else:
                     await asyncio.get_running_loop().run_in_executor(None, desktop.windows, what, "", wid)
                     resp = {"ok": True}
+            elif cmd == "window_thumb":  # JPEG preview of one window for dock hover cards
+                wid = str(req.get("id", ""))
+                try:
+                    got = await asyncio.get_running_loop().run_in_executor(
+                        None, desktop.window_thumb, wid)
+                    if not isinstance(got, dict):
+                        got = {"ok": False, "error": "bad thumb result"}
+                except Exception as e:
+                    log.warning("window_thumb failed: %s", e)
+                    got = {"ok": False, "error": str(e)[:200]}
+                resp = {"cmd": "window_thumb", "id": wid, **got}
+            elif cmd == "dock_icons":  # screen rects of dock icons → genie minimize target
+                icons = req.get("icons") or {}
+                if not isinstance(icons, dict):
+                    resp = {"ok": False, "error": "icons must be an object"}
+                else:
+                    replace = req.get("replace", True)
+                    # reconfigure=True only when the island needs a fresh genie map now
+                    # (minimize); default None = debounced, avoids Plasma thrash.
+                    recon = req.get("reconfigure", None)
+                    got = await asyncio.get_running_loop().run_in_executor(
+                        None, lambda: desktop.publish_dock_icons(
+                            icons, replace=bool(replace),
+                            reconfigure=None if recon is None else bool(recon)))
+                    resp = got
             elif cmd == "dock_pin":
-                got = await asyncio.get_running_loop().run_in_executor(
-                    None, dock.pin, str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
-                resp = {"ok": True, "dock": got}
+                # Пустой id — программа активного окна (горячая клавиша Meta+P).
+                ident = str(req.get("id", ""))
+                kind = str(req.get("kind", "app"))
+                on = req.get("on")
+                loop = asyncio.get_running_loop()
+                if ident:
+                    got = await loop.run_in_executor(None, dock.pin, kind, ident, on)
+                else:
+                    got = await loop.run_in_executor(None, dock.pin_focused, on)
+                if got.get("ok"):
+                    # pin/unpin returns catalog fields; keep last good dock
+                    if isinstance(got, dict) and got.get("items"):
+                        self._dock = got
+                    self.publish(dock=got)
+                resp = got
             elif cmd == "tray_hide":  # убрать значок из полосы лотка или вернуть его
+                aliases = req.get("aliases") or []
+                if not isinstance(aliases, list):
+                    aliases = []
                 got = await asyncio.get_running_loop().run_in_executor(
-                    None, dock.hide_tray, str(req.get("id", "")), req.get("on"))
+                    None, lambda: dock.hide_tray(str(req.get("id", "")), req.get("on"),
+                                                 [str(a) for a in aliases]))
                 if got.get("ok"):
                     self.cfg = config.load()
                     self.publish(settings=island.settings_snapshot(self.cfg))
@@ -2721,6 +2887,9 @@ class Daemon:
             elif cmd == "dock_arrange":  # новый порядок после перетаскивания
                 keys = [str(k) for k in (req.get("keys") or [])]
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.arrange, keys)
+                if isinstance(got, dict) and (got.get("items") or []):
+                    self._dock = got
+                self.publish(dock=got)
                 resp = {"ok": True, "dock": got}
             elif cmd == "session":  # что умеет кнопка питания
                 resp = {"ok": True, "session": session.actions()}
@@ -2743,6 +2912,15 @@ class Daemon:
                 resp = {"ok": True, "forgotten": clipboard.wipe()}
             elif cmd == "clip_pause":
                 resp = {"ok": True, "paused": clipboard.pause(bool(req.get("on", True)))}
+            elif cmd == "clip_pin":
+                on = req.get("on")
+                resp = {"cmd": "clip_pin", **clipboard.pin(str(req.get("which", "")),
+                                                           None if on is None else bool(on))}
+            elif cmd == "clip_edit":
+                resp = {"cmd": "clip_edit", **clipboard.edit(str(req.get("which", "")),
+                                                             str(req.get("text", "")))}
+            elif cmd == "clip_text":
+                resp = {"cmd": "clip_text", **clipboard.text_of(str(req.get("which", "")))}
             elif cmd == "voice_mute":  # кнопка «молчи» на островке — то же, что `justday voice mute`
                 await self.set_voice(not bool(req.get("on", True)))
                 resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
@@ -2750,9 +2928,9 @@ class Daemon:
                 which = str(req.get("which", ""))
                 if which not in ("emoji", "clip", "mixer", "plans", "claude", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
-                elif which == "apps":     # программы переехали в собственное меню на всё окно
-                    self.publish(menu=True)
-                    resp = {"ok": True, "panel": "menu"}
+                elif which == "apps":     # Alt+Space → Spotlight-поиск, не полное меню
+                    self.publish(menu="search")
+                    resp = {"ok": True, "panel": "search"}
                 else:
                     self.publish(panel=which)
                     resp = {"ok": True, "panel": which}
@@ -2806,15 +2984,27 @@ class Daemon:
         spawn(self._housekeeping())
         spawn(self._load_loop())
         spawn(self._clip_watch())
+        spawn(self._file_index_loop())
         if shutil.which("dbus-monitor"):
             spawn(self._watch_notifications())
         spawn(self._watch_windows())
         spawn(self._watch_layout())
+        spawn(self._watch_brightness())
         spawn(self._cpu_loop())
+        # Pre-build dock catalog (resolved icon paths) so the next UI restart paints icons on try 1.
+        loop.run_in_executor(None, dock.catalog)
         # Остров — единственное место для уведомлений, если так попросили.
         want_popups = bool(self.cfg["island"].get("system_popups", False))
         if notifications.system_popups().get("popups") != want_popups:
             await loop.run_in_executor(None, notifications.system_popups, want_popups)
+        # Mute Plasma volume/brightness/keyboard OSD when JustDay show_osd owns the HUD.
+        await loop.run_in_executor(
+            None,
+            lambda: notifications.sync_plasma_osd(
+                show_osd=self.cfg["island"].get("show_osd", True),
+                system_popups=want_popups,
+            ),
+        )
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()

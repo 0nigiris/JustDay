@@ -203,11 +203,24 @@ HOTKEYS: tuple[tuple[str, str, str], ...] = (
     ("type", "Написать текстом", "Meta+K"),
     ("yes", "Да / разрешить", "Meta+Y"),
     ("no", "Нет / отклонить", "Meta+N"),
-    ("apps", "Поиск программ", "Alt+Space"),
+    ("apps", "Spotlight / поиск", "Alt+Space"),
     ("clip", "Буфер обмена", "Meta+V"),
     ("emoji", "Эмодзи", "Meta+."),
     ("load", "Нагрузка машины", ""),
-    ("menu", "Меню приложений", ""),
+    ("menu", "Меню приложений", "Meta"),
+    # Meta забираем у лаунчера Plasma (см. free_key / set_hotkeys). Meta+P — «pin».
+    ("pin", "Закрепить в доке", "Meta+P"),
+    # Meta+1…9 — N-я программа слева направо (как Cmd+N на macOS). Забираем у
+    # plasmashell «Activate Task Manager Entry N».
+    ("dock1", "Док: слот 1", "Meta+1"),
+    ("dock2", "Док: слот 2", "Meta+2"),
+    ("dock3", "Док: слот 3", "Meta+3"),
+    ("dock4", "Док: слот 4", "Meta+4"),
+    ("dock5", "Док: слот 5", "Meta+5"),
+    ("dock6", "Док: слот 6", "Meta+6"),
+    ("dock7", "Док: слот 7", "Meta+7"),
+    ("dock8", "Док: слот 8", "Meta+8"),
+    ("dock9", "Док: слот 9", "Meta+9"),
 )
 HOTKEY_DEFAULTS = {name: default for name, _, default in HOTKEYS}
 
@@ -388,11 +401,15 @@ def set_hotkeys(*args: str | None, **named: str | None) -> dict:
         if not key:
             continue
         component = _hotkey_id(name)
+        # Always strip co-owners first (KRunner shares Alt+Space; plasmashell Meta). Skipping
+        # free_key when we already appear in the owner list left the neighbour holding the key
+        # and `hotkey get` showed ✔ ← занято. Do not claim_key if we already own it: talk has
+        # two chords (Meta+J + mouse F19) and reclaiming one would wipe the other.
+        if (was := free_key(key, component)):
+            taken[key] = was
         if key_is_ours(key, component):
             live[name] = True
             continue
-        if (was := free_key(key, component)):
-            taken[key] = was
         claim_key(key, component, f"JustDay: {label.lower()}")
         live[name] = key_is_ours(key, component)
     return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(),

@@ -3,16 +3,23 @@
 #   talk   (по умолчанию <Super>j)       → justday toggle
 #   cancel (<Super><Shift>j)             → justday stop
 #   type   (<Super>k)                    → justday compose
-# Usage: setup-hotkey-gnome.sh [--talk "<Super>j"] [--cancel "<Super><Shift>j"] [--type "<Super>k"] [--remove]
+#   menu   (<Super>)                     → justday menu
+#   emoji  (<Super>period)               → justday tools emoji
+#   clip   (<Super>v)                    → justday tools clip
+# Usage: setup-hotkey-gnome.sh [--talk ...] [--cancel ...] [--type ...] [--menu ...] [--emoji ...] [--clip ...] [--remove]
 #
 # GNOME держит свои сочетания в media-keys/custom-keybindings: список путей плюс по три ключа на каждый.
 set -euo pipefail
-TALK="<Super>j"; CANCEL="<Super><Shift>j"; TYPE="<Super>k"; REMOVE=0
+TALK="<Super>j"; CANCEL="<Super><Shift>j"; TYPE="<Super>k"
+MENU="<Super>"; EMOJI="<Super>period"; CLIP="<Super>v"; REMOVE=0
 while (($#)); do
   case "$1" in
     --talk) TALK="$2"; shift ;;
     --cancel) CANCEL="$2"; shift ;;
     --type) TYPE="$2"; shift ;;
+    --menu) MENU="$2"; shift ;;
+    --emoji) EMOJI="$2"; shift ;;
+    --clip) CLIP="$2"; shift ;;
     --remove) REMOVE=1 ;;
   esac
   shift
@@ -27,6 +34,7 @@ keep=$(printf '%s' "$current" | tr -d "[]@as '" | tr ',' '\n' | grep -v '/justda
 
 add() {  # add NAME COMMAND BINDING
   local name=$1 cmd=$2 key=$3 path="$ROOT/custom-keybindings/justday-$1/"
+  [[ -z "$key" ]] && return 0
   gsettings set "$SCHEMA.custom-keybinding:$path" name "JustDay: $name"
   gsettings set "$SCHEMA.custom-keybinding:$path" command "$cmd"
   gsettings set "$SCHEMA.custom-keybinding:$path" binding "$key"
@@ -45,7 +53,10 @@ paths=$(
   [[ -n "$TALK" ]] && add talk "$JUSTDAY toggle" "$TALK"
   [[ -n "$CANCEL" ]] && add cancel "$JUSTDAY stop" "$CANCEL"
   [[ -n "$TYPE" ]] && add type "$JUSTDAY compose" "$TYPE"
+  [[ -n "$MENU" ]] && add menu "$JUSTDAY menu" "$MENU"
+  [[ -n "$EMOJI" ]] && add emoji "$JUSTDAY tools emoji" "$EMOJI"
+  [[ -n "$CLIP" ]] && add clip "$JUSTDAY tools clip" "$CLIP"
 )
 list=$(printf '%s\n' $paths | grep -v '^$' | sed "s|.*|'&'|" | paste -sd, -)
 gsettings set $SCHEMA custom-keybindings "[${list}]"
-echo "shortcuts: talk=$TALK cancel=$CANCEL type=$TYPE"
+echo "shortcuts: talk=$TALK cancel=$CANCEL type=$TYPE menu=$MENU emoji=$EMOJI clip=$CLIP"

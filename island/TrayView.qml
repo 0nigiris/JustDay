@@ -10,6 +10,9 @@
 // Quickshell умеет показывать только в режиме QApplication, а мы работаем без QtWidgets — и раньше
 // правая кнопка просто молчала.
 import QtQuick
+import QtQuick.Window
+import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
 import Quickshell.Services.SystemTray
@@ -21,6 +24,93 @@ Item {
     readonly property real pad: 8
     readonly property real cell: icon + 14
     readonly property bool atRight: JD.trayPlace === "right"
+
+    // Icon wash: default original (no effect). auto only lightens truly black glyphs.
+    // Forced light/clear/tinted/mono still available in settings.
+    readonly property string iconStyle: {
+        const w = String(JD.trayCfg.icon_style || "original").trim().toLowerCase()
+        return ["original", "auto", "light", "clear", "tinted", "mono"].indexOf(w) >= 0 ? w : "original"
+    }
+    readonly property color iconTint: {
+        const t = String(JD.trayCfg.icon_tint || "").trim()
+        return t ? t : "#7AC8FF"
+    }
+    function trayLooksDark(item) {
+        const s = [item.id, item.title, item.tooltipTitle, item.tooltipDescription].map(x => String(x || "")).join(" ").toLowerCase()
+        // Only known solid-black glyphs. Do NOT force-wash Discord / Waywallen /
+        // status icons — ColorOverlay on already-light SNI pixmaps leaves white
+        // corner dots and a fuzzy halo around the silhouette.
+        return /spotify|spotify-client|com\.spotify/.test(s)
+    }
+    // Branded / coloured tray glyphs — never ColorOverlay (even in forced light/clear).
+    function trayKeepColor(item) {
+        const s = [item.id, item.title, item.tooltipTitle, item.tooltipDescription, item.icon].map(x => String(x || "")).join(" ").toLowerCase()
+        return /discord|waywallen|steam|telegram|chrome|firefox|chromium|slack|signal|element|vesktop/.test(s)
+    }
+    // probedKind: 0 keep colour, 2 near-black only (gray midtones left alone — MultiEffect washed them)
+    function trayMode(item, probedKind) {
+        const st = tv.iconStyle
+        if (st === "original") return "none"
+        if (tv.trayKeepColor(item)) return "none"
+        if (st === "light" || st === "clear" || st === "tinted" || st === "mono") return st
+        // auto: Soft ColorOverlay only for truly black icons (Spotify etc.)
+        const kind = probedKind === undefined || probedKind === null ? 0 : probedKind
+        if (kind >= 2 || tv.trayLooksDark(item)) return "soft"
+        return "none"
+    }
+    function washColor(mode) {
+        if (mode === "soft" || mode === "light") return "#F2F4F7"
+        if (mode === "clear") return "#F7F8FA"
+        if (mode === "tinted") return tv.iconTint
+        if (mode === "mono") return "#C8CCD2"
+        return "#F2F4F7"
+    }
+    // StatusNotifier icon URLs:
+    //  - pixmap dump: "…/foo.png?path=/tmp/sni-xxx" → rewrite to file://path/foo.png
+    //  - theme name:  "image://icon/name?path=/app/share/icons" → leave as-is;
+    //    IconImage's icon provider searches that path (rewriting breaks Waywallen).
+    function trayIconSource(icon) {
+        const s = String(icon || "")
+        if (!s) return ""
+        // Discord MacTahoe/WhiteSur theme SVGs squash Clyde's eyes → stock PNG.
+        // Keep real SNI pixmap dumps (muted/speaking status) untouched.
+        const low = s.toLowerCase()
+        if (/discord/.test(low)) {
+            const isPixmap = (s.startsWith("file:") && /\.(png|jpg|jpeg|webp|gif|ico)/i.test(s))
+                          || (s.startsWith("/") && /\.(png|jpg|jpeg|webp|gif|ico)$/i.test(s))
+                          || (s.indexOf("?path=") >= 0 && /\.(png|jpg|jpeg|webp|gif|ico)/i.test(s.split("?path=")[0]))
+            if (!isPixmap)
+                return "file:///usr/share/icons/hicolor/256x256/apps/discord.png"
+        }
+        // Some SNIs put an absolute pixmap path in IconName (no image:// wrapper).
+        if (s.startsWith("/") && /\.(png|svg|svgz|xpm|jpg|jpeg|webp|gif|ico)$/i.test(s))
+            return "file://" + s
+        if (s.indexOf("?path=") < 0) return s
+        const chunks = s.split("?path=")
+        const name = chunks[0]
+        const path = chunks[1]
+        if (!path) return s
+        const fileName = name.substring(name.lastIndexOf("/") + 1)
+        // Pixmap dump in a temp/theme folder → real file.
+        if (fileName && /\.(png|svg|svgz|xpm|jpg|jpeg|webp|gif|ico)$/i.test(fileName))
+            return "file://" + path + "/" + fileName
+        // Theme id (org.waywallen.waywallen, steam_tray_mono, …): resolve to a
+        // real SVG/PNG via the icon theme. Vectors scale cleanly — no AA halo.
+        if (fileName) {
+            try {
+                const resolved = Quickshell.iconPath(fileName, "")
+                if (resolved) return resolved
+            } catch (e) { /* fall through */ }
+        }
+        // Last resort: original SNI URL (image://icon/name?path=…).
+        return s
+    }
+    // Render size: device pixels for the calm icon, plus magnify headroom so
+    // scale transforms never upsample a soft bitmap.
+    function trayIconPx() {
+        const dpr = Math.max(1, (typeof Screen !== "undefined" && Screen.devicePixelRatio) ? Screen.devicePixelRatio : 1)
+        return Math.max(16, Math.round(tv.icon * dpr * (1 + Math.max(0, tv.amp))))
+    }
 
     // Показываем всё, что в лотке есть. KDE прячет «пассивные» значки во всплывающий ящик, но
     // «мой значок пропал» — худшая новость, какую может принести полоса лотка: человек не знает,
@@ -51,9 +141,11 @@ Item {
         ? (JD.dockCfg.magnify_spread === undefined ? 200 : JD.dockCfg.magnify_spread)
         : JD.trayCfg.magnify_spread) / 100))
     readonly property string animStyle: JD.dockCfg.animation || "spring"
-    readonly property real springK: Math.max(10, Math.min(600, JD.dockCfg.spring === undefined ? 180 : JD.dockCfg.spring))
+    // Tray hover must stay calm: full-screen paint + per-frame re-layout thrash
+    // when spring is dock-stiff. Cap K, overdamp, and prefer smooth when possible.
+    readonly property real springK: Math.max(10, Math.min(140, JD.dockCfg.spring === undefined ? 90 : Math.min(JD.dockCfg.spring, 140)))
     readonly property real springDamp: animStyle === "smooth" ? 1.0
-        : Math.max(0.3, Math.min(1, JD.dockCfg.damping === undefined ? 0.8 : JD.dockCfg.damping))
+        : Math.max(0.88, Math.min(1, JD.dockCfg.damping === undefined ? 0.97 : Math.max(JD.dockCfg.damping, 0.92)))
 
     property real pointerScene: -99999   // курсор по вертикали, в координатах окна
     property bool engaged: false
@@ -79,6 +171,12 @@ Item {
     readonly property int cells: items.length + extras
 
     readonly property real restLength: pad * 2 + cells * cell
+    // Rest chrome size (no magnify). PanelWindow uses these + headroom so the
+    // invisible layer is content-sized, not a full-edge fence — exclusive/magnet
+    // stay on the real strip outline.
+    readonly property real restWidth: icon + pad * 2
+    readonly property real magExtra: Math.round(cell * amp * spread * 1.8) + 16
+    readonly property real sideExtra: Math.round(icon * Math.max(amp, 0.4)) + 10
 
     // Куда курсор попадает в спокойных координатах полосы. Решаем уравнение: ищем место u, которое
     // при своих же размерах рисуется ровно под курсором.
@@ -101,12 +199,16 @@ Item {
     }
     function restUnderPointer() { return engaged ? solveRest(pointerScene) : -99999 }
     function targetSize(i, u) {
+        // Language / layout chip: never magnify — its outline looks broken when it lifts.
+        if (i < extras) return 1
         if (!magnify || u < -9000) return 1
         const d = (pad + i * cell + cell / 2 - u) / (cell * spread)
         return 1 + amp * Math.exp(-d * d)
     }
     function stepPhysics(dt) {
-        dt = Math.max(0.001, Math.min(0.033, dt))
+        // Cap dt so a hitch cannot overshoot; settle thresholds are looser than the
+        // dock so slow pointer travel between icons does not keep the lane buzzing.
+        dt = Math.max(0.001, Math.min(0.024, dt))
         const u = restUnderPointer()
         const s = sizes, v = speeds
         const omega = Math.sqrt(springK)
@@ -116,7 +218,12 @@ Item {
             const t = targetSize(i, u)
             v[i] += (-(s[i] - t) * springK - c * v[i]) * dt
             s[i] += v[i] * dt
-            if (Math.abs(t - s[i]) > 0.0015 || Math.abs(v[i]) > 0.0015) moving = true
+            // Snap when close — kills residual micro-oscillation / jitter.
+            if (Math.abs(t - s[i]) < 0.004 && Math.abs(v[i]) < 0.01) {
+                s[i] = t; v[i] = 0
+            } else if (Math.abs(t - s[i]) > 0.004 || Math.abs(v[i]) > 0.01) {
+                moving = true
+            }
         }
         tick++
         return moving
@@ -158,16 +265,6 @@ Item {
     // Проверка движка без мыши: поставить курсор в точку спокойной полосы, дать физике сойтись и
     // вернуть получившуюся раскладку. Синтетическая мышь на вейланде врёт, а «значки расступаются»
     // иначе никак не проверить числом.
-    // Задержать курсор в точке, чтобы можно было посмотреть на полосу глазами (снимком экрана).
-    // Снимается первым же настоящим движением мыши. Нужна потому, что синтетической мыши на
-    // вейланде нет, а «красиво ли обтекает» числом не проверишь.
-    function hold(at) {
-        engaged = true
-        pointerScene = anchorMiddle - restLength / 2 + at
-        wake()
-        return JSON.stringify({ held: at, u: Math.round(restUnderPointer()) })
-    }
-
     function probe(at) {
         const wasEngaged = engaged, wasAt = pointerScene
         engaged = true
@@ -186,67 +283,28 @@ Item {
         return out
     }
 
-    // Размытие кладём под спокойный прямоугольник полосы: Region умеет прямоугольник с одним
-    // радиусом, а наш силуэт теперь сложнее. Разницу видно только в тот миг, когда значок вырос.
-    readonly property Rectangle blurItem: blurShape
+    readonly property Rectangle blurItem: strip
+
     Rectangle {
-        id: blurShape
-        visible: false
-        anchors.fill: parent
-        radius: Math.round(tv.implicitWidth * 0.34)
-    }
-
-    // ───────────── полоса обтекает значки ─────────────
-    //
-    // Раньше значок под курсором рос, а полоса оставалась прежней ширины — и подложка значка
-    // вылезала за её край. На главном меню такое читается как «значок поднялся над поверхностью», а
-    // здесь — как «рамка не поспевает за содержимым», потому что полоса узкая и край рядом.
-    //
-    // Поэтому края у неё больше нет как прямоугольника. Полоса собирается из круглых пятен — по
-    // одному на ячейку, каждое по размеру своей, — и соседние перекрываются. Их объединение и есть
-    // её силуэт: там, где значок вырос, полоса раздувается вокруг него и смыкается с соседями.
-    //
-    // Рисуется это слоем (`layer.enabled`), и прозрачность задаётся **слою**, а не каждому пятну:
-    // иначе в местах перекрытия она складывалась бы, и по полосе шли бы тёмные пояса.
-    component Blob: Item {
-        id: blob
-        property color ink: "#000000"
-        property real bleed: 0          // насколько пятна больше ячейки — для каймы
-        anchors.fill: parent
-        layer.enabled: true
-        Repeater {
-            model: tv.cells
-            delegate: Rectangle {
-                required property int index
-                readonly property var g: tv.geom[index] || ({ y: tv.pad + index * tv.cell, h: tv.cell, k: 1 })
-                // Ширина пятна — по тому, насколько выросла его ячейка, но не уже спокойной полосы.
-                width: Math.max(tv.implicitWidth, (tv.icon + 12) * g.k + tv.pad) + blob.bleed * 2
-                // Пятна нарочно выше своей ячейки: чем сильнее они перекрываются, тем ровнее
-                // выходит их объединение. Впритык они дают зубчатый силуэт — видно каждое.
-                height: Math.max(g.h + tv.cell * 0.7, width) + blob.bleed * 2
-                radius: Math.min(width, height) / 2
-                x: (parent.width - width) / 2
-                y: g.y + g.h / 2 - height / 2
-                color: blob.ink
-            }
-        }
-    }
-
-    Item {
         id: strip
         anchors.fill: parent
-
-        // Кайма — то же объединение, на волосок больше и цветом каймы. Нарисовать настоящую рамку
-        // вокруг объединения нечем: у слоя нет контура, а обводить каждое пятно значило бы видеть
-        // швы там, где они смыкаются.
-        Blob { ink: Qt.rgba(1, 1, 1, 0.14); bleed: 1 }
-        Blob { ink: "#000000"; opacity: JD.blurOn ? 0.4 : 0.82 }
+        radius: Math.round(tv.implicitWidth * 0.34)
+        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.12)
 
         // Курсор берём в координатах сцены нарочно: в координатах полосы он «двигался» бы сам,
         // когда она под ним растёт и переезжает, — и получилась бы обратная связь.
         HoverHandler {
             id: laneHover
-            onPointChanged: { tv.pointerScene = point.scenePosition.y; tv.wake() }
+            onPointChanged: {
+                const y = point.scenePosition.y
+                // Wider deadzone: slow travel between icons was waking physics every
+                // pixel and made the magnify halo thrash.
+                if (tv.engaged && Math.abs(y - tv.pointerScene) < 6.0) return
+                tv.pointerScene = y
+                tv.wake()
+            }
             onHoveredChanged: {
                 tv.engaged = hovered
                 if (hovered) tv.pointerScene = point.scenePosition.y
@@ -271,9 +329,10 @@ Item {
                 width: tv.cell
                 height: g.h
 
+                // Fixed chrome — never follow magnify (outline would "lift" and look broken).
                 Rectangle {
                     anchors.centerIn: parent
-                    width: (tv.icon + 10) * parent.g.k
+                    width: tv.icon + 10
                     height: width
                     radius: width * 0.3
                     color: layoutHover.hovered ? JD.fill2 : JD.fill1
@@ -286,7 +345,6 @@ Item {
                     font.family: JD.fontFamily
                     font.pixelSize: tv.icon * 0.5
                     font.weight: Font.Bold
-                    scale: parent.g.k
                 }
 
                 HoverHandler {
@@ -318,29 +376,108 @@ Item {
                     width: tv.cell
                     height: g.h
 
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: (tv.icon + 10) * slot.g.k
-                        height: width
-                        radius: width / 2
-                        color: slotHover.hovered ? JD.fill1 : "transparent"
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 120 } }
-                    }
+                    // No circular backplate under app icons: SNI pixmaps (Discord and friends)
+                    // already bring their own plate; a second fill1 disk read as a broken badge.
                     // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
                     // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
                     // Растр просят с запасом: увеличенный значок, нарисованный по обычному
                     // размеру, расплывается.
-                    Image {
+                    // Crisp SNI icons without IconImage: Quickshell IconImage rewrites
+                    // "image://icon/name?path=/theme" into a broken file:// path
+                    // (Waywallen → file:///app/share/icons/org.waywallen.waywallen).
+                    // Use Image with the original SNI URL; only rewrite real pixmap dumps
+                    // (basename has an extension). No mipmap; DPR-aware sourceSize;
+                    // ColorOverlay only for black-glyph wash — never on Discord/Waywallen.
+                    // No backplate / hover disk under tray glyphs — SNI icons already
+                    // bring their own art; a fill disk read as a broken badge.
+                    Item {
+                        id: trayIconWrap
                         anchors.centerIn: parent
                         width: tv.icon
                         height: tv.icon
-                        source: slot.modelData.icon
-                        sourceSize: Qt.size(tv.icon * 2.4, tv.icon * 2.4)
-                        fillMode: Image.PreserveAspectFit
-                        mipmap: true
-                        smooth: true
+                        z: 1
                         scale: slot.g.k * (slotTap.pressed ? 0.88 : 1)
                         transformOrigin: tv.atRight ? Item.Right : Item.Left
+                        // Smooth scale without fighting the physics tick (no Behavior on
+                        // the spring-driven k — only press feedback is animated).
+                        Behavior on scale {
+                            enabled: JD.animOn && slotTap.pressed
+                            NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                        }
+                        property int probedKind: 0   // 0 keep, 2 truly black
+                        readonly property string mode: tv.trayMode(slot.modelData, probedKind)
+                        readonly property bool wash: mode !== "none"
+                        readonly property string src: tv.trayIconSource(slot.modelData.icon)
+                        readonly property int px: tv.trayIconPx()
+                        Image {
+                            id: trayIconSrc
+                            anchors.fill: parent
+                            source: trayIconWrap.src
+                            sourceSize: Qt.size(trayIconWrap.px, trayIconWrap.px)
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: false
+                            smooth: true
+                            antialiasing: true
+                            // No layer.enabled — offscreen round-trip was the laggy "halo".
+                            visible: !trayIconWrap.wash
+                            asynchronous: false
+                            onStatusChanged: if (status === Image.Ready && tv.iconStyle === "auto") trayProbe.requestPaint()
+                            onSourceChanged: {
+                                trayIconWrap.probedKind = 0
+                                if (status === Image.Ready && tv.iconStyle === "auto") trayProbe.requestPaint()
+                            }
+                        }
+                        Canvas {
+                            id: trayProbe
+                            width: 16
+                            height: 16
+                            visible: false
+                            onPaint: {
+                                if (tv.iconStyle !== "auto") return
+                                if (trayIconSrc.status !== Image.Ready) return
+                                const ctx = getContext("2d")
+                                if (!ctx) return
+                                ctx.clearRect(0, 0, width, height)
+                                try { ctx.drawImage(trayIconSrc, 0, 0, width, height) } catch (e) { return }
+                                let data
+                                try { data = ctx.getImageData(0, 0, width, height) } catch (e) { return }
+                                if (!data || !data.data) return
+                                let sumLum = 0, sumSat = 0, n = 0
+                                const px = data.data
+                                for (let i = 0; i < px.length; i += 4) {
+                                    const a = px[i + 3]
+                                    if (a < 40) continue
+                                    const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255
+                                    const mx = Math.max(r, g, b), mn = Math.min(r, g, b)
+                                    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                                    const sat = mx > 0.001 ? (mx - mn) / mx : 0
+                                    sumLum += lum; sumSat += sat; n++
+                                }
+                                if (n < 3) { trayIconWrap.probedKind = 0; return }
+                                const al = sumLum / n, as = sumSat / n
+                                if (as < 0.22 && al < 0.22) trayIconWrap.probedKind = 2
+                                else trayIconWrap.probedKind = 0
+                            }
+                        }
+                        Image {
+                            id: trayIconFxSrc
+                            anchors.fill: parent
+                            source: trayIconWrap.wash ? trayIconWrap.src : ""
+                            sourceSize: Qt.size(trayIconWrap.px, trayIconWrap.px)
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: false
+                            smooth: true
+                            antialiasing: true
+                            visible: false
+                            asynchronous: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: parent
+                            visible: trayIconWrap.wash
+                            source: trayIconFxSrc
+                            color: tv.washColor(trayIconWrap.mode)
+                            cached: false
+                        }
                     }
 
                     // Программа просит внимания — оранжевая точка. Это единственное, что полоса
@@ -387,7 +524,7 @@ Item {
                         acceptedButtons: Qt.RightButton
                         onClicked: mouse => {
                             const it = slot.modelData
-                            if (mouse.modifiers & Qt.ControlModifier) JD.trayHide(it.id || it.title, true)
+                            if (mouse.modifiers & Qt.ControlModifier) JD.trayHideItem(it, true)
                             else tv.showMenu(it, slot)
                         }
                     }
@@ -405,16 +542,18 @@ Item {
     }
 
     property string hint: ""
-    // Меню растёт от того края полосы, у которого она стоит, и от середины значка: так видно, чьё
-    // оно. Точка — в координатах экрана: меню живёт в отдельном окне во весь экран.
+    // Menu grows from the strip edge beside the icon. Coordinates are screen-local: the menu
+    // lives in its own full-screen layer, and the tray paint layer is full-screen too — so
+    // mapToItem(null) is already screen-local (not a short content-sized panel).
     function showMenu(item, at) {
         if (!item || !item.hasMenu) return
-        // Повторный щелчок по тому же значку закрывает меню, а не открывает его заново: иначе
-        // единственный способ убрать его — целиться мимо.
+        // Same icon again toggles closed — otherwise the only dismiss is clicking outside.
         if (JD.trayMenu === item) { JD.closeTrayMenu(); return }
         const p = at.mapToItem(null, tv.atRight ? 0 : at.width, at.height / 2)
-        const left = tv.atRight ? JD.screenWidth - tv.width - 10 : tv.x + tv.width
-        JD.openTrayMenu(item, Math.round(tv.atRight ? left : left + 8), Math.round(p.y))
+        // Attachment X: outer edge of the icon (left tray → right of icon; right tray → left).
+        const ax = Math.round(tv.atRight ? p.x : p.x + 8)
+        const ay = Math.round(p.y)
+        JD.openTrayMenu(item, ax, ay)
         tv.hint = ""
     }
 

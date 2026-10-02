@@ -18,32 +18,91 @@ Singleton {
     property var notification: null   // desktop notification being shown
     property var notifications: []    // recent ones for the menu
     property bool notifExpanded: false  // the whole text, unfolded inside the island (the ⌄ button)
-    // a tap on a notification: its app comes forward (Telegram, Discord…) and the island lets it go
+    // Tap a toast like Plasma: invoke the notification's default action (ActionInvoked) so the
+    // app opens the matching dialog/chat. Focus/launch is only a fallback when no action exists
+    // (eavesdrop-only copy with no live Notify object). No per-app hardcoding.
+    property var _notifActionRefs: []   // keep action QObjects; Quickshell may clear live.actions
+    function _cacheNotifActions(live) {
+        _notifActionRefs = []
+        if (!live) return
+        const acts = live.actions || []
+        for (let i = 0; i < acts.length; i++)
+            _notifActionRefs.push(acts[i])
+    }
     function openNotification(n) {
         if (!n) return
-        send({ cmd: "notification_open", app: n.app || "", desktop: n.desktop || n.icon || "" })
+        let acted = false
+        const pool = []
+        const liveActs = (liveNotification && liveNotification.actions) ? liveNotification.actions : []
+        for (let i = 0; i < liveActs.length; i++) pool.push(liveActs[i])
+        for (let i = 0; i < _notifActionRefs.length; i++) pool.push(_notifActionRefs[i])
+
+        function tryInvoke(a) {
+            // QML action objects expose invoke() as a method; typeof is unreliable here.
+            if (!a) return false
+            try { a.invoke(); return true } catch (e) { return false }
+        }
+        // Same order plasmashell uses: "default", then empty id, then a lone action.
+        for (const a of pool) {
+            const id = String(a.identifier || "").toLowerCase()
+            if (id === "default" || id === "open" || id === "activate" || id === "") {
+                if (tryInvoke(a)) { acted = true; break }
+            }
+        }
+        if (!acted && pool.length === 1)
+            acted = tryInvoke(pool[0])
+
+        // Fallback only when there is nothing to Activate — e.g. daemon eavesdrop without live.
+        if (!acted) {
+            const desk = n.desktop || ""
+            const icon = n.icon || ""
+            const deskOrIcon = desk || ((icon && !icon.startsWith("/") && !icon.startsWith("file:") && !icon.includes("/")) ? icon : "")
+            send({ cmd: "notification_open", app: n.app || "", desktop: deskOrIcon })
+        }
+
         if (n === notification) { notification = null; notifExpanded = false }
+        if (liveNotification) { try { liveNotification.dismiss() } catch (e) {}; liveNotification = null }
+        _notifActionRefs = []
         expanded = false
     }
     function dismissNotification() {
         if (liveNotification) { liveNotification.dismiss(); liveNotification = null }
+        _notifActionRefs = []
         notification = null
         notifExpanded = false
     }
     // Уведомление, пришедшее к нам напрямую, а не подслушиванием: у него есть кнопки и его можно
     // честно закрыть — программа узнает, что его увидели, и не станет показывать второй раз.
     property var liveNotification: null
+    property string _notifDedupeKey: ""
+    property double _notifDedupeAt: 0
     function takeNotification(n, live) {
         if (island.show_notifications === false) { if (live) live.dismiss(); return }
+        const key = (n.app || "") + "\0" + (n.summary || "") + "\0" + (n.body || "").slice(0, 120)
+        const now = Date.now()
+        if (key && key === _notifDedupeKey && now - _notifDedupeAt < 2000) {
+            // Eavesdrop may arrive first; attach the live Notify object when it shows up.
+            if (live) {
+                liveNotification = live
+                _cacheNotifActions(live)
+            }
+            return
+        }
+        _notifDedupeKey = key
+        _notifDedupeAt = now
         liveNotification = live || null
+        _cacheNotifActions(live)
         notification = n
         notifExpanded = false
         notifTimer.restart()
     }
     function runNotificationAction(which) {
-        if (!liveNotification) return
-        for (const a of (liveNotification.actions || []))
-            if (a.identifier === which) { a.invoke(); break }
+        const pool = []
+        const liveActs = (liveNotification && liveNotification.actions) ? liveNotification.actions : []
+        for (let i = 0; i < liveActs.length; i++) pool.push(liveActs[i])
+        for (let i = 0; i < _notifActionRefs.length; i++) pool.push(_notifActionRefs[i])
+        for (const a of pool)
+            if (a.identifier === which) { try { a.invoke() } catch (e) {}; break }
         dismissNotification()
     }
     property var alarm: null          // the timer or alarm ringing right now
@@ -113,12 +172,6 @@ Singleton {
         if (dstate === "idle" && (was === "speaking" || was === "thinking")) { buddyHappy = true; happyOff.restart() }
     }
     property Timer happyOff: Timer { interval: 1800; onTriggered: jd.buddyHappy = false }
-
-    // На чём он сейчас думает. Лёгкая модель работает молча, а про переход на сильную сказать
-    // стоит: человек видит, что задача признана крупной, и может возразить одним словом.
-    property string brainModel: ""
-    property string brainWhy: ""
-    readonly property bool brainStrong: brainWhy !== "" && brainModel !== ""
 
     property real tick: Date.now() / 1000          // one clock for every countdown on screen
     Timer { running: jd.reminders.length > 0 || !!jd.runningJob; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
@@ -225,11 +278,13 @@ Singleton {
     readonly property bool musicOn: !!player && (!!player.file || !!player.loading)
     // the pill stays while music plays and for a little while after a pause
     property bool pauseGrace: false
-    // Островок с музыкой на виду. Одним нравится, что он не уходит, пока играет, другим это мешает
-    // попадать по вкладкам браузера, и спорить тут не о чем — это настройка, а не замысел.
-    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false
-        && (mediaCfg.keep_island !== false)
-        && (!player.paused || !!player.loading || pauseGrace || peeking)
+    // На чём он сейчас думает. Лёгкая модель работает молча, а про переход на сильную сказать
+    // стоит: человек видит, что задача признана крупной, и может возразить одним словом.
+    property string brainModel: ""
+    property string brainWhy: ""
+    readonly property bool brainStrong: brainWhy !== "" && brainModel !== ""
+
+    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false && (!player.paused || !!player.loading || pauseGrace || peeking)
     Timer { id: graceTimer; interval: 6000; onTriggered: jd.pauseGrace = false }
     function media(action, value) { send({ cmd: "media", action: action, value: value === undefined ? null : value }) }
     function playerPos(now) {
@@ -332,8 +387,6 @@ Singleton {
         if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
-        else if (toolsPage === "plans") plansRefresh()
-        else if (toolsPage === "claude") sessionsRefresh()
     }
     // Сначала закрыть панель, потом просить вставить. Пока панель на экране, клавиатура принадлежит
     // ей: напечатанное уходит в никуда, и человек видит «скопировано» вместо вставленного символа.
@@ -341,6 +394,12 @@ Singleton {
     function useClip(which) { closeTools(); send({ cmd: "clip_use", which: String(which) }) }
     function forgetClip(which) { send({ cmd: "clip_forget", which: String(which) }); refreshTools() }
     function pauseClip(on) { send({ cmd: "clip_pause", on: on }) }
+    function pinClip(which, on) { send({ cmd: "clip_pin", which: String(which), on: on === undefined ? null : on }) }
+    function editClip(which, text) {
+        send({ cmd: "clip_edit", which: String(which), text: String(text || "") })
+    }
+    property string clipEditing: ""       // id записи, которую правят в панели буфера
+    property string clipEditDraft: ""
 
     // ───────────── меню приложений ─────────────
     //
@@ -355,6 +414,7 @@ Singleton {
     property int menuPick: 0
     property int menuSerial: 0            // растёт на каждое открытие: поле снова берёт фокус
     property string menuConfirm: ""       // выключение ждёт второго щелчка
+    property bool menuSearchMode: false   // Alt+Space Spotlight: узкий поиск, не полное меню
 
     readonly property var menuUser: menuCatalog.user || ({})
     readonly property var menuGroups: menuCatalog.groups || []
@@ -369,7 +429,8 @@ Singleton {
     }
     // Что показать сеткой: закреплённые, всё подряд или один раздел.
     readonly property var menuShown: {
-        if (menuSearching) return menuFound
+        // Spotlight / набор в поиске — один список от лаунчера (пустой запрос = недавние).
+        if (menuSearchMode || menuSearching) return menuFound
         if (menuGroup === "fav") return menuPinned
         const all = menuCatalog.apps || []
         return menuGroup === "all" ? all : all.filter(a => a.cat === menuGroup)
@@ -379,7 +440,9 @@ Singleton {
     }
 
     function openMenu() {
+        menuSearchMode = false
         menuQuery = ""
+        menuFound = []
         menuPick = 0
         menuConfirm = ""
         menuOpen = true
@@ -388,8 +451,27 @@ Singleton {
         send({ cmd: "apps_catalog" })
         if (dockOn) dockRefresh()      // заодно: программы могли поставить или удалить
     }
-    function closeMenu() { menuOpen = false; menuQuery = ""; menuFound = []; menuConfirm = "" }
-    function toggleMenu() { menuOpen ? closeMenu() : openMenu() }
+    // Spotlight (Alt+Space / justday tools apps): тот же поиск, без разделов и полки питания.
+    function openSearch() {
+        menuSearchMode = true
+        menuQuery = ""
+        menuPick = 0
+        menuConfirm = ""
+        menuFound = []
+        menuOpen = true
+        menuSerial++
+        closeAll()
+        searchMenu()                   // пустой запрос → недавние (launcher.items)
+    }
+    function closeMenu() {
+        menuOpen = false
+        menuQuery = ""
+        menuFound = []
+        menuConfirm = ""
+        menuSearchMode = false
+    }
+    function toggleMenu() { menuOpen && !menuSearchMode ? closeMenu() : openMenu() }
+    function toggleSearch() { menuOpen && menuSearchMode ? closeMenu() : openSearch() }
     // Ищет тот же демон, что отвечает и ассистенту: «открой дискорд» голосом и строка в меню
     // находят одно и то же. Поиск шире сетки — в нём есть ещё и открытые окна.
     function searchMenu() { send({ cmd: "apps", query: menuQuery, limit: 60 }) }
@@ -423,7 +505,7 @@ Singleton {
     // Ничего не нашлось — не тупик: строка уходит ассистенту. Ради этого меню и своё.
     function askFromMenu(text) { closeMenu(); send({ cmd: "type", text: text }) }
     function pinFromMenu(item) {
-        if (!item) return
+        if (!item || item.kind === "file" || item.kind === "window") return
         send({ cmd: "apps_pin", kind: item.kind, id: item.id })
         pinRefresh.restart()
     }
@@ -457,11 +539,30 @@ Singleton {
     readonly property real trayIconSize: Math.max(14, Math.min(48, trayCfg.icon_size || 22))
     readonly property bool trayAutohide: trayCfg.autohide === true
     // Что в лотке не показывать. Сравнение без учёта регистра: значки называют себя как попало.
+    // Prefixed aliases count too: hidden "discord" also covers "discord-tray", and vice versa.
     readonly property var trayHidden: (trayCfg.hidden || []).map(k => String(k).toLowerCase())
+    function trayNames(item) {
+        if (!item) return []
+        const out = []
+        for (const raw of [item.id, item.title, item.tooltipTitle]) {
+            if (!raw) continue
+            const n = String(raw).toLowerCase().trim()
+            if (n && out.indexOf(n) < 0) out.push(n)
+        }
+        return out
+    }
+    function trayKeyHits(hiddenKey, name) {
+        if (!hiddenKey || !name) return false
+        if (hiddenKey === name) return true
+        // Alias family: "discord" ↔ "discord-tray". Require a real stem (4+ chars) so
+        // a one-letter hide key cannot wipe the whole strip.
+        if (hiddenKey.length < 4 || name.length < 4) return false
+        return name.indexOf(hiddenKey) === 0 || hiddenKey.indexOf(name) === 0
+    }
     function trayShows(item) {
-        if (!item) return false
-        const names = [item.id, item.title, item.tooltipTitle].filter(n => !!n).map(n => String(n).toLowerCase())
-        return !names.some(n => trayHidden.indexOf(n) >= 0)
+        const names = trayNames(item)
+        if (!names.length) return false
+        return !trayHidden.some(h => names.some(n => trayKeyHits(h, n)))
     }
     // Раскладка клавиатуры: демон узнаёт о смене сигналом плазмы и присылает уже готовое.
     property var layout: null
@@ -471,7 +572,22 @@ Singleton {
     // позже и первой смены не дождаться до вечера.
     function layoutRefresh() { send({ cmd: "layout" }) }
 
-    function trayHide(ident, on) { if (ident) send({ cmd: "tray_hide", id: String(ident), on: on === undefined ? null : on }) }
+    function trayHide(ident, on, aliases) {
+        if (!ident && !(aliases && aliases.length)) return
+        const msg = { cmd: "tray_hide", id: String(ident || ""), on: on === undefined ? null : on }
+        if (aliases && aliases.length) msg.aliases = aliases.map(a => String(a))
+        send(msg)
+    }
+    // Settings toggle / Ctrl+right-click: hide by primary id, show by clearing the whole
+    // alias family so a leftover "discord-tray" cannot keep Discord dark after enabling.
+    function trayHideItem(item, hide) {
+        const names = trayNames(item)
+        if (!names.length) return
+        if (hide)
+            trayHide(names[0], true)
+        else
+            trayHide(names[0], false, names)
+    }
     // Чьё меню лотка открыто и от какой точки оно растёт. Меню живёт в своём окне во весь экран —
     // иначе его нечем закрыть щелчком мимо, — а окно узнаёт о нажатии отсюда.
     property var trayMenu: null           // сам значок (SystemTrayItem): у него спрашиваем item.menu
@@ -488,6 +604,34 @@ Singleton {
     // только когда есть кому смотреть.
     property real cpu: 0
     property var dockData: ({})           // {items, pinned, match, skip} — от демона
+    // Seed from on-disk catalog before the daemon hello arrives (qs restart / hot-reload
+    // otherwise paints only launcher+trash+cat for a beat — the "empty dock flash").
+    property bool dockSeeded: false
+    readonly property string dockCatalogPath: {
+        const st = Quickshell.env("XDG_STATE_HOME")
+        if (st) return st + "/justday/dock-catalog.json"
+        return (Quickshell.env("HOME") || "") + "/.local/state/justday/dock-catalog.json"
+    }
+    FileView {
+        id: dockCatalogFile
+        path: jd.dockCatalogPath
+        blockLoading: true
+        watchChanges: false
+    }
+    function seedDockFromDisk() {
+        if (dockData && dockData.items && dockData.items.length) return
+        try {
+            const raw = String(dockCatalogFile.text() || "").trim()
+            if (!raw) return
+            const d = JSON.parse(raw)
+            if (d && d.items && d.items.length) {
+                dockData = d
+                if (d.trash_full !== undefined) trashFull = !!d.trash_full
+                dockSeeded = true
+            }
+        } catch (e) {}
+    }
+    Component.onCompleted: seedDockFromDisk()
     // Открытые окна. Спрашивать вейланд бесполезно: KWin не отдаёт список окон обычным клиентам —
     // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
     // демона, которому о нём рассказывает скрипт, живущий внутри самого KWin.
@@ -495,9 +639,109 @@ Singleton {
     // Есть ли впереди окно во весь экран. Считается здесь, а не в доке: то же самое пригодится
     // и островку, и уведомлениям — поверх игры им тоже не место.
     readonly property bool fullscreen: windows.some(w => w && w.full === true && !w.minimized)
+    // Оценка высоты полосы дока (карточка + отступ), пока окно дока ещё не посчитало cardHeight.
+    readonly property real dockStripGuess: Math.max(48, dockIconSize + Math.round(dockIconSize * 0.36) + 17)
+    // Island peek strip when mode is hidden (shared with EdgeReveal timings).
+    function islandPeekHeight(hoverReveal) { return hoverReveal !== false ? 3 : 0 }
+    // Apps whose windows must never hide the dock (our own layers, Plasma chrome).
+    readonly property var dockCoverIgnore: ["quickshell", "plasmashell", "org.kde.plasmashell",
+                                            "kwin_wayland", "ksplashqml", "xwaylandvideobridge",
+                                            "xdg-desktop-portal-kde"]
+    // islandX/islandW = screen-local dock card rect (icons+padding). Hit-test that island,
+    // not the full bottom/top strip — otherwise any window along the edge hides the dock.
+    function windowCoversDockStrip(w, screen, stripPx, atTop, islandX, islandW) {
+        if (!w || !screen || w.minimized) return false
+        const app = String(w.app || "").toLowerCase()
+        if (app && (dockCoverIgnore.indexOf(app) >= 0 || (dockSkip || []).indexOf(app) >= 0))
+            return false
+        // Prefer the window's own output geometry when KWin sent it — Quickshell screen
+        // x/y can disagree with KWin for a frame on reconnect.
+        const sx = (w.ow > 0 ? (w.ox || 0) : screen.x)
+        const sy = (w.ow > 0 ? (w.oy || 0) : screen.y)
+        const sw = (w.ow > 0 ? w.ow : screen.width)
+        const sh = (w.oh > 0 ? w.oh : screen.height)
+        if (sw <= 0 || sh <= 0) return false
+
+        if (w.full === true) {
+            // True KWin fullscreen only hides the dock on the output it occupies.
+            if (w.screen && screen.name)
+                return w.screen === screen.name
+            if (w.ow > 0)
+                return Math.abs((w.ox || 0) - screen.x) <= 4 && Math.abs((w.oy || 0) - screen.y) <= 4
+            return false
+        }
+
+        const strip = Math.max(24, stripPx || dockStripGuess)
+        let onScreen = false
+        if (w.screen && screen.name && w.screen === screen.name) onScreen = true
+        else if (w.ow > 0 && w.oh > 0
+                 && Math.abs((w.ox || 0) - screen.x) <= 4 && Math.abs((w.oy || 0) - screen.y) <= 4)
+            onScreen = true
+        else {
+            const ww0 = w.w || 0, wh0 = w.h || 0
+            if (ww0 <= 0 || wh0 <= 0) return false
+            const wx0 = w.x || 0, wy0 = w.y || 0
+            onScreen = wx0 < sx + sw && wx0 + ww0 > sx && wy0 < sy + sh && wy0 + wh0 > sy
+        }
+        if (!onScreen) return false
+
+        const ww = w.w || 0, wh = w.h || 0
+        if (ww <= 0 || wh <= 0) return false
+        const wx = w.x || 0, wy = w.y || 0
+        // Horizontal miss vs this output.
+        if (wx >= sx + sw || wx + ww <= sx) return false
+
+        // True cover of the output (maximise / borderless) → overlaps dock island for sure.
+        const fullCover = Math.abs(wy - sy) <= 8 && Math.abs(wh - sh) <= 8
+                          && Math.abs(wx - sx) <= 8 && Math.abs(ww - sw) <= 8
+        if (fullCover) return true
+
+        // Unknown island geometry → do not hide (avoids full-width-strip false positives).
+        const iw = Number(islandW) || 0
+        if (iw <= 0) return false
+        const il = sx + (Number(islandX) || 0)
+        const ir = il + iw
+        // Miss the centered card horizontally (window only opposite empty edge).
+        if (wx >= ir || wx + ww <= il) return false
+
+        // Require a meaningful bite of the strip — a 1px graze from shadows / resize
+        // handles was a false positive that hid the dock on an otherwise empty edge.
+        const minBite = Math.min(20, Math.max(8, Math.round(strip * 0.35)))
+        let overlapY = 0
+        if (atTop) {
+            const stripBottom = sy + strip
+            overlapY = Math.min(wy + wh, stripBottom) - Math.max(wy, sy)
+        } else {
+            const stripTop = sy + sh - strip
+            overlapY = Math.min(wy + wh, sy + sh) - Math.max(wy, stripTop)
+        }
+        if (overlapY < minBite) return false
+
+        // Overlap the real dock island (icons+padding), not the full bottom/top edge.
+        const overlapX = Math.min(wx + ww, ir) - Math.max(wx, il)
+        const minX = Math.min(24, Math.max(8, Math.round(iw * 0.08)))
+        return overlapX >= minX
+    }
+    // Окно наезжает на островок дока на этом экране (или true-fullscreen на нём).
+    // Empty window list → never hide (false positive guard for startup / watch restart).
+    // islandX/islandW — локальные к экрану координаты карточки (dock.x / dock.width).
+    function dockCoveredOn(screen, stripPx, atTop, islandX, islandW) {
+        if (dockCfg.hide_on_fullscreen === false) return false
+        if (!screen) return false
+        if (!windows || !windows.length) return false
+        const strip = stripPx || dockStripGuess
+        const top = !!atTop
+        for (let i = 0; i < windows.length; i++) {
+            if (windowCoversDockStrip(windows[i], screen, strip, top, islandX, islandW))
+                return true
+        }
+        return false
+    }
     readonly property var dockItems: dockData.items || []
     readonly property var dockMatch: dockData.match || ({})
     readonly property var dockSkip: dockData.skip || []
+    // WM_CLASS values that get one dock slot per window (anti-detect browser profiles).
+    readonly property var dockSeparate: dockData.separate || ["octium"]
     // Готовый файл значка меню: демон нашёл его в теме и перекрасил в белый. Пусто — рисуем свою
     // сетку точек.
     readonly property string dockLauncher: dockData.launcher || ""
@@ -576,6 +820,87 @@ Singleton {
     function folderList(path) { send({ cmd: "folder_list", path: String(path) }) }
     function folderOpen(path) { send({ cmd: "folder_open", path: String(path) }) }
     function windowDo(action, id) { if (id) send({ cmd: "window_do", action: action, id: id }) }
+
+    // ─── dock hover thumbnails ───
+    property var thumbs: ({})          // window id → jpeg path
+    property var thumbPending: ({})
+    property int thumbFailCount: 0
+    // After repeated capture failures, tip stays macOS-style (name / title list; no empty frames).
+    property bool thumbCaptureBroken: false
+    function thumbPath(id) {
+        const k = String(id || "")
+        return (thumbs && thumbs[k]) ? thumbs[k] : ""
+    }
+    function requestThumb(id) {
+        const k = String(id || "")
+        if (!k || thumbCaptureBroken || thumbPending[k]) return
+        if (thumbs[k]) return
+        const nextPend = Object.assign({}, thumbPending)
+        nextPend[k] = true
+        thumbPending = nextPend
+        send({ cmd: "window_thumb", id: k })
+    }
+    property var lastDockIcons: ({})
+    function publishDockIcons(icons, forceReconfigure) {
+        lastDockIcons = icons || ({})
+        send({ cmd: "dock_icons", icons: lastDockIcons,
+               reconfigure: forceReconfigure === true ? true : null })
+    }
+    // Screen rect of a dock cell (geom is local to DockView; dockRect is screen-ish).
+    function dockIconScreenRect(g) {
+        if (!g || !dockRect) return null
+        const atTop = !!(dockRect.y !== undefined && dockPlace !== "bottom")
+        // dockRect.y is the card's top on screen when at top; when at bottom it's card top too.
+        const cardY = dockRect.y
+        const cardX = dockRect.x
+        // geom x is relative to DockView; DockView is centered — dockRect.x is the view's left.
+        return {
+            x: Math.round(cardX + g.x + (g.w - Math.min(g.w, dockIconSize)) / 2),
+            y: Math.round(cardY + (dockPlace === "bottom" ? Math.max(0, (dockRect.h || 0) - dockIconSize - 8) : 8)),
+            w: Math.round(Math.min(g.w, dockIconSize + 8)),
+            h: Math.round(dockIconSize + 8)
+        }
+    }
+
+    // ─── genie minimize ───
+    // Primary: KWin justday_genie effect scales the real window toward dock icon
+    // rects published via dock_icons. QML overlay is a fallback if the effect is off.
+    property var genie: null
+    property bool genieEffect: true
+    function minimizeGenie(win, iconRect) {
+        if (!win || !win.id) return
+        // Dock already publishes full icon map; do not overwrite it with a one-key patch.
+        if (!genieEffect) {
+            const from = {
+                x: win.x || 0, y: win.y || 0,
+                w: Math.max(32, win.w || 200), h: Math.max(32, win.h || 120)
+            }
+            const to = iconRect || {
+                x: Math.round(screenWidth / 2 - 24),
+                y: dockPlace === "top" ? 12 : Math.round(screenHeight - 60),
+                w: 48, h: 48
+            }
+            const hit = dockLookup(win.app)
+            genie = {
+                id: String(win.id), app: String(win.app || ""),
+                icon: hit ? hit.icon : String(win.app || ""),
+                title: String(win.title || ""), from: from, to: to
+            }
+            genieKick.restart()
+            return
+        }
+        // Fresh IconsJson into the effect right before minimize (debounced path may be stale).
+        publishDockIcons(lastDockIcons, true)
+        windowDo("minimize", String(win.id))
+    }
+    Timer {
+        id: genieKick
+        interval: 40
+        onTriggered: {
+            if (jd.genie && jd.genie.id)
+                jd.windowDo("minimize", jd.genie.id)
+        }
+    }
     function dockIsPinned(key) { return (dockData.pinned || []).indexOf(key) >= 0 }
     onLinkedChanged: if (linked) { dockRefresh(); mascotRefresh(); layoutRefresh() }
 
@@ -591,25 +916,77 @@ Singleton {
     readonly property bool animOn: animStyle !== "off"
     readonly property real springK: animStyle === "smooth" ? 7.5 : 4.2
     readonly property real springDamping: animStyle === "smooth" ? 1.0 : 0.36
+    // Fixed-duration OutCubic reads clean at high Hz; soft springs sample like ~60 fps.
+    readonly property int slideMs: 200
+    // macOS-like: fast start, soft settle (no Spring hitch at end)
+    readonly property int slideEase: Easing.OutQuint
     function dur(ms) { return animOn ? ms : 0 }
     // сколько оставить сверху: панель KDE у верхнего края больше не уходит под остров
     // Где висит остров и в какую сторону он растёт. Пилюля горизонтальная, поэтому «слева» и
     // «справа» — это край по горизонтали, а не поворот на бок: повёрнутая пилюля не вмещает ни
     // строки ответа, ни волны голоса, ни плеера.
-    // Размытие под доком, лотком и меню — самый дорогой эффект композитора из всех.
+    // Frost under dock/tray/menu. Do NOT gate on global `fullscreen`: that property is
+    // true if ANY output has a fullscreen window, which killed blur on every monitor
+    // (and darkened card tints via DockView/TrayView). Per-screen hide already drops
+    // blur with the strip: dockBlur/trayBlur use `… && dockWin.shown` / `trayWin.shown`,
+    // and shown follows dockCoveredOn (true-fullscreen / overlap on THAT output only).
     readonly property bool blurOn: island.blur !== false
     readonly property string place: island.position || "top-center"
     readonly property bool atTop: !place.startsWith("bottom")
     readonly property string side: place.split("-")[1] || "center"
     readonly property real sideMargin: 16
+    // Toast placement (Settings → Виджеты). Independent of the island pill.
+    readonly property string notifPlace: island.notification_position || place || "top-right"
+    function resolveNotifScreen() {
+        const screens = Quickshell.screens
+        if (!screens.length) return null
+        const want = String(island.notification_screen ?? "secondary")
+        const primary = screens.find(s => s.x === 0 && s.y === 0) || screens[0]
+        if (want === "primary") return primary
+        if (want === "secondary") return screens.find(s => s !== primary) || primary
+        if (want === "" || want === "island") {
+            const named = island.screen ? screens.find(s => s.name === island.screen) : null
+            return named || primary
+        }
+        return screens.find(s => s.name === want) || primary
+    }
+    // System OSD (volume / layout / brightness) — Noctalia-like, separate from app toasts.
+    readonly property string osdPlace: island.osd_position || place || "top-center"
+    function resolveOsdScreen() {
+        const screens = Quickshell.screens
+        if (!screens.length) return null
+        const want = String(island.osd_screen ?? "island")
+        const primary = screens.find(s => s.x === 0 && s.y === 0) || screens[0]
+        if (want === "primary") return primary
+        if (want === "secondary") return screens.find(s => s !== primary) || primary
+        if (want === "" || want === "island") {
+            const named = island.screen ? screens.find(s => s.name === island.screen) : null
+            return named || primary
+        }
+        return screens.find(s => s.name === want) || primary
+    }
+    property bool osdShow: false
+    property string osdKind: ""       // volume | layout | brightness
+    property real osdValue: 0         // 0–1 for bars; unused for layout
+    property string osdLabel: ""
+    property string osdIcon: ""
+    property bool osdMuted: false
+    property bool _osdPrimed: false   // skip first volume snapshot at UI start
+    property bool _brightPrimed: false
+    property real _lastBrightFrac: -1
+    function showOsd(kind, value, label, icon, muted) {
+        if (island.show_osd === false) return
+        osdKind = String(kind || "")
+        osdValue = Math.max(0, Math.min(1, Number(value) || 0))
+        osdLabel = String(label || "")
+        osdIcon = String(icon || "")
+        osdMuted = !!muted
+        osdShow = true
+        osdTimer.restart()
+    }
+    Timer { id: osdTimer; interval: 1600; onTriggered: jd.osdShow = false }
     readonly property real topMargin: island.top_margin === undefined ? 8 : Math.max(0, Math.min(400, island.top_margin))
     property bool peeking: false
-    // Три ступени показа работы. Ноль — только значок: идёт работа, и этого достаточно, чтобы
-    // знать. Один — строка, что он делает прямо сейчас. Два — всё целиком.
-    //
-    // Раньше ступень была одна, самая шумная: любая работа разворачивала поперёк экрана полосу в
-    // шестьсот точек с текстом, который человек не просил. Работа идёт почти всегда — значит и
-    // полоса висела почти всегда.
     // Вид верхней полосы. Это не вкусовщина: капсула посреди верхнего края физически перекрывает
     // вкладки браузера, и тому, кто много живёт в браузере, нужен другой вид, а не уговоры привыкнуть.
     //   island — капсула, плавающая под краем (как сейчас);
@@ -621,8 +998,9 @@ Singleton {
     }
     readonly property bool workQuiet: island.work_quiet !== false
     property int workStep: 0
-    function workMore() { workStep = (workStep + 1) % 3 }
-    readonly property bool detailOpen: workStep >= 2
+    function workMore() { workStep = (workStep + 1) % 3; detailOpen = workStep >= 2 }
+    // Подробности раскрыты: или шагом по значку работы, или стрелкой на карточке.
+    property bool detailOpen: false
     property bool islandHovered: false
 
     readonly property string mode: {
@@ -638,7 +1016,8 @@ Singleton {
         if (video && !videoMini) return "video"
         if (dstate === "listening") return answerOpen ? "answer" : "listening"
         if (playerOpen && musicOn) return "player"
-        if (notification) return "notification"
+        // notifications render on notifWin (corner toast); keep the island free
+        // if (notification) return "notification"
         if (flashText) return "flash"
         if (answerOpen) return "answer"
         if (dstate === "transcribing") return "transcribing"
@@ -648,7 +1027,7 @@ Singleton {
         if (peeking || workers > 0) return "peek"
         return "hidden"
     }
-    onModeChanged: workStep = workQuiet ? 0 : 1
+    onModeChanged: if (mode !== "thinking") { detailOpen = false; workStep = 0 }
 
     // ───────────── look ─────────────
     readonly property color ink: "#000000"
@@ -823,7 +1202,12 @@ Singleton {
         if (m.jobs !== undefined) jobs = m.jobs || []
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
-        if (m.menu !== undefined) { m.menu === "toggle" ? toggleMenu() : (m.menu ? openMenu() : closeMenu()) }
+        if (m.menu !== undefined) {
+            if (m.menu === "search") toggleSearch()
+            else if (m.menu === "toggle") toggleMenu()
+            else if (m.menu) openMenu()
+            else closeMenu()
+        }
         if (m.catalog !== undefined) {
             menuCatalog = m.catalog
             // Пустое «Избранное» в первый день выглядит поломкой, а не подсказкой: пока в нём ничего
@@ -837,20 +1221,99 @@ Singleton {
                             "user-trash-full", accentGreen)
             else flash(flat(m.error) || tr("Не вышло выбросить"), "circle-alert", accentRed)
         }
-        if (m.layout !== undefined) layout = m.layout
+        if (m.layout !== undefined) {
+            const prev = layout ? String(layout.id || "") : ""
+            layout = m.layout
+            const cur = layout ? String(layout.id || "") : ""
+            if (prev && cur && prev !== cur)
+                showOsd("layout", 0, (layoutShort || cur).toUpperCase(), "keyboard", false)
+        }
         if (m.items !== undefined && m.file !== undefined) plans = m.items
         if (m.sessions !== undefined) sessions = m.sessions
         if (m.items !== undefined && m.path !== undefined) {
             folderPath = m.path; folderItems = m.items; folderMore = m.more || 0
         }
         if (m.brain_model !== undefined) { brainModel = m.brain_model; brainWhy = m.brain_why || "" }
+        if (m.brightness !== undefined && m.brightness_max) {
+            const frac = Math.max(0, Math.min(1, Number(m.brightness) / Number(m.brightness_max)))
+            const prev = _lastBrightFrac
+            _lastBrightFrac = frac
+            if (_brightPrimed && Math.abs(frac - prev) > 0.004)
+                showOsd("brightness", frac, Math.round(frac * 100) + "%", "sun", false)
+            _brightPrimed = true
+        }
         if (m.mascots !== undefined) mascots = m.mascots
-        if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
+        if (m.dock !== undefined) {
+            const incoming = m.dock || {}
+            const hasItems = !!(incoming.items && incoming.items.length)
+            // Never replace a good catalog with {} / empty items (hello race, watch gap).
+            if (!hasItems && dockData && dockData.items && dockData.items.length) {
+                if (incoming.trash_full !== undefined) trashFull = !!incoming.trash_full
+                if (incoming.launcher || incoming.cat) {
+                    const keep = Object.assign({}, dockData)
+                    if (incoming.launcher) keep.launcher = incoming.launcher
+                    if (incoming.cat) keep.cat = incoming.cat
+                    if (incoming.trash_full !== undefined) keep.trash_full = incoming.trash_full
+                    dockData = keep
+                }
+            } else {
+                dockData = incoming
+                if (incoming.trash_full !== undefined) trashFull = !!incoming.trash_full
+                if (hasItems) dockSeeded = true
+            }
+        }
         if (m.cpu !== undefined) cpu = m.cpu
         if (m.trash_full !== undefined) trashFull = m.trash_full
-        if (m.windows !== undefined) windows = m.windows || []
-        if (m.emoji !== undefined) { toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups }
-        if (m.clip !== undefined) { toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0 }
+        if (m.windows !== undefined) {
+            const next = m.windows || []
+            // Watch restart / journal gap briefly publishes []; blanking the dock then
+            // repainting every icon looked like icons "vanishing". Keep the last list
+            // for a short grace unless we really have zero windows for a while.
+            if (next.length === 0 && windows.length > 0) {
+                _pendingEmptyWindows = true
+                emptyWinGrace.restart()
+            } else {
+                _pendingEmptyWindows = false
+                emptyWinGrace.stop()
+                windows = next
+            }
+        }
+        if (m.emoji !== undefined) {
+            toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups
+            if (toolsPick >= toolsItems.length) toolsPick = Math.max(0, toolsItems.length - 1)
+        }
+        if (m.clip !== undefined) {
+            toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0
+            if (toolsPick >= toolsItems.length) toolsPick = Math.max(0, toolsItems.length - 1)
+        }
+        // Полный текст для правки в панели буфера (preview обрезан).
+        if (m.cmd === "window_thumb") {
+            const id = String(m.id || "")
+            if (id) {
+                const nextPend = Object.assign({}, thumbPending)
+                delete nextPend[id]
+                thumbPending = nextPend
+                if (m.ok && m.path) {
+                    const next = Object.assign({}, thumbs)
+                    next[id] = m.path
+                    thumbs = next
+                    thumbFailCount = 0
+                } else if (!m.minimized) {
+                    // Capture unavailable (grim/KWin) or permanently broken → stop asking this session.
+                    if (m.permanent)
+                        thumbCaptureBroken = true
+                    else {
+                        thumbFailCount = thumbFailCount + 1
+                        if (thumbFailCount >= 2)
+                            thumbCaptureBroken = true
+                    }
+                }
+            }
+        }
+        if (m.cmd === "clip_text" && m.ok && m.id && clipEditing === m.id)
+            clipEditDraft = m.text || ""
+        if (m.cmd === "clip_edit" && m.ok) { clipEditing = ""; clipEditDraft = ""; refreshTools() }
+        if (m.cmd === "clip_pin" && m.ok) refreshTools()
         if (m.load !== undefined) {
             load = m.load
             // Графики держат минуту: дольше — уже не «что происходит сейчас», а история, которой
@@ -922,6 +1385,17 @@ Singleton {
         flashTimer.restart()
     }
     Timer { id: flashTimer; interval: 2200; onTriggered: jd.flashText = "" }
+    property bool _pendingEmptyWindows: false
+    Timer {
+        id: emptyWinGrace
+        interval: 900
+        onTriggered: {
+            if (jd._pendingEmptyWindows) {
+                jd._pendingEmptyWindows = false
+                jd.windows = []
+            }
+        }
+    }
     Timer { id: notifTimer; interval: 6000; onTriggered: if (jd.islandHovered || jd.notifExpanded) restart(); else jd.notification = null }
     Timer {
         id: answerTimer

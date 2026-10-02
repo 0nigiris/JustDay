@@ -11,12 +11,12 @@ out="$out_dir/remo32-$(date +%Y%m%d-%H%M%S).png"
 
 if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] && command -v grim >/dev/null; then
     grim "$out"
-elif command -v spectacle >/dev/null; then
-    spectacle -b -n -o "$out"
+elif command -v gnome-screenshot >/dev/null; then
+    gnome-screenshot -f "$out"
 elif command -v import >/dev/null; then
     import -window root "$out"
 else
-    echo "не найдено ни одной утилиты снимка экрана (grim, spectacle, import)" >&2
+    echo "не найдено ни одной утилиты снимка экрана (grim, gnome-screenshot, import)" >&2
     exit 1
 fi
 

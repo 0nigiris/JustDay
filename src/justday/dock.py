@@ -20,6 +20,7 @@ import subprocess
 from . import config, desktop, launcher
 
 PIN_FILE = config.STATE_DIR / "dock.json"
+CATALOG_FILE = config.STATE_DIR / "dock-catalog.json"
 PIN_MAX = 32
 
 # Чем док заполняется в первый запуск. Пустой док — это не «чистый лист», а сломанная полоса: по
@@ -38,7 +39,19 @@ SEED: tuple[tuple[str, ...], ...] = (
 # Окна, которых в доке быть не должно: служебные поверхности, а не программы. Мост xwayland живёт
 # невидимым окном постоянно, и без этого списка он висит в доке как полноправный значок.
 SKIP: tuple[str, ...] = ("xwaylandvideobridge", "quickshell", "plasmashell", "org.kde.plasmashell",
-                         "kwin_wayland", "ksplashqml", "xdg-desktop-portal-kde")
+                         "kwin_wayland", "ksplashqml", "xdg-desktop-portal-kde",
+                         # Spectacle's interactive capture UI is fullscreen chrome, not a dock app;
+                         # listing it also churns the dock while PrintScreen is open.
+                         "spectacle", "org.kde.spectacle")
+
+# Soft alias only: give child WM_CLASS the parent's name/icon, but DO NOT merge
+# them into one dock key. Anti-detect browsers (Octo/octium, etc.) need each
+# profile window separately switchable — hard-merging hid every profile under one icon.
+ALIAS_CLASSES: dict[str, str] = {
+    "octium": "octobrowser",
+}
+# Running windows with these classes get one dock slot per window (not per app).
+SEPARATE_INSTANCES: frozenset[str] = frozenset({"octium"})
 
 _FLATPAK = re.compile(r"\b([A-Za-z][\w-]*(?:\.[\w-]+){2,})\b")
 
@@ -52,9 +65,17 @@ def _exec_key(line: str) -> str:
     words = [w for w in str(line or "").split() if not w.startswith("%")]
     if not words:
         return ""
-    head = words[0].rsplit("/", 1)[-1]
+    # `env VAR=1 /path/App.AppImage` — настоящее имя после переменных окружения.
+    i = 0
+    if words[0] == "env":
+        i = 1
+        while i < len(words) and "=" in words[i] and not words[i].startswith("/"):
+            i += 1
+    if i >= len(words):
+        return ""
+    head = words[i].rsplit("/", 1)[-1]
     if head in ("flatpak", "flatpak-spawn"):
-        for word in words[1:]:
+        for word in words[i + 1:]:
             if _FLATPAK.fullmatch(word):
                 return word.lower()
         return ""
@@ -63,7 +84,13 @@ def _exec_key(line: str) -> str:
     if head in ("env", "sh", "bash", "gtk-launch", "kioclient", "systemd-run", "steam", "lutris",
                 "heroic", "wine", "wine64", "python", "python3", "electron", "java", "bottles-cli"):
         return ""
-    return head.lower()
+    key = head.lower()
+    # AppImageLauncher: KanekiRapt_<hash>.appimage → окно зовёт себя KanekiRapt.
+    if key.endswith(".appimage"):
+        stem = key[: -len(".appimage")]
+        stem = re.sub(r"_[0-9a-f]{8,}$", "", stem)
+        return stem or key
+    return key
 
 
 def match_keys(app: dict, *, weak: bool = False) -> list[str]:
@@ -79,6 +106,14 @@ def match_keys(app: dict, *, weak: bool = False) -> list[str]:
         out = [ident.lower(), str(app.get("wmclass", "")).lower()]
         if "." in ident:                  # org.kde.dolphin → dolphin: так окно зовут в половине случаев
             out.append(ident.rsplit(".", 1)[-1].lower())
+        # AppImageLauncher: appimagekit_<hash>-KanekiRapt → KanekiRapt (resourceClass окна).
+        m = re.match(r"appimagekit_[^-]+-(.+)$", ident, re.I)
+        if m:
+            out.append(m.group(1).lower())
+        # Однословное имя программы часто совпадает с WM_CLASS, когда StartupWMClass пуст.
+        name = str(app.get("name", "")).strip().lower()
+        if name and " " not in name and "/" not in name:
+            out.append(name)
     seen: set[str] = set()
     return [k for k in out if k and not (k in seen or seen.add(k))]
 
@@ -127,6 +162,25 @@ def pin(kind: str, ident: str, on: bool | None = None) -> dict:
     on = key not in have if on is None else bool(on)
     save(([k for k in have if k != key] + [key]) if on else [k for k in have if k != key])
     return {"ok": True, "on": on} | catalog()
+
+
+def pin_focused(on: bool | None = None) -> dict:
+    """Закрепить программу активного окна (или открепить / переключить).
+
+    Горячая клавиша зовёт именно это: человек смотрит на окно и жмёт сочетание — док
+    должен понять, какая это программа, без имени из настроек.
+    """
+    wins = desktop.windows("active")
+    if not wins:
+        return {"ok": False, "error": "нет активного окна"}
+    app = str(wins[0].get("app") or "").lower()
+    if not app:
+        return {"ok": False, "error": "у окна нет имени программы"}
+    match = catalog()["match"]
+    hit = match.get(app) or (match.get(app.rsplit(".", 1)[-1]) if "." in app else None)
+    if not hit:
+        return {"ok": False, "error": f"не нашёл программу для «{app}»"}
+    return pin(hit["kind"], hit["id"], on) | {"name": hit.get("name", hit["id"]), "app": app}
 
 
 def arrange(keys: list[str]) -> dict:
@@ -335,18 +389,250 @@ def hidden_tray() -> list[str]:
     return [str(k).strip().lower() for k in got if str(k).strip()]
 
 
-def hide_tray(ident: str, on: bool | None = None) -> dict:
-    """Спрятать значок лотка или вернуть его. on=None — переключить."""
+def _tray_key_hits(hidden_key: str, name: str) -> bool:
+    """Exact or stem-alias match: hidden "discord" covers "discord-tray" and vice versa."""
+    if not hidden_key or not name:
+        return False
+    if hidden_key == name:
+        return True
+    if len(hidden_key) < 4 or len(name) < 4:
+        return False
+    return name.startswith(hidden_key) or hidden_key.startswith(name)
+
+
+def hide_tray(ident: str, on: bool | None = None, aliases: list[str] | None = None) -> dict:
+    """Спрятать значок лотка или вернуть его. on=None — переключить.
+
+    aliases — дополнительные имена того же значка (id/title/tooltip). При показе
+    убираем из hidden всю семью алиасов, иначе leftover "discord-tray" держит
+    Discord выключенным после включения в настройках.
+    """
     from . import config as cfg_mod
 
-    key = str(ident).strip().lower()
-    if not key:
+    keys = [str(ident).strip().lower()] + [str(a).strip().lower() for a in (aliases or [])]
+    keys = [k for k in keys if k]
+    # unique, stable
+    seen: list[str] = []
+    for k in keys:
+        if k not in seen:
+            seen.append(k)
+    keys = seen
+    if not keys:
         return {"ok": False, "error": "пустой идентификатор"}
     have = hidden_tray()
-    on = key not in have if on is None else bool(on)
-    keep = sorted(set(have) | {key}) if on else [k for k in have if k != key]
+    primary = keys[0]
+    currently_hidden = any(_tray_key_hits(h, k) for h in have for k in keys)
+    on = (not currently_hidden) if on is None else bool(on)
+    if on:
+        keep = sorted(set(have) | {primary})
+    else:
+        keep = [h for h in have if not any(_tray_key_hits(h, k) for k in keys)]
     cfg_mod.set_value("tray", "hidden", keep)
     return {"ok": True, "on": on, "hidden": keep}
+
+
+# Theme SVGs (MacTahoe/WhiteSur) for Discord embed a small Clyde face with
+# preserveAspectRatio="none" — Qt scales it into tiny eyes. Prefer the stock PNG.
+_DISCORD_ICON_NAMES = {
+    "discord", "discord-tray", "com.discordapp.discord",
+    "com.discordapp.discordcanary", "com.discordapp.discordptb",
+}
+
+def _prefer_discord_png(name: str) -> pathlib.Path | None:
+    key = str(name or "").strip().lower().rsplit("/", 1)[-1]
+    key = key.removesuffix(".svg").removesuffix(".png")
+    if key not in _DISCORD_ICON_NAMES and "discord" not in key:
+        return None
+    for root in ICON_DIRS:
+        for size in ("512x512", "256x256", "128x128", "64x64"):
+            p = root / "hicolor" / size / "apps" / "discord.png"
+            if p.is_file():
+                return p
+        p = root / "hicolor" / "scalable" / "apps" / "discord.svg"
+        if p.is_file():
+            # Only if it is a real vector (no embedded raster plate).
+            try:
+                if "data:image/png" not in p.read_text(encoding="utf-8", errors="ignore"):
+                    return p
+            except OSError:
+                pass
+    return None
+
+
+def _resolve_icon(name: str, theme: str = "") -> str:
+    """Turn a theme Icon= name into an absolute path when we can.
+
+    Quickshell.iconPath is async and often blank on the first one/two UI starts (theme not
+    warm yet) — that looked like transparent dock icons. A file:// path paints immediately.
+    """
+    n = str(name or "").strip()
+    if not n:
+        return ""
+    if n.startswith("file:") or n.startswith("image:") or n.startswith("/"):
+        # Absolute theme SVG for Discord still gets the shrunken Clyde — swap when we can.
+        base = pathlib.Path(n.removeprefix("file://")).name if "discord" in n.lower() else ""
+        if base:
+            pref = _prefer_discord_png(base)
+            if pref:
+                return str(pref)
+        return n
+    pref = _prefer_discord_png(n)
+    if pref:
+        return str(pref)
+    hit = find_icon(n, theme)
+    return str(hit) if hit else n
+
+
+def _save_catalog(data: dict) -> None:
+    try:
+        config.STATE_DIR.mkdir(parents=True, exist_ok=True)
+        # Drop huge match table from the on-disk seed? Keep it — UI needs it for running windows.
+        CATALOG_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+
+def _lookup_window(app_id: str, match: dict) -> dict | None:
+    """Match table row for a window appId (same rules as JD.dockLookup)."""
+    a = str(app_id or "").lower()
+    if not a:
+        return None
+    hit = match.get(a)
+    if hit:
+        return hit
+    # Soft alias parent
+    parent = ALIAS_CLASSES.get(a)
+    if parent and parent in match:
+        return match[parent]
+    return None
+
+
+def slot_apps() -> list[dict]:
+    """App icons left-to-right as the dock draws them (pinned, then running extras).
+
+    Skips launcher/sep/trash/cat/clock — only real app slots, 0-based list for go().
+    """
+    cfg = config.load().get("dock") or {}
+    layout = cfg.get("layout") or ["launcher", "sep", "pinned", "running", "sep", "trash", "sep", "cat", "clock"]
+    words = [str(w).strip().lower() for w in layout if str(w).strip()]
+    cat = catalog_cached()
+    pinned_items = list(cat.get("items") or [])
+    match = cat.get("match") or {}
+    skip = {s.lower() for s in (cat.get("skip") or list(SKIP))}
+    separate = set(SEPARATE_INSTANCES) | {str(x).lower() for x in (cat.get("separate") or [])}
+
+    # Group live windows like DockView.grouped
+    by: dict[str, dict] = {}
+    order: list[str] = []
+    try:
+        wins = desktop.windows("list") or []
+    except Exception:
+        wins = []
+    for w in wins:
+        a = str(w.get("app") or "").lower()
+        if not a or a in skip:
+            continue
+        hit = _lookup_window(a, match)
+        split = a in separate or bool(hit and hit.get("separate"))
+        key = f"win:{a}:{w.get('id', '')}" if split else (hit["key"] if hit else f"win:{a}")
+        if key not in by:
+            raw_icon = (hit.get("icon") if hit else None) or ("wine" if a.endswith(".exe") else a)
+            if split:
+                label = (w.get("title") or "").strip() or (hit.get("name") if hit else w.get("app") or "")
+            else:
+                label = hit.get("name") if hit else (w.get("app") or "")
+            by[key] = {
+                "key": key,
+                "kind": (hit.get("kind") if hit else "app") or "app",
+                "id": (hit.get("id") if hit else "") or "",
+                "name": label,
+                "icon": raw_icon,
+                "wins": [],
+            }
+            order.append(key)
+        by[key]["wins"].append(w)
+
+    taken = {it.get("key") for it in pinned_items if it.get("key")}
+    out: list[dict] = []
+    for word in words:
+        if word == "pinned":
+            for it in pinned_items:
+                live = by.get(it["key"])
+                row = {
+                    "key": it["key"], "kind": it.get("kind") or "app", "id": it.get("id") or "",
+                    "name": it.get("name") or it.get("id") or "", "icon": it.get("icon") or "",
+                    "pinned": True, "wins": live["wins"] if live else [],
+                }
+                out.append(row)
+        elif word == "running":
+            for k in order:
+                if k in taken:
+                    continue
+                g = by[k]
+                out.append({
+                    "key": k, "kind": g.get("kind") or "app", "id": g.get("id") or "",
+                    "name": g.get("name") or "", "icon": g.get("icon") or "",
+                    "pinned": False, "wins": g.get("wins") or [],
+                })
+    return out
+
+
+def go(index: int) -> dict:
+    """Activate the Nth dock app left-to-right (1-based), like macOS Cmd+N / Meta+N.
+
+    Running → focus (raise); closed → launch. Out of range → error.
+    """
+    try:
+        n = int(index)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "нужен номер слота (1…N)"}
+    if n < 1:
+        return {"ok": False, "error": "номер слота начинается с 1"}
+    apps = slot_apps()
+    if not apps:
+        return {"ok": False, "error": "док пуст"}
+    if n > len(apps):
+        return {"ok": False, "error": f"в доке только {len(apps)} программ(ы)", "n": n, "count": len(apps)}
+    item = apps[n - 1]
+    wins = [w for w in (item.get("wins") or []) if w]
+    if wins:
+        # Prefer visible, then any
+        front = next((w for w in wins if not w.get("minimized") and w.get("active")), None)
+        if not front:
+            front = next((w for w in wins if not w.get("minimized")), wins[0])
+        wid = str(front.get("id") or "")
+        if wid:
+            desktop.windows("focus", wid=wid)
+            return {"ok": True, "action": "focus", "name": item.get("name"), "id": item.get("id"),
+                    "n": n, "wid": wid}
+        # Fallback: focus by app query
+        desktop.windows("focus", query=str(item.get("id") or item.get("name") or ""))
+        return {"ok": True, "action": "focus", "name": item.get("name"), "id": item.get("id"), "n": n}
+    # Launch
+    kind = item.get("kind") or "app"
+    ident = item.get("id") or ""
+    if not ident:
+        return {"ok": False, "error": f"слот {n} ({item.get('name')}) без id — нечего запускать", "n": n}
+    got = launcher.run(kind, ident)
+    return {"ok": bool(got.get("ok")), "action": "launch", "name": item.get("name"), "id": ident,
+            "n": n, **{k: v for k, v in got.items() if k != "ok"}}
+
+
+def catalog_cached() -> dict:
+    """Instant dock payload for UI hello — last good catalog, or build fresh if missing."""
+    try:
+        got = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
+        if isinstance(got, dict) and isinstance(got.get("items"), list) and got.get("pinned") is not None:
+            # Keep trash/launcher fresh cheaply.
+            got["trash_full"] = trash_full()
+            launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
+            if launcher:
+                got["launcher"] = launcher
+            return got
+    except (OSError, ValueError, TypeError):
+        pass
+    return catalog()
 
 
 # ───────────── папки-стопки ─────────────
@@ -422,9 +708,34 @@ def catalog() -> dict:
             for k in row[field]:
                 match.setdefault(k, short)
 
+    # Soft aliases: octium gets Octo Browser's name/icon, but keeps its own match key
+    # so DockView can still split profile windows into separate slots.
+    for child, parent in ALIAS_CLASSES.items():
+        parent_hit = match.get(parent)
+        if not parent_hit:
+            continue
+        soft = dict(parent_hit)
+        soft["key"] = f"win:{child}"          # not parent key — no hard merge
+        soft["alias_of"] = parent_hit["key"]
+        soft["separate"] = child in SEPARATE_INSTANCES
+        match.setdefault(child, soft)
+
+    theme = icon_theme()
     launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
     want = pinned()
-    return {"launcher": launcher, "cat": cat_frames(), "items": [{k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
-                      for k in want if k in known],
-            "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP),
-            "trash_full": trash_full()}
+    items = []
+    for k in want:
+        if k not in known:
+            continue
+        row = {k2: v for k2, v in (known[k] | {"key": k}).items() if k2 not in ("strong", "weak")}
+        row["icon"] = _resolve_icon(row.get("icon", ""), theme)
+        items.append(row)
+    # Also resolve icons inside match so running (unpinned) windows paint immediately.
+    for short in match.values():
+        if isinstance(short, dict) and short.get("icon"):
+            short["icon"] = _resolve_icon(short["icon"], theme)
+    out = {"launcher": launcher, "cat": cat_frames(), "items": items,
+           "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP),
+           "separate": sorted(SEPARATE_INSTANCES), "trash_full": trash_full()}
+    _save_catalog(out)
+    return out

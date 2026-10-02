@@ -9,7 +9,7 @@ Item {
     readonly property real fit: Math.min(1, parent.width / Math.max(1, implicitWidth), parent.height / Math.max(1, implicitHeight))
     readonly property real reveal: JD.animOn ? Math.max(0, Math.min(1, (fit - 0.55) / 0.4)) : 1
     property real fade: shown ? 1 : 0
-    Behavior on fade { enabled: JD.animOn; NumberAnimation { duration: view.shown ? 180 : 110; easing.type: Easing.OutCubic } }
+    Behavior on fade { enabled: JD.animOn; NumberAnimation { duration: view.shown ? 160 : 100; easing.type: Easing.OutCubic } }
     anchors.top: parent.top
     anchors.horizontalCenter: parent.horizontalCenter
     width: implicitWidth

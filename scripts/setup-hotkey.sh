@@ -7,7 +7,7 @@
 #
 #   setup-hotkey.sh [--talk "Meta+J"] [--extra F19] [--cancel "Meta+Shift+J"] [--type Meta+K]
 #                   [--yes Meta+Y] [--no Meta+N] [--apps "Alt+Space"] [--clip "Meta+V"]
-#                   [--emoji "Meta+."] [--load ""] [--menu Meta] [--mouse ExtraButton1] [--remove]
+#                   [--emoji "Meta+."] [--load ""] [--menu Meta] [--pin Meta+P] [--dock1 Meta+1] … [--dock9 Meta+9] [--mouse ExtraButton1] [--remove]
 # Пустое значение — не регистрировать вовсе.
 #
 # kglobalacceld включает командные сочетания только для «служебных» составляющих, а те создаются из
@@ -22,11 +22,21 @@ KEYS=(
   "type|написать|compose|Meta+K"
   "yes|да / разрешить|approve|Meta+Y"
   "no|нет / отклонить|deny|Meta+N"
-  "apps|поиск программ|tools apps|Alt+Space"
+  "apps|Spotlight / поиск|tools apps|Alt+Space"
   "clip|буфер обмена|tools clip|Meta+V"
   "emoji|эмодзи|tools emoji|Meta+."
   "load|нагрузка машины|tools load|"
-  "menu|меню приложений|menu|"
+  "menu|меню приложений|menu|Meta"
+  "pin|закрепить в доке|dock pin|Meta+P"
+  "dock1|док слот 1|dock go 1|Meta+1"
+  "dock2|док слот 2|dock go 2|Meta+2"
+  "dock3|док слот 3|dock go 3|Meta+3"
+  "dock4|док слот 4|dock go 4|Meta+4"
+  "dock5|док слот 5|dock go 5|Meta+5"
+  "dock6|док слот 6|dock go 6|Meta+6"
+  "dock7|док слот 7|dock go 7|Meta+7"
+  "dock8|док слот 8|dock go 8|Meta+8"
+  "dock9|док слот 9|dock go 9|Meta+9"
 )
 
 declare -A KEY

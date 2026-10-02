@@ -24,6 +24,22 @@ Item {
     property bool toLeft: false      // полоса справа — меню растёт влево
     signal dismissed()
 
+    // Union of open sheet cards — trayMenuWin blurs under this rect (dock/tray chrome).
+    readonly property var blurRect: {
+        let x0 = 0, y0 = 0, x1 = 0, y1 = 0, any = false
+        function add(sh) {
+            if (!sh || !sh.visible || !(sh.cardW > 0) || !(sh.cardH > 0)) return
+            const a = sh.cardX, b = sh.cardY, c = sh.cardX + sh.cardW, d = sh.cardY + sh.cardH
+            if (!any) { x0 = a; y0 = b; x1 = c; y1 = d; any = true; return }
+            if (a < x0) x0 = a
+            if (b < y0) y0 = b
+            if (c > x1) x1 = c
+            if (d > y1) y1 = d
+        }
+        add(s0); add(s1); add(s2)
+        return any ? ({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }) : ({ x: 0, y: 0, w: 0, h: 0 })
+    }
+
     readonly property real screenW: JD.screenWidth
     readonly property real screenH: JD.screenHeight
 
@@ -138,7 +154,8 @@ Item {
             width: sh.cardW
             height: Math.min(sh.contentH + 12, tm.screenH - 24)
             radius: 14
-            color: Qt.rgba(0, 0, 0, 0.9)
+            // Match dock/tray chrome: translucent over frosted blur, solid when blur is off.
+            color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.9)
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.12)
             // Вправо, если вправо есть место; иначе слева от родителя — но никогда за краем экрана.

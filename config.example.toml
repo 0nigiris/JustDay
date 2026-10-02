@@ -91,10 +91,18 @@ notifications = true
 
 [island]                    # Dynamic Island, applied live
 animations = "spring"       # spring | smooth | off
+blur = true                 # dock/tray frosted glass; adaptive blurRegion follows the live card
 hover_reveal = true         # hover the top edge to show widgets
 show_weather = true
 show_events = true
 show_notifications = true   # mirror desktop notifications (they never leave the computer)
+notification_screen = "secondary"  # primary | secondary | island | output name (HDMI-A-1, DP-2…)
+notification_position = "top-right"  # Telegram-style corner; empty = follow position
+show_osd = true                     # volume / layout / brightness HUD (separate from app toasts);
+                                    # when true, mutes Plasma OSD (plasmarc [OSD] Enabled=false + plasmaparc VolumeOsd)
+osd_screen = "island"               # primary | secondary | island | output name
+osd_position = "top-center"         # near island by default; empty = follow island.position
+# system_popups = false     # false = Plasma Do-Not-Disturb (JustDay shows toasts); true = Plasma popups too
 city = ""                   # weather location; empty = no weather requests
 top_margin = 8              # room above the island: a panel along the top edge stays clickable
 menu_width = 760            # the app menu: its size is set by dragging the card's free corner
@@ -117,18 +125,18 @@ spring = 180                # stiffness: higher reaches the size sooner
 damping = 0.8               # lower overshoots more; 1.0 = no overshoot at all
 magnify = true              # icons grow outward under the pointer; their place in the strip does not move
 autohide = false
-reserve = false             # true stops maximised windows at the dock — but Plasma shrinks the wallpaper too
+reserve = false             # no exclusive zone; overlap hide + edge reveal instead
 show_running = true         # windows of apps that are not pinned, behind a separator
 show_trash = true
 labels = "hover"            # off | hover (the name above the icon under the pointer) | always (under every icon)
 indicator = "dot"           # what marks an open app: dot | line | bar | glow (behind the icon) | none
 reorder = true              # drag a pinned icon along the dock to move it
-hide_on_fullscreen = true   # a game or a film fullscreen hides the dock; the screen edge still calls it back
+hide_on_fullscreen = true   # hide when a window overlaps the dock island (icons+padding) or is fullscreen; edge hover still reveals
 launcher = "apple"          # apple = the icon theme's start-here (an Apple mark in macOS themes) | grid | any icon name
 cat = true                  # a running cat: the busier the CPU, the faster it runs (CatWalk's frames when installed)
 cat_sleep_below = 0         # below this CPU percentage the cat sleeps; 0 = never
 clock = false               # a clock in the dock (there is already one above)
-preview = true              # window titles under the tooltip (no thumbnails: KWin gives them to nobody)
+preview = true              # hover: window thumbnail cards; click a card to focus that window
 # What the strip is made of, left to right. Words: launcher, pinned, running, trash, cat, clock,
 # sep (a hairline), space (a gap). The order of the words is the order on screen.
 layout = ["launcher", "sep", "pinned", "running", "sep", "trash", "sep", "cat", "clock"]
@@ -136,6 +144,8 @@ separator_room = 0          # room for the hairline in points; 0 = the same as t
 separator_width = 1
 separator_height = 62       # in percent of the icon
 separator_opacity = 16
+icon_style = "original"   # original | light | clear | tinted | mono — wash over dock app icons
+icon_tint = "#7AC8FF"     # HEX used when icon_style = tinted
 
 [tray]                      # other apps' status icons, as their own strip
 enabled = true
@@ -145,6 +155,8 @@ icon_size = 22
 reserve = false
 autohide = false
 hidden = ["xwayland video bridge"]   # tray icons to keep out of the strip, by id
+icon_style = "original"   # original | auto | light | clear | tinted | mono — default sharp; auto lightens black only
+icon_tint = "#7AC8FF"      # HEX used when icon_style = tinted
 
 [updates]
 check = true                # look for a new version on GitHub (git fetch)

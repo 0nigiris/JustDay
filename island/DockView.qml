@@ -36,7 +36,9 @@ Item {
     readonly property real gap: Math.max(4, Math.min(64, JD.dockCfg.spacing === undefined ? 20 : JD.dockCfg.spacing))
     readonly property real cell: icon + gap
     readonly property real pad: Math.round(icon * 0.18)
-    readonly property real dotRoom: 9
+    readonly property real dotRoom: 11
+    // Closed icons sink a touch so the row feels centered; running keep the normal baseline (no raise).
+    readonly property real restDrop: Math.max(1, Math.round(icon * 0.06))
     readonly property bool magnify: JD.dockCfg.magnify !== false
     // Подписи: нет совсем, под курсором или всегда. Раньше было только «да/нет», а «всегда» — это
     // другой док: имена под всеми значками сразу, как в Dockish и в старых доках.
@@ -102,7 +104,7 @@ Item {
     // Место под имя под значком — только в режиме «всегда»: в остальных подпись живёт в плашке
     // под курсором и высоты карточке не добавляет.
     readonly property real labelRoom: labelMode === "always" ? 14 : 0
-    readonly property real cardHeight: icon + pad * 2 + dotRoom + labelRoom
+    readonly property real cardHeight: icon + pad * 2 + dotRoom + restDrop + labelRoom
 
     implicitWidth: laneLength
     implicitHeight: cardHeight + headroom
@@ -113,14 +115,23 @@ Item {
     // только подписанный тем, как окно назвало себя само.
     readonly property var grouped: {
         const skip = JD.dockSkip, byKey = ({}), order = []
+        const separate = JD.dockSeparate || []
         for (const w of JD.windows) {
             const a = String(w.app || "").toLowerCase()
             if (!a || skip.indexOf(a) >= 0) continue
             const hit = JD.dockLookup(a)
-            const key = hit ? hit.key : "win:" + a
+            // Anti-detect browsers (octium, …): one dock slot per profile window.
+            const split = separate.indexOf(a) >= 0 || !!(hit && hit.separate)
+            const key = split ? ("win:" + a + ":" + String(w.id || ""))
+                      : (hit ? hit.key : "win:" + a)
             if (!byKey[key]) {
+                // Unmatched .exe (Wine) → wine icon, not the theme's generic gear fallback.
+                const rawIcon = hit ? hit.icon : (a.endsWith(".exe") ? "wine" : a)
+                const label = split
+                    ? ((w.title || "").trim() || (hit ? hit.name : (w.app || "")))
+                    : (hit ? hit.name : (w.app || ""))
                 byKey[key] = { key: key, kind: hit ? hit.kind : "", id: hit ? hit.id : "",
-                               name: hit ? hit.name : (w.app || ""), icon: hit ? hit.icon : a, wins: [] }
+                               name: label, icon: rawIcon, wins: [], split: split }
                 order.push(key)
             }
             byKey[key].wins.push(w)
@@ -220,6 +231,9 @@ Item {
     readonly property string animStyle: JD.dockCfg.animation || "spring"
     readonly property real amp: Math.max(0, Math.min(2, (JD.dockCfg.magnify_scale === undefined ? 80 : JD.dockCfg.magnify_scale) / 100))
     readonly property real spread: Math.max(0.4, Math.min(6, (JD.dockCfg.magnify_spread === undefined ? 200 : JD.dockCfg.magnify_spread) / 100))
+    // Extra panel width so magnified end-icons are not clipped. Exclusive zone still
+    // uses card height only — this is paint/hit room, not magnet depth.
+    readonly property real magExtra: Math.round(icon * amp * spread * 1.8) + 16
     // Жёсткость и затухание — наружу: «пружинисто» у каждого своё, а на 185 герцах разница видна.
     readonly property real springK: Math.max(10, Math.min(600, JD.dockCfg.spring === undefined ? 180 : JD.dockCfg.spring))
     readonly property real springDamp: animStyle === "smooth" ? 1.0
@@ -242,8 +256,8 @@ Item {
         while (s.length < n) { s.push(1); v.push(0) }
         sizes = s; speeds = v; tick++
     }
-    onLaneChanged: resetPhysics()
-    Component.onCompleted: resetPhysics()
+    onLaneChanged: { resetPhysics(); iconPublish.restart() }
+    Component.onCompleted: { resetPhysics(); iconPublish.restart() }
 
     // Середина, вокруг которой полоса растёт. Задаётся снаружи: центрирует док окно, а не он сам.
     property real anchorCentre: 0
@@ -479,20 +493,33 @@ Item {
             id: edgeHover
             onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.engaged = true; dv.wake() }
             onHoveredChanged: {
-                if (hovered) { dv.engaged = true; dv.pointerScene = point.scenePosition.x }
-                else if (!cardHover.hovered) dv.leaveLane()
+                if (hovered) { dv.cancelLeave(); dv.engaged = true; dv.pointerScene = point.scenePosition.x }
+                else if (!cardHover.hovered && !tipHover.hovered) dv.leaveLane()
                 dv.wake()
             }
         }
     }
 
-    // Уход с полосы — в одном месте: курсор может уйти и с карточки, и с приграничной полоски, а
-    // «ушёл» означает одно и то же.
-    function leaveLane() {
+    // Уход с полосы — с короткой задержкой: курсор часто прыгает с карточки на плашку
+    // подписи/превью (и обратно). Без паузы leaveLane гасит tip и срывает engaged → EdgeReveal
+    // прячет док, как будто курсор уже ушёл. macOS-док так не делает: пока курсор над доком
+    // или его всплывающей UI, полоса остаётся.
+    function overDockUi() {
+        return cardHover.hovered || edgeHover.hovered || tipHover.hovered
+    }
+    function cancelLeave() { leaveWait.stop() }
+    function leaveLane() { leaveWait.restart() }
+    function leaveLaneNow() {
+        if (overDockUi()) return
         engaged = false
         ctxClose.restart()
         tipWait.stop()
         tipShown = false
+    }
+    Timer {
+        id: leaveWait
+        interval: 220
+        onTriggered: dv.leaveLaneNow()
     }
 
     Rectangle {
@@ -503,7 +530,7 @@ Item {
         radius: Math.round(dv.cardHeight * 0.3)
         // Без размытия под доком та же прозрачность превращается в кашу: значки читаются по тому,
         // что за ними, а не по себе. Нет размытия — нет и прозрачности.
-        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
+        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.28 : 0.55)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
 
@@ -521,8 +548,8 @@ Item {
             id: cardHover
             onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.engaged = true; dv.wake() }
             onHoveredChanged: {
-                if (hovered) { dv.engaged = true; dv.pointerScene = point.scenePosition.x }
-                else if (!edgeHover.hovered) dv.leaveLane()
+                if (hovered) { dv.cancelLeave(); dv.engaged = true; dv.pointerScene = point.scenePosition.x }
+                else if (!edgeHover.hovered && !tipHover.hovered) dv.leaveLane()
                 dv.wake()
             }
         }
@@ -571,19 +598,28 @@ Item {
                     width: dv.icon
                     height: dv.icon
                     anchors.horizontalCenter: parent.horizontalCenter
-                    // Растёт от края, к которому прижат док: низ значка остаётся на своей линии, и
-                    // ряд не начинает плавать по вертикали.
-                    y: (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + slot.bounce
+                    // Closed icons sink slightly; running stay at the previous normal height.
+                    // Grow from the dock edge so magnification still feels anchored.
+                    readonly property real baseY: dv.atTop
+                        ? (dv.pad + dv.dotRoom + (slot.running ? 0 : dv.restDrop))
+                        : (dv.pad + (slot.running ? 0 : dv.restDrop))
+                    y: baseY + slot.bounce
+                    Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                     // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
                     // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
                     // Та же история, что и с местом: размер под пальцем считает физика, а
                     // взятый значок просто чуть крупнее. Анимации тут нет нарочно — ей было бы
                     // где замереть на полпути.
-                    scale: slot.k * (slot.dragged ? 1.08 : 1) * (drop.containsDrag ? 1.14 : 1)
+                    // Press feedback is macOS-like (subtle scale + light fade). Do NOT drop
+                    // opacity to ~0.7: on a dark dock that reads as a black flash.
+                    property real pressScale: slotTap.pressed ? 0.9 : 1
+                    Behavior on pressScale { enabled: JD.animOn; NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                    scale: slot.k * (slot.dragged ? 1.08 : 1) * (drop.containsDrag ? 1.14 : 1) * pressScale
                     Behavior on scale { enabled: JD.animOn && drop.containsDrag
                                         NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
                     transformOrigin: dv.atTop ? Item.Top : Item.Bottom
-                    opacity: slot.dragged ? 0.86 : slotTap.pressed ? 0.7 : 1
+                    opacity: slot.dragged ? 0.86 : (slotTap.pressed ? 0.88 : 1)
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 90 } }
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
@@ -628,15 +664,25 @@ Item {
                     }
 
                     Icon {
+                        // Slight inset so filled theme plates (MacTahoe etc.) are not
+                        // edge-to-edge in the cell — reads less "solid block", keeps aspect.
                         anchors.fill: parent
+                        anchors.margins: Math.round(dv.icon * 0.06)
                         visible: slot.e.t === "app"
                         name: slot.e.icon || ""
                         fallback: "application-x-executable"
                         implicitSize: dv.icon
                         // Растр просят с запасом на увеличение: под курсором значок вырастает в
                         // полтора раза, и нарисованный по обычному размеру он там расплывается.
-                        renderSize: dv.icon * 2.4
+                        // Prefer ~3x for fine logos (Discord Clyde eyes).
+                        renderSize: dv.icon * 3.0
                         theme: true
+                        syncLoad: true
+                        iconPalette: String(JD.dockCfg.icon_style || "original").toLowerCase()
+                        iconPaletteTint: {
+                            const t = String(JD.dockCfg.icon_tint || "").trim()
+                            return t ? t : "#7AC8FF"
+                        }
                     }
                     Icon {
                         anchors.fill: parent
@@ -646,6 +692,7 @@ Item {
                         implicitSize: dv.icon
                         renderSize: dv.icon * 2.4
                         theme: true
+                        syncLoad: true
                     }
                     DockCat {
                         anchors.centerIn: parent
@@ -816,12 +863,57 @@ Item {
         }
     }
 
+
+    // Tell the genie effect / overlay where each dock icon sits on the screen.
+    function publishIcons() {
+        const icons = ({})
+        for (let i = 0; i < lane.length; i++) {
+            const e = lane[i]
+            if (e.t !== "app") continue
+            const g = geom[i]
+            if (!g) continue
+            const r = JD.dockIconScreenRect(g)
+            if (!r) continue
+            if (e.key) icons[e.key] = r
+            if (e.id) icons[String(e.id).toLowerCase()] = r
+            // Per-window slots (octium profiles) and appId aliases.
+            for (const w of (e.wins || [])) {
+                if (w && w.id) icons[String(w.id)] = r
+                if (w && w.app) icons[String(w.app).toLowerCase()] = r
+            }
+            // Bare app id from key app:foo
+            if (e.key && e.key.indexOf(":") > 0)
+                icons[e.key.split(":").slice(1).join(":").toLowerCase()] = r
+        }
+        icons["*"] = { x: Math.round(JD.screenWidth / 2 - 24),
+                       y: Math.round(dv.atTop ? 8 : JD.screenHeight - 56), w: 48, h: 48 }
+        JD.publishDockIcons(icons)
+    }
+    Timer {
+        id: iconPublish
+        interval: 280
+        onTriggered: dv.publishIcons()
+    }
+    // Do NOT republish on every magnify geom tick — that rewrote kwinrc + reconfigureEffect
+    // dozens of times per second and froze Plasma / blanked dock icons. Rest positions on
+    // lane / dockRect / windows changes are enough for the genie effect.
+    onAwakeChanged: if (awake) iconPublish.restart()
+    Connections {
+        target: JD
+        function onDockRectChanged() { iconPublish.restart() }
+        function onWindowsChanged() { iconPublish.restart() }
+    }
+
     // ───────────── подпись под курсором ─────────────
     //
     // Не сразу: подпись, выскакивающая в тот же миг, превращает проход вдоль дока в мельтешение
     // плашек. Полсекунды — это ровно «я тут остановился и смотрю».
     property bool tipShown: false
     property string tipFor: ""
+    // shell.qml mask + EdgeReveal.keepVisible need these from outside DockView.
+    readonly property Item tipItem: tip
+    readonly property bool tipHovered: tipHover.hovered
+    readonly property bool dockUiActive: engaged || tipHovered || tipShown || !!ctxEntry
     Timer { id: tipWait; interval: 480; onTriggered: dv.tipShown = true }
     onFocusedChanged: {
         const key = focused ? (focused.key || focused.t) : ""
@@ -840,65 +932,196 @@ Item {
             : dv.focused.t === "cat" ? "Процессор " + Math.round(JD.cpu) + "%"
             : dv.focused.t === "clock" ? Qt.formatDate(new Date(), "d MMMM, dddd")
             : (dv.focused.name || "")
-        // Заголовки открытых окон. Настоящих картинок-предпросмотров на KWin обычным клиентам не
-        // дают — снимать чужие окна умеет только композитор, — поэтому показываем то, что у нас
-        // есть и что на деле нужнее: какие именно окна открыты и какое из них сейчас наверху.
         readonly property var wins: dv.focused && dv.focused.wins ? dv.focused.wins : []
-        readonly property bool showsWindows: dv.preview && wins.length > 0
+        // JPEG thumbnail cards only when a real capture path works AND at least one JPEG arrived.
+        // Never show empty blue frames with the app logo — that looked like a broken teleport tip.
+        readonly property bool thumbsReady: {
+            const _ = JD.thumbs
+            if (JD.thumbCaptureBroken || !dv.preview || wins.length === 0) return false
+            for (let i = 0; i < Math.min(wins.length, 5); i++) {
+                if (JD.thumbPath(wins[i].id)) return true
+            }
+            return false
+        }
+        readonly property bool showsThumbs: thumbsReady
+        // Compact window-title list (macOS/KDE style) when preview is on but thumbs unavailable.
+        readonly property bool showsWinList: dv.preview && wins.length > 0 && !showsThumbs
+        readonly property bool expanded: showsThumbs || showsWinList
         readonly property int at: dv.focused ? dv.focused.i : -1
-        width: Math.max(tipText.implicitWidth, winList.implicitWidth) + 20
-        height: showsWindows ? 26 + winList.implicitHeight + 6 : 26
-        radius: showsWindows ? 12 : 13
-        color: Qt.rgba(0, 0, 0, 0.86)
+        // Ask for thumbs in the background; tip stays classic until a JPEG lands (or capture is marked broken).
+        onWinsChanged: tip.requestThumbs()
+        onWantChanged: {
+            if (want) tip.requestThumbs()
+            else { frozenX = liveX; frozenY = liveY }
+        }
+        function requestThumbs() {
+            if (!dv.preview || JD.thumbCaptureBroken) return
+            for (const w of wins.slice(0, 5))
+                if (w && w.id) JD.requestThumb(w.id)
+        }
+        // Cap tip width. Chromium/Electron page titles are huge; sizing from
+        // titleLab.implicitWidth made a full-width black strip that looked like a broken
+        // Helium/CSD title bar floating above the dock — not a real window decoration.
+        readonly property real tipMax: Math.min(360, Math.max(200, Math.round(dv.width * 0.42)))
+        width: Math.min(tipMax,
+                        showsThumbs ? Math.max(tipText.implicitWidth + 20, winRow.implicitWidth + 16)
+                      : showsWinList ? Math.max(tipText.implicitWidth + 20, winList.implicitWidth + 20)
+                      : tipText.implicitWidth + 20)
+        height: showsThumbs ? 28 + winRow.implicitHeight + 10
+              : showsWinList ? 28 + winList.implicitHeight + 8
+              : 26
+        radius: expanded ? 14 : 13
+        color: Qt.rgba(0, 0, 0, 0.9)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.12)
-        Behavior on height { enabled: JD.animOn; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-        x: {
+        // Live geometry while shown; freeze last spot while fading out (no lag-slide up-left).
+        readonly property real liveX: {
             const g = at >= 0 && at < dv.geom.length ? dv.geom[at] : null
             return Math.max(0, Math.min(dv.width - width, (g ? g.x + g.w / 2 : 0) - width / 2))
         }
-        y: (dv.atTop ? card.height + 10 : dv.height - card.height - height - 10) + (want ? 0 : (dv.atTop ? -5 : 5))
+        readonly property real liveY: dv.atTop ? card.height + 10 : dv.height - card.height - height - 10
+        property real frozenX: 0
+        property real frozenY: 0
+        x: want ? liveX : frozenX
+        y: want ? liveY : frozenY
         opacity: want ? 1 : 0
-        scale: want ? 1 : 0.94
         visible: opacity > 0.01
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 130 } }
-        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-        Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+        // Opacity fade only — no Behavior on x/y/width/height/scale (those caused the wild leave slide).
+        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
         Label1 {
             id: tipText
             anchors { top: parent.top; topMargin: 5; horizontalCenter: parent.horizontalCenter }
+            width: Math.min(implicitWidth, tip.tipMax - 20)
+            elide: Text.ElideRight
             text: tip.text
         }
+        // ─── real window thumbnails (Win/KDE task-manager style) ───
+        Row {
+            id: winRow
+            visible: tip.showsThumbs
+            anchors { top: tipText.bottom; topMargin: 6; horizontalCenter: parent.horizontalCenter }
+            spacing: 8
+            Repeater {
+                model: tip.showsThumbs ? tip.wins.slice(0, 5) : []
+                delegate: Item {
+                    id: cardWin
+                    required property var modelData
+                    width: 148
+                    height: 118
+                    readonly property string thumb: {
+                        const _ = JD.thumbs
+                        return JD.thumbPath(modelData.id)
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 10
+                        color: Qt.rgba(1, 1, 1, thumbCardHover.hovered ? 0.12 : 0.06)
+                        border.width: modelData.active ? 2 : 1
+                        border.color: modelData.active ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.14)
+                        Column {
+                            anchors { fill: parent; margins: 6 }
+                            spacing: 4
+                            Item {
+                                width: parent.width
+                                height: 72
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 6
+                                    color: Qt.rgba(0, 0, 0, 0.45)
+                                    clip: true
+                                    Image {
+                                        anchors.fill: parent
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                        visible: !!cardWin.thumb && !modelData.minimized
+                                        source: cardWin.thumb ? ("file://" + cardWin.thumb) : ""
+                                    }
+                                    Label2 {
+                                        anchors.centerIn: parent
+                                        visible: !!modelData.minimized || !cardWin.thumb
+                                        text: modelData.minimized ? "свернуто" : "…"
+                                        color: JD.text3
+                                    }
+                                }
+                            }
+                            Label2 {
+                                width: parent.width
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                                color: modelData.minimized ? JD.text3 : JD.text1
+                                text: (modelData.title || "").trim() || "без названия"
+                            }
+                        }
+                    }
+                    HoverHandler { id: thumbCardHover }
+                    TapHandler {
+                        onTapped: {
+                            JD.windowDo("focus", String(modelData.id))
+                            dv.tipShown = false
+                        }
+                    }
+                }
+            }
+        }
+        // ─── clean macOS-style tip: compact clickable window titles, no empty frames ───
         Column {
             id: winList
-            visible: tip.showsWindows
-            anchors { top: tipText.bottom; topMargin: 4; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 10 }
+            visible: tip.showsWinList
+            anchors { top: tipText.bottom; topMargin: 4; horizontalCenter: parent.horizontalCenter }
             spacing: 2
+            width: Math.min(tip.tipMax - 20, Math.max(160, tipText.implicitWidth))
             Repeater {
-                model: tip.showsWindows ? tip.wins.slice(0, 5) : []
-                delegate: Row {
+                model: tip.showsWinList ? tip.wins.slice(0, 5) : []
+                delegate: Item {
                     required property var modelData
-                    spacing: 6
+                    // Width from tip cap + app name — never from the raw page title
+                    // (titleLab.implicitWidth stretched Helium tips across the screen).
+                    width: winList.width
+                    height: 22
                     Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 4
-                        height: 4
-                        radius: 2
-                        color: modelData.active ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.35)
+                        anchors.fill: parent
+                        radius: 6
+                        color: Qt.rgba(1, 1, 1, winRowHover.hovered ? 0.12 : 0)
                     }
                     Label2 {
-                        width: Math.min(implicitWidth, 260)
+                        id: titleLab
+                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 8; rightMargin: 8 }
                         font.pixelSize: 11
-                        color: modelData.minimized ? JD.text3 : JD.text2
-                        text: (modelData.title || "").trim() || "без названия"
+                        elide: Text.ElideRight
+                        color: modelData.minimized ? JD.text3 : (modelData.active ? JD.accentBlue : JD.text1)
+                        text: ((modelData.title || "").trim() || "без названия") + (modelData.minimized ? " · свёрнуто" : "")
+                    }
+                    HoverHandler { id: winRowHover }
+                    TapHandler {
+                        onTapped: {
+                            JD.windowDo("focus", String(modelData.id))
+                            dv.tipShown = false
+                        }
                     }
                 }
             }
             Label2 {
-                visible: tip.wins.length > 5
+                visible: tip.showsWinList && tip.wins.length > 5
+                anchors.horizontalCenter: parent.horizontalCenter
                 font.pixelSize: 11
                 color: JD.text3
                 text: "и ещё " + (tip.wins.length - 5)
+            }
+        }
+        Label2 {
+            visible: tip.showsThumbs && tip.wins.length > 5
+            anchors { top: winRow.bottom; topMargin: 2; horizontalCenter: parent.horizontalCenter }
+            font.pixelSize: 11
+            color: JD.text3
+            text: "и ещё " + (tip.wins.length - 5)
+        }
+        // Pointer over the tip counts as still on the dock (do not leaveLane / autohide).
+        HoverHandler {
+            id: tipHover
+            onHoveredChanged: {
+                if (hovered) { dv.cancelLeave(); dv.engaged = true }
+                else if (!cardHover.hovered && !edgeHover.hovered) dv.leaveLane()
+                dv.wake()
             }
         }
     }
@@ -1353,7 +1576,13 @@ Item {
         if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
         if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
         const front = wins.find(w => w.active && !w.minimized)
-        if (front) { for (const w of wins) JD.windowDo("minimize", w.id); return }
+        if (front) {
+            // Genie: scale each window toward this dock icon, then minimize.
+            const g = e.i !== undefined && e.i < dv.geom.length ? dv.geom[e.i] : null
+            const iconRect = g ? JD.dockIconScreenRect(g) : null
+            for (const w of wins) JD.minimizeGenie(w, iconRect)
+            return
+        }
         const up = wins.find(w => !w.minimized) || wins[0]
         JD.windowDo("focus", up.id)
     }

@@ -34,10 +34,13 @@ Item {
     // Колонок столько, чтобы получился прямоугольник, а не строка с хвостом. Шесть программ в пять
     // колонок — это пять в ряд и одна под ними, и выглядит это как недогруженный список; те же
     // шесть в три колонки — ровный блок, который видно целиком одним взглядом.
-    readonly property int columns: shown.length <= 4 ? Math.max(1, shown.length)
+    readonly property bool spotlight: JD.menuSearchMode
+    // Spotlight — одна колонка-список; полное меню — сетка плиток.
+    readonly property int columns: spotlight ? 1
+                                 : shown.length <= 4 ? Math.max(1, shown.length)
                                  : shown.length <= 9 ? 3
                                  : shown.length <= 16 ? 4 : 5
-    readonly property real tile: 104
+    readonly property real tile: spotlight ? 52 : 104
 
     // Размер меню больше не считается по содержимому — и это починка, а не упрощение. Раньше
     // высота карточки равнялась высоте сетки: шесть закреплённых программ и сто пятьдесят семь
@@ -111,9 +114,9 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
-        anchors.bottomMargin: 18
-        spacing: 12
+        anchors.margins: spotlight ? 14 : 20
+        anchors.bottomMargin: spotlight ? 14 : 18
+        spacing: spotlight ? 10 : 12
 
         // ───────────── поиск ─────────────
         //
@@ -167,7 +170,9 @@ Item {
                         visible: !field.text
                         font: field.font
                         color: JD.text3
-                        text: "Программа, игра, окно — или просьба к " + JD.assistantName
+                        text: mv.spotlight
+                            ? ("Поиск или просьба к " + JD.assistantName)
+                            : ("Программа, файл, окно — или просьба к " + JD.assistantName)
                     }
                 }
                 // Поиск не на каждую букву: пока печатают быстро, спрашивать демона незачем.
@@ -190,8 +195,9 @@ Item {
         // оставались на вторых ролях. Значка хватает, чтобы узнать раздел; имя показывает тот, что
         // выбран, и тот, на который навели.
         RowLayout {
+            visible: !spotlight
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: visible ? 34 : 0
             spacing: 6
             opacity: JD.menuSearching ? 0.3 : 1
             Behavior on opacity { NumberAnimation { duration: 160 } }
@@ -254,11 +260,14 @@ Item {
                 // Программ меньше, чем помещается, — сетка стоит посередине, а не жмётся к левому
                 // верхнему углу, оставив вокруг себя дыру. Дыра поровну со всех сторон читается как
                 // замысел; дыра с двух — как незаполненная форма.
-                readonly property real cell: Math.min(Math.floor((parent.width - 6) / mv.columns), 140)
-                width: cell * mv.columns
+                readonly property real cell: mv.spotlight
+                    ? parent.width
+                    : Math.min(Math.floor((parent.width - 6) / mv.columns), 140)
+                width: mv.spotlight ? parent.width : cell * mv.columns
                 height: Math.min(parent.height, contentHeight)
                 anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
+                // Spotlight: список сверху; полное меню: сетка по центру.
+                y: mv.spotlight ? 0 : Math.max(0, (parent.height - height) / 2)
                 clip: true
                 cellWidth: cell
                 cellHeight: mv.tile
@@ -297,14 +306,58 @@ Item {
                     height: grid.cellHeight
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: 4
-                        radius: 12
+                        anchors.margins: mv.spotlight ? 2 : 4
+                        radius: mv.spotlight ? 10 : 12
                         color: index === JD.menuPick ? mv.fill2 : (tileHover.hovered ? mv.fill1 : "transparent")
                         Behavior on color { ColorAnimation { duration: 120 } }
                         scale: tileTap.pressed ? 0.94 : 1
                         Behavior on scale { NumberAnimation { duration: 110 } }
 
+                        // Spotlight: строка значок+имя; полное меню: плитка.
+                        RowLayout {
+                            visible: mv.spotlight
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 12
+                            Icon {
+                                name: modelData.icon
+                                fallback: "application-x-executable"
+                                implicitSize: 28
+                                renderSize: 64
+                                theme: true
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+                                Text {
+                                    Layout.fillWidth: true
+                                    font.family: JD.fontFamily
+                                    font.pixelSize: 14
+                                    color: JD.text1
+                                    elide: Text.ElideRight
+                                    text: modelData.name
+                                }
+                                Label2 {
+                                    visible: !!(modelData.sub || modelData.kind === "window" || modelData.kind === "file")
+                                    Layout.fillWidth: true
+                                    color: modelData.kind === "window" ? JD.accentCyan : JD.text3
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                    text: modelData.kind === "file" ? (modelData.sub || "файл")
+                                          : modelData.kind === "window" ? (modelData.sub || "открыто")
+                                          : (modelData.sub || "")
+                                }
+                            }
+                            Icon {
+                                visible: modelData.kind !== "file" && modelData.kind !== "window" && JD.isPinned(modelData)
+                                name: "star"
+                                implicitSize: 13
+                                tint: JD.accentOrange
+                            }
+                        }
                         ColumnLayout {
+                            visible: !mv.spotlight
                             anchors.fill: parent
                             anchors.topMargin: 12
                             anchors.bottomMargin: 8
@@ -334,7 +387,7 @@ Item {
                         // Звёздочка в углу: закреплённое видно, не наводя мышь.
                         Icon {
                             anchors { top: parent.top; right: parent.right; topMargin: 6; rightMargin: 6 }
-                            visible: JD.isPinned(modelData) && !JD.menuSearching
+                            visible: !mv.spotlight && modelData.kind !== "file" && modelData.kind !== "window" && JD.isPinned(modelData) && !JD.menuSearching
                             name: "star"
                             implicitSize: 13
                             tint: JD.accentOrange
@@ -342,16 +395,17 @@ Item {
                         // Открытое окно — это переход к нему, а не второй запуск, и об этом надо сказать.
                         Label2 {
                             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: -2 }
-                            visible: modelData.kind === "window"
-                            color: JD.accentCyan
+                            visible: !mv.spotlight && (modelData.kind === "window" || modelData.kind === "file")
+                            color: modelData.kind === "file" ? JD.text3 : JD.accentCyan
                             font.pixelSize: 11
-                            text: "открыто"
+                            text: modelData.kind === "file" ? "файл" : "открыто"
                         }
                         HoverHandler {
                             id: tileHover
                             cursorShape: Qt.PointingHandCursor
                             onHoveredChanged: mv.hintFor(hovered, (modelData.sub ? modelData.name + "  ·  " + modelData.sub : modelData.name)
                                 + (modelData.kind === "window" ? "  ·  перейти к окну"
+                                   : modelData.kind === "file" ? "  ·  открыть"
                                    : JD.isPinned(modelData) ? "  ·  правой кнопкой — открепить"
                                    : "  ·  правой кнопкой — закрепить"))
                         }
@@ -402,7 +456,8 @@ Item {
                 Label2 {
                     Layout.alignment: Qt.AlignHCenter
                     color: JD.text3
-                    text: JD.menuGroup === "fav" ? "Здесь пусто. Правой кнопкой по программе — закрепить."
+                    text: mv.spotlight ? "Ничего недавнего — начните печатать"
+                         : JD.menuGroup === "fav" ? "Здесь пусто. Правой кнопкой по программе — закрепить."
                                                  : "В этом разделе ничего нет"
                 }
             }
@@ -444,9 +499,11 @@ Item {
         // Одна полка на всё мелкое: инструменты слева, подсказка посередине, выключение и настройки
         // справа. Раньше кнопки питания стояли в шапке пятью серыми кругами и тянули на себя больше
         // внимания, чем всё меню вместе, — а нажимают из них дай бог один раз в неделю.
+        // В Spotlight полка скрыта: это только поиск, не пуск.
         Item {
+            visible: !spotlight
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
+            Layout.preferredHeight: visible ? 30 : 0
 
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top }

@@ -27,11 +27,13 @@ Canvas {
     height: size * 0.5
     antialiasing: true
 
-    Timer {
-        interval: 33
-        repeat: true
+    // Spin follows display refresh (~170 Hz on DP-2) instead of a fixed ~30 fps timer.
+    FrameAnimation {
         running: eye.spinning && visible && JD.animOn
-        onTriggered: { eye.spin += 0.1; eye.requestPaint() }
+        onTriggered: {
+            eye.spin += 0.1 * Math.max(0.5, Math.min(3.0, frameTime * 60))
+            eye.requestPaint()
+        }
     }
     Connections {
         target: me
