@@ -49,3 +49,66 @@ def character(cfg: dict) -> str:
     if p.get("live_speech"):
         lines.append(extra["live_speech"])
     return "\n".join(lines)
+
+
+# ──────────────────────────── что он умеет на этой машине ────────────────────────────
+#
+# Зачем это здесь. Умения ассистента описаны в PERSONA.md словами, а что из них **включено** —
+# знает только конфиг. Из-за этого он не знал, что у него есть история буфера обмена и выбиралка
+# эмодзи: ему про них никто не сказал, а сам он их не видит. Человек просил «скажите ему, что он
+# умеет», и правильный ответ — не дописать абзац руками, а собирать его из того, что реально
+# работает: выключенное из списка должно пропадать само, иначе он начнёт обещать несуществующее.
+#
+# Каждая строка — одно умение: как его позвать и что оно делает. Без вариантов «можно также» —
+# список читается моделью перед каждым разговором, и каждое лишнее слово в нём стоит токенов на
+# каждом ходу.
+ABILITIES: list[tuple[str, str, str]] = [
+    ("clipboard.history", "История буфера обмена: `justday clip` — панель на островке; пароли в неё не попадают.",
+     "Clipboard history: `justday clip` — a panel on the island; passwords never get in."),
+    ("", "Эмодзи: `justday emoji` — поиск по-русски, вставка в то окно, где курсор.",
+     "Emoji: `justday emoji` — search and insert into the window with the cursor."),
+    ("", "Нагрузка машины: `justday load` — процессор, память, видеокарта, диски, сеть.",
+     "Machine load: `justday load` — CPU, memory, GPU, disks, network."),
+    ("", "Громкость по программам: `justday tools mixer` — микшер на островке.",
+     "Per-app volume: `justday tools mixer` — the mixer on the island."),
+    ("dock.enabled", "Док: `justday dock pin|unpin <id>`, `justday dock go N` — N-я программа слева.",
+     "Dock: `justday dock pin|unpin <id>`, `justday dock go N` — the Nth app from the left."),
+    ("tray.enabled", "Лоток: чужие значки полосой у края; `justday config set tray.hidden ...` прячет лишние.",
+     "Tray: other apps' icons in a strip; `justday config set tray.hidden ...` hides the extra ones."),
+    ("", "Окна: `justday windows list|focus|close|minimize`, `justday apps`, `justday games`.",
+     "Windows: `justday windows list|focus|close|minimize`, `justday apps`, `justday games`."),
+    ("", "Снимок экрана: `justday screenshot`; нажатия и клавиши: `justday click`, `justday keys`.",
+     "Screenshot: `justday screenshot`; clicks and keys: `justday click`, `justday keys`."),
+    ("notes.plans", "Планы: `justday plan` — они лежат в Obsidian, островок их только показывает и отмечает.",
+     "Plans: `justday plan` — they live in Obsidian; the island only shows and ticks them."),
+    ("", "Живые сессии Claude Code: страница «Клод» на островке — что каждая делает прямо сейчас.",
+     "Live Claude Code sessions: the «Claude» page on the island — what each one is doing now."),
+    ("media.show_player", "Музыка и видео: `justday play`, `justday player`, `justday video`.",
+     "Music and video: `justday play`, `justday player`, `justday video`."),
+    ("mail.address", "Почта и календарь: `justday mail`, `justday calendar`, `justday contacts`.",
+     "Mail and calendar: `justday mail`, `justday calendar`, `justday contacts`."),
+    ("", "Память: `justday memory` — она в файлах на диске и переживает перезапуск.",
+     "Memory: `justday memory` — files on disk; it survives a restart."),
+    ("", "Напоминания и таймеры: `justday timer`, `justday alarm`, `justday reminders`.",
+     "Reminders and timers: `justday timer`, `justday alarm`, `justday reminders`."),
+]
+
+
+def _on(cfg: dict, path: str) -> bool:
+    """Включено ли то, что стоит за этим ключом. Пустой ключ — умение есть всегда."""
+    if not path:
+        return True
+    node: object = cfg
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    if isinstance(node, bool):
+        return node
+    return bool(node)
+
+
+def abilities(cfg: dict) -> str:
+    """Список включённых умений для слота {abilities} в PERSONA.md, на языке человека."""
+    en = cfg.get("user", {}).get("language", "ru") != "ru"
+    return "\n".join(f"- {row[2] if en else row[1]}" for row in ABILITIES if _on(cfg, row[0]))

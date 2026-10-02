@@ -608,3 +608,28 @@ def test_the_tiny_level_is_offered_only_when_there_is_a_tiny_model(monkeypatch) 
     assert dispatch.level_for("который час", tiny=True)[0] == dispatch.TINY
     # Без крошечной модели тот же ответ судьи не должен превращаться в несуществующую ступень.
     assert dispatch.level_for("который час", tiny=False)[0] in (dispatch.LIGHT, dispatch.STRONG)
+
+
+# ──────────────────────────── что он знает о себе ────────────────────────────
+def test_he_is_told_only_about_what_is_switched_on() -> None:
+    """Он не знал, что у него есть буфер обмена и эмодзи: ему про них никто не сказал.
+
+    Список собирается из конфига, а не пишется руками, и выключенное пропадает из него само —
+    иначе он начнёт обещать человеку то, чего у того нет.
+    """
+    from justday import config, persona
+
+    cfg = config.DEFAULTS
+    on = persona.abilities({**cfg, "dock": {**cfg["dock"], "enabled": True},
+                            "clipboard": {**cfg["clipboard"], "history": 50}})
+    assert "буфер" in on.lower()
+    assert "Док:" in on
+
+    off = persona.abilities({**cfg, "dock": {**cfg["dock"], "enabled": False},
+                             "clipboard": {**cfg["clipboard"], "history": 0}})
+    assert "буфер" not in off.lower(), "выключенный буфер остался в списке — он пообещает лишнее"
+    assert "Док:" not in off
+
+    # Язык человека: английскому незачем читать список по-русски.
+    said = persona.abilities({**cfg, "user": {**cfg["user"], "language": "en"}})
+    assert "Clipboard" in said or "Emoji" in said

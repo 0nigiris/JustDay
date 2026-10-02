@@ -179,6 +179,9 @@ class Brain:
         persona = persona_file.read_text(encoding="utf-8")
         names = [u["assistant_name"], *u.get("assistant_aliases", [])]
         persona = persona.replace("{character}", persona_mod.character(self.cfg))  # it has placeholders of its own
+        # Что из его умений включено — знает конфиг, а не текст характера. Иначе он обещает
+        # то, чего у человека нет, и не знает про то, что у него есть.
+        persona = persona.replace("{abilities}", persona_mod.abilities(self.cfg))
         persona = (persona.replace("{address_as}", u["address_as"] or "").replace("{assistant_name}", names[0])
                    .replace("{assistant_names}", (" и " if lang == "ru" else " and ").join(f"«{n}»" for n in names)))
         claude = providers.is_claude(self.cfg)
