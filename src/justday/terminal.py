@@ -124,6 +124,17 @@ class Said:
     tools: list[str] = field(default_factory=list)
 
 
+def _marks(cfg: dict) -> dict[str, str]:
+    """Чем движок узнаёт, что он запущен не сам по себе.
+
+    Без этого модель внутри оболочки ведёт себя как в разговоре с человеком: ждёт ответа на
+    вопрос, которого никто не услышит, и держит важное в голове вместо диска, хотя её могут
+    сменить на следующей минуте. Правила объясняют, что делать; эти переменные говорят, где она.
+    """
+    night = "1" if (cfg.get("terminal") or {}).get("unattended") else "0"
+    return {"JUSTDAY_SHELL": "terminal", "JUSTDAY_NIGHT": night}
+
+
 def _quiet_for(cfg: dict) -> float:
     return float((cfg.get("terminal") or {}).get("first_word_seconds") or 90)
 
@@ -227,7 +238,7 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
             elif not got.text:
                 got.text = str(ev.get("result") or "")
 
-    _, err = await _run(cmd, {**os.environ}, line, _quiet_for(cfg))
+    _, err = await _run(cmd, {**os.environ, **_marks(cfg)}, line, _quiet_for(cfg))
     if err.strip() and not got.text:
         got.error = got.error or err.strip()[:400]
     got.limit = fallback.looks_like_limit(got.error + " " + err)
@@ -259,7 +270,7 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
             got.tools.append(str(part["tool"]))
             on_tool(str(part["tool"]))
 
-    _, err = await _run(cmd, shell.env(), line, _quiet_for(cfg))
+    _, err = await _run(cmd, {**shell.env(), **_marks(cfg)}, line, _quiet_for(cfg))
     if err.strip():
         got.error = err.strip()[:400]
     got.limit = fallback.looks_like_limit(got.error)

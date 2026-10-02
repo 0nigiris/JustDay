@@ -192,8 +192,13 @@ def rungs(keys: set[str] | None = None) -> dict:
 
 
 def env() -> dict[str, str]:
-    """Окружение для окна: ключи из связки, и ни одного из них на диске."""
+    """Окружение для окна: ключи из связки, и ни одного из них на диске.
+
+    Заодно метка `JUSTDAY_SHELL`: по ней модель внутри узнаёт, что она запущена оболочкой, а не
+    разговаривает с человеком напрямую. Что из этого следует — написано в `AGENTS.md`.
+    """
     out = dict(os.environ)
+    out["JUSTDAY_SHELL"] = "opencode"
     for name, var in KEYS.items():
         got = providers.secret_get(name)
         if got:
