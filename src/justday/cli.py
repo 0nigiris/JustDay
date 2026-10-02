@@ -427,6 +427,10 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["list", "notify", "send", "ring"])
     sp.add_argument("args", nargs="*")
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
+    sp = sub.add_parser("server", help="режим сервера: экраны гаснут, звук глохнет, машина не "
+                                      "засыпает, а работа идёт. on | off | status")
+    sp.add_argument("action", nargs="?", default="status", choices=["on", "off", "status"])
+    sp.add_argument("--why", default="работа ассистента", help="зачем — видно в журнале и в status")
     sp = sub.add_parser("reach", help="дотянуться до человека, когда его нет за компьютером: "
                                      "письмо — обычное, --urgent — ещё и звонок на телефон")
     sp.add_argument("text", nargs="+")
@@ -877,6 +881,11 @@ def main(argv: list[str] | None = None) -> None:
             _print(session.save())
         else:
             _print(session.close(a.keep) if a.action == "close" else session.restore())
+    elif a.cmd == "server":
+        from . import server as server_mod
+
+        _print(server_mod.on(a.why) if a.action == "on"
+               else server_mod.off() if a.action == "off" else server_mod.status())
     elif a.cmd == "reach":
         from . import phone
 

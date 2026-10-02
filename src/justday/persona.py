@@ -91,6 +91,12 @@ ABILITIES: list[tuple[str, str, str]] = [
      "Memory: `justday memory` — files on disk; it survives a restart."),
     ("", "Напоминания и таймеры: `justday timer`, `justday alarm`, `justday reminders`.",
      "Reminders and timers: `justday timer`, `justday alarm`, `justday reminders`."),
+    ("", "Режим сервера: `justday server on` — экраны гаснут, звук глохнет, машина не засыпает, "
+         "а работа идёт дальше. `justday server off` возвращает всё. Включай, когда он ушёл, а "
+         "работа осталась, и обязательно выключай, закончив.",
+     "Server mode: `justday server on` — screens off, sound muted, no sleep, work continues. "
+     "`justday server off` restores everything. Turn it on when he leaves work running, and off "
+     "when it is done."),
     ("", "Дотянуться до него, когда его нет за компьютером: `justday reach \"текст\"` — письмо; "
          "`--urgent` — ещё и звонок на телефон. Звонок только ради того, что правда не ждёт.",
      "Reach him when he is away from the computer: `justday reach \"text\"` — email; "

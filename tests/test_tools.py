@@ -672,3 +672,46 @@ def test_ordinary_matters_do_not_ring(monkeypatch) -> None:
     got = phone.reach("пришло письмо из банка")
     assert not rang, "обычное дело не должно звонить"
     assert got["sent"] == ["письмо"]
+
+
+# ──────────────────────────── режим сервера ────────────────────────────
+def test_server_mode_restores_what_it_changed(tmp_path, monkeypatch) -> None:
+    """Режим, который не умеет выключаться обратно, — это сломанный компьютер, а не режим.
+
+    Проверяем пару: включили — экраны погасли, звук заглох, сторож сна поднят; выключили — экраны
+    зажглись, звук вернули, сторожа убили, след на диске убран.
+    """
+    from justday import server
+
+    did: list[str] = []
+    killed: list[int] = []
+    monkeypatch.setattr(server, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(server, "_screens", lambda on: did.append(f"screens={'on' if on else 'off'}") or True)
+    monkeypatch.setattr(server, "_mute", lambda on: did.append(f"mute={on}") or True)
+    monkeypatch.setattr(server, "_keep_awake", lambda why: 4242)
+    monkeypatch.setattr(server.os, "kill", lambda pid, sig: killed.append(pid))
+
+    got = server.on("сборка")
+    assert got["ok"] and "screens=off" in did and "mute=True" in did and got["guard"] == 4242
+    assert server.status()["on"] is True
+
+    back = server.off()
+    assert back["ok"] and "screens=on" in did and "mute=False" in did
+    assert killed == [4242], "сторож сна остался жить — машина никогда не уснёт"
+    assert server.status()["on"] is False
+    assert not (tmp_path / "state.json").exists()
+
+
+def test_turning_it_on_twice_does_not_start_a_second_guard(tmp_path, monkeypatch) -> None:
+    """Второй сторож пережил бы выключение режима, и машина перестала бы засыпать навсегда."""
+    from justday import server
+
+    guards: list[str] = []
+    monkeypatch.setattr(server, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(server, "_screens", lambda on: True)
+    monkeypatch.setattr(server, "_mute", lambda on: True)
+    monkeypatch.setattr(server, "_keep_awake", lambda why: guards.append(why) or 7)
+
+    server.on("раз")
+    server.on("два")
+    assert len(guards) == 1
