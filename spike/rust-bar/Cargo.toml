@@ -1,0 +1,14 @@
+[package]
+name = "barspike"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+smithay-client-toolkit = "0.19"
+wayland-client = "0.31"
+raqote = "0.8"
+fontdue = "0.9"
+
+[profile.release]
+opt-level = 2
+strip = true
