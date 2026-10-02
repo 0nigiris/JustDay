@@ -1146,6 +1146,11 @@ Item {
                     SSlider { key: "tray.icon_size"; from: 16; to: 40; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
                 Row {
+                    title: JD.tr("Кнопка лотка в доке")
+                    subtitle: JD.tr("Значки чужих программ за одной кнопкой: полоса появляется по нажатию и уходит по второму. Выключено по умолчанию")
+                    Toggle { checked: win.get("dock.tray_button") === true; onToggled: v => win.set("dock.tray_button", v) }
+                }
+                Row {
                     title: JD.tr("Рамка при наведении")
                     subtitle: JD.tr("Обводит значок, на который навели. Выключите — останутся одни значки, без рамки")
                     Toggle { checked: win.get("tray.hover_frame") !== false; onToggled: v => win.set("tray.hover_frame", v) }

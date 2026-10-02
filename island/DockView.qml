@@ -92,6 +92,7 @@ Item {
     property bool awake: true
     readonly property bool showCat: JD.dockCfg.cat !== false
     readonly property bool showClock: JD.dockCfg.clock === true
+    readonly property bool showTrayButton: JD.dockCfg.tray_button === true
     // Значок меню: «apple» — то, что тема значков зовёт start-here (в макосных темах это яблоко),
     // «grid» — своя сетка точек. Файл готовит демон: в темах такие значки нарисованы «цветом
     // текста», которого разрисовщик Qt не разрешает, и на тёмном доке вышло бы чёрное пятно.
@@ -147,7 +148,14 @@ Item {
         const raw = JD.dockCfg.layout
         const list = (Array.isArray(raw) && raw.length ? raw
                      : ["launcher", "sep", "pinned", "running", "sep", "trash", "sep", "cat", "clock"])
-        return list.map(w => String(w).trim().toLowerCase()).filter(w => !!w)
+        const words = list.map(w => String(w).trim().toLowerCase()).filter(w => !!w)
+        // Кнопку включили в настройках, а в порядке её нет — поставить самому, перед корзиной:
+        // там и так живёт всё системное. Иначе настройка была бы включена и ничего не делала.
+        if (JD.dockCfg.tray_button === true && words.indexOf("tray") < 0) {
+            const at = words.indexOf("trash")
+            words.splice(at >= 0 ? at : words.length, 0, "tray")
+        }
+        return words
     }
 
     // ───────────── перетаскивание значков ─────────────
@@ -190,6 +198,7 @@ Item {
             else if (word === "trash") { if (showTrash) put({ t: "trash" }) }
             else if (word === "cat") { if (showCat) put({ t: "cat" }) }
             else if (word === "clock") { if (showClock) put({ t: "clock" }) }
+            else if (word === "tray") { if (showTrayButton) put({ t: "tray" }) }
             else if (word === "pinned") {
                 for (const it of pinnedItems) {
                     const live = by[it.key]
@@ -694,6 +703,29 @@ Item {
                         theme: true
                         syncLoad: true
                     }
+                    // Кнопка лотка: значки чужих программ за одной кнопкой, вместо полосы, которая
+                    // занимает край экрана постоянно. Светится, пока полоса открыта, — иначе
+                    // непонятно, нажата она или нет.
+                    Item {
+                        anchors.fill: parent
+                        visible: slot.e.t === "tray"
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: dv.icon
+                            height: dv.icon
+                            radius: Math.round(dv.icon * 0.28)
+                            color: JD.trayOn ? Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.22)
+                                             : Qt.rgba(1, 1, 1, 0.10)
+                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 140 } }
+                            Icon {
+                                anchors.centerIn: parent
+                                name: "layout-grid"
+                                fallback: "view-grid"
+                                implicitSize: Math.round(dv.icon * 0.58)
+                                tint: JD.trayOn ? JD.accentBlue : JD.text1
+                            }
+                        }
+                    }
                     DockCat {
                         anchors.centerIn: parent
                         visible: slot.e.t === "cat"
@@ -789,7 +821,8 @@ Item {
                     // Значок меню подписывать нечем: «Программы» в ячейку не влезает и обрезается
                     // в «Програм…», а яблоко и так понятно.
                     text: slot.e.t === "app" ? (slot.e.name || "")
-                        : slot.e.t === "trash" ? "Корзина" : ""
+                        : slot.e.t === "trash" ? "Корзина"
+                        : slot.e.t === "tray" ? "Лоток" : ""
                 }
 
                 // Колесо по значку перебирает окна этой программы — так же, как в доке макоси и в
@@ -1570,6 +1603,7 @@ Item {
         // Нажали в доке при открытом меню — меню своё дело сделало и уходит.
         if (JD.menuOpen) JD.closeMenu()
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
+        if (e.t === "tray") { JD.trayToggle(); return }
         // Папка в доке — стопка: показать, что внутри, а не открывать файловый менеджер. За самим
         // менеджером человек пойдёт сам, если ему нужна именно папка, а не файл из неё.
         if (e.kind === "dir") { dv.openStack(e); return }

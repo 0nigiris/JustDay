@@ -296,11 +296,29 @@ Item {
         id: strip
         anchors.fill: parent
         radius: Math.round(tv.implicitWidth * 0.34)
-        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.82)
+        // Плотнее, чем было. Сорок процентов чёрного поверх светлых обоев дают грязно-серое пятно,
+        // в котором значки тонут; материал должен быть материалом, а не дымкой.
+        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.54 : 0.86)
         // Без обводки. Полоса лотка узкая, и светлая черта по её краю на тёмных обоях читается
         // как вторая, лишняя граница рядом с краем значков — а на светлых просто мусорит.
-        // Форму ей задаёт тёмная заливка, этого хватает.
+        // Форму ей задаёт заливка, а объём — блик сверху и тень под ней.
         border.width: 0
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowBlur: 0.9
+            shadowOpacity: 0.34
+            shadowVerticalOffset: 3
+        }
+
+        // Блик по верхней кромке: он и отделяет полосу от обоев, и не превращается в рамку.
+        Rectangle {
+            anchors { top: parent.top; left: parent.left; right: parent.right
+                      topMargin: 1; leftMargin: parent.radius * 0.6; rightMargin: parent.radius * 0.6 }
+            height: 1
+            radius: 0.5
+            color: Qt.rgba(1, 1, 1, 0.10)
+        }
 
         // Курсор берём в координатах сцены нарочно: в координатах полосы он «двигался» бы сам,
         // когда она под ним растёт и переезжает, — и получилась бы обратная связь.
@@ -438,6 +456,27 @@ Item {
                         readonly property bool wash: mode !== "none"
                         readonly property string src: tv.trayIconSource(slot.modelData.icon)
                         readonly property int px: tv.trayIconPx()
+                        // Значка нет или он не загрузился — буква вместо чёрного кружка.
+                        //
+                        // Пустая тёмная клетка в полосе выглядит как сломанная программа, хотя
+                        // сломан всего лишь путь к картинке. Буква из имени говорит, чья это
+                        // строка, и не притворяется значком.
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: trayIconSrc.status === Image.Error || trayIconSrc.status === Image.Null
+                            radius: Math.round(width * 0.28)
+                            color: Qt.rgba(1, 1, 1, 0.12)
+                            Text {
+                                anchors.centerIn: parent
+                                text: String(slot.modelData.tooltipTitle || slot.modelData.title
+                                             || slot.modelData.id || "?").trim().slice(0, 1).toUpperCase()
+                                color: JD.text1
+                                font.family: JD.fontFamily
+                                font.pixelSize: Math.round(parent.height * 0.52)
+                                font.weight: Font.DemiBold
+                            }
+                        }
+
                         Image {
                             id: trayIconSrc
                             anchors.fill: parent
@@ -587,17 +626,32 @@ Item {
     }
 
     // Подпись рядом с полосой, а не поверх неё: полоса узкая, имя в неё не влезает.
+    // Подпись появляется не мгновенно: курсор проходит мимо полосы по сто раз на дню, и подпись,
+    // выскакивающая на каждое касание, — это мигание на краю зрения, а не подсказка.
+    Timer { id: hintWait; interval: 380; onTriggered: hintBox.ready = true }
+    onHintChanged: { hintBox.ready = false; if (tv.hint !== "") hintWait.restart(); else hintWait.stop() }
+
     Rectangle {
-        visible: tv.hint !== ""
-        width: hintText.implicitWidth + 20
-        height: 26
-        radius: 13
-        color: Qt.rgba(0, 0, 0, 0.82)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.12)
-        x: tv.atRight ? -width - 10 : tv.width + 10
+        id: hintBox
+        property bool ready: false
+        visible: tv.hint !== "" && ready
+        width: hintText.implicitWidth + 18
+        height: 22
+        radius: 11
+        color: Qt.rgba(0, 0, 0, 0.88)
+        border.width: 0
+        opacity: visible ? 1 : 0
+        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 110 } }
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowBlur: 0.8
+            shadowOpacity: 0.4
+            shadowVerticalOffset: 2
+        }
+        x: tv.atRight ? -width - 8 : tv.width + 8
         y: Math.max(0, Math.min(tv.height - height, tv.hintY - height / 2))
-        Label1 { id: hintText; anchors.centerIn: parent; text: tv.hint }
+        Label2 { id: hintText; anchors.centerIn: parent; text: tv.hint; font.pixelSize: 12; color: JD.text1 }
     }
     property real hintY: tv.height / 2
 }

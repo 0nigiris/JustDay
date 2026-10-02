@@ -532,7 +532,11 @@ Singleton {
     readonly property var dockCfg: settings.dock || ({})
     readonly property var trayCfg: settings.tray || ({})
     readonly property bool dockOn: dockCfg.enabled !== false
-    readonly property bool trayOn: trayCfg.enabled !== false
+    // Полоса лотка: 0 — как в настройках, 1 — показана кнопкой, −1 — спрятана кнопкой.
+    // Кнопка в доке должна делать ровно то, что кнопка: показывать спрятанное и прятать показанное.
+    property int trayPeek: 0
+    function trayToggle() { trayPeek = trayOn ? -1 : 1 }
+    readonly property bool trayOn: trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false)
     readonly property string dockPlace: dockCfg.position || "bottom"
     readonly property string trayPlace: trayCfg.position || "left"
     readonly property real dockIconSize: Math.max(24, Math.min(96, dockCfg.icon_size || 44))
