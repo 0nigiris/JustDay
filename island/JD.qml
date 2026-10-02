@@ -602,6 +602,15 @@ Singleton {
     // Раньше ступень была одна, самая шумная: любая работа разворачивала поперёк экрана полосу в
     // шестьсот точек с текстом, который человек не просил. Работа идёт почти всегда — значит и
     // полоса висела почти всегда.
+    // Вид верхней полосы. Это не вкусовщина: капсула посреди верхнего края физически перекрывает
+    // вкладки браузера, и тому, кто много живёт в браузере, нужен другой вид, а не уговоры привыкнуть.
+    //   island — капсула, плавающая под краем (как сейчас);
+    //   bar    — сплошная полоса во всю ширину, вплотную к краю;
+    //   notch  — вырез: прижат к краю, скруглён только снизу.
+    readonly property string islandStyle: {
+        const want = String(island.style || "island").toLowerCase()
+        return ["island", "bar", "notch"].indexOf(want) >= 0 ? want : "island"
+    }
     readonly property bool workQuiet: island.work_quiet !== false
     property int workStep: 0
     function workMore() { workStep = (workStep + 1) % 3 }

@@ -243,19 +243,32 @@ ShellRoot {
                 videopill: videoPillView, tools: toolsHolder })[mode]
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen
 
-            width: mode === "hidden" ? 140 : Math.max(120, content.implicitWidth)
+            // Сплошная полоса занимает всю ширину всегда: в этом и есть её смысл — она не
+            // плавает над вкладками, а живёт своей строкой экрана.
+            width: JD.islandStyle === "bar" ? parent.width
+                 : mode === "hidden" ? 140 : Math.max(120, content.implicitWidth)
             height: mode === "hidden" ? 8 : content.implicitHeight
             // corners follow the *animated* height every frame (a pill stays a pill while it grows);
             // only the pill ↔ card transition itself is eased
             property real pill: compact ? 1 : 0
             Behavior on pill { enabled: JD.animOn; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-            radius: Math.min(height / 2, pill * height / 2 + (1 - pill) * (mode === "settings" ? 34 : 30))
-            x: JD.side === "left" ? JD.sideMargin
+            // Вырез скруглён только снизу, полоса не скруглена вовсе, капсула — как была.
+            readonly property real soft: Math.min(height / 2, pill * height / 2 + (1 - pill) * (mode === "settings" ? 34 : 30))
+            radius: JD.islandStyle === "bar" ? 0 : soft
+            topLeftRadius: JD.islandStyle === "island" ? soft : 0
+            topRightRadius: JD.islandStyle === "island" ? soft : 0
+            bottomLeftRadius: JD.islandStyle === "bar" ? 0 : soft
+            bottomRightRadius: JD.islandStyle === "bar" ? 0 : soft
+            x: JD.islandStyle === "bar" ? 0
+             : JD.side === "left" ? JD.sideMargin
              : JD.side === "right" ? parent.width - width - JD.sideMargin
              : (parent.width - width) / 2
             // Спрятанный остров уезжает за свой край — за тот же, у которого стоит.
-            y: JD.atTop ? (mode === "hidden" ? JD.topMargin - 22 : JD.topMargin)
-                        : parent.height - height - (mode === "hidden" ? JD.topMargin - 22 : JD.topMargin)
+            // Полоса и вырез прижаты к самому краю: у выреза отступ означал бы, что он вырезан не
+            // в экране, а в воздухе, а полоса с отступом — это та же капсула, только шире.
+            readonly property real fromEdge: JD.islandStyle === "island"
+                ? (mode === "hidden" ? JD.topMargin - 22 : JD.topMargin) : 0
+            y: JD.atTop ? fromEdge : parent.height - height - fromEdge
             opacity: mode === "hidden" ? 0 : 1
             scale: mode === "hidden" ? 0.7 : 1
             color: JD.ink

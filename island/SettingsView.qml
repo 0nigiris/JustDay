@@ -813,6 +813,16 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Вид полосы")
+                    subtitle: JD.tr("Капсула плавает под краем, полоса занимает строку экрана, вырез прижат к краю")
+                    Choice {
+                        key: "island.style"
+                        options: [{ value: "island", label: JD.tr("Островок") },
+                                 { value: "bar", label: JD.tr("Сплошная полоса") },
+                                 { value: "notch", label: JD.tr("Вырез") }]
+                    }
+                }
+                Row {
                     title: JD.tr("Работа — только значком")
                     subtitle: JD.tr("Пока он работает, видно кружок; строка и подробности — по нажатию")
                     Toggle { checked: win.get("island.work_quiet") !== false; onToggled: v => win.set("island.work_quiet", v) }
