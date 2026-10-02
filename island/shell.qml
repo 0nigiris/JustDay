@@ -545,7 +545,9 @@ ShellRoot {
         Timer { interval: 1000; repeat: true; running: tv.shown; onTriggered: tv.elapsed = Math.round((Date.now() - JD.busySince) / 1000) }
         TextMetrics { font.family: JD.fontFamily; id: tm; text: tv.line; font.pixelSize: 13; font.weight: Font.DemiBold }
         readonly property bool longText: tm.width > 470
-        implicitWidth: Math.min(640, Math.max(240, tm.width + 118))
+        // Ступень ноль — кружок и ничего больше: идёт работа, и этого достаточно, чтобы знать.
+        implicitWidth: JD.workStep === 0 ? (JD.brainStrong ? 136 : 92)
+                                         : Math.min(640, Math.max(240, tm.width + 118))
         implicitHeight: JD.detailOpen ? Math.min(260, full.implicitHeight + 58) : 40
 
         RowLayout {
@@ -563,7 +565,7 @@ ShellRoot {
                 text: tv.line
                 TextSwap on text {}
                 Layout.fillWidth: true
-                visible: !JD.detailOpen
+                visible: JD.workStep === 1
             }
             // На сильной модели — отметка. Про лёгкую говорить нечего: она работает всегда, и
             // сообщать об этом значило бы шуметь ровно в том месте, которое мы бережём.
@@ -584,10 +586,12 @@ ShellRoot {
             }
             Label2 { text: tv.elapsed >= 3 ? tv.elapsed + JD.tr(" с") : ""; font.features: { "tnum": 1 } }
             IconButton {
-                visible: oneLine.truncated || JD.detailOpen
+                // Одна кнопка на все три ступени: значок → строка → всё → снова значок. Три
+                // отдельные кнопки заняли бы ровно то место, которое мы бережём.
+                visible: true
                 size: 24
-                icon: JD.detailOpen ? "go-up" : "go-down"
-                onClicked: JD.detailOpen = !JD.detailOpen
+                icon: JD.workStep === 2 ? "go-up" : "go-down"
+                onClicked: JD.workMore()
             }
         }
         Flickable {

@@ -813,6 +813,11 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Работа — только значком")
+                    subtitle: JD.tr("Пока он работает, видно кружок; строка и подробности — по нажатию")
+                    Toggle { checked: win.get("island.work_quiet") !== false; onToggled: v => win.set("island.work_quiet", v) }
+                }
+                Row {
                     title: JD.tr("Маскот")
                     subtitle: JD.tr("Живое существо слева в полосе. Свои скины кладутся в ~/.local/share/justday/mascots")
                     Choice {

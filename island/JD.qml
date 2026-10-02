@@ -596,7 +596,16 @@ Singleton {
     readonly property real sideMargin: 16
     readonly property real topMargin: island.top_margin === undefined ? 8 : Math.max(0, Math.min(400, island.top_margin))
     property bool peeking: false
-    property bool detailOpen: false
+    // Три ступени показа работы. Ноль — только значок: идёт работа, и этого достаточно, чтобы
+    // знать. Один — строка, что он делает прямо сейчас. Два — всё целиком.
+    //
+    // Раньше ступень была одна, самая шумная: любая работа разворачивала поперёк экрана полосу в
+    // шестьсот точек с текстом, который человек не просил. Работа идёт почти всегда — значит и
+    // полоса висела почти всегда.
+    readonly property bool workQuiet: island.work_quiet !== false
+    property int workStep: 0
+    function workMore() { workStep = (workStep + 1) % 3 }
+    readonly property bool detailOpen: workStep >= 2
     property bool islandHovered: false
 
     readonly property string mode: {
@@ -622,7 +631,7 @@ Singleton {
         if (peeking || workers > 0) return "peek"
         return "hidden"
     }
-    onModeChanged: if (mode !== "thinking") detailOpen = false
+    onModeChanged: workStep = workQuiet ? 0 : 1
 
     // ───────────── look ─────────────
     readonly property color ink: "#000000"
