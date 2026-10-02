@@ -50,6 +50,11 @@ def ladder(tmp_path):
         "ladder": ["anthropic/claude-opus-4-5", "openrouter/deepseek/deepseek-chat", "ollama/qwen3:30b"],
         "tiny": "ollama/qwen3:0.6b",
     }), encoding="utf-8")
+    # Вход в оболочку: без него ступени пропускаются как недоступные — это проверяется отдельно.
+    auth = tmp_path / ".local" / "share" / "opencode"
+    auth.mkdir(parents=True)
+    (auth / "auth.json").write_text(json.dumps({"anthropic": {"type": "api"},
+                                                "openrouter": {"type": "api"}}), encoding="utf-8")
     r = subprocess.run(["node", "--input-type=module", "-e", SCRIPT], capture_output=True, text=True,
                        timeout=60, env={"PATH": "/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path),
                                         "PLUGIN": PLUGIN.as_uri(), "HOME": str(tmp_path)})
@@ -172,3 +177,42 @@ def test_renaming_two_rungs_into_one_does_not_leave_a_double() -> None:
 
     assert shell.fresh(["anthropic/claude-opus-4-5", "anthropic/claude-opus-4-1"]) \
         == ["anthropic/claude-opus-5-5"]
+
+
+def test_a_rung_with_nothing_to_log_in_with_was_counted_as_a_limit(tmp_path) -> None:
+    """Ступень, куда нечем войти, проваливала начало разговора.
+
+    Поставщик без ключа отвечает обычной ошибкой, а лестница любую ошибку считает кончившимся
+    лимитом — и спускается. Разговор начинался с двух провалов подряд, и человек видел, что
+    отвечает кто-то не тот. Такие ступени пропускаются сразу, а человеку говорится, какие.
+
+    Про anthropic это теперь обычное дело: войти в него подпиской Claude нельзя (с февраля 2026
+    Anthropic разрешает такой вход только своим Claude Code и claude.ai), а ключа у человека нет.
+    """
+    if not shutil.which("node"):
+        pytest.skip("нет node — оболочку проверить нечем")
+    conf = tmp_path / "opencode"
+    conf.mkdir()
+    (conf / "justday-ladder.json").write_text(json.dumps({
+        "ladder": ["anthropic/claude-opus-5-5", "openrouter/qwen/qwen3-coder", "ollama/qwen3.5:9b"],
+        "tiny": "ollama/qwen3.5:9b",
+    }), encoding="utf-8")
+
+    script = """
+const said = []
+const client = { tui: { showToast: async ({ body }) => said.push(body.message) },
+                 session: { prompt: async () => ({}) } }
+const { JustDayLadder } = await import(process.env.PLUGIN)
+const h = await JustDayLadder({ client })
+const o = { message: {}, parts: [{ type: 'text', text: 'напиши скрипт' }] }
+await h['chat.message']({}, o)
+console.log(JSON.stringify({ model: o.message.model.providerID + '/' + o.message.model.modelID, said }))
+"""
+    r = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True,
+                       timeout=60, env={"PATH": "/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path),
+                                        "PLUGIN": PLUGIN.as_uri(), "HOME": str(tmp_path)})
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout.strip().splitlines()[-1])
+    assert got["model"] == "ollama/qwen3.5:9b", "работа ушла на ступень, куда нечем войти"
+    assert any("anthropic/claude-opus-5-5" in m for m in got["said"]), \
+        "ступени пропущены молча — человек не поймёт, почему отвечает не тот"

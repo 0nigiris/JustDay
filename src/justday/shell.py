@@ -19,7 +19,15 @@ from pathlib import Path
 from . import config, providers
 
 # Поставщик → как его ключ называется у нас в связке и как его ждёт OpenCode.
-KEYS = {"openrouter": "OPENROUTER_API_KEY", "groq": "GROQ_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+#
+# anthropic здесь тоже есть, но только как ключ API. Войти в оболочку подпиской Claude нельзя:
+# с февраля 2026 Anthropic разрешает такой вход только своим Claude Code и claude.ai, а с апреля
+# закрывает его и технически. Подписка остаётся там, где она разрешена, — в самом Claude Code,
+# которым и думает сам Джарвис.
+KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
+        "groq": "GROQ_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+AUTH = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "opencode" / "auth.json"
+LOCAL = {"ollama", "lmstudio", "llamacpp", "local"}
 
 CONF_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode"
 PLUGIN = CONF_DIR / "plugin" / "justday-ladder.js"
@@ -158,6 +166,31 @@ def ensure() -> None:
     SETTINGS.write_text(json.dumps(conf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def logged_in() -> set[str]:
+    """Поставщики, в которые оболочка уже вошла своими средствами (`opencode auth login`)."""
+    try:
+        got = json.loads(AUTH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return {str(k) for k in got} if isinstance(got, dict) else set()
+
+
+def rungs(keys: set[str] | None = None) -> dict:
+    """Какие ступени лестницы живые, а какие пропускаются, потому что в них нечем войти.
+
+    Нужно для одной строки при запуске. Без неё человек видит только, что отвечает не тот, кого он
+    поставил наверх, — и ищет беду в лестнице, хотя беда в том, что входа нет.
+    """
+    try:
+        got = json.loads(LADDER.read_text(encoding="utf-8"))
+        all_rungs = [str(r) for r in (got.get("ladder") or [])]
+    except (OSError, ValueError, AttributeError):
+        all_rungs = list(DEFAULT_LADDER["ladder"])
+    have = set(logged_in()) | (keys if keys is not None else {n for n in KEYS if providers.secret_get(n)})
+    live = [r for r in all_rungs if r.split("/", 1)[0] in LOCAL or r.split("/", 1)[0] in have]
+    return {"live": live or all_rungs, "skipped": [] if not live else [r for r in all_rungs if r not in live]}
+
+
 def env() -> dict[str, str]:
     """Окружение для окна: ключи из связки, и ни одного из них на диске."""
     out = dict(os.environ)
@@ -168,11 +201,25 @@ def env() -> dict[str, str]:
     return out
 
 
+def report(out) -> None:
+    """Одна строка про лестницу перед запуском окна: кто отвечает и кого пропустили."""
+    have = {n for n, var in KEYS.items() if out.get(var)}
+    step = rungs(have)
+    print("Лестница: " + " → ".join(step["live"]))
+    if step["skipped"]:
+        print("Пропускаю (нечем войти): " + ", ".join(step["skipped"]))
+        if any(r.startswith("anthropic/") for r in step["skipped"]):
+            print("  Подписка Claude в чужих оболочках запрещена с февраля 2026 — только Claude Code\n"
+                  "  и claude.ai. Для anthropic здесь нужен ключ API: justday secret set anthropic.")
+
+
 def run(args: list[str] | None = None) -> int:
     ensure()
     cli = shutil.which("opencode") or str(Path.home() / ".local" / "bin" / "opencode")
     if not Path(cli).exists():
         print("OpenCode не установлен: npm install -g opencode-ai")
         return 1
-    os.execve(cli, [cli, *(args or [])], env())
+    out = env()
+    report(out)
+    os.execve(cli, [cli, *(args or [])], out)
     return 0        # сюда не возвращаются
