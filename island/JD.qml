@@ -887,8 +887,12 @@ Singleton {
     // Где висит остров и в какую сторону он растёт. Пилюля горизонтальная, поэтому «слева» и
     // «справа» — это край по горизонтали, а не поворот на бок: повёрнутая пилюля не вмещает ни
     // строки ответа, ни волны голоса, ни плеера.
-    // Размытие под доком, лотком и меню — самый дорогой эффект композитора из всех.
-    readonly property bool blurOn: island.blur !== false && !fullscreen
+    // Frost under dock/tray/menu. Do NOT gate on global `fullscreen`: that property is
+    // true if ANY output has a fullscreen window, which killed blur on every monitor
+    // (and darkened card tints via DockView/TrayView). Per-screen hide already drops
+    // blur with the strip: dockBlur/trayBlur use `… && dockWin.shown` / `trayWin.shown`,
+    // and shown follows dockCoveredOn (true-fullscreen / overlap on THAT output only).
+    readonly property bool blurOn: island.blur !== false
     readonly property string place: island.position || "top-center"
     readonly property bool atTop: !place.startsWith("bottom")
     readonly property string side: place.split("-")[1] || "center"
