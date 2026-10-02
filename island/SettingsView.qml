@@ -128,31 +128,50 @@ Item {
                 }
                 Repeater {
                     model: [
+                        // Шестнадцать строк подряд читаются как список дел, а не как настройки.
+                        // Пять подписей разбивают их на то, что человек ищет: кто он, как выглядит,
+                        // как звучит, с чем связан и что под капотом.
+                        { group: JD.tr("Основное") },
                         { id: "general", title: JD.tr("Общие"), icon: "settings", tint: "#8e8e93" },
                         { id: "character", title: JD.tr("Характер"), icon: "user-round", tint: "#ff9f0a" },
+                        { id: "model", title: JD.tr("Модель"), icon: "cpu", tint: "#bf5af2" },
+                        { group: JD.tr("Вид") },
                         { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
                         { id: "dock", title: JD.tr("Док и лоток"), icon: "layout-grid", tint: "#5e5ce6" },
-                        { id: "widgets", title: JD.tr("Виджеты"), icon: "cloud-sun", tint: "#32ade6" },
-                        { id: "notifications", title: JD.tr("Уведомления"), icon: "bell", tint: "#bf5af2" },
+                        { id: "notifications", title: JD.tr("Уведомления и виджеты"), icon: "bell", tint: "#32ade6" },
+                        { group: JD.tr("Звук") },
                         { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
                         { id: "media", title: JD.tr("Музыка и видео"), icon: "music", tint: "#fc3c44" },
-                        { id: "buttons", title: JD.tr("Кнопки"), icon: "keyboard", tint: "#0a84ff" },
-                        { id: "model", title: JD.tr("Модель"), icon: "cpu", tint: "#bf5af2" },
+                        { group: JD.tr("Связь") },
                         { id: "mail", title: JD.tr("Почта и календарь"), icon: "mail", tint: "#ff453a" },
                         { id: "people", title: JD.tr("Люди"), icon: "users", tint: "#30d158" },
+                        { group: JD.tr("Система") },
+                        { id: "buttons", title: JD.tr("Кнопки"), icon: "keyboard", tint: "#0a84ff" },
                         { id: "memory", title: JD.tr("Память"), icon: "brain", tint: "#64d2ff" },
                         { id: "privacy", title: JD.tr("Приватность"), icon: "shield", tint: "#ff9f0a" },
-                        { id: "diagnostics", title: JD.tr("Диагностика"), icon: "activity", tint: "#636366" },
                         { id: "about", title: JD.tr("О программе"), icon: "info", tint: "#5e5ce6" }
                     ]
                     Rectangle {
                         required property var modelData
+                        readonly property bool caption: !!modelData.group
                         Layout.fillWidth: true
-                        implicitHeight: 34
-                        radius: 8
-                        color: win.page === modelData.id ? Qt.rgba(1, 1, 1, 0.1) : (navHover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
+                        Layout.topMargin: caption ? 10 : 0
+                        implicitHeight: caption ? 20 : 34
+                        radius: caption ? 0 : 8
+                        color: caption ? "transparent"
+                             : win.page === modelData.id ? Qt.rgba(1, 1, 1, 0.1)
+                             : (navHover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 180 } }
+                        Text {
+                            visible: parent.caption
+                            anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                            text: modelData.group || ""
+                            color: win.t2; font.family: win.font; font.pixelSize: 10
+                            font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase
+                            font.letterSpacing: 0.6
+                        }
                         RowLayout {
+                            visible: !parent.caption
                             anchors.fill: parent
                             anchors.leftMargin: 8
                             spacing: 10
@@ -163,8 +182,8 @@ Item {
                             }
                             Text { text: modelData.title; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.fillWidth: true }
                         }
-                        HoverHandler { id: navHover; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: win.page = modelData.id }
+                        HoverHandler { id: navHover; enabled: !parent.caption; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { enabled: !parent.caption; onTapped: win.page = modelData.id }
                     }
                 }
                 Item { Layout.fillHeight: true }
@@ -232,9 +251,14 @@ Item {
                     y: 26
                     width: Math.min(700, scroller.width - 64)
                     active: !win.loading
-                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage, dock: dockPage, widgets: widgetsPage, notifications: notificationsPage, voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage, mail: mailPage,
-                                        people: peoplePage, memory: memoryPage, privacy: privacyPage, diagnostics: diagnosticsPage,
-                                        about: aboutPage })[win.page]
+                    // «Виджеты» и «Уведомления» — об одном и том же крае экрана, а «Диагностика» без
+                    // «О программе» это полстраницы. Старые имена оставлены: по ним сюда ведут
+                    // ссылки с островка и из подсказок.
+                    sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage,
+                                        dock: dockPage, widgets: notifyPage, notifications: notifyPage,
+                                        voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage,
+                                        mail: mailPage, people: peoplePage, memory: memoryPage, privacy: privacyPage,
+                                        diagnostics: systemPage, about: systemPage })[win.page]
                     onLoaded: { scroller.contentY = 0; pageIn.restart() }
                     ParallelAnimation {
                         id: pageIn
@@ -680,7 +704,6 @@ Item {
                     subtitle: JD.tr("Машина без перезагрузки копит обновления ядра и утёкшую память. 0 — не напоминать")
                     SSlider { key: "ui.reboot_reminder_days"; from: 0; to: 30; step: 1; decimals: 0; unit: JD.tr(" дней") }
                 }
-                Row { title: JD.tr("Уведомления"); subtitle: JD.tr("Системные уведомления о подтверждениях и ошибках"); Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
                 Row {
                     title: JD.tr("Язык распознавания")
                     Choice { key: "stt.language"; options: [{ value: "ru", label: JD.tr("Русский") }, { value: "en", label: "English" }, { value: "", label: JD.tr("Автоопределение") }] }
@@ -1166,6 +1189,26 @@ Item {
         }
     }
 
+    // Уведомления и виджеты: и то и другое про верхний край экрана, и искать их человек идёт
+    // в одно место. Страницы остались прежними — здесь они просто лежат одна под другой.
+    Component {
+        id: notifyPage
+        ColumnLayout {
+            spacing: 18
+            Loader { Layout.fillWidth: true; sourceComponent: notificationsPage }
+            Loader { Layout.fillWidth: true; sourceComponent: widgetsPage }
+        }
+    }
+
+    Component {
+        id: systemPage
+        ColumnLayout {
+            spacing: 18
+            Loader { Layout.fillWidth: true; sourceComponent: aboutPage }
+            Loader { Layout.fillWidth: true; sourceComponent: diagnosticsPage }
+        }
+    }
+
     Component {
         id: widgetsPage
         ColumnLayout {
@@ -1186,6 +1229,8 @@ Item {
             spacing: 6
             PageTitle { title: JD.tr("Уведомления"); subtitle: JD.tr("Тосты JustDay, всплывашки Plasma и системный OSD") }
             Group {
+                // Переехало из «Общих»: это уведомление, и место ему среди уведомлений.
+                Row { title: JD.tr("Сообщать о подтверждениях и ошибках"); subtitle: JD.tr("Системные уведомления самого JustDay: «сделано», «не вышло», «нужно ваше да»"); Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
                 Row { title: JD.tr("Уведомления на острове"); subtitle: JD.tr("Показывать всплывашки JustDay (Plasma при этом молчит, если включён режим «только остров»). Никуда не отправляются"); Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
                 Row {
                     title: JD.tr("Всплывашки Plasma")
@@ -1856,14 +1901,25 @@ Item {
                     }
                 }
                 Row {
+                    visible: mp.provider === "claude" && win.get("brain.auto_model") !== false
+                    title: JD.tr("Крошечная модель для мелочей")
+                    subtitle: JD.tr("«Который час», «как дела» — такое не стоит и лёгкой облачной модели. Имя местной модели, например qwen3:0.6b. Пусто — не использовать")
+                    Field { key: "brain.tiny_model"; placeholderText: "qwen3:0.6b" }
+                }
+                Row {
                     title: JD.tr("Когда кончится лимит")
                     subtitle: JD.tr("Перейти к следующему, у кого есть ключ, и сказать об этом. Пусто — честно ждать")
                     Field { key: "brain.fallbacks"; placeholderText: "openrouter, ollama_cloud, ollama" }
                 }
                 Row {
-                    title: JD.tr("Через сколько пробовать Claude снова")
-                    subtitle: JD.tr("Промахнулись — следующий отказ уведёт обратно, это дешевле, чем остаться на запасной навсегда")
+                    title: JD.tr("Через сколько начать проверять")
+                    subtitle: JD.tr("Не раньше этого времени ассистент начнёт спрашивать верхнего, вернулся ли лимит. 0 — не возвращаться самому")
                     SSlider { key: "brain.fallback_back_after_hours"; from: 0; to: 24; step: 1; decimals: 0; unit: JD.tr(" ч") }
+                }
+                Row {
+                    title: JD.tr("Как часто спрашивать")
+                    subtitle: JD.tr("Один крошечный вопрос, не разговор. Ответил — поднимаемся обратно, молчит — работаем дальше там, где работаем")
+                    SSlider { key: "brain.fallback_check_minutes"; from: 5; to: 120; step: 5; decimals: 0; unit: JD.tr(" мин") }
                 }
                 Row {
                     visible: mp.provider === "claude"

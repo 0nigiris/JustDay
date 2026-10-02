@@ -554,3 +554,57 @@ def test_the_same_icon_map_is_not_pushed_to_kwin_twice(tmp_path, monkeypatch) ->
     assert desktop.publish_dock_icons({"app:discord": {"x": 99, "y": 20, "w": 48, "h": 48}},
                                       reconfigure=True)["ok"]
     assert len(calls) == 2
+
+
+# ──────────────────────────── лестница поставщиков ────────────────────────────
+def test_the_ladder_starts_at_the_one_we_want_to_think_with(monkeypatch) -> None:
+    """Наверху лестницы — основной, ниже запасные по порядку, и никто не повторяется дважды."""
+    from justday import fallback
+
+    cfg = {"brain": {"home_provider": "claude", "provider": "ollama",
+                     "fallbacks": ["openrouter", "claude", "ollama"]}}
+    assert fallback.ladder(cfg) == ["claude", "openrouter", "ollama"]
+
+
+def test_we_climb_back_to_the_better_one_and_not_past_it(monkeypatch) -> None:
+    """Снизу видно только тех, кто выше. Стоя наверху, подниматься некуда — и проверять нечего."""
+    from justday import fallback
+
+    monkeypatch.setattr(fallback.providers, "secret_get",
+                        lambda name: "key" if name == "openrouter" else "")
+    cfg = {"brain": {"home_provider": "claude", "provider": "ollama", "light_model": "haiku",
+                     "fallbacks": ["openrouter", "ollama"], "fallback_models": {"openrouter": "free/model"}}}
+    assert fallback.better_than(cfg) == ("claude", "haiku")
+
+    cfg["brain"]["provider"] = "claude"
+    assert fallback.better_than(cfg) is None
+
+
+def test_a_provider_that_answers_with_a_limit_is_not_back_yet(monkeypatch, tmp_path) -> None:
+    """Проверка должна верить ответу, а не коду возврата: «429» с нулевым кодом — это ещё лимит."""
+    import subprocess
+
+    from justday import fallback
+
+    monkeypatch.setattr(fallback.shutil, "which", lambda name: "/usr/bin/claude")
+    monkeypatch.setattr(fallback.providers, "env", lambda cfg: {})
+    cfg = {"brain": {"claude_cli": "claude", "provider": "ollama", "model": "haiku"}}
+
+    monkeypatch.setattr(fallback.subprocess, "run",
+                        lambda *a, **kw: subprocess.CompletedProcess(a, 0, "usage limit reached", ""))
+    assert fallback.probe(cfg, "claude", "haiku") is False
+
+    monkeypatch.setattr(fallback.subprocess, "run",
+                        lambda *a, **kw: subprocess.CompletedProcess(a, 0, "ok", ""))
+    assert fallback.probe(cfg, "claude", "haiku") is True
+
+
+def test_the_tiny_level_is_offered_only_when_there_is_a_tiny_model(monkeypatch) -> None:
+    """Уровень, которого нет, предлагать нельзя: просьба ушла бы в никуда."""
+    from justday import dispatch
+
+    monkeypatch.setattr(dispatch.localllm, "available", lambda: True)
+    monkeypatch.setattr(dispatch.localllm, "chat", lambda *a, **kw: "tiny")
+    assert dispatch.level_for("который час", tiny=True)[0] == dispatch.TINY
+    # Без крошечной модели тот же ответ судьи не должен превращаться в несуществующую ступень.
+    assert dispatch.level_for("который час", tiny=False)[0] in (dispatch.LIGHT, dispatch.STRONG)

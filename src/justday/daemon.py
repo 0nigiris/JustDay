@@ -6,6 +6,7 @@ Never exposed on the network.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -149,6 +150,7 @@ class Daemon:
         self._music_started = 0.0   # music that just started speaks for itself: the reply after it stays silent
         self._offline_note = 0.0    # when the user was last told that the cloud is out
         self._fell_back_at = 0.0      # когда ушли с Claude на запасного
+        self._probed_at = 0.0         # когда в последний раз спрашивали верхнего
         self._cloud_down_until = 0.0  # the brain just failed: five minutes of going local without the wait
         self._cache_q: list[dict] = []      # songs playing from the stream, waiting to be downloaded
         self._cache_task: asyncio.Task | None = None
@@ -751,8 +753,6 @@ class Daemon:
     async def start_job(self, title: str, command: str, cwd: str = "") -> dict:
         """Wrapping a command in a job must not be a way around the approval rules: the command inside gets
         the same check a direct call would, and a risky one waits for the person's «да» first."""
-        from . import providers
-
         if providers.risky("Bash", {"command": command}, Brain._ask_rules()):
             desc = f"{t('Фоновая задача')} «{title}»: {command[:300]}"
             events.emit("approval_request", tool="Bash", desc=desc, reason="background job")
@@ -983,32 +983,47 @@ class Daemon:
         self.publish(detail=t("Отменено"), kind="tool")
         await self.earcon("error")
 
-    async def _pick_model(self, text: str) -> str:
-        """Выбрать модель под просьбу. Возвращает прежнюю — чтобы вернуться к ней после работы.
+    async def _pick_model(self, text: str) -> tuple[str, str]:
+        """Выбрать, кому думать над просьбой. Возвращает прежнюю пару — чтобы вернуться после.
 
         Переподключение стоит секунду-полторы, и платить её имеет смысл только вверх: подняться
         надо **до** работы, иначе работать будет не тот. Опускаться обратно можно потом, когда
         человек уже получил ответ и никуда не торопится.
+
+        Три ступени, а не две. Совсем мелкое — «который час», «как дела» — не стоит даже лёгкой
+        облачной модели: на это есть крошечная местная, если человек её завёл. Она на той же
+        видеокарте, стоит ноль и отвечает мгновенно; инструменты ей почти не даются, поэтому
+        берётся она только там, где делать ничего не надо.
         """
         b = self.cfg["brain"]
-        was = b.get("model", "")
-        if not b.get("auto_model", True) or not providers.is_claude(self.cfg):
+        home = str(b.get("home_provider") or "claude")
+        was = (b.get("provider", "claude"), b.get("model", ""))
+        if not b.get("auto_model", True) or b.get("provider", "claude") != home:
             return was
         light, strong = b.get("light_model") or "haiku", b.get("strong_model") or "sonnet"
-        level, why = await asyncio.get_running_loop().run_in_executor(None, dispatch.level_for, text)
-        want = strong if level == dispatch.STRONG else light
+        tiny_model = str(b.get("tiny_model") or "").strip()
+        tiny_where = str(b.get("tiny_provider") or "ollama")
+        tiny_ok = bool(tiny_model) and fallback.usable(tiny_where)
+        level, why = await asyncio.get_running_loop().run_in_executor(
+            None, functools.partial(dispatch.level_for, text, tiny=tiny_ok))
+        if level == dispatch.TINY and tiny_ok:
+            want = (tiny_where, tiny_model)
+        elif level == dispatch.STRONG:
+            want = (home, strong)
+        else:
+            want = (home, light)
         if want == was:
             return was
-        b["model"] = want
+        b["provider"], b["model"] = want
         try:
             await self.brain.reconnect()
         except Exception:
-            log.exception("не вышло переключиться на %s, остаёмся на %s", want, was)
-            b["model"] = was
+            log.exception("не вышло переключиться на %s, остаёмся на %s", want[1], was[1])
+            b["provider"], b["model"] = was
             return was
-        log.info("модель: %s → %s (%s)", was, want, why)
-        events.emit("model_picked", model=want, was=was, why=why)
-        self.publish(brain_model=want, brain_why=why)
+        log.info("модель: %s → %s (%s)", was[1] or was[0], want[1] or want[0], why)
+        events.emit("model_picked", model=want[1], was=was[1], why=why)
+        self.publish(brain_model=want[1], brain_why=why, provider=want[0])
         return was
 
     async def _fall_back(self, error: str) -> bool:
@@ -1039,41 +1054,68 @@ class Daemon:
         return True
 
     async def _try_home(self) -> None:
-        """Вернуться к Claude, когда лимит, скорее всего, уже восстановился.
+        """Подняться обратно по лестнице, как только верхний снова отвечает.
 
-        Угадывать точный миг нечем: Claude не говорит, когда лимит вернётся. Поэтому возвращаемся по
-        времени, которое человек задал сам, и если промахнулись — следующий же отказ уведёт нас
-        обратно к запасному. Хуже от этого не станет: одна потерянная попытка против того, чтобы
-        навсегда остаться на запасной модели, не заметив, что основная давно свободна.
+        Угадывать, когда лимит вернётся, нечем: Claude этого не говорит. Поэтому мы не гадаем, а
+        спрашиваем — раз в четверть часа одним словом, отдельным коротким процессом. Ответил —
+        поднимаемся. Молчит — работаем там, где работаем, и спросим позже.
+
+        Проверка идёт только между разговорами и только когда мозг свободен: забрать работу у
+        того, кто её делает, посередине — значит потерять её. Нижний договаривает своё, и уже
+        после этого место занимает верхний.
         """
         b = self.cfg["brain"]
         hours = float(b.get("fallback_back_after_hours") or 0)
-        if not hours or not self._fell_back_at or b.get("provider") == "claude":
+        if not hours or not self._fell_back_at:
             return
-        if time.monotonic() - self._fell_back_at < hours * 3600:
+        got = fallback.better_than(self.cfg)
+        if not got:                                   # мы и так наверху
             return
-        self._fell_back_at = 0.0
-        b["provider"] = "claude"
-        b["model"] = b.get("light_model") or "haiku"
+        now = time.monotonic()
+        if now - self._fell_back_at < hours * 3600:
+            return
+        every = max(1.0, float(b.get("fallback_check_minutes") or 15)) * 60
+        if now - self._probed_at < every:
+            return
+        if self.brain.busy or self._workers_active:   # идёт работа — дождёмся её конца
+            return
+        self._probed_at = now
+        name, model = got
+        ok = await asyncio.get_running_loop().run_in_executor(
+            None, fallback.probe, self.cfg, name, model)
+        if not ok:
+            return
+        was = b.get("provider", "claude")
+        b["provider"] = name
+        b["model"] = model or b.get("light_model") or "haiku"
         try:
             await self.brain.reconnect()
-            log.info("пробуем снова Claude")
-            events.emit("provider_home")
-            self.publish(brain_model=b["model"], brain_why="", provider="claude")
         except Exception:
-            log.exception("вернуться к Claude не вышло")
+            log.exception("вернуться на %s не вышло", name)
+            b["provider"] = was
+            return
+        self._fell_back_at = 0.0 if name == str(b.get("home_provider") or "claude") else now
+        log.info("%s снова отвечает — вернулись с %s", name, was)
+        events.emit("provider_home", provider=name, was=was)
+        self.publish(brain_model=b["model"], brain_why="", provider=name)
+        # Сказать стоит: человек должен знать, что отвечает снова тот, кого он звал.
+        self.notify(t("{where} снова отвечает — вернулся к нему.").format(where=name),
+                    icon="dialog-information")
 
-    async def _settle_model(self, back_to: str) -> None:
-        """Вернуться к лёгкой после тяжёлой работы — молча и уже после ответа."""
+    async def _settle_model(self, back_to) -> None:
+        """Вернуться к прежней паре после работы — молча и уже после ответа."""
         b = self.cfg["brain"]
-        if not back_to or b.get("model") == back_to or not b.get("auto_model", True):
+        if not back_to or not b.get("auto_model", True):
             return
-        b["model"] = back_to
+        provider, model = back_to
+        if (b.get("provider", "claude"), b.get("model", "")) == (provider, model):
+            return
+        b["provider"], b["model"] = provider, model
         try:
             await self.brain.reconnect()
-            self.publish(brain_model=back_to, brain_why="")
+            self.publish(brain_model=model, brain_why="", provider=provider)
         except Exception:
-            log.exception("не вышло вернуться на %s", back_to)
+            log.exception("не вышло вернуться на %s", model or provider)
 
     async def run_turn(self, text: str, source: str = "voice") -> str:
         self.state = "thinking"
@@ -1551,6 +1593,9 @@ class Daemon:
                 except Exception as e:
                     log.info("update check failed: %s", type(e).__name__)
             await self._reboot_maybe()
+            # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
+            # возвращается сам по себе, и ждать с ним до разговора незачем.
+            await self._try_home()
             await self._diary_maybe()
             if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
                 self._last_cal = time.monotonic()
