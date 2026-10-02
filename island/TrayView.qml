@@ -631,13 +631,24 @@ Item {
     Timer { id: hintWait; interval: 380; onTriggered: hintBox.ready = true }
     onHintChanged: { hintBox.ready = false; if (tv.hint !== "") hintWait.restart(); else hintWait.stop() }
 
+    // Подпись приходит от самой программы и бывает какой угодно: у qBittorrent это две строки со
+    // скоростями, у других — разметка с тегами. Поэтому коробка меряется по тексту, а не наоборот:
+    // фиксированная высота в 22 точки просто выпускала вторую строку наружу, и подпись выглядела
+    // как мусор поверх чужого окна.
+    function tidy(text) {
+        return String(text || "")
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<[^>]+>/g, "")
+            .split("\n").map(l => l.trim()).filter(l => !!l).slice(0, 3).join("\n")
+    }
+
     Rectangle {
         id: hintBox
         property bool ready: false
         visible: tv.hint !== "" && ready
-        width: hintText.implicitWidth + 18
-        height: 22
-        radius: 11
+        width: hintText.implicitWidth + 20
+        height: hintText.implicitHeight + 12
+        radius: Math.min(11, height / 2)
         color: Qt.rgba(0, 0, 0, 0.88)
         border.width: 0
         opacity: visible ? 1 : 0
@@ -651,7 +662,19 @@ Item {
         }
         x: tv.atRight ? -width - 8 : tv.width + 8
         y: Math.max(0, Math.min(tv.height - height, tv.hintY - height / 2))
-        Label2 { id: hintText; anchors.centerIn: parent; text: tv.hint; font.pixelSize: 12; color: JD.text1 }
+        Label2 {
+            id: hintText
+            anchors.centerIn: parent
+            width: Math.min(280, implicitWidth)
+            text: tv.tidy(tv.hint)
+            font.pixelSize: 12
+            color: JD.text1
+            wrapMode: Text.Wrap
+            maximumLineCount: 3
+            elide: Text.ElideRight
+            lineHeight: 1.15
+            horizontalAlignment: Text.AlignLeft
+        }
     }
     property real hintY: tv.height / 2
 }
