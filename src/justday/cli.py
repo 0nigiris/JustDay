@@ -391,6 +391,11 @@ def main(argv: list[str] | None = None) -> None:
     # Своя оболочка: один терминал, в котором задачу подхватывает тот, кто сейчас может.
     sp = sub.add_parser("terminal", help="своя оболочка: один терминал, лестница движков")
     sp.add_argument("task", nargs="*", help="задача строкой (без неё открывается окно)")
+    sp.add_argument("--night", action="store_true",
+                    help="оставить задачу на ночь: не давать машине спать, ждать возвращения лимитов, "
+                         "писать журнал на диск")
+    sp.add_argument("--hours", type=float, default=8.0, help="сколько часов ждать лимиты ночью")
+    sp.add_argument("--tell", action="store_true", help="написать письмо, когда кончится")
     sp = sub.add_parser("work", help="сесть за работу: Claude Code, пока он отвечает, иначе оболочка")
     sp.add_argument("--shell", action="store_true", help="сразу оболочка, не спрашивая Claude")
     sp.add_argument("--claude", action="store_true", help="сразу Claude Code")
@@ -789,7 +794,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(shell_mod.run(a.rest))
     elif a.cmd == "terminal":
         from . import terminal as terminal_mod
-        sys.exit(terminal_mod.run(a.task))
+        sys.exit(terminal_mod.run(a.task, over_night=a.night, hours=a.hours, tell=a.tell))
     elif a.cmd == "work":
         from . import shell as shell_mod
         sys.exit(shell_mod.work(a.rest, force="shell" if a.shell else "claude" if a.claude else ""))

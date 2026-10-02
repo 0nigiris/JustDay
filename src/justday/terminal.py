@@ -194,6 +194,11 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
         cmd += ["--effort", str(effort)]
     if (mode := b.get("permission_mode") or ""):
         cmd += ["--permission-mode", str(mode)]
+    if (cfg.get("terminal") or {}).get("unattended"):
+        # Человека рядом нет, спросить некого. «Некого» значит «нельзя», а не «можно»: всё, что
+        # потребовало бы подтверждения, отклоняется и попадает в ответ словами. Разрешать опасное
+        # за спящего человека мы не будем — он прочитает утром и решит сам.
+        cmd += ["--permission-prompts", "none"]
     if session:
         cmd += ["--resume", session]
     got = Said(session=session)
@@ -299,6 +304,7 @@ class Work:
         self.step = 0
         self.spent = 0.0
         self.probed_at = 0.0           # когда в последний раз спрашивали верхнего
+        self.wait_until = 0.0          # до каких пор ждать, если кончились все ступени (0 — не ждать)
         self.why = ""                  # чем решили усилие на последней задаче — для строки состояния
         self.effort = ""               # и какое оно вышло
         # Сессия помнится по ступени лестницы, а не по модели: мелочь, взятую облегчённой моделью,
@@ -405,6 +411,16 @@ class Work:
                 return said
             was, why = rung, "кончился лимит" if said.limit else f"не ответила: {said.error[:120]}"
             if not self.down():
+                # Кончились все. Днём это конец хода: человек рядом и сам решит, что делать.
+                # Ночью — наоборот: лимит возвращается через часы, а человек спит, и бросить
+                # задачу значит, что утром он найдёт её там же, где оставил.
+                every = max(1.0, float(self.opts.get("probe_minutes") or 15)) * 60
+                if time.monotonic() + every < self.wait_until:
+                    on_note(f"{was.label} — {why}. Кончились все; жду {int(every / 60)} мин "
+                            "и начинаю сверху заново.")
+                    await asyncio.sleep(every)
+                    self.step, self.probed_at = 0, 0.0
+                    continue
                 on_note(f"{was.label} — {why}. Спускаться больше некуда, жду.")
                 return said
             on_note(f"{was.label} — {why}. Задачу продолжает {self.now.label}.")
@@ -442,9 +458,102 @@ async def plain(task: str, cfg: dict | None = None) -> int:
     return 0
 
 
-def run(args: list[str] | None = None) -> int:
+NIGHT_DIR = config.STATE_DIR / "ночь"
+
+
+def asks_back(text: str) -> bool:
+    """Кончился ли ход вопросом к человеку.
+
+    Смотрим последнюю непустую строку: вопрос, заданный посреди рассказа, — это рассуждение, а
+    вопрос в конце — это ожидание ответа. Ночью ответа не будет.
+    """
+    lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
+    return bool(lines) and lines[-1].endswith("?")
+
+
+async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | None = None) -> int:
+    """Оставить задачу на ночь: работать, пока не сделается, и записать всё на диск.
+
+    Чем ночь отличается от дня. Днём кончившийся лимит — конец хода: человек рядом и решит сам.
+    Ночью бросать задачу нельзя — лимит возвращается через часы, и к утру она сделалась бы сама,
+    если бы кто-то дождался. Поэтому: машине не давать заснуть, кончились все ступени — ждать и
+    начинать сверху заново, всё сказанное писать в файл, потому что окно до утра не доживёт.
+
+    Чего ночь **не** меняет: прав. Спросить человека некого, и «некого» значит «нельзя»: всё, что
+    потребовало бы подтверждения, отклоняется и попадает в журнал словами. Разрешать опасное за
+    спящего человека — не наша забота о его удобстве, а снятая с него защита.
+    """
+    from . import server
+
+    cfg = cfg or config.load()
+    opts = dict(cfg.get("terminal") or {})
+    opts["unattended"] = True
+    cfg = {**cfg, "terminal": opts}
+    work = Work(cfg)
+    work.wait_until = time.monotonic() + max(0.5, hours) * 3600
+
+    NIGHT_DIR.mkdir(parents=True, exist_ok=True)
+    log = NIGHT_DIR / (time.strftime("%Y-%m-%d_%H-%M") + ".md")
+    started = time.strftime("%H:%M")
+    lines = [f"# Ночная работа, начато в {started}", "", f"**Задача.** {task}", ""]
+
+    def write(text: str, end: str = "") -> None:
+        print(text, end=end, flush=True)
+        lines.append(text)
+
+    def note(text: str) -> None:
+        write(f"\n— {text}\n", "\n")
+
+    def picked(rung: Rung, effort: str, why: str) -> None:
+        note(f"{rung.label}" + (f", усилие {effort} ({why})" if effort else ""))
+
+    guard = server.awake(f"ночная работа: {task[:60]}")
+    try:
+        said = await work.send(task, on_text=lambda t: write(t), on_note=note, on_pick=picked,
+                               on_tool=lambda name: write(f"\n· {name}\n", "\n"))
+        # Ход может кончиться вопросом к человеку — а человек спит. Подтолкнуть пару раз стоит:
+        # половина таких вопросов это «какой из двух путей», и выбрать можно самому. Бесконечно
+        # толкать нельзя: если без человека правда нельзя, он должен найти это утром словами, а
+        # не сто кругов одного и того же.
+        for _ in range(int(opts.get("night_nudges", 2) or 0)):
+            if not asks_back(said.text):
+                break
+            note("Это вопрос ко мне, а человек спит — говорю решать самому.")
+            said = await work.send(
+                "Человек спит, спросить его некого. Если выбор можно сделать самому — сделай его "
+                "и доделай задачу, объяснив в конце, что выбрал и почему. Если без его решения "
+                "правда нельзя — напиши одной строкой, что именно от него нужно, и остановись.",
+                on_text=lambda t: write(t), on_note=note, on_pick=picked,
+                on_tool=lambda name: write(f"\n· {name}\n", "\n"))
+    finally:
+        if guard:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(guard, 15)
+        lines += ["", f"**Кончено в {time.strftime('%H:%M')}.**"]
+        if work.spent:
+            lines.append(f"Потрачено ${work.spent:.4f}.")
+        log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    done = bool(said.text) and not said.error
+    short = "Задача сделана." if done else "Задача не доделана: " + (said.error or "никто не ответил")
+    print(f"\n{short}\nЖурнал: {log}")
+    if tell:
+        # Письмо, а не звонок: человек спит, и будить его сделанной работой незачем.
+        from . import phone
+        with contextlib.suppress(Exception):
+            phone.reach(f"{short}\n\nЗадача: {task}\n\nЖурнал: {log}", subject="Ночная работа")
+    return 0 if done else 1
+
+
+def run(args: list[str] | None = None, *, over_night: bool = False, hours: float = 8.0,
+        tell: bool = False) -> int:
     """`justday terminal`: окно, если есть куда рисовать, иначе одна задача строкой."""
     task = " ".join(args or []).strip()
+    if over_night:
+        if not task:
+            print("Ночью нужна задача: justday terminal --night \"что сделать\"")
+            return 1
+        return asyncio.run(night(task, hours=hours, tell=tell))
     if task:
         return asyncio.run(plain(task))
     # Окно тянет за собой textual; ради одной задачи строкой тянуть его незачем.

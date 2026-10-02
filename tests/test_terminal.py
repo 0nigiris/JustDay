@@ -6,10 +6,14 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
+from pathlib import Path
 
 import pytest
 
 from justday import terminal
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def rungs(*names):
@@ -227,3 +231,100 @@ def test_the_top_rung_was_asked_on_every_single_task(monkeypatch) -> None:
     work.step = 1
     asyncio.run(work.send("два", on_note=lambda _n: None))   # второй — ещё рано
     assert len(asked) == before + 1, "верхнего спросили второй раз подряд, не выждав срока"
+
+
+def test_a_task_left_for_the_night_was_abandoned_when_every_rung_ran_out() -> None:
+    """Кончились все ступени — задача умирала там же, где стояла, хотя лимит вернулся бы к утру.
+
+    Днём это правильно: человек рядом и решит сам. Ночью — нет: он спит, лимит возвращается через
+    часы, и утром он нашёл бы задачу нетронутой. Поэтому ночью ждём и начинаем сверху заново.
+    """
+    tries = []
+
+    async def ask(rung, text, session, cfg, on_text, on_tool):
+        tries.append(str(rung))
+        # Первый обход — у всех лимит; на втором верхний уже отвечает.
+        if len(tries) <= 2:
+            return terminal.Said(limit=True)
+        return terminal.Said(text="доделал к утру")
+
+    sleeps = []
+
+    async def no_sleep(seconds):
+        sleeps.append(seconds)
+
+    work = terminal.Work({"terminal": {"auto": False, "probe_minutes": 1}, "brain": {}},
+                         rungs=rungs("claude:opus", "opencode:ollama/своя"),
+                         engines={"claude": ask, "opencode": ask})
+    work.wait_until = 10_000_000          # как будто впереди целая ночь
+    notes = []
+
+    async def go():
+        import asyncio as aio
+        real, aio.sleep = aio.sleep, no_sleep
+        try:
+            return await work.send("собери проект", on_note=notes.append)
+        finally:
+            aio.sleep = real
+
+    said = asyncio.run(go())
+
+    assert said.text == "доделал к утру", "задача не дождалась возвращения лимита"
+    assert sleeps, "ждать и не подумали — значит снова упёрлись в тот же лимит"
+    assert any("начинаю сверху заново" in n for n in notes)
+
+
+def test_nobody_may_approve_the_dangerous_thing_for_a_sleeping_person() -> None:
+    """Ночью опасное отклоняется, а не разрешается молча.
+
+    Соблазн понятен: человек спит, подтвердить некому, а задача упирается. Но «спросить некого»
+    значит «нельзя»: снятая со спящего защита — это не забота об удобстве. Claude Code получает
+    `--permission-prompts none`, то есть всё, что спросило бы, отклоняется и попадает в журнал
+    словами, а человек читает утром и решает сам.
+    """
+    src = (ROOT / "src" / "justday" / "terminal.py").read_text(encoding="utf-8")
+    body = src.split("async def ask_claude", 1)[1].split("async def ask_opencode", 1)[0]
+    assert '"--permission-prompts", "none"' in body
+    assert "bypassPermissions" not in src, "ночью нельзя обходить права, их можно только отклонять"
+    assert "dangerously" not in src.lower()
+
+
+def test_the_window_can_be_left_for_the_night_and_lets_the_machine_sleep_after() -> None:
+    """Уйти спать надо было уметь из окна — и не оставить машину вечно бодрой наутро.
+
+    Сторож сна — отдельный процесс: пока он жив, система не уснёт. Забыть отпустить его значит
+    оставить человеку машину, которая не засыпает никогда, и он будет искать причину неделю.
+    """
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import server, terminal_ui
+
+    async def go() -> tuple[int, bool, int]:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.command("/night 8")
+            await pilot.pause()
+            was, waits = app.guard, app.work.wait_until > 0
+            app.command("/day")
+            await pilot.pause()
+            return was, waits, app.guard
+
+    guarded, waits, after = asyncio.run(go())
+    if not shutil.which("systemd-inhibit"):
+        pytest.skip("нет systemd-inhibit — сторожа сна в этой системе нет")
+    assert guarded, "ночь включилась, а машине всё равно разрешено заснуть"
+    assert waits, "ночью не ждём возвращения лимитов — значит это не ночь"
+    assert after == 0, "сторож сна остался жить: машина не уснёт уже никогда"
+    assert server.awake.__doc__, "сторож без объяснения — через полгода его никто не поймёт"
+
+
+def test_a_question_asked_at_night_used_to_stop_the_work_till_morning() -> None:
+    """Ход кончился вопросом — а человек спит, и задача стояла до утра из-за «какой из двух путей».
+
+    Вопрос в конце ответа — это ожидание; вопрос посреди рассуждения — нет. Поэтому смотрим
+    последнюю непустую строку, и ночью пару раз говорим решать самому.
+    """
+    assert terminal.asks_back("Сделал. Ставить вторую кнопку?")
+    assert terminal.asks_back("первая строка\nА это точно нужно?")
+    assert not terminal.asks_back("Почему он лагал? Потому что док перерисовывался. Починил.")
+    assert not terminal.asks_back("")

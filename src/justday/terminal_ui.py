@@ -25,6 +25,9 @@ HELP = """[b]Команды[/b]
   /ladder        показать лестницу
   /up            вернуться на верхнюю ступень
   /new           начать разговор заново
+  /night [ЧАСЫ]  уйти спать: машине не давать заснуть, кончились все ступени — ждать
+                 возвращения лимитов, опасное отклонять (по умолчанию 8 часов)
+  /day           вернуться к обычной работе
   /help, /quit"""
 
 
@@ -46,6 +49,7 @@ class Shell(App):
         self.work = terminal.Work(self.cfg)
         self.busy = False
         self.turn: asyncio.Task | None = None   # ход держим за руку: без ссылки его соберёт сборщик
+        self.guard = 0                          # сторож, не дающий машине заснуть ночью
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -68,6 +72,8 @@ class Shell(App):
         if self.work.effort:
             bits.append(f"усилие {self.work.effort} ({self.work.why})")
         bits.append(f"ступень {self.work.step + 1} из {len(self.work.rungs)}")
+        if self.guard:
+            bits.append("ночь")
         if self.work.spent:
             bits.append(f"${self.work.spent:.4f}")
         if doing:
@@ -122,6 +128,30 @@ class Shell(App):
             self.work.now.model = rest
             log.write(f"Модель на этой ступени: {rest}.\n")
             self.refresh_status()
+        elif word == "night":
+            import time
+
+            from . import server
+            hours = 8.0
+            try:
+                hours = float(rest) if rest else 8.0
+            except ValueError:
+                log.write("[#8d8d99]Сколько часов? Например: /night 8[/]\n")
+                return
+            self.cfg.setdefault("terminal", {})["unattended"] = True
+            self.work.cfg = self.cfg
+            self.work.wait_until = time.monotonic() + hours * 3600
+            self.guard = self.guard or server.awake("ночная работа в оболочке")
+            log.write(f"Ночь на {hours:g} ч: машине не дам заснуть, кончатся все ступени — буду "
+                      "ждать возвращения лимитов. Опасное при этом отклоняется, а не разрешается: "
+                      "спросить тебя некого.\n")
+            self.refresh_status()
+        elif word == "day":
+            self.release()
+            self.cfg.setdefault("terminal", {})["unattended"] = False
+            self.work.cfg, self.work.wait_until = self.cfg, 0.0
+            log.write("Обычная работа: жду тебя рядом.\n")
+            self.refresh_status()
         elif word == "effort":
             if rest not in ("low", "medium", "high"):
                 log.write("[#8d8d99]Усилие: low, medium или high.[/]\n")
@@ -149,6 +179,20 @@ class Shell(App):
             log.write("")
             self.busy = False
             self.refresh_status()
+
+
+    def release(self) -> None:
+        """Отпустить сторожа сна. Забыть про него — значит оставить машину вечно бодрой."""
+        if not self.guard:
+            return
+        import contextlib
+        import os
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(self.guard, 15)
+        self.guard = 0
+
+    def on_unmount(self) -> None:
+        self.release()
 
 
 def main() -> int:
