@@ -31,6 +31,7 @@ from . import (
     dispatch,
     dock,
     events,
+    fallback,
     fastpath,
     glyphs,
     inbox,
@@ -142,6 +143,7 @@ class Daemon:
         self._voice_warned = False
         self._music_started = 0.0   # music that just started speaks for itself: the reply after it stays silent
         self._offline_note = 0.0    # when the user was last told that the cloud is out
+        self._fell_back_at = 0.0      # когда ушли с Claude на запасного
         self._cloud_down_until = 0.0  # the brain just failed: five minutes of going local without the wait
         self._cache_q: list[dict] = []      # songs playing from the stream, waiting to be downloaded
         self._cache_task: asyncio.Task | None = None
@@ -994,6 +996,58 @@ class Daemon:
         self.publish(brain_model=want, brain_why=why)
         return was
 
+    async def _fall_back(self, error: str) -> bool:
+        """Перейти к запасному поставщику, если отказ похож на лимит. True — перешли."""
+        if not fallback.looks_like_limit(error):
+            return False
+        got = fallback.next_provider(self.cfg)
+        if not got:
+            log.info("лимит, но переходить некуда")
+            return False
+        name, model = got
+        b = self.cfg["brain"]
+        was = b.get("provider", "claude")
+        b["provider"], b["model"] = name, model
+        self._fell_back_at = time.monotonic()
+        try:
+            await self.brain.reconnect()
+        except Exception:
+            log.exception("не вышло перейти на %s", name)
+            b["provider"], b["model"] = was, b.get("model", model)
+            return False
+        log.info("лимит у %s → перешёл на %s (%s)", was, name, model)
+        events.emit("provider_fallback", was=was, provider=name, model=model)
+        self.publish(brain_model=model, brain_why="", provider=name)
+        # Сказать об этом надо: человек должен знать, что отвечает уже не тот, кого он звал.
+        self.notify(t("Лимит Claude кончился — перешёл на {where}.").format(where=name),
+                    icon="dialog-information")
+        return True
+
+    async def _try_home(self) -> None:
+        """Вернуться к Claude, когда лимит, скорее всего, уже восстановился.
+
+        Угадывать точный миг нечем: Claude не говорит, когда лимит вернётся. Поэтому возвращаемся по
+        времени, которое человек задал сам, и если промахнулись — следующий же отказ уведёт нас
+        обратно к запасному. Хуже от этого не станет: одна потерянная попытка против того, чтобы
+        навсегда остаться на запасной модели, не заметив, что основная давно свободна.
+        """
+        b = self.cfg["brain"]
+        hours = float(b.get("fallback_back_after_hours") or 0)
+        if not hours or not self._fell_back_at or b.get("provider") == "claude":
+            return
+        if time.monotonic() - self._fell_back_at < hours * 3600:
+            return
+        self._fell_back_at = 0.0
+        b["provider"] = "claude"
+        b["model"] = b.get("light_model") or "haiku"
+        try:
+            await self.brain.reconnect()
+            log.info("пробуем снова Claude")
+            events.emit("provider_home")
+            self.publish(brain_model=b["model"], brain_why="", provider="claude")
+        except Exception:
+            log.exception("вернуться к Claude не вышло")
+
     async def _settle_model(self, back_to: str) -> None:
         """Вернуться к лёгкой после тяжёлой работы — молча и уже после ответа."""
         b = self.cfg["brain"]
@@ -1012,6 +1066,7 @@ class Daemon:
         gen = self._cancel_gen
         if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again
             return await self.offline_turn(text)
+        await self._try_home()
         was_model = await self._pick_model(text)
         try:
             reply = await self.brain.ask(text, source=source)
@@ -1020,8 +1075,19 @@ class Daemon:
             if gen != self._cancel_gen:
                 return ""
             events.emit("turn_failed", error=repr(e))
-            self._cloud_down_until = time.monotonic() + 300
-            reply = await self.offline_turn(text)
+            # Лимит и обрыв связи — разные беды. При лимите есть куда пойти: бесплатные модели в
+            # том же интернете работают. При обрыве идти некуда, и честнее сказать это сразу.
+            moved = await self._fall_back(repr(e))
+            if moved:
+                try:
+                    reply = await self.brain.ask(text, source=source)
+                except Exception as again:
+                    events.emit("turn_failed", error=repr(again))
+                    self._cloud_down_until = time.monotonic() + 300
+                    reply = await self.offline_turn(text)
+            else:
+                self._cloud_down_until = time.monotonic() + 300
+                reply = await self.offline_turn(text)
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
             spawn(self._settle_model(was_model))
             return ""

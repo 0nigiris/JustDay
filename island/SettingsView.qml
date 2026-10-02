@@ -1654,6 +1654,38 @@ Item {
                 Row { visible: mp.provider === "custom"; title: JD.tr("Адрес API"); subtitle: JD.tr("Anthropic-совместимый, например LiteLLM"); Field { key: "brain.base_url"; placeholderText: "http://127.0.0.1:4000" } }
                 Row {
                     visible: mp.provider === "claude"
+                    title: JD.tr("Модель под задачу")
+                    subtitle: JD.tr("Лёгкая по умолчанию, сильная — когда задача того стоит. Решает местная модель, она стоит ноль")
+                    Toggle { checked: win.get("brain.auto_model") !== false; onToggled: v => win.set("brain.auto_model", v) }
+                }
+                Row {
+                    visible: mp.provider === "claude" && win.get("brain.auto_model") !== false
+                    title: JD.tr("Лёгкая модель")
+                    Choice {
+                        key: "brain.light_model"
+                        options: [{ value: "haiku", label: "Haiku" }, { value: "sonnet", label: "Sonnet" }]
+                    }
+                }
+                Row {
+                    visible: mp.provider === "claude" && win.get("brain.auto_model") !== false
+                    title: JD.tr("Сильная модель")
+                    Choice {
+                        key: "brain.strong_model"
+                        options: [{ value: "sonnet", label: "Sonnet" }, { value: "opus", label: "Opus" }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Когда кончится лимит")
+                    subtitle: JD.tr("Перейти к следующему, у кого есть ключ, и сказать об этом. Пусто — честно ждать")
+                    Field { key: "brain.fallbacks"; placeholderText: "openrouter, ollama_cloud, ollama" }
+                }
+                Row {
+                    title: JD.tr("Через сколько пробовать Claude снова")
+                    subtitle: JD.tr("Промахнулись — следующий отказ уведёт обратно, это дешевле, чем остаться на запасной навсегда")
+                    SSlider { key: "brain.fallback_back_after_hours"; from: 0; to: 24; step: 1; decimals: 0; unit: JD.tr(" ч") }
+                }
+                Row {
+                    visible: mp.provider === "claude"
                     title: JD.tr("Сколько думать")
                     subtitle: JD.tr("Больше — умнее, но медленнее")
                     Segmented {
