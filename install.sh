@@ -250,26 +250,71 @@ if [[ -z "$WANT" ]]; then                       # ни флага, ни пере
     printf '\n  %s%s %s%s\n' "$D" "$(t 'Уже стоит:' 'Already installed:')" "${here[*]}" "$N"
     printf '  %s%s%s\n\n' "$D" "$(t 'Обновляю это же. Сменить состав: justday parts add speech · ./install.sh --everything' 'Updating the same. To change: justday parts add speech · ./install.sh --everything')" "$N"
   elif ((ASK == 1)) && { : </dev/tty; } 2>/dev/null; then
+    # Выбор галочками, а не цифрами.
+    #
+    # Четыре готовых набора — это чужое представление о том, как людям нужно. Кому-то не нужен
+    # голос, но нужен микрофон; кому-то наоборот; кто-то хочет только текстом и без островка.
+    # Готовые наборы остались первой строкой — для тех, кому всё равно, — а ниже каждая часть
+    # отмечается отдельно.
+    #
+    # Стрелками, потому что цифрами выбирают то, что уже прочитали и поняли, а галочками —
+    # разбираясь по дороге. Второе и есть установка.
+    # Общий выбор галочками: работает по спискам PICK_KEY/PICK_NAME/PICK_DESC/PICK_ON,
+    # складывает отмеченное в PICK_OUT. Рисует прямо в терминал — вывод забирает подстановка
+    # команд, и напечатанное в stdout человек бы не увидел вовсе.
+    pick_list() {
+      local n=${#PICK_KEY[@]} at=0 drawn=0 i hint
+      hint="$(t 'Пробел — отметить · ↑↓ — выбрать · Enter — дальше' 'Space — toggle · ↑↓ — move · Enter — continue')"
+      while :; do
+        ((drawn)) && printf '\e[%dA' $((n + 2)) >/dev/tty
+        drawn=1
+        for ((i = 0; i < n; i++)); do
+          local mark cursor
+          [[ ${PICK_ON[$i]} == 1 ]] && mark="${C}◉${N}" || mark="${D}○${N}"
+          [[ $i == $at ]] && cursor="${B}❯${N}" || cursor=" "
+          printf '\e[K   %s %s  %s%s%s\n' "$cursor" "$mark" "$(pad "${PICK_NAME[$i]}" 26)" "$D" "${PICK_DESC[$i]}$N" >/dev/tty
+        done
+        printf '\e[K\n' >/dev/tty
+        printf '\e[K  %s%s%s\n' "$D" "$hint" "$N" >/dev/tty
+        local chunk
+        IFS= read -rsn1 chunk </dev/tty || break
+        case "$chunk" in
+          $'\e') IFS= read -rsn2 -t 0.1 chunk </dev/tty || chunk=""
+                 case "$chunk" in "[A") at=$(((at + n - 1) % n)) ;; "[B") at=$(((at + 1) % n)) ;; esac ;;
+          " ") [[ ${PICK_ON[$at]} == 1 ]] && PICK_ON[$at]=0 || PICK_ON[$at]=1 ;;
+          "") break ;;
+          k) at=$(((at + n - 1) % n)) ;;
+          j) at=$(((at + 1) % n)) ;;
+        esac
+      done
+      PICK_OUT=()
+      for ((i = 0; i < n; i++)); do [[ ${PICK_ON[$i]} == 1 ]] && PICK_OUT+=("${PICK_KEY[$i]}"); done
+    }
+
     printf '\n  %s%s%s\n\n' "$B" "$(t 'Что установить' 'What to install')" "$N"
-    def=1; [[ -n "$gpu" ]] || def=2
-    printf '   %s1%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Всё' 'Everything')" 22)" "$D" "$(t '~3.5 ГБ · речь, голос, ускорение на видеокарте' '~3.5 GB · speech, voice, GPU acceleration')$N"
-    printf '   %s2%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Без видеокарты' 'Without the GPU')" 22)" "$D" "$(t '~1.3 ГБ · речь и голос, распознавание на процессоре' '~1.3 GB · speech and voice, recognition on the CPU')$N"
-    printf '   %s3%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Только текст' 'Text only')" 22)" "$D" "$(t '~250 МБ · без микрофона и голоса, команды с клавиатуры' '~250 MB · no microphone, no voice: commands are typed')$N"
-    printf '   %s4%s  %s%s%s\n' "$B" "$N" "$(pad "$(t 'Речь без голоса' 'Speech, no voice')" 22)" "$D" "$(t '~550 МБ · слышит вас, отвечает текстом и espeak-ng' '~550 MB · hears you, answers in text and espeak-ng')$N"
     if ((${#here[@]})); then
-      printf '\n  %s%s %s%s\n' "$D" "$(t 'Уже стоит:' 'Already installed:')" "${here[*]}" "$N"
+      printf '  %s%s %s%s\n\n' "$D" "$(t 'Уже стоит:' 'Already installed:')" "${here[*]}" "$N"
     fi
-    printf '  %s%s%s\n' "$D" "$(t "Enter — вариант $def · доставить потом: justday parts add speech" "Enter — option $def · add later with: justday parts add speech")" "$N"
-    printf '  %s›%s ' "$C" "$N"
-    read -r pick </dev/tty || pick=""
-    printf '\e[1A\e[K'
-    case "${pick:-$def}" in
-      1) WANT="speech,voice,cuda" ;;
-      2) WANT="speech,voice" ;;
-      3) WANT="-" ;;
-      4) WANT="speech" ;;
-      *) WANT="$guess" ;;
-    esac
+    PICK_KEY=(speech voice cuda)
+    PICK_NAME=("$(t 'Распознавание речи' 'Speech recognition')" "$(t 'Нейросетевой голос' 'Neural voice')" "$(t 'Ускорение на видеокарте' 'GPU acceleration')")
+    PICK_DESC=("$(t '~550 МБ · слышит вас' '~550 MB · hears you')" "$(t '~750 МБ · отвечает голосом' '~750 MB · answers out loud')" "$(t '~2.2 ГБ · NVIDIA, быстрее распознаёт' '~2.2 GB · NVIDIA, faster recognition')")
+    PICK_ON=(0 0 0)
+    for i in 0 1 2; do [[ ",$guess," == *",${PICK_KEY[$i]},"* ]] && PICK_ON[$i]=1; done
+    pick_list
+    WANT=$(IFS=,; printf '%s' "${PICK_OUT[*]}"); WANT=${WANT:--}
+    printf '\e[K'
+
+    # Второй выбор — про экран, а не про гигабайты. Кому-то нужен только голосовой Джарвис: ни
+    # дока, ни лотка, ни островка. Раньше это настраивалось потом, в настройках, то есть не
+    # настраивалось никогда — человек не знает, что у него есть лишнее, пока оно ему не мешает.
+    printf '\n  %s%s%s\n\n' "$B" "$(t 'Что показывать на экране' 'What to show on screen')" "$N"
+    PICK_KEY=(island dock tray)
+    PICK_NAME=("$(t 'Островок' 'The island')" "$(t 'Док' 'The dock')" "$(t 'Полоса лотка' 'The tray strip')")
+    PICK_DESC=("$(t 'полоса сверху: ответы, музыка, уведомления' 'the strip on top: answers, music, notifications')" "$(t 'программы снизу, как на макоси' 'apps along the bottom, macOS-style')" "$(t 'чужие значки отдельной полосой сбоку' "other apps' icons in their own strip")")
+    PICK_ON=(1 1 1)
+    pick_list
+    SCREEN=$(IFS=,; printf '%s' "${PICK_OUT[*]}")
+    printf '\e[K'
   else
     WANT="$guess"
   fi
@@ -545,6 +590,18 @@ settings() {
     local mic
     mic=$(pactl list short sources 2>/dev/null | awk '{print $2}' | grep -v monitor | grep -viE 'virtual|pwsp|easyeffects' | grep -i usb | head -1 || true)
     sed "s|^input = \"\"|input = \"${mic}\"|" "$APP_DIR/config.example.toml" > "$CONF_DIR/config.toml"
+    # Что человек отметил на втором вопросе. Пишем своим же конфигуратором, а не sed: вставленная
+    # строка дала бы второй ключ enabled в секции, где он уже есть, а TOML с двумя одинаковыми
+    # ключами не читается вовсе — установка кончилась бы конфигом, который не открывается.
+    if [[ -n "${SCREEN+x}" ]]; then
+      for part in island dock tray; do
+        [[ ",$SCREEN," == *",$part,"* ]] && continue
+        # Молча проглотить ошибку нельзя: человек снял галочку, а на экране всё осталось бы как
+        # было — и он бы решил, что выбор ничего не значит. Поэтому строкой под шагом.
+        "$APP_DIR/.venv/bin/justday" config set "$part.enabled" false >/dev/null 2>&1 \
+          || warn "$(t "не удалось отключить" "could not turn off") $part — $(t "включите в настройках" "turn it off in settings")"
+      done
+    fi
     # Настройки под выбранный набор: без распознавания речи кнопка открывает поле ввода,
     # а не запись; без нейросетевого голоса отвечает espeak-ng, а в текстовом наборе — молча.
     ((SPEECH)) || sed -i 's/^microphone = true/microphone = false/' "$CONF_DIR/config.toml"

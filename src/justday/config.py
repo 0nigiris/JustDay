@@ -409,18 +409,29 @@ def _toml_value(v) -> str:
     return json.dumps(str(v), ensure_ascii=False)
 
 
+# Заголовок секции: `[island]`, и всё равно, стоит ли за ним пояснение. В нашем же примерном
+# конфиге пояснение есть почти у каждой секции, и сравнение строки целиком их не узнавало — тогда
+# ключ дописывался второй секцией в конец файла, а TOML с двумя одинаковыми секциями не читается
+# вовсе. Одна настройка через `justday config set` — и конфиг переставал открываться целиком.
+_HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*(?:#.*)?$")
+
+
 def set_value(section: str, key: str, value) -> None:
     """Set one key in config.toml, keeping the user's comments and layout."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     lines = CONFIG_FILE.read_text(encoding="utf-8").splitlines() if CONFIG_FILE.exists() else []
     line = f"{key} = {_toml_value(value)}"
-    header = f"[{section}]"
+
+    def head(i: int) -> str | None:
+        m = _HEADER.match(lines[i])
+        return m.group(1).strip() if m else None
+
     try:
-        start = next(i for i, l in enumerate(lines) if l.strip() == header)
+        start = next(i for i in range(len(lines)) if head(i) == section)
     except StopIteration:
-        lines += ["", header, line]
+        lines += ["", f"[{section}]", line]
     else:
-        end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
+        end = next((i for i in range(start + 1, len(lines)) if head(i) is not None), len(lines))
         for i in range(start + 1, end):
             if re.match(rf"\s*{re.escape(key)}\s*=", lines[i]):
                 lines[i] = line
