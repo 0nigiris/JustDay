@@ -137,7 +137,20 @@ class UtteranceRecorder:
 
     def patience(self, spoken_s: float) -> float:
         """Сколько тишины считать концом просьбы, если человек говорит уже spoken_s секунд."""
+        if spoken_s >= self.max_s:
+            # Заговорился дольше отведённого. Рубить по секундомеру нельзя: именно так его и
+            # обрывало — ровно на сороковой секунде, посреди слова, и половина просьбы уходила
+            # в работу как целая. Поэтому после срока ждём ближайшей паузы, а не её конца.
+            return 0.5
         return self.silence_long_s if spoken_s >= self.long_after_s else self.silence_s
+
+    @property
+    def hard_max_s(self) -> float:
+        """Предел, на котором запись обрывается чем бы человек ни был занят.
+
+        Нужен не против человека, а против микрофона: включённый телевизор или зависшая гарнитура
+        «говорят» без паузы сколько угодно, и без потолка запись не кончится никогда."""
+        return min(300.0, self.max_s * 3)
 
     @property
     def vad(self):
@@ -188,7 +201,7 @@ class UtteranceRecorder:
                 frames.append(frame)
                 silence = silence + FRAME / RATE if p < 0.3 else 0.0
                 spoken = len(frames) * FRAME / RATE
-                if silence >= self.patience(spoken - silence) or spoken >= self.max_s:
+                if silence >= self.patience(spoken - silence) or spoken >= self.hard_max_s:
                     break
             if not frames:
                 return None
