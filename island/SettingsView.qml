@@ -1617,18 +1617,36 @@ Item {
                         }
                     }
                 }
+                // Имя у строки обязательно, и это не придирка к стилю. Без него `acc` видно только
+                // прямым детям, а кнопка лежит внуком — через RowLayout. Привязка в ней падала с
+                // «acc is not defined», и дальше начиналось самое неприятное: сломанная привязка
+                // `visible` оставляет элемент видимым, а сломанное нажатие не делает ничего. Кнопка
+                // была на экране, выглядела рабочей и молчала.
                 Row {
+                    id: ollamaRow
                     visible: !!mp.info.account
                     readonly property var acc: mp.info.account || ({})
                     title: JD.tr("Аккаунт Ollama")
-                    subtitle: acc.signed_in ? JD.tr("Вход выполнен") + (acc.user ? ": " + acc.user : "")
-                            : acc.error ? acc.error : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
+                    subtitle: ollamaRow.acc.signed_in
+                            ? JD.tr("Вход выполнен") + (ollamaRow.acc.user ? ": " + ollamaRow.acc.user : "")
+                            : ollamaRow.acc.error ? ollamaRow.acc.error
+                            : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
                     RowLayout {
                         spacing: 8
                         Btn {
-                            visible: !acc.signed_in && !!acc.signin_url
+                            visible: !ollamaRow.acc.signed_in && !!ollamaRow.acc.signin_url
                             text: JD.tr("Войти"); primary: true
-                            onClicked: Quickshell.execDetached(["xdg-open", acc.signin_url])
+                            onClicked: Quickshell.execDetached(["xdg-open", ollamaRow.acc.signin_url])
+                        }
+                        // Ссылку можно забрать с собой: в неё удобнее зайти с телефона, да и если
+                        // браузер по какой-то причине не откроется, у человека остаётся путь.
+                        Btn {
+                            visible: !ollamaRow.acc.signed_in && !!ollamaRow.acc.signin_url
+                            glyph: "edit-copy"; text: JD.tr("Скопировать ссылку")
+                            onClicked: {
+                                Quickshell.execDetached(["wl-copy", "--", ollamaRow.acc.signin_url])
+                                JD.flash(JD.tr("Ссылка скопирована"), "edit-copy", JD.accentGreen)
+                            }
                         }
                         Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
                     }
