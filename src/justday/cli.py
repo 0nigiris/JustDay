@@ -396,6 +396,8 @@ def main(argv: list[str] | None = None) -> None:
                          "писать журнал на диск")
     sp.add_argument("--hours", type=float, default=8.0, help="сколько часов ждать лимиты ночью")
     sp.add_argument("--tell", action="store_true", help="написать письмо, когда кончится")
+    sp.add_argument("--dark", action="store_true",
+                    help="заодно режим сервера: экраны гаснут, музыка на паузу (см. justday night)")
     sp = sub.add_parser("work", help="сесть за работу: Claude Code, пока он отвечает, иначе оболочка")
     sp.add_argument("--shell", action="store_true", help="сразу оболочка, не спрашивая Claude")
     sp.add_argument("--claude", action="store_true", help="сразу Claude Code")
@@ -448,10 +450,25 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["init"])
     sp.add_argument("where", help="папка на смонтированной флешке")
     sp.add_argument("--keys", default="", help="какие ключи положить, через запятую: openrouter,groq")
-    sp = sub.add_parser("server", help="режим сервера: экраны гаснут, звук глохнет, машина не "
-                                      "засыпает, а работа идёт. on | off | status")
+    sp = sub.add_parser("server", help="режим сервера: экраны гаснут, музыка встаёт на паузу, "
+                                      "машина не засыпает, а работа идёт. on | off | status")
     sp.add_argument("action", nargs="?", default="status", choices=["on", "off", "status"])
     sp.add_argument("--why", default="работа ассистента", help="зачем — видно в журнале и в status")
+    sp.add_argument("--hours", type=float, default=0.0,
+                    help="через сколько часов сторож сам вернёт машину (0 — как в настройках)")
+    sp.add_argument("--quiet", action="store_true",
+                    help="для off: вернуть всё, кроме музыки — её включит человек сам")
+    sp = sub.add_parser("night", help="«я спать»: задача уходит работать на ночь в отдельную "
+                                     "службу, машина переходит в режим сервера, утром — письмо")
+    sp.add_argument("task", nargs="*", help="что сделать за ночь")
+    sp.add_argument("--hours", type=float, default=8.0, help="сколько часов на это есть")
+    sp.add_argument("--here", action="store_true",
+                    help="работать в этом окне, а не в службе (окно нельзя будет закрыть)")
+    sp.add_argument("--light", action="store_true",
+                    help="не гасить экраны и не глушить звук — только не давать машине заснуть")
+    sp.add_argument("--no-letter", action="store_true", help="не писать письмо по окончании")
+    sp.add_argument("--status", action="store_true", help="идёт ли ночная работа и где журнал")
+    sp.add_argument("--stop", action="store_true", help="остановить работу и вернуть машину")
     sp = sub.add_parser("reach", help="дотянуться до человека, когда его нет за компьютером: "
                                      "письмо — обычное, --urgent — ещё и звонок на телефон")
     sp.add_argument("text", nargs="+")
@@ -794,7 +811,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(shell_mod.run(a.rest))
     elif a.cmd == "terminal":
         from . import terminal as terminal_mod
-        sys.exit(terminal_mod.run(a.task, over_night=a.night, hours=a.hours, tell=a.tell))
+        sys.exit(terminal_mod.run(a.task, over_night=a.night, hours=a.hours, tell=a.tell,
+                                  dark=a.dark))
     elif a.cmd == "work":
         from . import shell as shell_mod
         sys.exit(shell_mod.work(a.rest, force="shell" if a.shell else "claude" if a.claude else ""))
@@ -932,8 +950,25 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "server":
         from . import server as server_mod
 
-        _print(server_mod.on(a.why) if a.action == "on"
-               else server_mod.off() if a.action == "off" else server_mod.status())
+        _print(server_mod.on(a.why, hours=a.hours) if a.action == "on"
+               else server_mod.off(resume=not a.quiet) if a.action == "off"
+               else server_mod.status())
+    elif a.cmd == "night":
+        from . import terminal
+
+        if a.status:
+            _print(terminal.nightly_status())
+        elif a.stop:
+            _print(terminal.nightly_stop())
+        else:
+            task = " ".join(a.task).strip()
+            if not task:
+                sys.exit("Ночью нужна задача: justday night \"что сделать\"")
+            if a.here:
+                import asyncio
+                sys.exit(asyncio.run(terminal.night(task, hours=a.hours, tell=not a.no_letter,
+                                                    dark=not a.light)))
+            sys.exit(terminal.nightly(task, hours=a.hours, tell=not a.no_letter, dark=not a.light))
     elif a.cmd == "reach":
         from . import phone
 

@@ -25,9 +25,9 @@ HELP = """[b]Команды[/b]
   /ladder        показать лестницу
   /up            вернуться на верхнюю ступень
   /new           начать разговор заново
-  /night [ЧАСЫ]  уйти спать: машине не давать заснуть, кончились все ступени — ждать
-                 возвращения лимитов, опасное отклонять (по умолчанию 8 часов)
-  /day           вернуться к обычной работе
+  /night [ЧАСЫ]  уйти спать: экраны гаснут, музыка на паузу, машине не даю заснуть, кончились
+                 все ступени — жду возвращения лимитов, опасное отклоняю (по умолчанию 8 часов)
+  /day           вернуться к обычной работе: экраны, звук и подтверждения назад
   /help, /quit"""
 
 
@@ -50,6 +50,7 @@ class Shell(App):
         self.busy = False
         self.turn: asyncio.Task | None = None   # ход держим за руку: без ссылки его соберёт сборщик
         self.guard = 0                          # сторож, не дающий машине заснуть ночью
+        self.dark = False                       # машина в режиме сервера: экраны и звук наши
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -72,8 +73,12 @@ class Shell(App):
         if self.work.effort:
             bits.append(f"усилие {self.work.effort} ({self.work.why})")
         bits.append(f"ступень {self.work.step + 1} из {len(self.work.rungs)}")
-        if self.guard:
-            bits.append("ночь")
+        # Место в разговоре: он должен видеть, что до сжатия осталось немного, **до** того, как
+        # работа упрётся в стену. 100% не показываем — это шум.
+        if (free := self.work.free()) < 1.0:
+            bits.append(f"место {int(free * 100)}%")
+        if self.guard or self.dark:
+            bits.append("ночь" + (" · тёмный экран" if self.dark else ""))
         if self.work.spent:
             bits.append(f"${self.work.spent:.4f}")
         if doing:
@@ -141,10 +146,19 @@ class Shell(App):
             self.cfg.setdefault("terminal", {})["unattended"] = True
             self.work.cfg = self.cfg
             self.work.wait_until = time.monotonic() + hours * 3600
-            self.guard = self.guard or server.awake("ночная работа в оболочке")
-            log.write(f"Ночь на {hours:g} ч: машине не дам заснуть, кончатся все ступени — буду "
-                      "ждать возвращения лимитов. Опасное при этом отклоняется, а не разрешается: "
-                      "спросить тебя некого.\n")
+            # «Уйти спать» — это не только «не засыпай»: он сказал прямо, что хочет включить и
+            # лечь. Поэтому заодно режим сервера: экраны, звук, музыка. Вернёт их `/day`, выход из
+            # окна или сторож через час после срока.
+            if (self.cfg.get("terminal") or {}).get("night_server", True):
+                self.dark = bool(server.on("ночная работа в оболочке",
+                                           hours=hours + 1).get("ok"))
+            if not self.dark:
+                self.guard = self.guard or server.awake("ночная работа в оболочке")
+            log.write(f"Ночь на {hours:g} ч: "
+                      + ("экраны погасил, звук заглушил, " if self.dark else "")
+                      + "машине не дам заснуть, кончатся все ступени — буду ждать возвращения "
+                        "лимитов. Опасное при этом отклоняется, а не разрешается: спросить тебя "
+                        "некого.\n")
             self.refresh_status()
         elif word == "day":
             self.release()
@@ -182,14 +196,21 @@ class Shell(App):
 
 
     def release(self) -> None:
-        """Отпустить сторожа сна. Забыть про него — значит оставить машину вечно бодрой."""
-        if not self.guard:
-            return
+        """Вернуть человеку машину: экраны, звук, музыку и право засыпать.
+
+        Забыть про это — значит оставить тёмный экран и вечно бодрую машину после закрытого окна.
+        """
         import contextlib
         import os
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.kill(self.guard, 15)
-        self.guard = 0
+        if self.dark:
+            from . import server
+            with contextlib.suppress(Exception):
+                server.off()
+            self.dark = False
+        if self.guard:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(self.guard, 15)
+            self.guard = 0
 
     def on_unmount(self) -> None:
         self.release()

@@ -25,6 +25,7 @@ import contextlib
 import json
 import os
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -122,6 +123,9 @@ class Said:
     cost: float = 0.0
     session: str = ""
     tools: list[str] = field(default_factory=list)
+    # Сколько места в разговоре занято после этого хода. Не «сколько стоило» (это `cost`), а
+    # сколько уже лежит в окне: по этому числу решается, пора ли просить сжатия.
+    used: int = 0
 
 
 def _marks(cfg: dict) -> dict[str, str]:
@@ -137,6 +141,21 @@ def _marks(cfg: dict) -> dict[str, str]:
 
 def _quiet_for(cfg: dict) -> float:
     return float((cfg.get("terminal") or {}).get("first_word_seconds") or 90)
+
+
+def taken(usage: dict) -> int:
+    """Сколько места занимает разговор по одному ответу движка.
+
+    Складываем всё, что лежало в окне на этот запрос: присланное, прочитанное из кэша, записанное
+    в кэш и сказанное. Кэш считать обязательно — в нём лежит почти весь разговор, и без него
+    место выглядит пустым там, где оно кончается.
+
+    Числа из `result` для этого не годятся: там они сложены за все ходы разом (проверено — чтение
+    кэша за два хода складывается в сумму), и выходит больше окна при полупустом разговоре.
+    """
+    keys = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
+            "output_tokens")
+    return sum(int(usage.get(k) or 0) for k in keys)
 
 
 def _opencode_cli() -> str:
@@ -222,7 +241,12 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
         kind = ev.get("type")
         if kind == "system" and ev.get("subtype") == "init":
             got.session = str(ev.get("session_id") or got.session)
+        elif kind == "system" and ev.get("subtype") == "compact_boundary":
+            # Claude Code сжал разговор сам, посреди хода. Наш счёт места после этого — вчерашняя
+            # газета: считать его дальше значит просить сжатия у того, кто только что сжался.
+            got.used = 0
         elif kind == "assistant":
+            got.used = max(got.used, taken((ev.get("message") or {}).get("usage") or {}))
             for block in (ev.get("message") or {}).get("content") or []:
                 if block.get("type") == "text" and block.get("text"):
                     got.text += block["text"]
@@ -263,6 +287,12 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
             return
         got.session = str(ev.get("sessionID") or got.session)
         part = ev.get("part") or {}
+        if tok := (part.get("tokens") or {}):
+            # У OpenCode расход лежит отдельным полем в конце шага, а кэш — вложенным: сложить
+            # надо так же, как у Claude Code, иначе разговор выглядит пустым до самой стены.
+            cache = tok.get("cache") or {}
+            got.used = max(got.used, sum(int(tok.get(k) or 0) for k in ("input", "output"))
+                           + sum(int(cache.get(k) or 0) for k in ("read", "write")))
         if ev.get("type") == "text" and part.get("text"):
             got.text += part["text"]
             on_text(part["text"])
@@ -275,6 +305,47 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
         got.error = err.strip()[:400]
     got.limit = fallback.looks_like_limit(got.error)
     return got
+
+
+async def squeeze_claude(rung: Rung, session: str, cfg: dict) -> tuple[bool, str]:
+    """Попросить Claude Code сжать разговор. Возвращает (сжалось ли, сессия после сжатия).
+
+    Сжатие просится тем же способом, которым его просит человек, — командой `/compact` в ту же
+    сессию. В режиме печати она работает: в потоке приходит `compact_result: success`, номер
+    сессии остаётся тем же (проверено живьём).
+    """
+    cli = shutil.which("claude") or "claude"
+    cmd = [cli, "-p", "/compact", "--output-format", "stream-json", "--verbose"]
+    if rung.model:
+        cmd += ["--model", rung.model]
+    if session:
+        cmd += ["--resume", session]
+    done = {"ok": False, "session": session}
+
+    def line(raw: str) -> None:
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            return
+        if ev.get("session_id"):
+            done["session"] = str(ev["session_id"])
+        if ev.get("type") == "system" and (ev.get("subtype") == "compact_boundary"
+                                           or ev.get("compact_result") == "success"):
+            done["ok"] = True
+
+    # Ждём дольше обычного: сжатие — это целый ход модели по всему разговору.
+    await _run(cmd, {**os.environ, **_marks(cfg)}, line, max(_quiet_for(cfg), 120.0))
+    return bool(done["ok"]), str(done["session"])
+
+
+async def squeeze_opencode(rung: Rung, session: str, cfg: dict) -> tuple[bool, str]:
+    """То же у OpenCode — его собственной командой `compact`."""
+    if not session:
+        return False, session
+    cmd = [_opencode_cli(), "run", "--format", "json", "--command", "compact", "-s", session]
+    lines, err = await _run(cmd, {**shell.env(), **_marks(cfg)}, lambda _l: None,
+                            max(_quiet_for(cfg), 120.0))
+    return bool(lines) and not err.strip(), session
 
 
 def handoff_note(task: str, was: Rung, said: str) -> str:
@@ -295,6 +366,17 @@ def handoff_note(task: str, was: Rung, said: str) -> str:
         "",
         "Прочитай ПЕРЕДАЧА.md в корне проекта — там что делалось до тебя, чем это проверено и чего",
         "делать нельзя. Веди этот файл дальше сам.",
+    ])
+
+
+def restart_note(task: str) -> str:
+    """Чем начинается разговор, начатый заново: место кончилось, а сжать его не удалось."""
+    return "\n".join([
+        "[Разговор начат заново: место в прежнем кончилось, а сжать его не вышло.]",
+        "",
+        f"Задача человека: {task}",
+        "",
+        "Прочитай ПЕРЕДАЧА.md в корне проекта — там что делалось до тебя и чего делать нельзя.",
     ])
 
 
@@ -321,9 +403,11 @@ class Work:
         # Сессия помнится по ступени лестницы, а не по модели: мелочь, взятую облегчённой моделью,
         # следующий вопрос должен продолжать, а не начинать заново.
         self.sessions: dict[str, str] = {}
+        self.used: dict[str, int] = {}     # сколько места занято в разговоре каждой ступени
         # Движки берутся из таблицы, чтобы проверять лестницу без запуска нейросетей: подменить
         # движок в тесте проще и честнее, чем подменять три разные программы.
         self.engines = engines or {CLAUDE: ask_claude, OPENCODE: ask_opencode}
+        self.squeezers = {CLAUDE: squeeze_claude, OPENCODE: squeeze_opencode}
 
     @property
     def now(self) -> Rung:
@@ -351,6 +435,46 @@ class Work:
         if level != dispatch.STRONG and rung.engine == CLAUDE and light and rung.model != light:
             rung = Rung(CLAUDE, light)
         return rung, effort, why
+
+    # ───────────── место в разговоре ─────────────
+
+    def free(self, seat: str = "") -> float:
+        """Сколько места в разговоре ещё свободно — долей от окна. 1.0 — пусто или считать нечем."""
+        window = int(self.opts.get("context_window") or 0)
+        used = int(self.used.get(seat or str(self.now), 0))
+        if window <= 0 or used <= 0:
+            return 1.0
+        return max(0.0, 1.0 - used / window)
+
+    async def tidy(self, on_note=None) -> str:
+        """Освободить место, пока мы между задачами. Возвращает «», «сжато» или «заново».
+
+        Почему между задачами, а не когда прижало. Стена «кончился контекст» приходит всегда
+        посреди хода: на середине правки, после трёх прочитанных файлов. Сжатие в этот миг —
+        это потерянная середина работы. Поэтому место проверяется перед задачей: тогда сжатие
+        стоит одну паузу, а не один обрыв.
+        """
+        on_note = on_note or (lambda _t: None)
+        seat = str(self.now)
+        edge = float(self.opts.get("compact_at") or 0)
+        if edge <= 0 or self.free(seat) > edge or not self.sessions.get(seat):
+            return ""
+        left = int(self.free(seat) * 100)
+        on_note(f"Места в разговоре осталось {left}% — прошу сжать, пока не начали задачу.")
+        try:
+            ok, session = await self.squeezers[self.now.engine](
+                self.now, self.sessions[seat], self.cfg)
+        except Exception:          # не вышло сжать — не повод терять задачу
+            ok, session = False, ""
+        self.used[seat] = 0
+        if ok:
+            self.sessions[seat] = session
+            return "сжато"
+        # Сжать не удалось: сбрасываем разговор, но задачу отдаём с передачей — иначе следующий
+        # ход начнётся с «продолжай» без того, что продолжать.
+        self.sessions.pop(seat, None)
+        on_note("Сжать не вышло — начинаю разговор заново, задача пойдёт с передачей.")
+        return "заново"
 
     # ───────────── обратно наверх ─────────────
 
@@ -408,6 +532,8 @@ class Work:
         on_pick = on_pick or (lambda _r, _e, _w: None)
         text = task
         await self.climb(on_note)
+        if await self.tidy(on_note) == "заново":
+            text = restart_note(task)
         while True:
             seat = str(self.now)                 # сессия принадлежит ступени, а не модели
             rung, self.effort, self.why = self.shape(task)
@@ -418,6 +544,8 @@ class Work:
             self.spent += said.cost
             if said.session:
                 self.sessions[seat] = said.session
+            if said.used:
+                self.used[seat] = said.used
             if not self.hopeless(said):
                 return said
             was, why = rung, "кончился лимит" if said.limit else f"не ответила: {said.error[:120]}"
@@ -482,7 +610,8 @@ def asks_back(text: str) -> bool:
     return bool(lines) and lines[-1].endswith("?")
 
 
-async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | None = None) -> int:
+async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | None = None,
+                dark: bool = False) -> int:
     """Оставить задачу на ночь: работать, пока не сделается, и записать всё на диск.
 
     Чем ночь отличается от дня. Днём кончившийся лимит — конец хода: человек рядом и решит сам.
@@ -518,7 +647,18 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
     def picked(rung: Rung, effort: str, why: str) -> None:
         note(f"{rung.label}" + (f", усилие {effort} ({why})" if effort else ""))
 
-    guard = server.awake(f"ночная работа: {task[:60]}")
+    why = f"ночная работа: {task[:60]}"
+    # `dark` — человек лёг спать: гасим экраны, ставим музыку на паузу, глушим звук и не даём
+    # машине заснуть. Без него — только запрет на засыпание: он мог оставить работу и остаться
+    # рядом, и гасить ему экран незачем. Сторожу даём час сверх срока работы: он должен вернуть
+    # машину человеку, если её не вернул никто, но не отнимать её у работы, которая ещё идёт.
+    guard, mode = 0, False
+    if dark:
+        mode = bool(server.on(why, hours=hours + 1).get("ok"))
+        lines.append("Машина в режиме сервера: экраны погашены, звук заглушён." if mode
+                     else "Режим сервера включить не удалось — работаю при свете.")
+    if not mode:
+        guard = server.awake(why)
     try:
         said = await work.send(task, on_text=lambda t: write(t), on_note=note, on_pick=picked,
                                on_tool=lambda name: write(f"\n· {name}\n", "\n"))
@@ -537,6 +677,9 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
                 on_text=lambda t: write(t), on_note=note, on_pick=picked,
                 on_tool=lambda name: write(f"\n· {name}\n", "\n"))
     finally:
+        # Режим сервера нарочно не выключается по концу работы: она может кончиться в три часа
+        # ночи, и зажигать человеку экраны с музыкой посреди сна — худшее, что можно сделать с
+        # «включил и лёг спать». Машину вернёт либо он сам (`justday server off`), либо сторож.
         if guard:
             with contextlib.suppress(ProcessLookupError, PermissionError):
                 os.kill(guard, 15)
@@ -547,7 +690,8 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
 
     done = bool(said.text) and not said.error
     short = "Задача сделана." if done else "Задача не доделана: " + (said.error or "никто не ответил")
-    print(f"\n{short}\nЖурнал: {log}")
+    back = "\nМашина осталась в режиме сервера; вернуть её: justday server off" if mode else ""
+    print(f"\n{short}\nЖурнал: {log}{back}")
     if tell:
         # Письмо, а не звонок: человек спит, и будить его сделанной работой незачем.
         from . import phone
@@ -556,15 +700,94 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
     return 0 if done else 1
 
 
+# Работа, которая должна дожить до утра, не может висеть на открытом окне терминала: он закроется
+# вместе с сеансом, по случайному Ctrl-C или потому, что человек просто захлопнул окно, — и работа
+# умрёт на полуслове. Поэтому ночная работа уезжает в отдельную службу systemd: у неё своя жизнь.
+NIGHT_UNIT = "justday-night"
+
+
+def nightly(task: str, hours: float = 8.0, tell: bool = True, dark: bool = True) -> int:
+    """Отправить ночную работу в отдельную службу и вернуть человеку строку приглашения.
+
+    Что он увидит: одну команду, после которой можно закрыть окно и лечь спать. Работа идёт в
+    службе `justday-night`, журнал пишется на диск по ходу дела, утром приходит письмо.
+    """
+    cli = shutil.which("justday")
+    if not shutil.which("systemd-run") or not cli:
+        # Нет systemd — работаем прямо здесь. Хуже (закрытое окно убьёт работу), но лучше, чем
+        # отказаться: сказать человеку «не могу» в ответ на «я спать» — не ответ.
+        print("systemd-run недоступен — работаю прямо в этом окне, не закрывай его.")
+        return asyncio.run(night(task, hours=hours, tell=tell, dark=dark))
+    if nightly_status().get("running"):
+        print("Ночная работа уже идёт. Посмотреть: justday night --status; "
+              "остановить: justday night --stop")
+        return 1
+    cmd = ["systemd-run", "--user", "--collect", f"--unit={NIGHT_UNIT}",
+           "--description=JustDay: ночная работа",
+           # Службе systemd достаётся окружение его менеджера, а не наше: без этих переменных
+           # движок не найдёт ни программ в ~/.local/bin, ни экрана, ни связки ключей.
+           *[f"--setenv={k}={os.environ[k]}" for k in
+             ("PATH", "WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "XDG_CURRENT_DESKTOP",
+              "LANG", "HOME", "SHELL") if os.environ.get(k)],
+           cli, "terminal", "--night", "--hours", str(hours)]
+    if tell:
+        cmd.append("--tell")
+    cmd.append(task)
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"Не вышло отправить работу в службу: {e}")
+        return 1
+    if done.returncode != 0:
+        print((done.stderr or done.stdout or "systemd-run отказался").strip()[:400])
+        return 1
+    from . import server
+    mode = server.on(f"ночная работа: {task[:60]}", hours=hours + 1) if dark else {}
+    print("Работа ушла в службу justday-night — окно можно закрывать.")
+    if mode.get("ok"):
+        print("Машина в режиме сервера: экраны погашены, звук заглушён, засыпать не даю.")
+    print(f"Журнал: {NIGHT_DIR}\nПосмотреть: justday night --status · остановить: justday night --stop")
+    return 0
+
+
+def nightly_status() -> dict:
+    """Идёт ли ночная работа и где её журнал."""
+    try:
+        done = subprocess.run(["systemctl", "--user", "is-active", f"{NIGHT_UNIT}.service"],
+                              capture_output=True, text=True, timeout=10)
+        running = done.stdout.strip() == "active"
+    except (OSError, subprocess.SubprocessError):
+        running = False
+    logs = sorted(NIGHT_DIR.glob("*.md")) if NIGHT_DIR.exists() else []
+    from . import server
+    return {"ok": True, "running": running, "log": str(logs[-1]) if logs else "",
+            "server_mode": server.status()}
+
+
+def nightly_stop() -> dict:
+    """Остановить ночную работу и вернуть человеку машину.
+
+    Служба гаснет от сигнала, а сигнал не даёт ей ничего вернуть за собой, — поэтому режим
+    сервера выключаем здесь сами. Иначе «останови» оставляло бы тёмный экран и глухой звук.
+    """
+    from . import server
+    try:
+        subprocess.run(["systemctl", "--user", "stop", f"{NIGHT_UNIT}.service"],
+                       capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"ok": True, "stopped": True, "server": server.off()}
+
+
 def run(args: list[str] | None = None, *, over_night: bool = False, hours: float = 8.0,
-        tell: bool = False) -> int:
+        tell: bool = False, dark: bool = False) -> int:
     """`justday terminal`: окно, если есть куда рисовать, иначе одна задача строкой."""
     task = " ".join(args or []).strip()
     if over_night:
         if not task:
             print("Ночью нужна задача: justday terminal --night \"что сделать\"")
             return 1
-        return asyncio.run(night(task, hours=hours, tell=tell))
+        return asyncio.run(night(task, hours=hours, tell=tell, dark=dark))
     if task:
         return asyncio.run(plain(task))
     # Окно тянет за собой textual; ради одной задачи строкой тянуть его незачем.

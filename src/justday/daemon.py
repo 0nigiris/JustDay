@@ -223,7 +223,10 @@ class Daemon:
         if value not in ("listening", "thinking") or self.silent() or self.cfg["tts"]["engine"] != "qwen":
             return
         try:   # состояние меняется и до запуска цикла — тогда греть попросту некуда и незачем
-            spawn(asyncio.get_running_loop().run_in_executor(None, self.tts.nudge, "warm"))
+            # `to_thread`, а не `run_in_executor`: тот отдаёт Future, а задачу делают из корутины.
+            # Из-за этого прогрев падал TypeError прямо в присваивании состояния — и с ним падал
+            # весь заход в прослушивание. Со стороны это выглядело так: Джарвис перестал слышать.
+            spawn(asyncio.to_thread(self.tts.nudge, "warm"))
         except RuntimeError:
             pass
 

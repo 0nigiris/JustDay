@@ -91,3 +91,31 @@ def test_he_was_cut_off_exactly_on_the_fortieth_second() -> None:
     assert rec.patience(41.0) < rec.patience(20.0), "после срока надо ждать паузы, а не рубить"
     assert rec.hard_max_s > 40, "потолок совпал со сроком — значит нож остался"
     assert rec.hard_max_s <= 300, "без разумного потолка запись не кончится никогда"
+
+
+def test_jarvis_stopped_hearing_because_warming_the_voice_crashed_the_listening() -> None:
+    """«Почему Джарвис теперь меня не слышит?» — заход в прослушивание падал на прогреве голоса.
+
+    Прогрев отправлялся в сторону через `run_in_executor`, а тот отдаёт Future; задачу делают из
+    корутины, и получался TypeError прямо в присваивании состояния. Падало не «греть голос», а
+    весь заход в прослушивание — слушать было больше некому.
+    """
+    import asyncio
+    import types
+    import typing
+
+    from justday import daemon
+
+    class Fake:
+        cfg: typing.ClassVar = {"tts": {"engine": "qwen"}}
+        stt = types.SimpleNamespace(warm=lambda: None)
+        tts = types.SimpleNamespace(nudge=lambda what: None)
+
+        def silent(self) -> bool:
+            return False
+
+    async def go() -> None:
+        daemon.Daemon._warm_models(Fake(), "listening")   # падало здесь
+        await asyncio.sleep(0.05)
+
+    asyncio.run(go())

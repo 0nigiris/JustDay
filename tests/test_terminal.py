@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 from pathlib import Path
 
 import pytest
@@ -289,33 +288,90 @@ def test_nobody_may_approve_the_dangerous_thing_for_a_sleeping_person() -> None:
     assert "dangerously" not in src.lower()
 
 
-def test_the_window_can_be_left_for_the_night_and_lets_the_machine_sleep_after() -> None:
-    """Уйти спать надо было уметь из окна — и не оставить машину вечно бодрой наутро.
+def test_the_window_can_be_left_for_the_night_and_gives_the_machine_back_after(monkeypatch) -> None:
+    """«Включил и лёг спать» — из окна, одной командой, и машина возвращается человеку наутро.
 
-    Сторож сна — отдельный процесс: пока он жив, система не уснёт. Забыть отпустить его значит
-    оставить человеку машину, которая не засыпает никогда, и он будет искать причину неделю.
+    Две беды сразу. Первая: `/night` только запрещал машине спать — экраны горели всю ночь, а в
+    пустой комнате играл фильм. Вторая: забыть отпустить сторожа значит оставить человеку машину,
+    которая не засыпает никогда, и он будет искать причину неделю.
     """
     pytest.importorskip("textual", reason="нет textual — окно не ставилось")
     from justday import server, terminal_ui
 
-    async def go() -> tuple[int, bool, int]:
+    # Живую машину тест не трогает: гасить экраны на прогоне тестов — само по себе беда.
+    done = []
+    monkeypatch.setattr(server, "on", lambda why, hours=0.0: done.append(("on", hours)) or {"ok": True})
+    monkeypatch.setattr(server, "off", lambda resume=True: done.append(("off", resume)) or {"ok": True})
+    monkeypatch.setattr(server, "awake", lambda why="": 0)
+
+    async def go() -> tuple[bool, bool, bool]:
         app = terminal_ui.Shell()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.command("/night 8")
             await pilot.pause()
-            was, waits = app.guard, app.work.wait_until > 0
+            dark, waits = app.dark, app.work.wait_until > 0
             app.command("/day")
             await pilot.pause()
-            return was, waits, app.guard
+            return dark, waits, app.dark
 
-    guarded, waits, after = asyncio.run(go())
-    if not shutil.which("systemd-inhibit"):
-        pytest.skip("нет systemd-inhibit — сторожа сна в этой системе нет")
-    assert guarded, "ночь включилась, а машине всё равно разрешено заснуть"
+    dark, waits, after = asyncio.run(go())
+    assert dark, "ушли спать, а экраны так и горят: это не «режим сервера»"
     assert waits, "ночью не ждём возвращения лимитов — значит это не ночь"
-    assert after == 0, "сторож сна остался жить: машина не уснёт уже никогда"
-    assert server.awake.__doc__, "сторож без объяснения — через полгода его никто не поймёт"
+    assert not after, "утром машина осталась тёмной и глухой"
+    assert ("off", True) in done, "машину никто не вернул человеку, да ещё и с музыкой на паузе"
+    assert done[0][1] > 8, "сторож должен пережить саму работу, иначе он отнимет машину у неё же"
+
+
+def test_the_night_work_used_to_die_with_the_closed_terminal_window(monkeypatch) -> None:
+    """Работа на ночь висела на открытом окне: закрыл окно — и к утру ничего не сделано.
+
+    Поэтому она уезжает в отдельную службу systemd: своя жизнь, свой журнал, своё «останови».
+    """
+    import subprocess
+
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(terminal.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(terminal.subprocess, "run", fake_run)
+    monkeypatch.setattr(terminal, "nightly_status", lambda: {"running": False})
+    from justday import server
+    monkeypatch.setattr(server, "on", lambda why, hours=0.0: {"ok": True})
+
+    assert terminal.nightly("сделай всё из плана", hours=8.0) == 0
+    cmd = seen["cmd"]
+    assert cmd[0] == "systemd-run" and "--user" in cmd, "работа опять живёт в окне терминала"
+    assert f"--unit={terminal.NIGHT_UNIT}" in cmd, "службу не найти, значит её не остановить"
+    assert "--night" in cmd and cmd[-1] == "сделай всё из плана", "задача до службы не доехала"
+    assert any(c.startswith("--setenv=PATH=") for c in cmd), \
+        "без PATH служба не найдёт ни claude, ни opencode"
+
+
+def test_the_morning_must_not_start_with_music_at_three_in_the_night(monkeypatch) -> None:
+    """Работа кончилась в три ночи — и зажигала экраны с музыкой, пока человек спал.
+
+    Поэтому режим сервера по концу работы не выключается сам: машину возвращает либо человек,
+    либо сторож по сроку, и сторож музыку не включает.
+    """
+    from justday import server
+
+    done = []
+    monkeypatch.setattr(server, "on", lambda why, hours=0.0: {"ok": True})
+    monkeypatch.setattr(server, "off", lambda resume=True: done.append(resume) or {"ok": True})
+    monkeypatch.setattr(server, "awake", lambda why="": 0)
+    cfg = {"terminal": {"ladder": ["claude:opus"], "night_nudges": 0}, "brain": {}}
+    work = terminal.Work(cfg, rungs=rungs("claude:opus"),
+                         engines={"claude": engine([terminal.Said(text="сделал")])})
+    monkeypatch.setattr(terminal, "Work", lambda *a, **kw: work)
+    monkeypatch.setattr(terminal, "NIGHT_DIR", Path("/tmp") / "justday-тест-ночь")
+
+    asyncio.run(terminal.night("почини док", hours=0.5, cfg=cfg, dark=True))
+
+    assert not done, "работа кончилась — и разбудила человека светом и музыкой"
 
 
 def test_a_question_asked_at_night_used_to_stop_the_work_till_morning() -> None:
@@ -328,3 +384,104 @@ def test_a_question_asked_at_night_used_to_stop_the_work_till_morning() -> None:
     assert terminal.asks_back("первая строка\nА это точно нужно?")
     assert not terminal.asks_back("Почему он лагал? Потому что док перерисовывался. Починил.")
     assert not terminal.asks_back("")
+
+
+def test_the_long_work_used_to_hit_the_wall_of_a_full_conversation_mid_task() -> None:
+    """«Кончился контекст» приходило всегда посреди дела — на середине правки, после трёх файлов.
+
+    Место в разговоре теперь считается по тем же числам, что показывает сам движок, и сжатие
+    просится **перед** задачей, а не когда прижало.
+    """
+    # Числа из `assistant`: присланное + кэш + сказанное. Кэш считать обязательно — в нём лежит
+    # почти весь разговор, и без него окно выглядит пустым там, где оно кончается.
+    assert terminal.taken({"input_tokens": 8, "cache_creation_input_tokens": 506,
+                           "cache_read_input_tokens": 25271, "output_tokens": 1}) == 25786
+
+    cfg = {"terminal": {"context_window": 1000, "compact_at": 0.2}, "brain": {}}
+    work = terminal.Work(cfg, rungs=rungs("claude:opus"),
+                         engines={"claude": engine([terminal.Said(text="сделал", used=850)])})
+    squeezed = []
+
+    async def squeeze(rung, session, cfg):
+        squeezed.append(session)
+        return True, "новая-сессия"
+
+    work.squeezers = {"claude": squeeze}
+    work.sessions["claude:opus"] = "старая-сессия"
+
+    notes = []
+    asyncio.run(work.send("почини док", on_note=notes.append))
+    assert not squeezed, "сжались посреди хода, а не между задачами — потеряли середину работы"
+    assert work.free() < 0.2, "место в разговоре считается не от окна модели"
+
+    asyncio.run(work.send("а теперь трей", on_note=notes.append))
+    assert squeezed == ["старая-сессия"], "места не осталось, а сжатия никто не попросил"
+    assert work.sessions["claude:opus"] == "новая-сессия", "после сжатия разговор потерялся"
+    assert any("сжать" in n for n in notes), "сжали молча: человек не поймёт, почему пауза"
+
+
+def test_a_conversation_that_cannot_be_squeezed_must_not_lose_the_task() -> None:
+    """Сжать не удалось — разговор начинается заново, но задача уходит с передачей, а не «продолжай»."""
+    cfg = {"terminal": {"context_window": 1000, "compact_at": 0.2}, "brain": {}}
+    ask = engine([terminal.Said(text="сделал", used=990), terminal.Said(text="и это")])
+    work = terminal.Work(cfg, rungs=rungs("claude:opus"), engines={"claude": ask})
+
+    async def squeeze(rung, session, cfg):
+        return False, session
+
+    work.squeezers = {"claude": squeeze}
+    work.sessions["claude:opus"] = "разговор"
+    asyncio.run(work.send("первая задача"))
+    asyncio.run(work.send("вторая задача"))
+
+    assert "claude:opus" not in work.sessions or not work.sessions["claude:opus"], \
+        "сжать не вышло, а разговор остался тем же — следующий ход упрётся в ту же стену"
+    assert "ПЕРЕДАЧА.md" in ask.heard[-1][1], "задачу отдали без передачи: продолжать нечего"
+
+
+def test_the_counting_of_room_must_not_come_from_the_result_event() -> None:
+    """В `result` числа сложены за все ходы разом: по ним разговор «кончался» на третьем вопросе.
+
+    Проверено живьём: чтение кэша за два хода там складывается в сумму и переваливает окно, когда
+    в разговоре ещё половина места.
+    """
+    said = asyncio.run(_claude_events([
+        {"type": "assistant", "message": {"usage": {"input_tokens": 10,
+                                                    "cache_read_input_tokens": 12413,
+                                                    "cache_creation_input_tokens": 12858,
+                                                    "output_tokens": 4},
+                                          "content": [{"type": "text", "text": "ок"}]}},
+        {"type": "result", "session_id": "с1", "usage": {"input_tokens": 18,
+                                                         "cache_read_input_tokens": 37684,
+                                                         "cache_creation_input_tokens": 13364,
+                                                         "output_tokens": 440}},
+    ]))
+    assert said.used == 25285, "место считается по сумме всех ходов, а не по последнему запросу"
+
+
+def test_claude_code_compacting_itself_mid_turn_must_reset_our_count() -> None:
+    """Claude Code сжимается и сам: считать место по старому числу после этого — просить сжатия у сжатого."""
+    said = asyncio.run(_claude_events([
+        {"type": "assistant", "message": {"usage": {"input_tokens": 190000}, "content": []}},
+        {"type": "system", "subtype": "compact_boundary", "session_id": "с1"},
+        {"type": "assistant", "message": {"usage": {"input_tokens": 12000},
+                                          "content": [{"type": "text", "text": "дальше"}]}},
+    ]))
+    assert said.used == 12000, "после своего сжатия движок считается полным"
+
+
+async def _claude_events(events):
+    """Прогнать поток событий `claude` через разбор, не запуская саму программу."""
+    import json
+
+    async def fake_run(cmd, env, on_line, quiet_for=90.0):
+        for ev in events:
+            on_line(json.dumps(ev))
+        return [], ""
+
+    was, terminal._run = terminal._run, fake_run
+    try:
+        return await terminal.ask_claude(terminal.Rung("claude", "opus"), "задача", "", {},
+                                         lambda _t: None, lambda _t: None)
+    finally:
+        terminal._run = was
