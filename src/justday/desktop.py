@@ -455,6 +455,7 @@ def watch_start() -> bool:
         return False
     try:
         ensure_genie_effect()
+        ensure_blur_effect()
     except Exception:
         pass
     watch_stop()
@@ -848,6 +849,62 @@ def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | No
     except (OSError, subprocess.SubprocessError, ValueError):
         pass
     return {"ok": True, "path": str(path), "n": len(icons or {})}
+
+
+
+def ensure_blur_effect() -> dict:
+    """Enable a KWin blur effect so Quickshell BackgroundEffect can frost dock/tray.
+
+    Prefers better_blur_dx (force-blur / BackgroundEffect protocol) when installed;
+    falls back to stock blur. Stock blur stays off when better_blur is available
+    (they conflict). Idempotent — only writes/loads when not already active.
+    """
+    import shutil
+
+    if not shutil.which("kwriteconfig6") and not shutil.which("kwriteconfig5"):
+        return {"ok": False, "error": "no kwriteconfig"}
+    kw = shutil.which("kwriteconfig6") or shutil.which("kwriteconfig5")
+    prefer = "better_blur_dx"
+    stock = "blur"
+    chosen = None
+    try:
+        # Probe which plugins KWin knows.
+        listed = ""
+        if backend() == "kwin" and qdbus_bin():
+            listed = _kwin("/Effects", "org.kde.kwin.Effects.listOfEffects") or ""
+        has_better = prefer in listed.replace(",", " ").split() if listed else True
+        # If list failed, still try better first then stock.
+        for name, enable_key, disable_other in (
+            (prefer, "better_blur_dxEnabled", "blurEnabled") if has_better else (None, None, None),
+            (stock, "blurEnabled", "better_blur_dxEnabled"),
+        ):
+            if not name:
+                continue
+            subprocess.run([kw, "--file", "kwinrc", "--group", "Plugins",
+                            "--key", enable_key, "true"], timeout=5, check=False, capture_output=True)
+            if disable_other:
+                subprocess.run([kw, "--file", "kwinrc", "--group", "Plugins",
+                                "--key", disable_other, "false"], timeout=5, check=False, capture_output=True)
+            if backend() == "kwin" and qdbus_bin():
+                loaded_list = _kwin("/Effects", "org.kde.kwin.Effects.loadedEffects") or ""
+                if name in loaded_list.replace(",", " ").split():
+                    chosen = name
+                    break
+                # Load it.
+                if name == prefer:
+                    _kwin("/Effects", "org.kde.kwin.Effects.unloadEffect", stock)
+                loaded = _kwin("/Effects", "org.kde.kwin.Effects.loadEffect", name)
+                if str(loaded).lower() in ("true", "1", ""):
+                    chosen = name
+                    break
+            else:
+                chosen = name
+                break
+        if chosen:
+            return {"ok": True, "effect": chosen}
+        return {"ok": False, "error": "no blur effect loaded"}
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": str(e)}
 
 
 def ensure_genie_effect() -> dict:

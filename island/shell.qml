@@ -3083,11 +3083,12 @@ ShellRoot {
 
     // ───────────── dock ─────────────
     //
-    // TWO layers (KWin maximize/border magnet follows PanelWindow geometry):
+    // THREE layers (KWin maximize/border magnet follows PanelWindow geometry):
     //   1) paint — full-screen, ExclusionMode.Ignore, exclusiveZone 0. Holds DockView so
-    //      hover/magnify/tips are not clipped. Never advertises a strut / magnet.
+    //      hover/magnify/tips are not clipped. Never advertises a strut / magnet. NO blur.
     //   2) fence — thin PanelWindow matching the visible card outline only. Exclusive /
     //      magnet when reserve is on; Ignore otherwise. Click-through (empty mask).
+    //   3) blur — card-sized PanelWindow only. BackgroundEffect must NOT sit on paint.
     // One primary screen reports dockRect / dockAnchor to JD (menus punch a hole there).
     Variants {
         id: dockVariants
@@ -3146,23 +3147,6 @@ ShellRoot {
                     Region { item: dockWin.shown ? dock.hotItem : null }
                     Region { item: dockWin.shown && dock.tipShown ? dock.tipItem : null }
                     Region { item: dock.ctxEntry ? dockCtxZone : null }
-                }
-
-                // Adaptive blur: follow the live card (slide / hide / magnify resize),
-                // not the calm rest footprint. Region.item tracks geometry every frame.
-                readonly property real dockRestY: dockHost.atTop
-                    ? dockHost.edgeMargin
-                    : height - dock.cardHeight - dockHost.edgeMargin
-                readonly property real dockRestX: Math.max(0, Math.round((width - dock.restLength) / 2))
-                BackgroundEffect.blurRegion: JD.blurOn ? dockBlurRegion : null
-                Region {
-                    id: dockBlurRegion
-                    // Card is a child of DockView; map live x/y/w/h on the paint window.
-                    x: Math.round(dock.x + dock.blurItem.x)
-                    y: Math.round(dock.y + dock.blurItem.y)
-                    width: Math.round(dock.blurItem.width)
-                    height: Math.round(dock.blurItem.height)
-                    radius: Math.round(dock.blurItem.radius)
                 }
 
                 Item {
@@ -3281,16 +3265,53 @@ ShellRoot {
                 // Invisible; only exists so KWin magnet / exclusive match the real card, not paint headroom.
                 visible: JD.dockOn
             }
+
+            // ── blur layer: card strip ONLY (never on full-screen paint) ──
+            // KWin blurs the whole layer-shell surface when BackgroundEffect sits on a
+            // full-screen PanelWindow — even with a small blurRegion. Keep blur on a
+            // separate window sized to the live card so games/desktop stay sharp.
+            PanelWindow {
+                id: dockBlur
+                screen: modelData
+                anchors {
+                    top: dockHost.atTop
+                    bottom: !dockHost.atTop
+                }
+                exclusionMode: ExclusionMode.Ignore
+                exclusiveZone: 0
+                WlrLayershell.layer: WlrLayer.Bottom
+                WlrLayershell.namespace: "justday-dock-blur"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+                visible: JD.dockOn && JD.blurOn && dockWin.shown
+                implicitWidth: Math.max(1, Math.round(dock.blurItem.width))
+                implicitHeight: Math.max(1, Math.round(dock.blurItem.height))
+                margins.left: Math.max(0, Math.round(dock.x + dock.blurItem.x))
+                margins.top: dockHost.atTop
+                    ? Math.max(0, Math.round(dock.y + dock.blurItem.y)) : 0
+                margins.bottom: dockHost.atTop ? 0 : Math.max(0, Math.round(
+                    ((screen ? screen.height : JD.screenHeight)
+                     - (dock.y + dock.blurItem.y + dock.blurItem.height))))
+                mask: Region {}
+                BackgroundEffect.blurRegion: Region {
+                    x: 0
+                    y: 0
+                    width: Math.round(dockBlur.width)
+                    height: Math.round(dockBlur.height)
+                    radius: Math.round(dock.blurItem.radius)
+                }
+            }
         }
     }
 
     // ───────────── tray ─────────────
     //
-    // Same TWO-layer split as the dock (KWin magnet follows PanelWindow geometry):
+    // Same THREE-layer split as the dock (KWin magnet follows PanelWindow geometry):
     //   1) paint — full-screen, ExclusionMode.Ignore, exclusiveZone 0. Holds TrayView so
-    //      hover/magnify/hints/menus are not clipped. Never advertises a strut / magnet.
+    //      hover/magnify/hints/menus are not clipped. Never advertises a strut / magnet. NO blur.
     //   2) fence — thin PanelWindow matching the visible strip outline only. Exclusive /
     //      magnet when reserve is on; Ignore otherwise. Click-through (empty mask).
+    //   3) blur — strip-sized PanelWindow only. BackgroundEffect must NOT sit on paint.
     Loader {
         id: trayLoader
         active: JD.trayOn
@@ -3373,22 +3394,13 @@ ShellRoot {
                 // Clicks pass everywhere except the strip and the edge summon strip.
                 mask: Region { item: trayWin.shown ? tray : trayEdge }
 
-                // Adaptive blur: follow the live strip (slide / hide / magnify length).
+                // Rest footprint for trayRect / fence align (blur lives on trayBlur window).
                 readonly property real trayRestX: trayWin.atRight
                     ? Math.round(width - tray.restWidth - trayHost.edgeMargin)
                     : trayHost.edgeMargin
                 readonly property real trayRestY: {
                     const sh = height
                     return trayHost.stripTop(tray.restLength, sh)
-                }
-                BackgroundEffect.blurRegion: (JD.blurOn && !tray.empty) ? trayBlurRegion : null
-                Region {
-                    id: trayBlurRegion
-                    x: Math.round(tray.x + tray.blurItem.x)
-                    y: Math.round(tray.y + tray.blurItem.y)
-                    width: Math.round(tray.blurItem.width)
-                    height: Math.round(tray.blurItem.height)
-                    radius: Math.round(tray.blurItem.radius)
                 }
 
                 Binding {
@@ -3454,6 +3466,38 @@ ShellRoot {
                 }
                 // Click-through — paint layer owns input.
                 mask: Region {}
+            }
+
+            // ── blur layer: strip ONLY (never on full-screen paint) ──
+            PanelWindow {
+                id: trayBlur
+                screen: win.screen
+                visible: JD.trayOn && JD.blurOn && !tray.empty && trayWin.shown
+                anchors {
+                    left: !trayHost.atRight
+                    right: trayHost.atRight
+                }
+                exclusionMode: ExclusionMode.Ignore
+                exclusiveZone: 0
+                WlrLayershell.layer: WlrLayer.Bottom
+                WlrLayershell.namespace: "justday-tray-blur"
+                WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+                color: "transparent"
+                implicitWidth: Math.max(1, Math.round(tray.blurItem.width))
+                implicitHeight: Math.max(1, Math.round(tray.blurItem.height))
+                margins.top: Math.max(0, Math.round(tray.y + tray.blurItem.y))
+                margins.left: trayHost.atRight ? 0 : Math.max(0, Math.round(tray.x + tray.blurItem.x))
+                margins.right: trayHost.atRight ? Math.max(0, Math.round(
+                    ((screen ? screen.width : JD.screenWidth)
+                     - (tray.x + tray.blurItem.x + tray.blurItem.width)))) : 0
+                mask: Region {}
+                BackgroundEffect.blurRegion: Region {
+                    x: 0
+                    y: 0
+                    width: Math.round(trayBlur.width)
+                    height: Math.round(trayBlur.height)
+                    radius: Math.round(tray.blurItem.radius)
+                }
             }
         }
     }
