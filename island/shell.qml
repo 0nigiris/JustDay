@@ -565,6 +565,23 @@ ShellRoot {
                 Layout.fillWidth: true
                 visible: !JD.detailOpen
             }
+            // На сильной модели — отметка. Про лёгкую говорить нечего: она работает всегда, и
+            // сообщать об этом значило бы шуметь ровно в том месте, которое мы бережём.
+            Rectangle {
+                visible: JD.brainStrong
+                implicitHeight: 18
+                implicitWidth: strongLabel.implicitWidth + 14
+                radius: 9
+                color: Qt.rgba(JD.accentPurple.r, JD.accentPurple.g, JD.accentPurple.b, 0.22)
+                Label2 {
+                    id: strongLabel
+                    anchors.centerIn: parent
+                    text: JD.brainModel
+                    color: JD.accentPurple
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                }
+            }
             Label2 { text: tv.elapsed >= 3 ? tv.elapsed + JD.tr(" с") : ""; font.features: { "tnum": 1 } }
             IconButton {
                 visible: oneLine.truncated || JD.detailOpen

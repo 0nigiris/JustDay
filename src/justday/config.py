@@ -142,7 +142,15 @@ DEFAULTS: dict = {
         "provider": "claude",
         "base_url": "",  # only for provider = "custom"
         "context_tokens": 0,  # model context window for non-Claude providers (0 = provider default)
-        "model": "sonnet",
+        "model": "haiku",
+        # Модель под задачу. Лёгкая справляется с девятью просьбами из десяти — «открой дискорд»,
+        # «сделай тише», «какая погода», — и держать на них сильную значит остаться без лимитов к
+        # обеду. Решает не список слов, а местная модель на той же видеокарте: она стоит ноль и
+        # отвечает за полсекунды. Повышение происходит до работы, понижение — после неё, чтобы
+        # человек не ждал смены модели ради того, что и так будет быстрым.
+        "auto_model": True,
+        "light_model": "haiku",
+        "strong_model": "sonnet",
         "effort": "low",
         "permission_mode": "auto",
         "chrome": True,

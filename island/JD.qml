@@ -114,6 +114,12 @@ Singleton {
     }
     property Timer happyOff: Timer { interval: 1800; onTriggered: jd.buddyHappy = false }
 
+    // На чём он сейчас думает. Лёгкая модель работает молча, а про переход на сильную сказать
+    // стоит: человек видит, что задача признана крупной, и может возразить одним словом.
+    property string brainModel: ""
+    property string brainWhy: ""
+    readonly property bool brainStrong: brainWhy !== "" && brainModel !== ""
+
     property real tick: Date.now() / 1000          // one clock for every countdown on screen
     Timer { running: jd.reminders.length > 0 || !!jd.runningJob; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
     function dismissAlarm(id) { send({ cmd: "alarm_dismiss", id: id || "" }) }
@@ -776,6 +782,7 @@ Singleton {
             else flash(flat(m.error) || tr("Не вышло выбросить"), "circle-alert", accentRed)
         }
         if (m.layout !== undefined) layout = m.layout
+        if (m.brain_model !== undefined) { brainModel = m.brain_model; brainWhy = m.brain_why || "" }
         if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
         if (m.cpu !== undefined) cpu = m.cpu

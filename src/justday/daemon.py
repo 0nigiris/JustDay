@@ -28,6 +28,7 @@ from . import (
     clipboard,
     config,
     desktop,
+    dispatch,
     dock,
     events,
     fastpath,
@@ -45,6 +46,7 @@ from . import (
     offline,
     palette,
     parts,
+    providers,
     reminders,
     scenes,
     session,
@@ -964,12 +966,53 @@ class Daemon:
         self.publish(detail=t("Отменено"), kind="tool")
         await self.earcon("error")
 
+    async def _pick_model(self, text: str) -> str:
+        """Выбрать модель под просьбу. Возвращает прежнюю — чтобы вернуться к ней после работы.
+
+        Переподключение стоит секунду-полторы, и платить её имеет смысл только вверх: подняться
+        надо **до** работы, иначе работать будет не тот. Опускаться обратно можно потом, когда
+        человек уже получил ответ и никуда не торопится.
+        """
+        b = self.cfg["brain"]
+        was = b.get("model", "")
+        if not b.get("auto_model", True) or not providers.is_claude(self.cfg):
+            return was
+        light, strong = b.get("light_model") or "haiku", b.get("strong_model") or "sonnet"
+        level, why = await asyncio.get_running_loop().run_in_executor(None, dispatch.level_for, text)
+        want = strong if level == dispatch.STRONG else light
+        if want == was:
+            return was
+        b["model"] = want
+        try:
+            await self.brain.reconnect()
+        except Exception:
+            log.exception("не вышло переключиться на %s, остаёмся на %s", want, was)
+            b["model"] = was
+            return was
+        log.info("модель: %s → %s (%s)", was, want, why)
+        events.emit("model_picked", model=want, was=was, why=why)
+        self.publish(brain_model=want, brain_why=why)
+        return was
+
+    async def _settle_model(self, back_to: str) -> None:
+        """Вернуться к лёгкой после тяжёлой работы — молча и уже после ответа."""
+        b = self.cfg["brain"]
+        if not back_to or b.get("model") == back_to or not b.get("auto_model", True):
+            return
+        b["model"] = back_to
+        try:
+            await self.brain.reconnect()
+            self.publish(brain_model=back_to, brain_why="")
+        except Exception:
+            log.exception("не вышло вернуться на %s", back_to)
+
     async def run_turn(self, text: str, source: str = "voice") -> str:
         self.state = "thinking"
         spoken_before = self._spoken
         gen = self._cancel_gen
         if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again
             return await self.offline_turn(text)
+        was_model = await self._pick_model(text)
         try:
             reply = await self.brain.ask(text, source=source)
             self._cloud_down_until = 0.0
@@ -980,7 +1023,9 @@ class Daemon:
             self._cloud_down_until = time.monotonic() + 300
             reply = await self.offline_turn(text)
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
+            spawn(self._settle_model(was_model))
             return ""
+        spawn(self._settle_model(was_model))
         await self.wait_speech_done()
         self.state = "thinking" if self.side and self.side.busy else "idle"
         if self._spoken == spoken_before and source != "event":
