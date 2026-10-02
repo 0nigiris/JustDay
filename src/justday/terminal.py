@@ -1,0 +1,366 @@
+"""Оболочка: один терминал, в котором задачу подхватывает тот, кто сейчас может.
+
+Чего хотел человек. Один терминал. Он пишет задачу — за неё берётся Claude Code; кончился у него
+лимит, за ту же задачу берётся следующий, и так вниз по лестнице: от лучшего к тому, что осталось.
+Не «открой другое окно и расскажи всё заново», а то же окно и та же задача.
+
+Почему оболочка, а не свой агент. Claude Code и OpenCode — это уже готовые циклы с инструментами,
+правами, сессиями и сжатием. Переписывать их значит получить через месяц то же самое, но хуже.
+Поэтому здесь нет ни одного своего инструмента: оболочка делает то, чего не делает ни один из них
+по отдельности — держит их лестницей и переносит задачу с одного на другого.
+
+Что оболочка умеет сверху: сменить модель и усилие посреди работы (`--model`, `--effort`),
+попросить сжать разговор (`/compact` сообщением в ту же сессию) и перенести задачу вниз с
+заметкой-передачей. Это ровно те четыре вещи, которых в самом Claude Code нет.
+
+Чего здесь нарочно нет. Подписка Claude не уезжает в чужие руки: на верхней ступени запускается
+сама программа `claude`, её же сессия, её же права. Токен из неё мы не достаём и ни одному другому
+клиенту не отдаём — с февраля 2026 Anthropic разрешает вход по подписке только своим программам,
+и обходить это мы не собираемся. Ступени ниже идут через OpenCode, где у человека свои ключи.
+"""
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import os
+import shutil
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import config, fallback, providers, shell
+
+CLAUDE, OPENCODE = "claude", "opencode"
+
+# Обрыв связи — не повод спускаться: внизу тот же самый оборванный интернет, и мы только потеряем
+# место в разговоре. Всё остальное, из-за чего ступень не сказала ни слова, — повод: мёртвый вход,
+# пропавшая модель, сломанная настройка. Человеку всё равно, почему верх молчит; ему нужно, чтобы
+# задачу кто-нибудь взял.
+BROKEN_NET = ("connection refused", "network is unreachable", "name or service not known",
+              "temporary failure in name resolution", "timed out", "socket hang up", "enotfound")
+
+
+@dataclass
+class Rung:
+    """Ступень лестницы: кем думать и какой моделью."""
+
+    engine: str
+    model: str = ""
+
+    @property
+    def label(self) -> str:
+        if self.engine == CLAUDE:
+            return f"Claude Code · {self.model or 'по умолчанию'}"
+        return self.model or "OpenCode"
+
+    def __str__(self) -> str:
+        return f"{self.engine}:{self.model}" if self.model else self.engine
+
+
+def parse_rung(line: str) -> Rung | None:
+    """«claude:opus», «opencode:ollama/qwen3.5:9b» → ступень.
+
+    Делим по первому двоеточию: в имени местной модели двоеточие тоже есть, и делить по последнему
+    значило бы потерять её версию.
+    """
+    raw = str(line or "").strip()
+    if not raw:
+        return None
+    engine, _, model = raw.partition(":")
+    engine = engine.strip().lower()
+    if engine not in (CLAUDE, OPENCODE):
+        return None
+    return Rung(engine, model.strip())
+
+
+def ladder(cfg: dict | None = None) -> list[Rung]:
+    cfg = cfg or config.load()
+    rows = (cfg.get("terminal") or {}).get("ladder") or []
+    out = [r for r in (parse_rung(str(x)) for x in rows) if r]
+    return out or [Rung(CLAUDE, "")]
+
+
+def reachable(rung: Rung) -> bool:
+    """Есть ли чем войти на эту ступень.
+
+    Ступень, куда войти нечем, отвечает обычной ошибкой, а ошибку лестница понимает как лимит — и
+    спускается. Один мёртвый верх означал бы, что каждая задача начинается с провала. Поэтому
+    недоступные ступени пропускаются молча, но об этом говорится один раз при запуске.
+    """
+    if rung.engine == CLAUDE:
+        return bool(shutil.which("claude"))
+    if not (shutil.which("opencode") or (Path.home() / ".opencode" / "bin" / "opencode").exists()):
+        return False
+    provider = rung.model.split("/", 1)[0] if rung.model else ""
+    if not provider or provider in shell.LOCAL:
+        return True
+    if provider in shell.logged_in():
+        return True
+    name = shell.KEYS.get(provider)
+    if not name:
+        return False
+    # Ключ может лежать и в окружении, и в связке ключей: в окружение его кладёт `justday shell`,
+    # а в связке он живёт всегда. Проверять только окружение значило бы объявить мёртвой ступень,
+    # ключ к которой у человека есть.
+    return bool(os.environ.get(name) or providers.secret_get(provider))
+
+
+@dataclass
+class Said:
+    """Что вышло из одного хода: сказанное, цена и беда, если была."""
+
+    text: str = ""
+    limit: bool = False
+    error: str = ""
+    cost: float = 0.0
+    session: str = ""
+    tools: list[str] = field(default_factory=list)
+
+
+def _quiet_for(cfg: dict) -> float:
+    return float((cfg.get("terminal") or {}).get("first_word_seconds") or 90)
+
+
+def _opencode_cli() -> str:
+    return shutil.which("opencode") or str(Path.home() / ".opencode" / "bin" / "opencode")
+
+
+async def _run(cmd: list[str], env: dict[str, str], on_line, quiet_for: float = 90.0) -> tuple[list[str], str]:
+    """Запустить движок и разобрать его поток событий. Возвращает (строки JSON, что в stderr).
+
+    `quiet_for` — сколько ждать самого первого события. Ступень с просроченным входом не отвечает
+    отказом: она висит молча и бесконечно (проверено — три минуты без единого слова), и работа
+    висит вместе с ней. Первое событие у живого движка приходит через миг, поэтому долгое молчание
+    в начале — надёжный признак, что эта ступень не работает. Дальше ждём сколько надо: думать
+    десять минут над настоящей задачей — нормально, и обрывать это по таймеру нельзя.
+    """
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
+                                                stderr=asyncio.subprocess.PIPE, env=env)
+    lines: list[str] = []
+    mute = False
+
+    async def read_out() -> None:
+        nonlocal mute
+        assert proc.stdout
+        while True:
+            try:
+                raw = await (asyncio.wait_for(proc.stdout.readline(), timeout=quiet_for) if not lines
+                             else proc.stdout.readline())
+            except TimeoutError:
+                mute = True
+                return
+            if not raw:
+                return
+            line = raw.decode("utf-8", "replace").strip()
+            if line:
+                lines.append(line)
+                on_line(line)
+
+    err = b""
+
+    async def read_err() -> None:
+        nonlocal err
+        assert proc.stderr
+        err = await proc.stderr.read()
+
+    try:
+        await asyncio.gather(read_out(), read_err())
+    finally:
+        if mute and proc.returncode is None:
+            proc.kill()
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(proc.wait(), timeout=10)
+    said = err.decode("utf-8", "replace")
+    if mute:
+        said += f"\nмолчит дольше {int(quiet_for)} секунд — похоже, сюда нечем войти"
+    return lines, said
+
+
+async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on_tool) -> Said:
+    """Ход на верхней ступени — самой программой `claude`, её же сессией и её же правами."""
+    cli = shutil.which("claude") or "claude"
+    b = cfg.get("brain") or {}
+    cmd = [cli, "-p", text, "--output-format", "stream-json", "--verbose"]
+    if rung.model:
+        cmd += ["--model", rung.model]
+    if (effort := (cfg.get("terminal") or {}).get("effort") or ""):
+        cmd += ["--effort", str(effort)]
+    if (mode := b.get("permission_mode") or ""):
+        cmd += ["--permission-mode", str(mode)]
+    if session:
+        cmd += ["--resume", session]
+    got = Said(session=session)
+
+    def line(raw: str) -> None:
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            return
+        kind = ev.get("type")
+        if kind == "system" and ev.get("subtype") == "init":
+            got.session = str(ev.get("session_id") or got.session)
+        elif kind == "assistant":
+            for block in (ev.get("message") or {}).get("content") or []:
+                if block.get("type") == "text" and block.get("text"):
+                    got.text += block["text"]
+                    on_text(block["text"])
+                elif block.get("type") == "tool_use":
+                    got.tools.append(str(block.get("name") or ""))
+                    on_tool(str(block.get("name") or ""))
+        elif kind == "result":
+            got.session = str(ev.get("session_id") or got.session)
+            got.cost = float(ev.get("total_cost_usd") or 0)
+            if ev.get("is_error"):
+                got.error = str(ev.get("result") or "ошибка без объяснения")
+            elif not got.text:
+                got.text = str(ev.get("result") or "")
+
+    _, err = await _run(cmd, {**os.environ}, line, _quiet_for(cfg))
+    if err.strip() and not got.text:
+        got.error = got.error or err.strip()[:400]
+    got.limit = fallback.looks_like_limit(got.error + " " + err)
+    return got
+
+
+async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, on_tool) -> Said:
+    """Ход на ступени ниже — через OpenCode: там живут ключи человека и местные модели."""
+    cli = _opencode_cli()
+    cmd = [cli, "run", "--format", "json"]
+    if rung.model:
+        cmd += ["-m", rung.model]
+    if session:
+        cmd += ["-s", session]
+    cmd.append(text)
+    got = Said(session=session)
+
+    def line(raw: str) -> None:
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            return
+        got.session = str(ev.get("sessionID") or got.session)
+        part = ev.get("part") or {}
+        if ev.get("type") == "text" and part.get("text"):
+            got.text += part["text"]
+            on_text(part["text"])
+        elif ev.get("type") in ("tool", "tool_start") and part.get("tool"):
+            got.tools.append(str(part["tool"]))
+            on_tool(str(part["tool"]))
+
+    _, err = await _run(cmd, shell.env(), line, _quiet_for(cfg))
+    if err.strip():
+        got.error = err.strip()[:400]
+    got.limit = fallback.looks_like_limit(got.error)
+    return got
+
+
+def handoff_note(task: str, was: Rung, said: str) -> str:
+    """Чем начинается работа у пришедшего на смену.
+
+    «Продолжай» — это не начало: он не видел ничего из того, что здесь было. Поэтому он получает
+    задачу человека целиком, то немногое, что успел сказать предыдущий, и указание на журнал,
+    где лежит всё остальное.
+    """
+    tail = (said or "").strip()
+    tail = (tail[-700:] if len(tail) > 700 else tail) or "(ничего не успел сказать)"
+    return "\n".join([
+        f"[Передача. У {was.label} кончился лимит, задачу продолжаешь ты.]",
+        "",
+        f"Задача человека: {task}",
+        "",
+        f"Что успел сказать предыдущий:\n{tail}",
+        "",
+        "Прочитай ПЕРЕДАЧА.md в корне проекта — там что делалось до тебя, чем это проверено и чего",
+        "делать нельзя. Веди этот файл дальше сам.",
+    ])
+
+
+class Work:
+    """Лестница в работе: чья очередь думать, где чья сессия и что делать при лимите."""
+
+    def __init__(self, cfg: dict | None = None, rungs: list[Rung] | None = None,
+                 engines: dict | None = None) -> None:
+        self.cfg = cfg or config.load()
+        # Лестницу из настроек просеиваем: ступень, куда нечем войти, только съест ход. Лестницу,
+        # переданную прямо, не трогаем — её задал тот, кто уже знает, что в ней живое (проверки).
+        if rungs is None:
+            self.all = ladder(self.cfg)
+            self.skipped = [r for r in self.all if not reachable(r)]
+        else:
+            self.all, self.skipped = list(rungs), []
+        self.rungs = [r for r in self.all if r not in self.skipped] or list(self.all)
+        self.step = 0
+        self.spent = 0.0
+        self.sessions: dict[str, str] = {}
+        # Движки берутся из таблицы, чтобы проверять лестницу без запуска нейросетей: подменить
+        # движок в тесте проще и честнее, чем подменять три разные программы.
+        self.engines = engines or {CLAUDE: ask_claude, OPENCODE: ask_opencode}
+
+    @property
+    def now(self) -> Rung:
+        return self.rungs[min(self.step, len(self.rungs) - 1)]
+
+    def down(self) -> bool:
+        if self.step >= len(self.rungs) - 1:
+            return False
+        self.step += 1
+        return True
+
+    async def send(self, task: str, on_text=None, on_tool=None, on_note=None) -> Said:
+        """Отдать задачу тому, чья очередь, и спускаться, пока кто-нибудь её не возьмёт."""
+        on_text = on_text or (lambda _t: None)
+        on_tool = on_tool or (lambda _t: None)
+        on_note = on_note or (lambda _t: None)
+        text = task
+        while True:
+            rung = self.now
+            engine = self.engines[rung.engine]
+            said = await engine(rung, text, self.sessions.get(str(rung), ""), self.cfg, on_text, on_tool)
+            self.spent += said.cost
+            if said.session:
+                self.sessions[str(rung)] = said.session
+            if not self.hopeless(said):
+                return said
+            was, why = rung, "кончился лимит" if said.limit else f"не ответила: {said.error[:120]}"
+            if not self.down():
+                on_note(f"{was.label} — {why}. Спускаться больше некуда, жду.")
+                return said
+            on_note(f"{was.label} — {why}. Задачу продолжает {self.now.label}.")
+            text = handoff_note(task, was, said.text)
+
+    @staticmethod
+    def hopeless(said: Said) -> bool:
+        """Надо ли спускаться: взял ли ход кто-нибудь всерьёз."""
+        if said.limit:
+            return True
+        if said.text or not said.error:
+            return False
+        low = said.error.lower()
+        return not any(word in low for word in BROKEN_NET)
+
+
+async def plain(task: str, cfg: dict | None = None) -> int:
+    """Та же лестница без окна: одна задача, ответ в терминал. Этим же удобно проверять."""
+    work = Work(cfg)
+    if work.skipped:
+        print("Пропускаю ступени без входа: " + ", ".join(r.label for r in work.skipped))
+    print(f"Думает {work.now.label}…\n")
+    said = await work.send(task, on_text=lambda t: print(t, end="", flush=True),
+                           on_note=lambda t: print(f"\n— {t}\n"))
+    print()
+    if said.error and not said.text:
+        print("Беда: " + said.error)
+        return 1
+    if work.spent:
+        print(f"\n(потрачено ${work.spent:.4f})")
+    return 0
+
+
+def run(args: list[str] | None = None) -> int:
+    """`justday terminal`: окно, если есть куда рисовать, иначе одна задача строкой."""
+    task = " ".join(args or []).strip()
+    if task:
+        return asyncio.run(plain(task))
+    # Окно тянет за собой textual; ради одной задачи строкой тянуть его незачем.
+    from .terminal_ui import main
+    return main()

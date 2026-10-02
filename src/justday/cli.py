@@ -388,6 +388,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("rest", nargs=argparse.REMAINDER, help="arguments passed on to opencode")
     # Одна команда на «сесть за работу»: пока подписка Claude отвечает — Claude Code (только в нём
     # она и разрешена), кончился лимит — оболочка на живой ступени лестницы.
+    # Своя оболочка: один терминал, в котором задачу подхватывает тот, кто сейчас может.
+    sp = sub.add_parser("terminal", help="своя оболочка: один терминал, лестница движков")
+    sp.add_argument("task", nargs="*", help="задача строкой (без неё открывается окно)")
     sp = sub.add_parser("work", help="сесть за работу: Claude Code, пока он отвечает, иначе оболочка")
     sp.add_argument("--shell", action="store_true", help="сразу оболочка, не спрашивая Claude")
     sp.add_argument("--claude", action="store_true", help="сразу Claude Code")
@@ -784,6 +787,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "shell":
         from . import shell as shell_mod
         sys.exit(shell_mod.run(a.rest))
+    elif a.cmd == "terminal":
+        from . import terminal as terminal_mod
+        sys.exit(terminal_mod.run(a.task))
     elif a.cmd == "work":
         from . import shell as shell_mod
         sys.exit(shell_mod.work(a.rest, force="shell" if a.shell else "claude" if a.claude else ""))

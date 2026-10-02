@@ -393,6 +393,21 @@ DEFAULTS: dict = {
              "icon_style": "original", "icon_tint": "#7AC8FF"},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
+    # Оболочка в терминале (`justday terminal`): один терминал, лестница движков.
+    #
+    # Порядок — это и есть приоритет: «сначала Клод, потом ChatGPT, потом что осталось». Ступень
+    # пишется как «движок:модель»; делится по первому двоеточию, потому что в имени местной модели
+    # двоеточие тоже есть. Ступени, куда нечем войти, пропускаются — иначе каждая задача начиналась
+    # бы с провала: поставщик без ключа отвечает ошибкой, а ошибку лестница понимает как лимит.
+    "terminal": {
+        "ladder": ["claude:opus", "claude:sonnet", "opencode:openai/gpt-6-sol",
+                   "opencode:openrouter/qwen/qwen3-coder", "opencode:ollama/qwen3.5:9b"],
+        "effort": "",          # low | medium | high; пусто — как решит сам Claude Code
+        # Сколько ждать первого слова от ступени. Ступень с просроченным входом не отказывает —
+        # она висит молча и бесконечно, и работа висит вместе с ней. Дальше первого слова ждём
+        # сколько надо: думать десять минут над настоящей задачей нормально.
+        "first_word_seconds": 90,
+    },
     # Local model for private data (mail). Ollama listens on localhost only.
     "local_llm": {"url": "http://127.0.0.1:11434", "model": "qwen3.5:9b", "num_ctx": 16384, "keep_alive": "10m"},
     "mail": {

@@ -1,0 +1,108 @@
+"""Один терминал, в котором задачу подхватывает тот, кто сейчас может.
+
+Проверяется лестница, а не нейросети: движки здесь подменены. Беда, из-за которой всё это
+написано, — «кончился лимит, и работа встала до вечера, потому что человек был в школе».
+"""
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+
+from justday import terminal
+
+
+def rungs(*names):
+    return [terminal.parse_rung(n) for n in names]
+
+
+def engine(answers):
+    """Движок-подделка: отдаёт заранее заготовленные ответы и запоминает, что ему сказали."""
+    heard = []
+
+    async def ask(rung, text, session, cfg, on_text, on_tool):
+        heard.append((str(rung), text))
+        said = answers.pop(0) if answers else terminal.Said(text="всё")
+        on_text(said.text)
+        return said
+
+    ask.heard = heard
+    return ask
+
+
+def test_the_model_of_the_ladder_splits_on_the_first_colon() -> None:
+    """В имени местной модели двоеточие тоже есть: `ollama/qwen3.5:9b` — это не движок «ollama»."""
+    r = terminal.parse_rung("opencode:ollama/qwen3.5:9b")
+    assert (r.engine, r.model) == ("opencode", "ollama/qwen3.5:9b")
+    assert terminal.parse_rung("claude:opus").engine == "claude"
+    assert terminal.parse_rung("мусор:модель") is None
+
+
+def test_a_limit_moved_the_task_down_instead_of_stopping_the_work() -> None:
+    """Кончился лимит — задача уходит вниз вместе с тем, что успели сказать, а не умирает.
+
+    Раньше это значило «работа встала до вечера»: человек в школе, сказать оболочке «перейди на
+    другую модель» некому.
+    """
+    top = engine([terminal.Said(text="начал, но ", limit=True)])
+    low = engine([terminal.Said(text="доделал")])
+    work = terminal.Work({"terminal": {}, "brain": {}},
+                         rungs=rungs("claude:opus", "opencode:ollama/своя"),
+                         engines={"claude": top, "opencode": low})
+    notes = []
+
+    said = asyncio.run(work.send("почини док", on_note=notes.append))
+
+    assert said.text == "доделал"
+    assert work.step == 1, "лестница не спустилась"
+    assert notes and "кончился лимит" in notes[0]
+    # Пришедшему на смену отдали задачу целиком, а не слово «продолжай».
+    handed = low.heard[0][1]
+    assert "почини док" in handed
+    assert "начал, но" in handed
+    assert "ПЕРЕДАЧА.md" in handed
+
+
+def test_a_dead_rung_was_blocking_the_task_because_it_was_not_a_limit() -> None:
+    """Ступень с просроченным входом отвечает не «лимит», а «401» — и задача упиралась в неё.
+
+    Человеку всё равно, почему верх молчит: ему нужно, чтобы задачу кто-нибудь взял. Поэтому вниз
+    спускает любое молчание со ссылкой на беду, а не только лимит.
+    """
+    dead = engine([terminal.Said(error="Token refresh failed: 401")])
+    alive = engine([terminal.Said(text="сделал")])
+    pick = lambda r, t, s, c, ot, otool: (dead if "openai" in r.model else alive)(r, t, s, c, ot, otool)  # noqa: E731
+    work = terminal.Work({"terminal": {}, "brain": {}},
+                         rungs=rungs("opencode:openai/gpt-6-sol", "opencode:ollama/своя"),
+                         engines={"opencode": pick})
+    notes = []
+
+    said = asyncio.run(work.send("собери проект", on_note=notes.append))
+
+    assert said.text == "сделал"
+    assert notes and "не ответила" in notes[0]
+
+
+def test_a_broken_connection_does_not_walk_down_the_ladder() -> None:
+    """Обрыв связи внизу тот же самый: спускаться — значит зря потерять место в разговоре."""
+    assert terminal.Work.hopeless(terminal.Said(error="connection refused"))  is False
+    assert terminal.Work.hopeless(terminal.Said(error="Error 429: usage limit reached", limit=True)) is True
+    assert terminal.Work.hopeless(terminal.Said(text="ответил", error="шумело в stderr")) is False
+
+
+def test_the_bottom_rung_says_it_has_nowhere_left_to_go() -> None:
+    """Молчать, когда кончились все, нельзя: человек будет ждать ответа, которого не будет."""
+    out = engine([terminal.Said(text="", limit=True)])
+    work = terminal.Work({"terminal": {}, "brain": {}}, rungs=rungs("claude:opus"),
+                         engines={"claude": out})
+    notes = []
+    asyncio.run(work.send("задача", on_note=notes.append))
+    assert notes and "некуда" in notes[0]
+
+
+@pytest.mark.parametrize("line,yes", [("claude:opus", True), ("opencode:ollama/своя", True)])
+def test_a_local_rung_needs_no_login(line, yes, monkeypatch) -> None:
+    """Местной модели вход не нужен — нужен запущенный ollama. Требовать от неё ключ значило бы
+    выбросить единственную ступень, которая работает без интернета вовсе."""
+    monkeypatch.setattr(terminal.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert terminal.reachable(terminal.parse_rung(line)) is yes
