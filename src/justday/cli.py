@@ -547,7 +547,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--copy", action="store_true", help="только в буфер, не печатать")
     # Имя не «panel»: так уже зовётся запасная полоска на Tk для машин без острова.
     sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps | emoji | clip | load")
-    sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "mixer", "load"])
+    sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "mixer", "plans", "load"])
     sp = sub.add_parser("models", help="что держит память: слух, голос; free — отпустить сейчас")
     sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
     sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")

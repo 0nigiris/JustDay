@@ -58,6 +58,7 @@ Item {
                     { id: "emoji", name: "Эмодзи", icon: "smile" },
                     { id: "clip", name: "Буфер", icon: "clipboard" },
                     { id: "mixer", name: "Звук", icon: "volume-2" },
+                    { id: "plans", name: "Планы", icon: "clipboard" },
                     { id: "load", name: "Машина", icon: "activity" },
                 ]
                 delegate: Rectangle {
@@ -309,6 +310,13 @@ Item {
                 labelColor: JD.accentRed
                 onClicked: { JD.send({ cmd: "clip_wipe" }); JD.refreshTools() }
             }
+        }
+
+        // ───────────── планы ─────────────
+        PlansView {
+            visible: tv.page === "plans"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
 
         // ───────────── микшер ─────────────

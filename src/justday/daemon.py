@@ -2519,6 +2519,11 @@ class Daemon:
                 from . import notes
 
                 resp = notes.add(req.get("text", ""), req.get("note", ""))
+            elif cmd == "plan_open":  # «показать в Obsidian» со страницы планов
+                from . import notes
+
+                await asyncio.get_running_loop().run_in_executor(None, notes.open_in_obsidian, "")
+                resp = {"ok": True}
             elif cmd == "plan_done":
                 from . import notes
 
@@ -2690,7 +2695,7 @@ class Daemon:
                 resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))
-                if which not in ("emoji", "clip", "mixer", "load", "apps", ""):
+                if which not in ("emoji", "clip", "mixer", "plans", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
                 elif which == "apps":     # программы переехали в собственное меню на всё окно
                     self.publish(menu=True)

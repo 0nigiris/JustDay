@@ -258,7 +258,7 @@ Singleton {
     // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
     // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
     // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
-    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | load
+    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | plans | load
     property int toolsPick: 0             // выбранная строка в списке: стрелками и Enter
     property string toolsQuery: ""
     property var toolsItems: []           // что нашлось: эмодзи или записи буфера
@@ -300,10 +300,28 @@ Singleton {
     }
     // Ищет демон, а не островок: набор эмодзи лежит там, история буфера тоже, и второй такой же
     // поиск на QML разошёлся бы с первым в тот же день.
+    // ───────────── планы ─────────────
+    //
+    // Они лежат в Obsidian и правятся руками — островок их только показывает и отмечает сделанным.
+    // Заводить им вторую жизнь здесь нельзя: два списка одного и того же расходятся в первый день.
+    property var plans: []
+    function plansRefresh() { send({ cmd: "plan_list", open: false }) }
+    function planDone(which) { send({ cmd: "plan_done", which: String(which) }); plansLater.restart() }
+    function planAdd(text) {
+        const s = String(text || "").trim()
+        if (!s) return
+        send({ cmd: "plan_add", text: s })
+        plansLater.restart()
+    }
+    // Список перечитывается не сразу: демон успевает записать файл, а мы успеваем не увидеть
+    // собственную правку и решить, что ничего не вышло.
+    property Timer plansLater: Timer { interval: 350; onTriggered: jd.plansRefresh() }
+
     function refreshTools() {
         if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
+        else if (toolsPage === "plans") plansRefresh()
     }
     // Сначала закрыть панель, потом просить вставить. Пока панель на экране, клавиатура принадлежит
     // ей: напечатанное уходит в никуда, и человек видит «скопировано» вместо вставленного символа.
@@ -782,6 +800,7 @@ Singleton {
             else flash(flat(m.error) || tr("Не вышло выбросить"), "circle-alert", accentRed)
         }
         if (m.layout !== undefined) layout = m.layout
+        if (m.items !== undefined && m.file !== undefined) plans = m.items
         if (m.brain_model !== undefined) { brainModel = m.brain_model; brainWhy = m.brain_why || "" }
         if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
