@@ -50,8 +50,13 @@ Item {
         spacing: 12
 
         // ───────────── заголовок: вкладки, поиск, закрыть ─────────────
+        //
+        // fillHeight здесь обязателен явным false: у RowLayout внутри ColumnLayout он по умолчанию
+        // true, и шапка забирала себе всю высоту окна — страница оставалась без места, а панель
+        // открывалась пустой, с одними кнопками посреди черноты.
         RowLayout {
             Layout.fillWidth: true
+            Layout.fillHeight: false
             spacing: 10
 
             Repeater {
@@ -170,6 +175,7 @@ Item {
         RowLayout {
             visible: tv.page === "emoji"
             Layout.fillWidth: true
+            Layout.fillHeight: false
             spacing: 7
             Repeater {
                 model: [""].concat(JD.emojiGroups || [])
@@ -459,6 +465,7 @@ Item {
         RowLayout {
             visible: tv.page === "clip"
             Layout.fillWidth: true
+            Layout.fillHeight: false
             spacing: 10
             Label2 {
                 Layout.fillWidth: true

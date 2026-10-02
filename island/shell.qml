@@ -1136,6 +1136,8 @@ ShellRoot {
         property color tint: JD.artTint(p.color)
         Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
         readonly property bool loading: !!p.loading
+        // Он думает прямо сейчас, а островок занят музыкой: сказать об этом строкой на ней же.
+        readonly property bool busy: JD.dstate === "thinking" || JD.dstate === "speaking"
         readonly property string label: loading ? JD.tr("Загружаю") + " «" + (p.loading.title || "") + "»" : (p.title || "")
         implicitWidth: mrow.implicitWidth + 26
         implicitHeight: 40
@@ -1172,13 +1174,23 @@ ShellRoot {
                     font.weight: Font.DemiBold; font.features: { "tnum": 1 }
                 }
             }
+            // Пока играет музыка, работа живёт здесь, а не вместо обложки: кружок и короткая
+            // строка о том, что он сейчас делает. Так видно и то и другое сразу.
+            Ring {
+                visible: mv.busy
+                size: 14
+                Layout.preferredWidth: 14; Layout.preferredHeight: 14
+            }
             Label2 {
-                readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
+                readonly property string event: mv.busy ? (JD.activity || JD.tr("Думаю…"))
+                                                : JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
                                                 : JD.runningJob ? JD.runningJob.title + " · " + JD.jobTime(JD.runningJob)
                                                 : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title : ""
                 visible: !!event
                 text: event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap
-                Layout.maximumWidth: 170; color: JD.workers > 0 ? JD.accentPurple : JD.text2
+                elide: Text.ElideRight
+                Layout.maximumWidth: 170
+                color: mv.busy ? JD.accentBlue : JD.workers > 0 ? JD.accentPurple : JD.text2
             }
             RowLayout {
                 visible: !!JD.weather && JD.island.show_weather !== false

@@ -11,6 +11,25 @@ import Quickshell.Services.SystemTray
 
 Item {
     id: win
+
+    // Полоса прокрутки, которая не вылезает из скруглённого угла. Обычная доходит до самого края
+    // и рисует свою подложку во всю высоту — на окне со скруглёнными углами это выглядит так,
+    // будто у угла отломили кусок и вставили прямую черту.
+    component ThinBar: ScrollBar {
+        id: bar
+        policy: ScrollBar.AsNeeded
+        topPadding: 14
+        bottomPadding: 14
+        rightPadding: 6
+        implicitWidth: 12
+        background: null
+        contentItem: Rectangle {
+            implicitWidth: 4
+            radius: 2
+            color: Qt.rgba(1, 1, 1, bar.pressed ? 0.34 : 0.16)
+            Behavior on color { ColorAnimation { duration: 120 } }
+        }
+    }
     implicitWidth: 940
     implicitHeight: 640
 
@@ -205,7 +224,7 @@ Item {
                 contentHeight: pageLoader.implicitHeight + 60
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                ScrollBar.vertical: ThinBar {}
 
                 Loader {
                     id: pageLoader
@@ -824,8 +843,8 @@ Item {
                     }
                 }
                 Row {
-                    title: JD.tr("Работа — только значком")
-                    subtitle: JD.tr("Пока он работает, видно кружок; строка и подробности — по нажатию")
+                    title: JD.tr("Музыка важнее работы")
+                    subtitle: JD.tr("Пока играет музыка, работа не забирает островок себе: обложка остаётся, а о работе говорит строка рядом")
                     Toggle { checked: win.get("island.work_quiet") !== false; onToggled: v => win.set("island.work_quiet", v) }
                 }
                 Row {
@@ -2083,7 +2102,7 @@ Item {
                                     anchors.fill: parent
                                     clip: true
                                     contentHeight: editText.implicitHeight
-                                    ScrollBar.vertical: ScrollBar {}
+                                    ScrollBar.vertical: ThinBar {}
                                     TextArea {
                                         id: editText
                                         width: editFlick.width
@@ -2172,7 +2191,7 @@ Item {
                             anchors.fill: parent
                             clip: true
                             contentHeight: profileText.implicitHeight
-                            ScrollBar.vertical: ScrollBar {}
+                            ScrollBar.vertical: ThinBar {}
                             TextArea { id: profileText; width: profileFlick.width; text: memp.profile; wrapMode: TextArea.Wrap; color: win.t1; font.family: "monospace"; font.pixelSize: 12; selectByMouse: true; background: null }
                         }
                     }

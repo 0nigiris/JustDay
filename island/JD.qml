@@ -996,9 +996,12 @@ Singleton {
         const want = String(island.style || "island").toLowerCase()
         return ["island", "bar", "notch"].indexOf(want) >= 0 ? want : "island"
     }
+    // Пока играет музыка, работа не отбирает островок себе: обложка остаётся на месте, а о работе
+    // говорит точка рядом с ней. Молчать о работе вообще — не то же самое: когда острову нечего
+    // показывать, кроме работы, человек должен видеть, чем он занят, а не кружок без слов.
     readonly property bool workQuiet: island.work_quiet !== false
-    property int workStep: 0
-    function workMore() { workStep = (workStep + 1) % 3; detailOpen = workStep >= 2 }
+    property int workStep: 1
+    function workMore() { workStep = workStep >= 2 ? 1 : 2; detailOpen = workStep >= 2 }
     // Подробности раскрыты: или шагом по значку работы, или стрелкой на карточке.
     property bool detailOpen: false
     property bool islandHovered: false
@@ -1021,13 +1024,16 @@ Singleton {
         if (flashText) return "flash"
         if (answerOpen) return "answer"
         if (dstate === "transcribing") return "transcribing"
-        if (dstate === "thinking" || dstate === "speaking") return "thinking"
+        // Музыка на островке — обложка и эквалайзер, и это самое красивое, что он показывает.
+        // Работа поверх неё — чёрная полоса с текстом вместо обложки; поэтому, пока играет
+        // музыка, работа остаётся точкой на её карточке, а островок себе не забирает.
+        if ((dstate === "thinking" || dstate === "speaking") && !(workQuiet && musicShown)) return "thinking"
         if (video && videoMini && workers === 0) return "videopill"
-        if (musicShown && workers === 0) return "music"
+        if (musicShown && (!workQuiet ? workers === 0 : true)) return "music"
         if (peeking || workers > 0) return "peek"
         return "hidden"
     }
-    onModeChanged: if (mode !== "thinking") { detailOpen = false; workStep = 0 }
+    onModeChanged: if (mode !== "thinking") { detailOpen = false; workStep = 1 }
 
     // ───────────── look ─────────────
     readonly property color ink: "#000000"
