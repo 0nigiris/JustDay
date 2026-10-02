@@ -20,6 +20,10 @@ Item {
     property bool edgeOnly: true
 
     property bool hovering: !(autohide || overlapHide)
+    // True while the pointer is over the strip body (not just the edge peek).
+    // Distinct from `hovering`: reveal() sets hovering, but the pointer may already
+    // have left — or still be here when the reveal lock expires.
+    property bool bodyHovered: false
     // After a reveal, ignore hide for one slide — otherwise mask/hover flicker
     // (edge → body → lost hover mid-animation) snaps the strip back out.
     property bool revealLocked: false
@@ -94,12 +98,15 @@ Item {
     }
 
     function onBodyHover(hovered) {
+        bodyHovered = !!hovered
         if (!needHide)
             return
         if (hovered) {
             cancelHide()
             if (!edgeOnly)
                 reveal()
+            else if (!hovering)
+                hovering = true
         } else {
             scheduleHide()
         }
@@ -118,8 +125,10 @@ Item {
         interval: er.slideMs + 80
         onTriggered: {
             er.revealLocked = false
-            // If pointer already left, start the normal hide clock.
-            if (er.needHide && !er.keepVisible)
+            // Only start the hide clock if the pointer already left during the lock.
+            // Scheduling hide while bodyHovered is still true made the strip vanish
+            // ~1–2s into an unbroken hover (lock + hideDelay) — tray and dock both.
+            if (er.needHide && !er.keepVisible && !er.bodyHovered)
                 er.scheduleHide()
         }
     }

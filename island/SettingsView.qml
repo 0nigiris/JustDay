@@ -656,11 +656,6 @@ Item {
                     Toggle { checked: win.d.autostart ? win.d.autostart.enabled : false
                              onToggled: v => { win.run(["autostart", v ? "on" : "off"], r => { win.d.autostart = r; win.d = Object.assign({}, win.d) }); win.notify(v ? JD.tr("Автозапуск включён") : JD.tr("Автозапуск выключен")) } }
                 }
-                Row {
-                    title: JD.tr("Напоминать перезагрузиться")
-                    subtitle: JD.tr("Машина без перезагрузки копит обновления ядра и утёкшую память. 0 — не напоминать")
-                    SSlider { key: "ui.reboot_reminder_days"; from: 0; to: 30; step: 1; decimals: 0; unit: JD.tr(" дней") }
-                }
                 Row { title: JD.tr("Уведомления"); subtitle: JD.tr("Системные уведомления о подтверждениях и ошибках"); Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
                 Row {
                     title: JD.tr("Язык распознавания")
@@ -812,21 +807,6 @@ Item {
                                  { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
                                  { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
                     }
-                }
-                Row {
-                    title: JD.tr("Вид полосы")
-                    subtitle: JD.tr("Капсула плавает под краем, полоса занимает строку экрана, вырез прижат к краю")
-                    Choice {
-                        key: "island.style"
-                        options: [{ value: "island", label: JD.tr("Островок") },
-                                 { value: "bar", label: JD.tr("Сплошная полоса") },
-                                 { value: "notch", label: JD.tr("Вырез") }]
-                    }
-                }
-                Row {
-                    title: JD.tr("Работа — только значком")
-                    subtitle: JD.tr("Пока он работает, видно кружок; строка и подробности — по нажатию")
-                    Toggle { checked: win.get("island.work_quiet") !== false; onToggled: v => win.set("island.work_quiet", v) }
                 }
                 Row {
                     title: JD.tr("Маскот")
@@ -1073,6 +1053,54 @@ Item {
                     SSlider { key: "tray.magnify_spread"; from: 80; to: 500; step: 20; decimals: 0; unit: JD.tr("%") }
                 }
                 Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("tray.autohide") === true; onToggled: v => win.set("tray.autohide", v) } }
+                Row {
+                    title: JD.tr("Отнимать место у окон")
+                    subtitle: JD.tr("Магнит exclusive zone только по контуру полосы, не на весь край экрана. Выкл. — окна могут наезжать")
+                    Toggle { checked: win.get("tray.reserve") === true; onToggled: v => win.set("tray.reserve", v) }
+                }
+            }
+            GroupTitle { text: JD.tr("Палитра значков") }
+            Group {
+                Note { text: JD.tr("По умолчанию — как есть (чёткие Steam/Discord). «Авто» в лотке высветляет только почти чёрные (Spotify). «Светлая / Clear» — матовое стекло (цвет сохраняется, не Ч/Б). «Tinted» — цветная заливка. «Моно» — серое.") }
+                Row {
+                    title: JD.tr("Стиль лотка")
+                    subtitle: JD.tr("original · auto · light · clear · tinted · mono")
+                    Choice {
+                        key: "tray.icon_style"
+                        options: [
+                            { value: "original", label: JD.tr("Как есть") },
+                            { value: "auto", label: JD.tr("Авто (чёрные)") },
+                            { value: "light", label: JD.tr("Светлая (glass)") },
+                            { value: "clear", label: JD.tr("Clear (glass)") },
+                            { value: "tinted", label: JD.tr("Tinted") },
+                            { value: "mono", label: JD.tr("Моно") }
+                        ]
+                    }
+                }
+                Row {
+                    title: JD.tr("Цвет Tinted (лоток)")
+                    subtitle: JD.tr("HEX, например #7AC8FF — только для режима Tinted")
+                    Field { key: "tray.icon_tint"; implicitWidth: 160 }
+                }
+                Row {
+                    title: JD.tr("Стиль дока")
+                    subtitle: JD.tr("Та же палитра поверх значков программ в доке. По умолчанию — как есть")
+                    Choice {
+                        key: "dock.icon_style"
+                        options: [
+                            { value: "original", label: JD.tr("Как есть") },
+                            { value: "light", label: JD.tr("Светлая (glass)") },
+                            { value: "clear", label: JD.tr("Clear (glass)") },
+                            { value: "tinted", label: JD.tr("Tinted") },
+                            { value: "mono", label: JD.tr("Моно") }
+                        ]
+                    }
+                }
+                Row {
+                    title: JD.tr("Цвет Tinted (док)")
+                    subtitle: JD.tr("HEX для режима Tinted у дока")
+                    Field { key: "dock.icon_tint"; implicitWidth: 160 }
+                }
             }
             GroupTitle { text: JD.tr("Какие значки показывать") }
             Group {
@@ -1085,7 +1113,7 @@ Item {
                         subtitle: modelData.tooltipTitle && modelData.tooltipTitle !== title ? modelData.tooltipTitle : ""
                         Toggle {
                             checked: JD.trayShows(modelData)
-                            onToggled: v => { JD.trayHide(ident, !v); win.notify(JD.tr("Сохранено")) }
+                            onToggled: v => { JD.trayHideItem(modelData, !v); win.notify(JD.tr("Сохранено")) }
                         }
                     }
                 }
@@ -1562,11 +1590,6 @@ Item {
                     Toggle { checked: win.get("media.show_player") !== false; onToggled: v => win.set("media.show_player", v) }
                 }
                 Row {
-                    title: JD.tr("Островок на виду, пока играет")
-                    subtitle: JD.tr("Выключите, если он мешает попадать по вкладкам браузера: тогда уходит, как обычно")
-                    Toggle { checked: win.get("media.keep_island") !== false; onToggled: v => win.set("media.keep_island", v) }
-                }
-                Row {
                     title: JD.tr("Приглушать музыку")
                     subtitle: JD.tr("Тише, пока ассистент слушает и отвечает")
                     Toggle { checked: win.get("media.duck") !== false; onToggled: v => win.set("media.duck", v) }
@@ -1634,6 +1657,27 @@ Item {
                       Field { id: loadKey; text: win.d.hotkeys ? win.d.hotkeys.load : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Закрепить в доке"); subtitle: JD.tr("Программу активного окна; повторно — открепить. По умолчанию Meta+P");
                       Field { id: pinKey; text: win.d.hotkeys ? win.d.hotkeys.pin : ""; implicitWidth: 180 } }
+            }
+            PageTitle { title: JD.tr("Док · Meta+1…9"); subtitle: JD.tr("Как на macOS: Meta+N открывает N-ю программу слева направо. Забирает слоты у панели задач Plasma.") }
+            Group {
+                Row { title: JD.tr("Док · слот 1"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock1Key; text: win.d.hotkeys ? (win.d.hotkeys.dock1 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 2"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock2Key; text: win.d.hotkeys ? (win.d.hotkeys.dock2 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 3"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock3Key; text: win.d.hotkeys ? (win.d.hotkeys.dock3 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 4"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock4Key; text: win.d.hotkeys ? (win.d.hotkeys.dock4 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 5"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock5Key; text: win.d.hotkeys ? (win.d.hotkeys.dock5 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 6"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock6Key; text: win.d.hotkeys ? (win.d.hotkeys.dock6 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 7"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock7Key; text: win.d.hotkeys ? (win.d.hotkeys.dock7 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 8"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock8Key; text: win.d.hotkeys ? (win.d.hotkeys.dock8 || "") : ""; implicitWidth: 180 } }
+                Row { title: JD.tr("Док · слот 9"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
+                      Field { id: dock9Key; text: win.d.hotkeys ? (win.d.hotkeys.dock9 || "") : ""; implicitWidth: 180 } }
                 Row {
                     title: ""
                     Btn {
@@ -1642,7 +1686,16 @@ Item {
                         onClicked: win.run(["hotkey", "set", "--talk", talkKey.text, "--extra", extraKey.text, "--cancel", cancelKey.text,
                                             "--type", typeKey.text, "--yes", yesKey.text, "--no", noKey.text,
                                             "--apps", appsKey.text, "--clip", clipKey.text, "--emoji", emojiKey.text,
-                                            "--load", loadKey.text, "--menu", menuKey.text, "--pin", pinKey.text],
+                                            "--load", loadKey.text, "--menu", menuKey.text, "--pin", pinKey.text,
+                                            "--dock1", dock1Key.text,
+                                            "--dock2", dock2Key.text,
+                                            "--dock3", dock3Key.text,
+                                            "--dock4", dock4Key.text,
+                                            "--dock5", dock5Key.text,
+                                            "--dock6", dock6Key.text,
+                                            "--dock7", dock7Key.text,
+                                            "--dock8", dock8Key.text,
+                                            "--dock9", dock9Key.text],
                                            r => win.notify(r.ok ? JD.tr("Сочетания обновлены") : JD.tr("Не получилось")))
                     }
                 }
@@ -1653,7 +1706,7 @@ Item {
                       JD.tr("<b>Пустое поле</b> снимает сочетание совсем.<br><br>") +
                       JD.tr("<b>Клавиша Windows</b> по умолчанию открывает меню JustDay (<tt>Meta</tt>), а не лаунчер Plasma: JustDay забирает её при установке. ") +
                       JD.tr("Вернуть лаунчеру KDE — очистите поле «Меню приложений» или «По умолчанию» в Параметрах системы → Комбинации клавиш. ") +
-                      JD.tr("Закрепить в доке — <tt>Meta+P</tt>.<br><br>") +
+                      JD.tr("Закрепить в доке — <tt>Meta+P</tt>. <tt>Meta+1…9</tt> — слоты дока (не панель задач Plasma).<br><br>") +
                       JD.tr("<b>Двойное нажатие</b> кнопки «говорить» отменяет всё — промежуток настраивается в разделе «Голос и звук».<br><br>") +
                       JD.tr("<b>В поле ввода</b>: Enter — отправить, Shift+Enter — новая строка, ↑/↓ — прошлые просьбы, Tab — подсказка команды, Esc — закрыть. Начните с <tt>/</tt>, чтобы увидеть быстрые команды. Пустое поле убрать выделенный текст: Backspace.")
             }
@@ -1719,73 +1772,23 @@ Item {
                         }
                     }
                 }
-                // Имя у строки обязательно, и это не придирка к стилю. Без него `acc` видно только
-                // прямым детям, а кнопка лежит внуком — через RowLayout. Привязка в ней падала с
-                // «acc is not defined», и дальше начиналось самое неприятное: сломанная привязка
-                // `visible` оставляет элемент видимым, а сломанное нажатие не делает ничего. Кнопка
-                // была на экране, выглядела рабочей и молчала.
                 Row {
-                    id: ollamaRow
                     visible: !!mp.info.account
                     readonly property var acc: mp.info.account || ({})
                     title: JD.tr("Аккаунт Ollama")
-                    subtitle: ollamaRow.acc.signed_in
-                            ? JD.tr("Вход выполнен") + (ollamaRow.acc.user ? ": " + ollamaRow.acc.user : "")
-                            : ollamaRow.acc.error ? ollamaRow.acc.error
-                            : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
+                    subtitle: acc.signed_in ? JD.tr("Вход выполнен") + (acc.user ? ": " + acc.user : "")
+                            : acc.error ? acc.error : JD.tr("Нужен бесплатный аккаунт на ollama.com — карта не нужна")
                     RowLayout {
                         spacing: 8
                         Btn {
-                            visible: !ollamaRow.acc.signed_in && !!ollamaRow.acc.signin_url
+                            visible: !acc.signed_in && !!acc.signin_url
                             text: JD.tr("Войти"); primary: true
-                            onClicked: Quickshell.execDetached(["xdg-open", ollamaRow.acc.signin_url])
-                        }
-                        // Ссылку можно забрать с собой: в неё удобнее зайти с телефона, да и если
-                        // браузер по какой-то причине не откроется, у человека остаётся путь.
-                        Btn {
-                            visible: !ollamaRow.acc.signed_in && !!ollamaRow.acc.signin_url
-                            glyph: "edit-copy"; text: JD.tr("Скопировать ссылку")
-                            onClicked: {
-                                Quickshell.execDetached(["wl-copy", "--", ollamaRow.acc.signin_url])
-                                JD.flash(JD.tr("Ссылка скопирована"), "edit-copy", JD.accentGreen)
-                            }
+                            onClicked: Quickshell.execDetached(["xdg-open", acc.signin_url])
                         }
                         Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
                     }
                 }
                 Row { visible: mp.provider === "custom"; title: JD.tr("Адрес API"); subtitle: JD.tr("Anthropic-совместимый, например LiteLLM"); Field { key: "brain.base_url"; placeholderText: "http://127.0.0.1:4000" } }
-                Row {
-                    visible: mp.provider === "claude"
-                    title: JD.tr("Модель под задачу")
-                    subtitle: JD.tr("Лёгкая по умолчанию, сильная — когда задача того стоит. Решает местная модель, она стоит ноль")
-                    Toggle { checked: win.get("brain.auto_model") !== false; onToggled: v => win.set("brain.auto_model", v) }
-                }
-                Row {
-                    visible: mp.provider === "claude" && win.get("brain.auto_model") !== false
-                    title: JD.tr("Лёгкая модель")
-                    Choice {
-                        key: "brain.light_model"
-                        options: [{ value: "haiku", label: "Haiku" }, { value: "sonnet", label: "Sonnet" }]
-                    }
-                }
-                Row {
-                    visible: mp.provider === "claude" && win.get("brain.auto_model") !== false
-                    title: JD.tr("Сильная модель")
-                    Choice {
-                        key: "brain.strong_model"
-                        options: [{ value: "sonnet", label: "Sonnet" }, { value: "opus", label: "Opus" }]
-                    }
-                }
-                Row {
-                    title: JD.tr("Когда кончится лимит")
-                    subtitle: JD.tr("Перейти к следующему, у кого есть ключ, и сказать об этом. Пусто — честно ждать")
-                    Field { key: "brain.fallbacks"; placeholderText: "openrouter, ollama_cloud, ollama" }
-                }
-                Row {
-                    title: JD.tr("Через сколько пробовать Claude снова")
-                    subtitle: JD.tr("Промахнулись — следующий отказ уведёт обратно, это дешевле, чем остаться на запасной навсегда")
-                    SSlider { key: "brain.fallback_back_after_hours"; from: 0; to: 24; step: 1; decimals: 0; unit: JD.tr(" ч") }
-                }
                 Row {
                     visible: mp.provider === "claude"
                     title: JD.tr("Сколько думать")

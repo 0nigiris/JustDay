@@ -143,6 +143,8 @@ separator_room = 0          # room for the hairline in points; 0 = the same as t
 separator_width = 1
 separator_height = 62       # in percent of the icon
 separator_opacity = 16
+icon_style = "original"   # original | light | clear | tinted | mono — wash over dock app icons
+icon_tint = "#7AC8FF"     # HEX used when icon_style = tinted
 
 [tray]                      # other apps' status icons, as their own strip
 enabled = true
@@ -152,6 +154,8 @@ icon_size = 22
 reserve = false
 autohide = false
 hidden = ["xwayland video bridge"]   # tray icons to keep out of the strip, by id
+icon_style = "original"   # original | auto | light | clear | tinted | mono — default sharp; auto lightens black only
+icon_tint = "#7AC8FF"      # HEX used when icon_style = tinted
 
 [updates]
 check = true                # look for a new version on GitHub (git fetch)

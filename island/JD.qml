@@ -18,15 +18,56 @@ Singleton {
     property var notification: null   // desktop notification being shown
     property var notifications: []    // recent ones for the menu
     property bool notifExpanded: false  // the whole text, unfolded inside the island (the ⌄ button)
-    // a tap on a notification: its app comes forward (Telegram, Discord…) and the island lets it go
+    // Tap a toast like Plasma: invoke the notification's default action (ActionInvoked) so the
+    // app opens the matching dialog/chat. Focus/launch is only a fallback when no action exists
+    // (eavesdrop-only copy with no live Notify object). No per-app hardcoding.
+    property var _notifActionRefs: []   // keep action QObjects; Quickshell may clear live.actions
+    function _cacheNotifActions(live) {
+        _notifActionRefs = []
+        if (!live) return
+        const acts = live.actions || []
+        for (let i = 0; i < acts.length; i++)
+            _notifActionRefs.push(acts[i])
+    }
     function openNotification(n) {
         if (!n) return
-        send({ cmd: "notification_open", app: n.app || "", desktop: n.desktop || n.icon || "" })
+        let acted = false
+        const pool = []
+        const liveActs = (liveNotification && liveNotification.actions) ? liveNotification.actions : []
+        for (let i = 0; i < liveActs.length; i++) pool.push(liveActs[i])
+        for (let i = 0; i < _notifActionRefs.length; i++) pool.push(_notifActionRefs[i])
+
+        function tryInvoke(a) {
+            // QML action objects expose invoke() as a method; typeof is unreliable here.
+            if (!a) return false
+            try { a.invoke(); return true } catch (e) { return false }
+        }
+        // Same order plasmashell uses: "default", then empty id, then a lone action.
+        for (const a of pool) {
+            const id = String(a.identifier || "").toLowerCase()
+            if (id === "default" || id === "open" || id === "activate" || id === "") {
+                if (tryInvoke(a)) { acted = true; break }
+            }
+        }
+        if (!acted && pool.length === 1)
+            acted = tryInvoke(pool[0])
+
+        // Fallback only when there is nothing to Activate — e.g. daemon eavesdrop without live.
+        if (!acted) {
+            const desk = n.desktop || ""
+            const icon = n.icon || ""
+            const deskOrIcon = desk || ((icon && !icon.startsWith("/") && !icon.startsWith("file:") && !icon.includes("/")) ? icon : "")
+            send({ cmd: "notification_open", app: n.app || "", desktop: deskOrIcon })
+        }
+
         if (n === notification) { notification = null; notifExpanded = false }
+        if (liveNotification) { try { liveNotification.dismiss() } catch (e) {}; liveNotification = null }
+        _notifActionRefs = []
         expanded = false
     }
     function dismissNotification() {
         if (liveNotification) { liveNotification.dismiss(); liveNotification = null }
+        _notifActionRefs = []
         notification = null
         notifExpanded = false
     }
@@ -40,20 +81,28 @@ Singleton {
         const key = (n.app || "") + "\0" + (n.summary || "") + "\0" + (n.body || "").slice(0, 120)
         const now = Date.now()
         if (key && key === _notifDedupeKey && now - _notifDedupeAt < 2000) {
-            if (live && !liveNotification) liveNotification = live
+            // Eavesdrop may arrive first; attach the live Notify object when it shows up.
+            if (live) {
+                liveNotification = live
+                _cacheNotifActions(live)
+            }
             return
         }
         _notifDedupeKey = key
         _notifDedupeAt = now
         liveNotification = live || null
+        _cacheNotifActions(live)
         notification = n
         notifExpanded = false
         notifTimer.restart()
     }
     function runNotificationAction(which) {
-        if (!liveNotification) return
-        for (const a of (liveNotification.actions || []))
-            if (a.identifier === which) { a.invoke(); break }
+        const pool = []
+        const liveActs = (liveNotification && liveNotification.actions) ? liveNotification.actions : []
+        for (let i = 0; i < liveActs.length; i++) pool.push(liveActs[i])
+        for (let i = 0; i < _notifActionRefs.length; i++) pool.push(_notifActionRefs[i])
+        for (const a of pool)
+            if (a.identifier === which) { try { a.invoke() } catch (e) {}; break }
         dismissNotification()
     }
     property var alarm: null          // the timer or alarm ringing right now
@@ -123,12 +172,6 @@ Singleton {
         if (dstate === "idle" && (was === "speaking" || was === "thinking")) { buddyHappy = true; happyOff.restart() }
     }
     property Timer happyOff: Timer { interval: 1800; onTriggered: jd.buddyHappy = false }
-
-    // На чём он сейчас думает. Лёгкая модель работает молча, а про переход на сильную сказать
-    // стоит: человек видит, что задача признана крупной, и может возразить одним словом.
-    property string brainModel: ""
-    property string brainWhy: ""
-    readonly property bool brainStrong: brainWhy !== "" && brainModel !== ""
 
     property real tick: Date.now() / 1000          // one clock for every countdown on screen
     Timer { running: jd.reminders.length > 0 || !!jd.runningJob; interval: 500; repeat: true; onTriggered: jd.tick = Date.now() / 1000 }
@@ -235,11 +278,7 @@ Singleton {
     readonly property bool musicOn: !!player && (!!player.file || !!player.loading)
     // the pill stays while music plays and for a little while after a pause
     property bool pauseGrace: false
-    // Островок с музыкой на виду. Одним нравится, что он не уходит, пока играет, другим это мешает
-    // попадать по вкладкам браузера, и спорить тут не о чем — это настройка, а не замысел.
-    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false
-        && (mediaCfg.keep_island !== false)
-        && (!player.paused || !!player.loading || pauseGrace || peeking)
+    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false && (!player.paused || !!player.loading || pauseGrace || peeking)
     Timer { id: graceTimer; interval: 6000; onTriggered: jd.pauseGrace = false }
     function media(action, value) { send({ cmd: "media", action: action, value: value === undefined ? null : value }) }
     function playerPos(now) {
@@ -272,7 +311,7 @@ Singleton {
     // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
     // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
     // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
-    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | plans | claude | load
+    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | load
     property int toolsPick: 0             // выбранная строка в списке: стрелками и Enter
     property string toolsQuery: ""
     property var toolsItems: []           // что нашлось: эмодзи или записи буфера
@@ -314,36 +353,10 @@ Singleton {
     }
     // Ищет демон, а не островок: набор эмодзи лежит там, история буфера тоже, и второй такой же
     // поиск на QML разошёлся бы с первым в тот же день.
-    // ───────────── планы ─────────────
-    //
-    // Они лежат в Obsidian и правятся руками — островок их только показывает и отмечает сделанным.
-    // Заводить им вторую жизнь здесь нельзя: два списка одного и того же расходятся в первый день.
-    property var plans: []
-    function plansRefresh() { send({ cmd: "plan_list", open: false }) }
-
-    // ───────────── живые сессии Claude Code ─────────────
-    //
-    // «Клод работает ×3» — это не сведения, а обещание, что что-то происходит. Здесь видно, что
-    // именно: какая сессия что читает, правит и запускает.
-    property var sessions: []
-    function sessionsRefresh() { send({ cmd: "sessions" }) }
-    function planDone(which) { send({ cmd: "plan_done", which: String(which) }); plansLater.restart() }
-    function planAdd(text) {
-        const s = String(text || "").trim()
-        if (!s) return
-        send({ cmd: "plan_add", text: s })
-        plansLater.restart()
-    }
-    // Список перечитывается не сразу: демон успевает записать файл, а мы успеваем не увидеть
-    // собственную правку и решить, что ничего не вышло.
-    property Timer plansLater: Timer { interval: 350; onTriggered: jd.plansRefresh() }
-
     function refreshTools() {
         if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
-        else if (toolsPage === "plans") plansRefresh()
-        else if (toolsPage === "claude") sessionsRefresh()
     }
     // Сначала закрыть панель, потом просить вставить. Пока панель на экране, клавиатура принадлежит
     // ей: напечатанное уходит в никуда, и человек видит «скопировано» вместо вставленного символа.
@@ -496,11 +509,30 @@ Singleton {
     readonly property real trayIconSize: Math.max(14, Math.min(48, trayCfg.icon_size || 22))
     readonly property bool trayAutohide: trayCfg.autohide === true
     // Что в лотке не показывать. Сравнение без учёта регистра: значки называют себя как попало.
+    // Prefixed aliases count too: hidden "discord" also covers "discord-tray", and vice versa.
     readonly property var trayHidden: (trayCfg.hidden || []).map(k => String(k).toLowerCase())
+    function trayNames(item) {
+        if (!item) return []
+        const out = []
+        for (const raw of [item.id, item.title, item.tooltipTitle]) {
+            if (!raw) continue
+            const n = String(raw).toLowerCase().trim()
+            if (n && out.indexOf(n) < 0) out.push(n)
+        }
+        return out
+    }
+    function trayKeyHits(hiddenKey, name) {
+        if (!hiddenKey || !name) return false
+        if (hiddenKey === name) return true
+        // Alias family: "discord" ↔ "discord-tray". Require a real stem (4+ chars) so
+        // a one-letter hide key cannot wipe the whole strip.
+        if (hiddenKey.length < 4 || name.length < 4) return false
+        return name.indexOf(hiddenKey) === 0 || hiddenKey.indexOf(name) === 0
+    }
     function trayShows(item) {
-        if (!item) return false
-        const names = [item.id, item.title, item.tooltipTitle].filter(n => !!n).map(n => String(n).toLowerCase())
-        return !names.some(n => trayHidden.indexOf(n) >= 0)
+        const names = trayNames(item)
+        if (!names.length) return false
+        return !trayHidden.some(h => names.some(n => trayKeyHits(h, n)))
     }
     // Раскладка клавиатуры: демон узнаёт о смене сигналом плазмы и присылает уже готовое.
     property var layout: null
@@ -510,7 +542,22 @@ Singleton {
     // позже и первой смены не дождаться до вечера.
     function layoutRefresh() { send({ cmd: "layout" }) }
 
-    function trayHide(ident, on) { if (ident) send({ cmd: "tray_hide", id: String(ident), on: on === undefined ? null : on }) }
+    function trayHide(ident, on, aliases) {
+        if (!ident && !(aliases && aliases.length)) return
+        const msg = { cmd: "tray_hide", id: String(ident || ""), on: on === undefined ? null : on }
+        if (aliases && aliases.length) msg.aliases = aliases.map(a => String(a))
+        send(msg)
+    }
+    // Settings toggle / Ctrl+right-click: hide by primary id, show by clearing the whole
+    // alias family so a leftover "discord-tray" cannot keep Discord dark after enabling.
+    function trayHideItem(item, hide) {
+        const names = trayNames(item)
+        if (!names.length) return
+        if (hide)
+            trayHide(names[0], true)
+        else
+            trayHide(names[0], false, names)
+    }
     // Чьё меню лотка открыто и от какой точки оно растёт. Меню живёт в своём окне во весь экран —
     // иначе его нечем закрыть щелчком мимо, — а окно узнаёт о нажатии отсюда.
     property var trayMenu: null           // сам значок (SystemTrayItem): у него спрашиваем item.menu
@@ -527,6 +574,34 @@ Singleton {
     // только когда есть кому смотреть.
     property real cpu: 0
     property var dockData: ({})           // {items, pinned, match, skip} — от демона
+    // Seed from on-disk catalog before the daemon hello arrives (qs restart / hot-reload
+    // otherwise paints only launcher+trash+cat for a beat — the "empty dock flash").
+    property bool dockSeeded: false
+    readonly property string dockCatalogPath: {
+        const st = Quickshell.env("XDG_STATE_HOME")
+        if (st) return st + "/justday/dock-catalog.json"
+        return (Quickshell.env("HOME") || "") + "/.local/state/justday/dock-catalog.json"
+    }
+    FileView {
+        id: dockCatalogFile
+        path: jd.dockCatalogPath
+        blockLoading: true
+        watchChanges: false
+    }
+    function seedDockFromDisk() {
+        if (dockData && dockData.items && dockData.items.length) return
+        try {
+            const raw = String(dockCatalogFile.text() || "").trim()
+            if (!raw) return
+            const d = JSON.parse(raw)
+            if (d && d.items && d.items.length) {
+                dockData = d
+                if (d.trash_full !== undefined) trashFull = !!d.trash_full
+                dockSeeded = true
+            }
+        } catch (e) {}
+    }
+    Component.onCompleted: seedDockFromDisk()
     // Открытые окна. Спрашивать вейланд бесполезно: KWin не отдаёт список окон обычным клиентам —
     // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
     // демона, которому о нём рассказывает скрипт, живущий внутри самого KWin.
@@ -706,14 +781,6 @@ Singleton {
         send({ cmd: "dock_pin", kind: kind || "app", id: ident, on: on === undefined ? null : on })
     }
     function dockArrange(keys) { send({ cmd: "dock_arrange", keys: keys }) }
-    // Содержимое закреплённой папки: спрашивается при каждом открытии стопки, потому что за минуту
-    // между двумя нажатиями папка могла и поменяться — показать вчерашнее содержимое хуже, чем
-    // подождать полкадра.
-    property var folderItems: []
-    property string folderPath: ""
-    property int folderMore: 0
-    function folderList(path) { send({ cmd: "folder_list", path: String(path) }) }
-    function folderOpen(path) { send({ cmd: "folder_open", path: String(path) }) }
     function windowDo(action, id) { if (id) send({ cmd: "window_do", action: action, id: id }) }
 
     // ─── dock hover thumbnails ───
@@ -878,25 +945,7 @@ Singleton {
     Timer { id: osdTimer; interval: 1600; onTriggered: jd.osdShow = false }
     readonly property real topMargin: island.top_margin === undefined ? 8 : Math.max(0, Math.min(400, island.top_margin))
     property bool peeking: false
-    // Три ступени показа работы. Ноль — только значок: идёт работа, и этого достаточно, чтобы
-    // знать. Один — строка, что он делает прямо сейчас. Два — всё целиком.
-    //
-    // Раньше ступень была одна, самая шумная: любая работа разворачивала поперёк экрана полосу в
-    // шестьсот точек с текстом, который человек не просил. Работа идёт почти всегда — значит и
-    // полоса висела почти всегда.
-    // Вид верхней полосы. Это не вкусовщина: капсула посреди верхнего края физически перекрывает
-    // вкладки браузера, и тому, кто много живёт в браузере, нужен другой вид, а не уговоры привыкнуть.
-    //   island — капсула, плавающая под краем (как сейчас);
-    //   bar    — сплошная полоса во всю ширину, вплотную к краю;
-    //   notch  — вырез: прижат к краю, скруглён только снизу.
-    readonly property string islandStyle: {
-        const want = String(island.style || "island").toLowerCase()
-        return ["island", "bar", "notch"].indexOf(want) >= 0 ? want : "island"
-    }
-    readonly property bool workQuiet: island.work_quiet !== false
-    property int workStep: 0
-    function workMore() { workStep = (workStep + 1) % 3 }
-    readonly property bool detailOpen: workStep >= 2
+    property bool detailOpen: false
     property bool islandHovered: false
 
     readonly property string mode: {
@@ -923,7 +972,7 @@ Singleton {
         if (peeking || workers > 0) return "peek"
         return "hidden"
     }
-    onModeChanged: workStep = workQuiet ? 0 : 1
+    onModeChanged: if (mode !== "thinking") detailOpen = false
 
     // ───────────── look ─────────────
     readonly property color ink: "#000000"
@@ -1132,14 +1181,26 @@ Singleton {
                 showOsd("brightness", frac, Math.round(frac * 100) + "%", "sun", false)
             _brightPrimed = true
         }
-        if (m.items !== undefined && m.file !== undefined) plans = m.items
-        if (m.sessions !== undefined) sessions = m.sessions
-        if (m.items !== undefined && m.path !== undefined) {
-            folderPath = m.path; folderItems = m.items; folderMore = m.more || 0
-        }
-        if (m.brain_model !== undefined) { brainModel = m.brain_model; brainWhy = m.brain_why || "" }
         if (m.mascots !== undefined) mascots = m.mascots
-        if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }
+        if (m.dock !== undefined) {
+            const incoming = m.dock || {}
+            const hasItems = !!(incoming.items && incoming.items.length)
+            // Never replace a good catalog with {} / empty items (hello race, watch gap).
+            if (!hasItems && dockData && dockData.items && dockData.items.length) {
+                if (incoming.trash_full !== undefined) trashFull = !!incoming.trash_full
+                if (incoming.launcher || incoming.cat) {
+                    const keep = Object.assign({}, dockData)
+                    if (incoming.launcher) keep.launcher = incoming.launcher
+                    if (incoming.cat) keep.cat = incoming.cat
+                    if (incoming.trash_full !== undefined) keep.trash_full = incoming.trash_full
+                    dockData = keep
+                }
+            } else {
+                dockData = incoming
+                if (incoming.trash_full !== undefined) trashFull = !!incoming.trash_full
+                if (hasItems) dockSeeded = true
+            }
+        }
         if (m.cpu !== undefined) cpu = m.cpu
         if (m.trash_full !== undefined) trashFull = m.trash_full
         if (m.windows !== undefined) {

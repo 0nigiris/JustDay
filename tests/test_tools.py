@@ -466,43 +466,16 @@ def test_hiding_a_tray_icon_is_case_blind(tmp_path, monkeypatch) -> None:
     assert "blueman" not in dock.hidden_tray()
 
 
-# ──────────────────────────── запасная модель ────────────────────────────
-def test_limit_and_network_failures_are_told_apart() -> None:
-    """Лимит и обрыв связи — разные беды: при лимите есть куда пойти, при обрыве некуда."""
-    from justday import fallback
+def test_showing_tray_icon_clears_alias_family(tmp_path, monkeypatch) -> None:
+    """Enabling Discord must clear both "discord" and "discord-tray" leftovers."""
+    from justday import config, dock
 
-    assert fallback.looks_like_limit("Error 429: rate_limit_error, usage limit reached")
-    assert fallback.looks_like_limit("insufficient credit")
-    assert not fallback.looks_like_limit("connection refused")
-    assert not fallback.looks_like_limit("Temporary failure in name resolution")
-    # Сеть важнее: «429» внутри сообщения об обрыве не повод уходить к запасному, он в том же
-    # интернете и упрётся туда же.
-    assert not fallback.looks_like_limit("connection refused after 429 attempts")
-
-
-def test_fallback_skips_providers_without_a_key(monkeypatch) -> None:
-    """Предлагать переход, который тут же упрётся в «нет ключа», значит тратить попытку впустую."""
-    from justday import fallback
-
-    monkeypatch.setattr(fallback.providers, "secret_get", lambda name: "key" if name == "openrouter" else "")
-    cfg = {"brain": {"provider": "claude", "fallbacks": ["deepseek", "openrouter", "ollama"]}}
-    got = fallback.next_provider(cfg)
-    assert got is not None and got[0] == "openrouter"
-
-
-def test_fallback_does_not_offer_where_we_already_are(monkeypatch) -> None:
-    from justday import fallback
-
-    monkeypatch.setattr(fallback.providers, "secret_get", lambda name: "key")
-    cfg = {"brain": {"provider": "openrouter", "fallbacks": ["openrouter", "ollama"]}}
-    got = fallback.next_provider(cfg)
-    assert got is not None and got[0] == "ollama"
-
-
-def test_the_dispatcher_answers_without_a_local_model() -> None:
-    """Местной модели может не быть вовсе — тогда решают правила, и они не должны молчать."""
-    from justday import dispatch
-
-    assert dispatch.level_for("открой дискорд", use_model=False)[0] == dispatch.LIGHT
-    assert dispatch.level_for("напиши скрипт для переименования файлов", use_model=False)[0] == dispatch.STRONG
-    assert dispatch.level_for("", use_model=False)[0] == dispatch.LIGHT
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    config.set_value("tray", "hidden", ["discord", "discord-tray", "xwayland video bridge"])
+    got = dock.hide_tray("Discord", False, aliases=["discord", "Discord", "discord-tray"])
+    assert got["on"] is False
+    hidden = dock.hidden_tray()
+    assert "discord" not in hidden
+    assert "discord-tray" not in hidden
+    assert "xwayland video bridge" in hidden

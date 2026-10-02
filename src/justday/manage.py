@@ -210,6 +210,17 @@ HOTKEYS: tuple[tuple[str, str, str], ...] = (
     ("menu", "Меню приложений", "Meta"),
     # Meta забираем у лаунчера Plasma (см. free_key / set_hotkeys). Meta+P — «pin».
     ("pin", "Закрепить в доке", "Meta+P"),
+    # Meta+1…9 — N-я программа слева направо (как Cmd+N на macOS). Забираем у
+    # plasmashell «Activate Task Manager Entry N».
+    ("dock1", "Док: слот 1", "Meta+1"),
+    ("dock2", "Док: слот 2", "Meta+2"),
+    ("dock3", "Док: слот 3", "Meta+3"),
+    ("dock4", "Док: слот 4", "Meta+4"),
+    ("dock5", "Док: слот 5", "Meta+5"),
+    ("dock6", "Док: слот 6", "Meta+6"),
+    ("dock7", "Док: слот 7", "Meta+7"),
+    ("dock8", "Док: слот 8", "Meta+8"),
+    ("dock9", "Док: слот 9", "Meta+9"),
 )
 HOTKEY_DEFAULTS = {name: default for name, _, default in HOTKEYS}
 

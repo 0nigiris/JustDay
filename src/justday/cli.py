@@ -167,7 +167,7 @@ def t_desktop():
             raise RuntimeError("KWin D-Bus not reachable")
         return f"kwin-mcp ok, KWin D-Bus ok, session={session}, окна: {len(desktop.windows('list'))}, экран: {_face()}"
     if desktop.backend() == "x11":
-        shot = next((x for x in ("spectacle", "gnome-screenshot", "maim", "scrot", "import") if shutil.which(x)), "")
+        shot = next((x for x in ("grim", "gnome-screenshot", "maim", "scrot", "import") if shutil.which(x)), "")
         if not shot:
             raise RuntimeError("нечем снять экран: поставьте maim или scrot")
         return (f"окна: wmctrl ({len(desktop.windows('list'))}), снимки: {shot}, session={session}, экран: {_face()}"
@@ -285,24 +285,38 @@ def t_hotkey():
 
 
 def _capture(png: str) -> None:
-    """Снять весь экран тем, что есть в системе: KDE, GNOME, wlroots или голый X11."""
-    tools = [("spectacle", ["spectacle", "-b", "-n", "-f", "-o", png]),
-             ("grim", ["grim", png]),
-             ("gnome-screenshot", ["gnome-screenshot", "-f", png]),
-             ("maim", ["maim", png]),
-             ("scrot", ["scrot", "-o", png]),
-             ("import", ["import", "-window", "root", png])]
+    """Grab the full screen with tools that do not coredump on KWin/Wayland.
+
+    Spectacle is intentionally never spawned: both `spectacle -b …` and the
+    `spectacle --dbus` service frequently abort after write (KCrash / free()).
+    Dock hover thumbs already avoid it; CLI/AI screenshot must match.
+    """
+    tools: list[tuple[str, list[str]]] = []
+    if shutil.which("grim"):
+        tools.append(("grim", ["grim", png]))
+    if not os.environ.get("WAYLAND_DISPLAY"):
+        for exe, cmd in (
+            ("maim", ["maim", png]),
+            ("scrot", ["scrot", "-o", png]),
+            ("import", ["import", "-window", "root", png]),
+        ):
+            if shutil.which(exe):
+                tools.append((exe, cmd))
+    if shutil.which("gnome-screenshot"):
+        tools.append(("gnome-screenshot", ["gnome-screenshot", "-f", png]))
+    # Never Spectacle — even if it is the only binary on PATH.
     errors = []
     for exe, cmd in tools:
-        if not shutil.which(exe):
-            continue
         try:
             subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL, timeout=20)
             if os.path.exists(png) and os.path.getsize(png) > 0:
                 return
         except (OSError, subprocess.SubprocessError) as e:
             errors.append(f"{exe}: {e}")
-    raise RuntimeError("нечем снять экран: поставьте spectacle, grim, maim или scrot" + (f" ({'; '.join(errors)})" if errors else ""))
+    raise RuntimeError(
+        "нечем снять экран: поставьте grim (или maim/scrot на X11); spectacle отключён — падает на KWin"
+        + (f" ({'; '.join(errors)})" if errors else "")
+    )
 
 
 def screenshot(all_screens: bool = False, full: bool = False) -> dict:
@@ -378,8 +392,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("test", help="test one component")
     sp.add_argument("component", choices=sorted(TESTS))
     sp = sub.add_parser("memory", help="show where JustDay's memory lives / print it")
-    sp.add_argument("action", nargs="?",
-                    choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new", "size"],
+    sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new"],
                     default="show")
     sp.add_argument("target", nargs="?", help="memory file for `forget`")
 
@@ -553,17 +566,17 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--image", action="store_true", help="для store: на входе картинка, а не текст")
     sp.add_argument("--copy", action="store_true", help="только в буфер, не печатать")
     # Имя не «panel»: так уже зовётся запасная полоска на Tk для машин без острова.
-    sp = sub.add_parser("tools", help="открыть панель инструментов в островке: apps (Spotlight) | emoji | clip | load")
-    sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "mixer", "plans", "claude", "load"])
+    sp = sub.add_parser("tools", help="открыть панель в островке: apps (Spotlight) | emoji | clip | load")
+    sp.add_argument("which", nargs="?", default="apps", choices=["apps", "emoji", "clip", "mixer", "load"])
     sp = sub.add_parser("models", help="что держит память: слух, голос; free — отпустить сейчас")
     sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
     sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")
     sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "open", "close"])
     sp = sub.add_parser("popups", help="чьи всплывашки с уведомлениями: island (только остров) | system (ещё и плазмы)")
     sp.add_argument("where", nargs="?", default="show", choices=["show", "island", "system"])
-    sp = sub.add_parser("dock", help="док: что в нём лежит, закрепить и открепить")
-    sp.add_argument("action", nargs="?", default="show", choices=["show", "pin", "unpin"])
-    sp.add_argument("what", nargs="*", help="идентификатор программы; пусто у pin/unpin — активное окно")
+    sp = sub.add_parser("dock", help="док: список, pin/unpin, go N (Meta+N — N-я программа слева направо)")
+    sp.add_argument("action", nargs="?", default="show", choices=["show", "pin", "unpin", "go"])
+    sp.add_argument("what", nargs="*", help="для pin/unpin — id программы; для go — номер слота 1…N")
     sp = sub.add_parser("launch", help="поиск программ: без запроса открывает лаунчер в островке, "
                                       "с запросом запускает первое подходящее")
     sp.add_argument("query", nargs="*")
@@ -686,17 +699,6 @@ def main(argv: list[str] | None = None) -> None:
         from .brain import BRAIN_DIR
 
         mem = memory_dir()
-        if a.action == "size":
-            # Сколько памяти накопилось и что в ней давно не пригождалось. Нужно и человеку, и
-            # самому ассистенту: он обязан замечать, что раздулся, а не ждать, пока заметят его.
-            from . import memory as memory_mod
-
-            st = memory_mod.state()
-            print(memory_mod.summary(st))
-            print(f"  {st['path']}")
-            for item in st["stale"]:
-                print(f"  {item['name']:44} {item['days']:>6.0f} дней назад")
-            return
         if a.action in ("list", "forget", "clear-journal", "read", "write", "new"):
             from . import manage
 
@@ -1430,9 +1432,19 @@ def _dock_cmd(action: str, what: str) -> int:
     """Показать док или изменить его состав. Ключ — идентификатор .desktop-файла без расширения.
 
     Без идентификатора `pin`/`unpin` действует на программу активного окна (горячая клавиша).
+    `go N` — запустить/сфокусировать N-ю программу слева направо (Meta+N).
     """
     from . import dock
 
+    if action == "go":
+        n = (what or "1").split()[0] if what else "1"
+        got = dock.go(n)
+        if not got.get("ok"):
+            print(got.get("error") or "не вышло")
+            return 1
+        act = "фокус" if got.get("action") == "focus" else "запуск"
+        print(f"  {act}: {got.get('name') or got.get('id')}  (слот {got.get('n')})")
+        return 0
     if action == "show":
         got = dock.catalog()
         if not got["items"]:

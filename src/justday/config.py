@@ -142,23 +142,7 @@ DEFAULTS: dict = {
         "provider": "claude",
         "base_url": "",  # only for provider = "custom"
         "context_tokens": 0,  # model context window for non-Claude providers (0 = provider default)
-        "model": "haiku",
-        # Модель под задачу. Лёгкая справляется с девятью просьбами из десяти — «открой дискорд»,
-        # «сделай тише», «какая погода», — и держать на них сильную значит остаться без лимитов к
-        # обеду. Решает не список слов, а местная модель на той же видеокарте: она стоит ноль и
-        # отвечает за полсекунды. Повышение происходит до работы, понижение — после неё, чтобы
-        # человек не ждал смены модели ради того, что и так будет быстрым.
-        "auto_model": True,
-        "light_model": "haiku",
-        "strong_model": "sonnet",
-        # Куда идти, когда у Claude кончился лимит. По порядку, пропуская тех, у кого нет ключа.
-        # Лимит кончается предсказуемо, раз в несколько часов, и всё это время бесплатные модели
-        # прекрасно откроют дискорд и ответят на вопрос — сидеть в скудном местном режиме незачем.
-        # Пустой список — никуда не переходить, честно сказать и ждать.
-        "fallbacks": ["openrouter", "ollama_cloud", "ollama"],
-        "fallback_models": {},   # поставщик → модель, если не хочется первой из предложенных
-        # Через сколько часов пробовать Claude снова. 0 — не возвращаться самому.
-        "fallback_back_after_hours": 5,
+        "model": "sonnet",
         "effort": "low",
         "permission_mode": "auto",
         "chrome": True,
@@ -186,12 +170,7 @@ DEFAULTS: dict = {
     "notes": {"vault": "", "plans": "Планы.md", "diary": "Дневник", "diary_hour": 23},
     # face: что показывать на экране — auto (по сеансу: остров на Wayland, полоска на X11),
     # island или panel. Решается при каждом входе, а не один раз при установке.
-    "ui": {
-        # Раз во сколько дней напоминать перезагрузиться. Машина, не выключавшаяся месяцами, копит
-        # обновления ядра и утёкшую память драйверов — это не катастрофа, но однажды становится ею,
-        # и всегда не вовремя. Напоминаем, а не перезагружаем: за компьютером может идти работа,
-        # которой ассистент не видит. 0 — не напоминать.
-        "reboot_reminder_days": 7,"notifications": True, "face": "auto"},
+    "ui": {"notifications": True, "face": "auto"},
     # «Я ушёл» closes the open applications and remembers them; «я вернулся» opens them again.
     # keep: what is never closed (a substring of the window class or the application name).
     # История буфера обмена для панели на островке. Пароли в неё не попадают: то, что программа
@@ -212,14 +191,6 @@ DEFAULTS: dict = {
         # Уведомления на фридесктопе показывает тот, кто занял это место первым, и оно одно на всю
         # систему: убрав панель плазмы, мы оставили его пустым, и его занимал чужой демон. false —
         # не занимать (тогда показывать их будет кто-то другой, со своим видом).
-        # Пока ассистент работает, островок показывает только значок; строка и подробности — по
-        # нажатию. Работа идёт почти всегда, и полоса в шестьсот точек с текстом, которого никто не
-        # просил, висела бы почти всегда. false — показывать строку сразу, как было раньше.
-        # Вид верхней полосы: island — капсула под краем, bar — сплошная полоса во всю ширину,
-        # notch — вырез, прижатый к краю и скруглённый только снизу. Капсула посреди верхнего края
-        # перекрывает вкладки браузера, и это не вкусовщина, а причина иметь выбор.
-        "style": "island",
-        "work_quiet": True,
         "notification_server": True,
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         # Where toast/shade notifications appear (Telegram-style), independent of the island pill:
@@ -344,6 +315,8 @@ DEFAULTS: dict = {
         "separator_width": 1,     # толщина самой черты
         "separator_height": 62,   # её высота, в процентах от значка
         "separator_opacity": 16,  # насколько она заметна, в процентах
+        # Палитра поверх значков дока: original | light | clear | tinted | mono
+        "icon_style": "original", "icon_tint": "#7AC8FF",
     },
     # Трей: чужие значки (те, что кладут в системный лоток) отдельной полосой у бокового края.
     # position: left | right; align: center | start | end.
@@ -358,7 +331,9 @@ DEFAULTS: dict = {
              # Пружина и затухание общие с доком — это не вкус полосы, а нрав всей оболочки.
              "magnify": True, "magnify_scale": 60, "magnify_spread": 160,
              # Раскладка клавиатуры первой ячейкой полосы: две буквы, нажатие переключает.
-             "layout": True},
+             "layout": True,
+             # Палитра значков: original | auto | light | clear | tinted | mono
+             "icon_style": "original", "icon_tint": "#7AC8FF"},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
     # Local model for private data (mail). Ollama listens on localhost only.
@@ -385,10 +360,7 @@ DEFAULTS: dict = {
     # does not know. Track titles (never the audio) leave the machine for this, like any other request.
     # video_where_strict: keep the chosen place even when the request names another one
     # ("включи в островке" is honoured by default, whatever video_where says)
-    # keep_island — держать ли островок на виду, пока играет музыка. Одним нравится, что он не
-    # уходит, другим это мешает попадать по вкладкам браузера: настройка, а не замысел.
     "media": {"video_where": "ask", "video_where_strict": False, "volume": 70, "duck": True, "show_player": True,
-              "keep_island": True,
               "color": "theme", "color_web": True},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},
@@ -432,24 +404,11 @@ def _toml_value(v) -> str:
     return json.dumps(str(v), ensure_ascii=False)
 
 
-# Заголовок секции: `[island]`, и всё равно, стоит ли за ним пояснение. В нашем же примерном
-# конфиге пояснение есть почти у каждой секции, и сравнение строки целиком их не узнавало — тогда
-# ключ дописывался второй секцией в конец файла, а TOML с двумя одинаковыми секциями не читается
-# вовсе. Одна настройка через `justday config set` — и конфиг переставал открываться целиком.
-_HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*(?:#.*)?$")
-
-
 def _section_header_index(lines: list[str], section: str) -> int | None:
     """Index of `[section]` — trailing comments allowed (`[island]  # …`).
 
     Must not match a longer table name: `[island.extra]` is not `[island]`.
-    Prefer exact section name via _HEADER when possible.
     """
-    for i, raw in enumerate(lines):
-        m = _HEADER.match(raw)
-        if m and m.group(1).strip() == section:
-            return i
-    # Fallback: prefix match that rejects `[island.extra]` for section `island`.
     head = f"[{section}]"
     for i, raw in enumerate(lines):
         s = raw.strip()
@@ -464,8 +423,8 @@ def _section_header_index(lines: list[str], section: str) -> int | None:
 
 
 def _header_name(line: str) -> str | None:
-    m = _HEADER.match(line)
-    return m.group(1).strip() if m else None
+    m = re.match(r"^\[([A-Za-z0-9_.-]+)\]\s*(#.*)?$", line.strip())
+    return m.group(1) if m else None
 
 
 def heal_duplicate_tables() -> bool:
@@ -540,7 +499,6 @@ def set_value(section: str, key: str, value) -> None:
         heal_duplicate_tables()
     lines = CONFIG_FILE.read_text(encoding="utf-8").splitlines() if CONFIG_FILE.exists() else []
     line = f"{key} = {_toml_value(value)}"
-
     header = f"[{section}]"
     start = _section_header_index(lines, section)
     if start is None:

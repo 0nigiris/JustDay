@@ -28,10 +28,8 @@ from . import (
     clipboard,
     config,
     desktop,
-    dispatch,
     dock,
     events,
-    fallback,
     fastpath,
     filesearch,
     glyphs,
@@ -48,7 +46,6 @@ from . import (
     offline,
     palette,
     parts,
-    providers,
     reminders,
     scenes,
     session,
@@ -109,6 +106,7 @@ class Daemon:
         self._layout_proc: asyncio.subprocess.Process | None = None
         self._windows_proc: asyncio.subprocess.Process | None = None
         self._windows: list[dict] = []
+        self._dock: dict = {}
         self._windows_debounce: asyncio.Task | None = None
         self._windows_pending: list[dict] | None = None
         self._trash_full = False
@@ -146,7 +144,6 @@ class Daemon:
         self._voice_warned = False
         self._music_started = 0.0   # music that just started speaks for itself: the reply after it stays silent
         self._offline_note = 0.0    # when the user was last told that the cloud is out
-        self._fell_back_at = 0.0      # когда ушли с Claude на запасного
         self._cloud_down_until = 0.0  # the brain just failed: five minutes of going local without the wait
         self._cache_q: list[dict] = []      # songs playing from the stream, waiting to be downloaded
         self._cache_task: asyncio.Task | None = None
@@ -981,106 +978,12 @@ class Daemon:
         self.publish(detail=t("Отменено"), kind="tool")
         await self.earcon("error")
 
-    async def _pick_model(self, text: str) -> str:
-        """Выбрать модель под просьбу. Возвращает прежнюю — чтобы вернуться к ней после работы.
-
-        Переподключение стоит секунду-полторы, и платить её имеет смысл только вверх: подняться
-        надо **до** работы, иначе работать будет не тот. Опускаться обратно можно потом, когда
-        человек уже получил ответ и никуда не торопится.
-        """
-        b = self.cfg["brain"]
-        was = b.get("model", "")
-        if not b.get("auto_model", True) or not providers.is_claude(self.cfg):
-            return was
-        light, strong = b.get("light_model") or "haiku", b.get("strong_model") or "sonnet"
-        level, why = await asyncio.get_running_loop().run_in_executor(None, dispatch.level_for, text)
-        want = strong if level == dispatch.STRONG else light
-        if want == was:
-            return was
-        b["model"] = want
-        try:
-            await self.brain.reconnect()
-        except Exception:
-            log.exception("не вышло переключиться на %s, остаёмся на %s", want, was)
-            b["model"] = was
-            return was
-        log.info("модель: %s → %s (%s)", was, want, why)
-        events.emit("model_picked", model=want, was=was, why=why)
-        self.publish(brain_model=want, brain_why=why)
-        return was
-
-    async def _fall_back(self, error: str) -> bool:
-        """Перейти к запасному поставщику, если отказ похож на лимит. True — перешли."""
-        if not fallback.looks_like_limit(error):
-            return False
-        got = fallback.next_provider(self.cfg)
-        if not got:
-            log.info("лимит, но переходить некуда")
-            return False
-        name, model = got
-        b = self.cfg["brain"]
-        was = b.get("provider", "claude")
-        b["provider"], b["model"] = name, model
-        self._fell_back_at = time.monotonic()
-        try:
-            await self.brain.reconnect()
-        except Exception:
-            log.exception("не вышло перейти на %s", name)
-            b["provider"], b["model"] = was, b.get("model", model)
-            return False
-        log.info("лимит у %s → перешёл на %s (%s)", was, name, model)
-        events.emit("provider_fallback", was=was, provider=name, model=model)
-        self.publish(brain_model=model, brain_why="", provider=name)
-        # Сказать об этом надо: человек должен знать, что отвечает уже не тот, кого он звал.
-        self.notify(t("Лимит Claude кончился — перешёл на {where}.").format(where=name),
-                    icon="dialog-information")
-        return True
-
-    async def _try_home(self) -> None:
-        """Вернуться к Claude, когда лимит, скорее всего, уже восстановился.
-
-        Угадывать точный миг нечем: Claude не говорит, когда лимит вернётся. Поэтому возвращаемся по
-        времени, которое человек задал сам, и если промахнулись — следующий же отказ уведёт нас
-        обратно к запасному. Хуже от этого не станет: одна потерянная попытка против того, чтобы
-        навсегда остаться на запасной модели, не заметив, что основная давно свободна.
-        """
-        b = self.cfg["brain"]
-        hours = float(b.get("fallback_back_after_hours") or 0)
-        if not hours or not self._fell_back_at or b.get("provider") == "claude":
-            return
-        if time.monotonic() - self._fell_back_at < hours * 3600:
-            return
-        self._fell_back_at = 0.0
-        b["provider"] = "claude"
-        b["model"] = b.get("light_model") or "haiku"
-        try:
-            await self.brain.reconnect()
-            log.info("пробуем снова Claude")
-            events.emit("provider_home")
-            self.publish(brain_model=b["model"], brain_why="", provider="claude")
-        except Exception:
-            log.exception("вернуться к Claude не вышло")
-
-    async def _settle_model(self, back_to: str) -> None:
-        """Вернуться к лёгкой после тяжёлой работы — молча и уже после ответа."""
-        b = self.cfg["brain"]
-        if not back_to or b.get("model") == back_to or not b.get("auto_model", True):
-            return
-        b["model"] = back_to
-        try:
-            await self.brain.reconnect()
-            self.publish(brain_model=back_to, brain_why="")
-        except Exception:
-            log.exception("не вышло вернуться на %s", back_to)
-
     async def run_turn(self, text: str, source: str = "voice") -> str:
         self.state = "thinking"
         spoken_before = self._spoken
         gen = self._cancel_gen
         if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again
             return await self.offline_turn(text)
-        await self._try_home()
-        was_model = await self._pick_model(text)
         try:
             reply = await self.brain.ask(text, source=source)
             self._cloud_down_until = 0.0
@@ -1088,23 +991,10 @@ class Daemon:
             if gen != self._cancel_gen:
                 return ""
             events.emit("turn_failed", error=repr(e))
-            # Лимит и обрыв связи — разные беды. При лимите есть куда пойти: бесплатные модели в
-            # том же интернете работают. При обрыве идти некуда, и честнее сказать это сразу.
-            moved = await self._fall_back(repr(e))
-            if moved:
-                try:
-                    reply = await self.brain.ask(text, source=source)
-                except Exception as again:
-                    events.emit("turn_failed", error=repr(again))
-                    self._cloud_down_until = time.monotonic() + 300
-                    reply = await self.offline_turn(text)
-            else:
-                self._cloud_down_until = time.monotonic() + 300
-                reply = await self.offline_turn(text)
+            self._cloud_down_until = time.monotonic() + 300
+            reply = await self.offline_turn(text)
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
-            spawn(self._settle_model(was_model))
             return ""
-        spawn(self._settle_model(was_model))
         await self.wait_speech_done()
         self.state = "thinking" if self.side and self.side.busy else "idle"
         if self._spoken == spoken_before and source != "event":
@@ -1530,7 +1420,6 @@ class Daemon:
                     self.publish(update=self.update_info)
                 except Exception as e:
                     log.info("update check failed: %s", type(e).__name__)
-            await self._reboot_maybe()
             await self._diary_maybe()
             if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
                 self._last_cal = time.monotonic()
@@ -1598,35 +1487,6 @@ class Daemon:
                     self._event_queue.put_nowait(msg)
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                 spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
-
-    async def _reboot_maybe(self) -> None:
-        """Раз в неделю напомнить перезагрузиться. Напомнить, а не перезагрузить.
-
-        Машина, которая не выключается месяцами, копит обновления ядра, утёкшую память драйверов и
-        службы, пережившие три своих обновления. Это не катастрофа, но однажды становится ею — и
-        всегда не вовремя.
-        Перезагружаться сам ассистент не станет: за компьютером может идти работа, которой он не
-        видит, и выбирать за человека момент потерять несохранённое — не его дело.
-        """
-        days = float(self.cfg["ui"].get("reboot_reminder_days") or 0)
-        if not days:
-            return
-        now = time.time()
-        state = events.load_state()
-        said = float(state.get("reboot_said") or 0)
-        if now - said < 20 * 3600:          # не чаще раза в сутки, даже если он не перезагрузился
-            return
-        try:
-            up = await asyncio.get_running_loop().run_in_executor(None, sysload.uptime)
-        except Exception:
-            return
-        if up < days * 86400:
-            return
-        events.save_state(reboot_said=now)
-        weeks = up / 86400
-        self.notify(t("Компьютер работает без перезагрузки {days} дней — стоит перезагрузить.")
-                    .format(days=int(weeks)), icon="system-reboot")
-        events.emit("reboot_reminder", days=round(weeks, 1))
 
     async def _diary_maybe(self) -> None:
         """Страница дня в Obsidian, вечером и сама.
@@ -2494,10 +2354,21 @@ class Daemon:
             cmd = req.get("cmd")
             if cmd == "subscribe":
                 self._subs.add(writer)
+                # dock from disk cache so the first UI paint has real icon paths (not empty slots)
+                try:
+                    dock_hello = dock.catalog_cached()
+                except Exception:
+                    dock_hello = {}
+                # Prefer last in-memory dock if cache somehow has no items (race during rebuild).
+                if (not isinstance(dock_hello, dict) or not (dock_hello.get("items") or [])) and getattr(self, "_dock", None):
+                    dock_hello = self._dock
+                elif isinstance(dock_hello, dict) and (dock_hello.get("items") or []):
+                    self._dock = dock_hello
                 hello = {"state": self.state, "workers": self._workers_active, "settings": island.settings_snapshot(self.cfg),
                          "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
                          "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
-                         "reminders": self._reminders_state(), "jobs": self.jobs.state()}
+                         "reminders": self._reminders_state(), "jobs": self.jobs.state(),
+                         "dock": dock_hello or {}, "windows": self._windows}
                 try:
                     writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
                     await writer.drain()
@@ -2660,23 +2531,6 @@ class Daemon:
                 from . import notes
 
                 resp = notes.add(req.get("text", ""), req.get("note", ""))
-            elif cmd == "claude_terminal":  # «открыть терминал» со страницы сессий
-                from . import workers as workers_mod
-
-                await asyncio.get_running_loop().run_in_executor(
-                    None, workers_mod.open_terminal, str(req.get("id") or "") or None, None)
-                resp = {"ok": True}
-            elif cmd == "sessions":  # что делает каждая живая сессия Claude Code
-                from . import sessions as sessions_mod
-
-                got = await asyncio.get_running_loop().run_in_executor(
-                    None, sessions_mod.live, self.cfg["brain"].get("claude_cli", "claude"))
-                resp = {"ok": True, "sessions": got}
-            elif cmd == "plan_open":  # «показать в Obsidian» со страницы планов
-                from . import notes
-
-                await asyncio.get_running_loop().run_in_executor(None, notes.open_in_obsidian, "")
-                resp = {"ok": True}
             elif cmd == "plan_done":
                 from . import notes
 
@@ -2791,6 +2645,8 @@ class Daemon:
                 resp = launcher.pin(str(req.get("kind", "app")), str(req.get("id", "")), req.get("on"))
             elif cmd == "dock":  # что закреплено в доке и чем ловить открытые окна
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.catalog)
+                if isinstance(got, dict) and (got.get("items") or []):
+                    self._dock = got
                 resp = {"ok": True, "dock": got, "windows": self._windows}
             elif cmd == "window_do":  # поднять, свернуть или закрыть окно по его номеру
                 what, wid = str(req.get("action", "focus")), str(req.get("id", ""))
@@ -2835,11 +2691,19 @@ class Daemon:
                 else:
                     got = await loop.run_in_executor(None, dock.pin_focused, on)
                 if got.get("ok"):
+                    if isinstance(got, dict) and (got.get("items") or got.get("pinned") is not None):
+                        # pin/unpin returns catalog fields; keep last good dock
+                        if got.get("items"):
+                            self._dock = got
                     self.publish(dock=got)
                 resp = got
             elif cmd == "tray_hide":  # убрать значок из полосы лотка или вернуть его
+                aliases = req.get("aliases") or []
+                if not isinstance(aliases, list):
+                    aliases = []
                 got = await asyncio.get_running_loop().run_in_executor(
-                    None, dock.hide_tray, str(req.get("id", "")), req.get("on"))
+                    None, lambda: dock.hide_tray(str(req.get("id", "")), req.get("on"),
+                                                 [str(a) for a in aliases]))
                 if got.get("ok"):
                     self.cfg = config.load()
                     self.publish(settings=island.settings_snapshot(self.cfg))
@@ -2847,17 +2711,6 @@ class Daemon:
             elif cmd == "mascots":  # какие маскоты есть и какой выбран
                 got = await asyncio.get_running_loop().run_in_executor(None, mascot.catalog)
                 resp = {"ok": True, "mascots": got}
-            elif cmd == "folder_list":  # что внутри закреплённой папки
-                got = await asyncio.get_running_loop().run_in_executor(
-                    None, dock.folder_items, str(req.get("path", "")))
-                resp = got
-            elif cmd == "folder_open":  # открыть файл или папку из стопки
-                path = str(req.get("path", "")).strip()
-                if path:
-                    await asyncio.get_running_loop().run_in_executor(
-                        None, lambda: subprocess.Popen(["xdg-open", path], start_new_session=True,
-                                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-                resp = {"ok": bool(path)}
             elif cmd == "trash_empty":  # очистить корзину: подтверждение спрашивает тот, кто просит
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.trash_empty)
                 self._trash_full = bool(got.get("trash_full"))
@@ -2866,6 +2719,8 @@ class Daemon:
             elif cmd == "dock_arrange":  # новый порядок после перетаскивания
                 keys = [str(k) for k in (req.get("keys") or [])]
                 got = await asyncio.get_running_loop().run_in_executor(None, dock.arrange, keys)
+                if isinstance(got, dict) and (got.get("items") or []):
+                    self._dock = got
                 self.publish(dock=got)
                 resp = {"ok": True, "dock": got}
             elif cmd == "session":  # что умеет кнопка питания
@@ -2903,7 +2758,7 @@ class Daemon:
                 resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))
-                if which not in ("emoji", "clip", "mixer", "plans", "claude", "load", "apps", ""):
+                if which not in ("emoji", "clip", "mixer", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
                 elif which == "apps":     # Alt+Space → Spotlight-поиск, не полное меню
                     self.publish(menu="search")
@@ -2968,6 +2823,8 @@ class Daemon:
         spawn(self._watch_layout())
         spawn(self._watch_brightness())
         spawn(self._cpu_loop())
+        # Pre-build dock catalog (resolved icon paths) so the next UI restart paints icons on try 1.
+        loop.run_in_executor(None, dock.catalog)
         # Остров — единственное место для уведомлений, если так попросили.
         want_popups = bool(self.cfg["island"].get("system_popups", False))
         if notifications.system_popups().get("popups") != want_popups:

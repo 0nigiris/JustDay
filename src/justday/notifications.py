@@ -59,6 +59,12 @@ def open_notification_app(app: str, desktop_id: str) -> str:
     """A tap on a notification on the island: bring its app forward (or start it). The exact chat opens only when
     Plasma's own popup is clicked — the island only watches notifications, it cannot press their buttons."""
 
+    desktop_id = str(desktop_id or "").strip()
+    if desktop_id.endswith(".desktop"):
+        desktop_id = desktop_id[: -len(".desktop")]
+    # Icon= theme names sometimes arrive where desktop-entry should be — keep as search term only.
+    if "/" in desktop_id or desktop_id.startswith("file:"):
+        desktop_id = ""
     terms = notification_terms(app, desktop_id)
     for term in terms:
         if desktop.windows("focus", term):

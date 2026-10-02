@@ -36,7 +36,9 @@ Item {
     readonly property real gap: Math.max(4, Math.min(64, JD.dockCfg.spacing === undefined ? 20 : JD.dockCfg.spacing))
     readonly property real cell: icon + gap
     readonly property real pad: Math.round(icon * 0.18)
-    readonly property real dotRoom: 9
+    readonly property real dotRoom: 11
+    // Closed icons sink a touch so the row feels centered; running keep the normal baseline (no raise).
+    readonly property real restDrop: Math.max(1, Math.round(icon * 0.06))
     readonly property bool magnify: JD.dockCfg.magnify !== false
     // Подписи: нет совсем, под курсором или всегда. Раньше было только «да/нет», а «всегда» — это
     // другой док: имена под всеми значками сразу, как в Dockish и в старых доках.
@@ -102,7 +104,7 @@ Item {
     // Место под имя под значком — только в режиме «всегда»: в остальных подпись живёт в плашке
     // под курсором и высоты карточке не добавляет.
     readonly property real labelRoom: labelMode === "always" ? 14 : 0
-    readonly property real cardHeight: icon + pad * 2 + dotRoom + labelRoom
+    readonly property real cardHeight: icon + pad * 2 + dotRoom + restDrop + labelRoom
 
     implicitWidth: laneLength
     implicitHeight: cardHeight + headroom
@@ -229,6 +231,9 @@ Item {
     readonly property string animStyle: JD.dockCfg.animation || "spring"
     readonly property real amp: Math.max(0, Math.min(2, (JD.dockCfg.magnify_scale === undefined ? 80 : JD.dockCfg.magnify_scale) / 100))
     readonly property real spread: Math.max(0.4, Math.min(6, (JD.dockCfg.magnify_spread === undefined ? 200 : JD.dockCfg.magnify_spread) / 100))
+    // Extra panel width so magnified end-icons are not clipped. Exclusive zone still
+    // uses card height only — this is paint/hit room, not magnet depth.
+    readonly property real magExtra: Math.round(icon * amp * spread * 1.8) + 16
     // Жёсткость и затухание — наружу: «пружинисто» у каждого своё, а на 185 герцах разница видна.
     readonly property real springK: Math.max(10, Math.min(600, JD.dockCfg.spring === undefined ? 180 : JD.dockCfg.spring))
     readonly property real springDamp: animStyle === "smooth" ? 1.0
@@ -534,7 +539,7 @@ Item {
         TapHandler {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             gesturePolicy: TapHandler.ReleaseWithinBounds
-            onTapped: { dv.closeCtx(); dv.closeStack() }
+            onTapped: dv.closeCtx()
         }
 
         // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
@@ -593,9 +598,13 @@ Item {
                     width: dv.icon
                     height: dv.icon
                     anchors.horizontalCenter: parent.horizontalCenter
-                    // Растёт от края, к которому прижат док: низ значка остаётся на своей линии, и
-                    // ряд не начинает плавать по вертикали.
-                    y: (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + slot.bounce
+                    // Closed icons sink slightly; running stay at the previous normal height.
+                    // Grow from the dock edge so magnification still feels anchored.
+                    readonly property real baseY: dv.atTop
+                        ? (dv.pad + dv.dotRoom + (slot.running ? 0 : dv.restDrop))
+                        : (dv.pad + (slot.running ? 0 : dv.restDrop))
+                    y: baseY + slot.bounce
+                    Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                     // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
                     // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
                     // Та же история, что и с местом: размер под пальцем считает физика, а
@@ -655,15 +664,25 @@ Item {
                     }
 
                     Icon {
+                        // Slight inset so filled theme plates (MacTahoe etc.) are not
+                        // edge-to-edge in the cell — reads less "solid block", keeps aspect.
                         anchors.fill: parent
+                        anchors.margins: Math.round(dv.icon * 0.06)
                         visible: slot.e.t === "app"
                         name: slot.e.icon || ""
                         fallback: "application-x-executable"
                         implicitSize: dv.icon
                         // Растр просят с запасом на увеличение: под курсором значок вырастает в
                         // полтора раза, и нарисованный по обычному размеру он там расплывается.
-                        renderSize: dv.icon * 2.4
+                        // Prefer ~3x for fine logos (Discord Clyde eyes).
+                        renderSize: dv.icon * 3.0
                         theme: true
+                        syncLoad: true
+                        iconPalette: String(JD.dockCfg.icon_style || "original").toLowerCase()
+                        iconPaletteTint: {
+                            const t = String(JD.dockCfg.icon_tint || "").trim()
+                            return t ? t : "#7AC8FF"
+                        }
                     }
                     Icon {
                         anchors.fill: parent
@@ -673,6 +692,7 @@ Item {
                         implicitSize: dv.icon
                         renderSize: dv.icon * 2.4
                         theme: true
+                        syncLoad: true
                     }
                     DockCat {
                         anchors.centerIn: parent
@@ -1112,28 +1132,6 @@ Item {
     // остальное у программы есть в её собственном окне.
     DockAudio { id: audio }
 
-    // ───────────── стопка ─────────────
-    property var stackEntry: null
-    property var stackItems: []
-    property real stackAt: 0
-    function openStack(e) {
-        if (!e || !e.id) return
-        closeCtx()
-        if (stackEntry && stackEntry.id === e.id) { closeStack(); return }
-        stackEntry = e
-        stackItems = []
-        const i = lane.findIndex(s => s.key === e.key)
-        stackAt = i >= 0 && geom[i] ? geom[i].x + geom[i].w / 2 : dv.width / 2
-        JD.folderList(e.id)
-    }
-    function closeStack() { stackEntry = null; stackItems = [] }
-    Connections {
-        target: JD
-        function onFolderItemsChanged() {
-            if (dv.stackEntry && JD.folderPath === dv.stackEntry.id) dv.stackItems = JD.folderItems
-        }
-    }
-
     property var ctxEntry: null
     property var ctxWins: []
     property string ctxConfirm: ""     // пункт, который ждёт второго щелчка
@@ -1150,91 +1148,6 @@ Item {
     }
     function closeCtx() { ctxEntry = null; ctxWins = []; ctxConfirm = "" }
     Timer { id: ctxClose; interval: 1400; onTriggered: dv.closeCtx() }
-
-    // ───────────── стопка: что лежит в папке ─────────────
-    //
-    // Решёткой, а не списком: у файлов есть имена, но узнают их по значкам, и в решётке за один
-    // взгляд видно вдвое больше. Папки первыми — это то, куда идут дальше, а файлы то, что берут.
-    Rectangle {
-        id: stack
-        visible: !!dv.stackEntry
-        width: Math.min(dv.width - 24, 92 * Math.max(1, Math.min(5, dv.stackItems.length)) + 24)
-        height: Math.min(360, stackGrid.contentHeight + (stackMore.visible ? 46 : 22))
-        radius: 18
-        color: Qt.rgba(0, 0, 0, 0.92)
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.12)
-        x: Math.max(0, Math.min(dv.width - width, dv.stackAt - width / 2))
-        y: dv.atTop ? card.height + 10 : dv.height - card.height - height - 10
-        HoverHandler { }
-
-        GridView {
-            id: stackGrid
-            anchors { fill: parent; margins: 11; bottomMargin: stackMore.visible ? 34 : 11 }
-            clip: true
-            cellWidth: 92
-            cellHeight: 84
-            model: dv.stackItems
-            boundsBehavior: Flickable.StopAtBounds
-            delegate: Item {
-                required property var modelData
-                width: 92
-                height: 84
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 3
-                    radius: 10
-                    color: cellHover.hovered ? JD.fill1 : "transparent"
-                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 110 } }
-                }
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 5
-                    Icon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        name: modelData.dir ? "folder" : "file"
-                        fallback: modelData.dir ? "folder" : "text-x-generic"
-                        implicitSize: 30
-                        theme: true
-                    }
-                    Text {
-                        width: 82
-                        horizontalAlignment: Text.AlignHCenter
-                        elide: Text.ElideMiddle
-                        maximumLineCount: 2
-                        wrapMode: Text.Wrap
-                        font.family: JD.fontFamily
-                        font.pixelSize: 10
-                        color: JD.text2
-                        text: modelData.name
-                    }
-                }
-                HoverHandler { id: cellHover; cursorShape: Qt.PointingHandCursor }
-                TapHandler {
-                    gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: { JD.folderOpen(modelData.path); dv.closeStack() }
-                }
-            }
-        }
-
-        // Папка может быть большой, и честнее сказать, сколько осталось за краем, чем молча
-        // показать первые сорок и сделать вид, что это всё.
-        Label2 {
-            id: stackMore
-            visible: JD.folderMore > 0
-            anchors { left: parent.left; bottom: parent.bottom; leftMargin: 14; bottomMargin: 10 }
-            font.pixelSize: 11
-            color: JD.text3
-            text: JD.tr("…и ещё ") + JD.folderMore
-        }
-        PillButton {
-            visible: !!dv.stackEntry
-            anchors { right: parent.right; bottom: parent.bottom; rightMargin: 11; bottomMargin: 7 }
-            height: 24
-            label: JD.tr("Открыть папку")
-            onClicked: { JD.folderOpen(dv.stackEntry.id); dv.closeStack() }
-        }
-    }
 
     Rectangle {
         id: ctx
@@ -1550,9 +1463,6 @@ Item {
         // Нажали в доке при открытом меню — меню своё дело сделало и уходит.
         if (JD.menuOpen) JD.closeMenu()
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
-        // Папка в доке — стопка: показать, что внутри, а не открывать файловый менеджер. За самим
-        // менеджером человек пойдёт сам, если ему нужна именно папка, а не файл из неё.
-        if (e.kind === "dir") { dv.openStack(e); return }
         if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
         if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
         const front = wins.find(w => w.active && !w.minimized)

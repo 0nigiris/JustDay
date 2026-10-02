@@ -25,8 +25,7 @@ log = get_logger("agent.screen")
 
 # Команда получает имя файла последним аргументом — кроме тех, где иначе.
 TOOLS: tuple[tuple[str, list[str]], ...] = (
-    ("spectacle", ["spectacle", "-b", "-n", "-o"]),  # KDE, наш случай
-    ("grim", ["grim"]),  # wlroots
+        ("grim", ["grim"]),  # wlroots
     ("gnome-screenshot", ["gnome-screenshot", "-f"]),
     ("import", ["import", "-window", "root"]),  # X11, ImageMagick
     ("scrot", ["scrot", "-o"]),
@@ -86,7 +85,7 @@ async def capture(env: dict[str, str] | None = None) -> bytes:
             + (
                 f"пробовали {', '.join(tried)}"
                 if tried
-                else "не установлено ни одной утилиты (spectacle, grim, import)"
+                else "не установлено ни одной утилиты (grim, gnome-screenshot, import)"
             )
         )
     finally:
