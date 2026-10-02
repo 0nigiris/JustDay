@@ -715,3 +715,45 @@ def test_turning_it_on_twice_does_not_start_a_second_guard(tmp_path, monkeypatch
     server.on("раз")
     server.on("два")
     assert len(guards) == 1
+
+
+# ──────────────────────────── флешка ────────────────────────────
+def test_the_stick_keeps_its_keys_sealed(tmp_path) -> None:
+    """Потерянная флешка должна означать потерянную флешку, а не потерянные ключи."""
+    from justday import portable
+
+    blob = portable.seal({"openrouter": "sk-очень-секретно"}, "пароль флешки")
+    assert b"sk-" not in blob, "ключ видно прямо в файле — это не шифрование"
+    assert portable.unseal(blob, "пароль флешки")["openrouter"] == "sk-очень-секретно"
+    with pytest.raises(RuntimeError):
+        portable.unseal(blob, "чужой пароль")
+
+
+def test_the_stick_carries_its_own_home(tmp_path) -> None:
+    """Всё, что ассистент пишет о себе, должно уехать на флешку, а не остаться у хозяина машины."""
+    from justday import portable
+
+    got = portable.init(str(tmp_path))
+    assert got["ok"], got
+    run = (tmp_path / portable.RUN).read_text(encoding="utf-8")
+    for var in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
+        assert f'export {var}="$HERE' in run, f"{var} остался бы на чужой машине"
+    assert "systemctl" not in run, "служба пережила бы флешку"
+    for part in ("home/config", "home/data", "home/state", "home/cache"):
+        assert (tmp_path / part).is_dir()
+
+
+def test_keys_on_the_stick_never_touch_the_host_keyring(tmp_path, monkeypatch) -> None:
+    """На чужой машине в связку ключей хозяина не пишется ничего — иначе след остаётся у него."""
+    from justday import portable, providers
+
+    blob = tmp_path / "secrets.enc"
+    blob.write_bytes(portable.seal({"groq": "gsk_со_флешки"}, "пароль"))
+    monkeypatch.setattr(providers, "_portable", None)
+    monkeypatch.setenv("JUSTDAY_SECRETS", str(blob))
+    monkeypatch.setenv("JD_PASS", "пароль")
+    called: list[str] = []
+    monkeypatch.setattr(providers.shutil, "which", lambda name: called.append(name) or "/usr/bin/secret-tool")
+
+    assert providers.secret_get("groq") == "gsk_со_флешки"
+    assert "secret-tool" not in called, "полезли в связку ключей, хотя ключ лежал на флешке"

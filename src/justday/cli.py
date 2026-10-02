@@ -427,6 +427,11 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["list", "notify", "send", "ring"])
     sp.add_argument("args", nargs="*")
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
+    sp = sub.add_parser("portable", help="собрать флешку: воткнул в чужой компьютер, поработал, "
+                                        "вынул — следов не осталось")
+    sp.add_argument("action", choices=["init"])
+    sp.add_argument("where", help="папка на смонтированной флешке")
+    sp.add_argument("--keys", default="", help="какие ключи положить, через запятую: openrouter,groq")
     sp = sub.add_parser("server", help="режим сервера: экраны гаснут, звук глохнет, машина не "
                                       "засыпает, а работа идёт. on | off | status")
     sp.add_argument("action", nargs="?", default="status", choices=["on", "off", "status"])
@@ -881,6 +886,27 @@ def main(argv: list[str] | None = None) -> None:
             _print(session.save())
         else:
             _print(session.close(a.keep) if a.action == "close" else session.restore())
+    elif a.cmd == "portable":
+        import getpass
+
+        from . import portable, providers
+
+        keys = {}
+        names = [k.strip() for k in a.keys.split(",") if k.strip()]
+        for name in names:
+            got = providers.secret_get(name)
+            if got:
+                keys[name] = got
+            else:
+                print(f"ключа «{name}» нет в связке — пропускаю")
+        word = ""
+        if keys:
+            # Пароль спрашивается у человека и никуда не записывается: ни в файл, ни в журнал, ни
+            # в память ассистента. Его знает только тот, кто носит флешку.
+            word = getpass.getpass("Пароль для флешки: ")
+            if word != getpass.getpass("Ещё раз: "):
+                sys.exit("пароли не совпали")
+        _print(portable.init(a.where, keys, word))
     elif a.cmd == "server":
         from . import server as server_mod
 

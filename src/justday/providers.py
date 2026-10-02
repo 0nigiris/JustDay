@@ -7,9 +7,11 @@ never in config files or in the assistant's memory.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 # name → (base url, secret name or fixed token, description)
 PROVIDERS: dict[str, dict] = {
@@ -30,7 +32,33 @@ PROVIDERS: dict[str, dict] = {
 SECRET_ATTRS = ["service", "justday"]
 
 
+_portable: dict | None = None
+
+
+def _from_stick(name: str) -> str:
+    """Ключ с флешки: там он лежит зашифрованным, а пароль живёт только в этом процессе.
+
+    На чужой машине в связку ключей хозяина мы не пишем ничего — иначе «вынул флешку, следов не
+    осталось» было бы неправдой: ключ остался бы у него.
+    """
+    global _portable
+    blob = os.environ.get("JUSTDAY_SECRETS", "")
+    passphrase = os.environ.get("JD_PASS", "")
+    if not blob or not passphrase:
+        return ""
+    if _portable is None:
+        from . import portable
+        try:
+            _portable = portable.unseal(Path(blob).read_bytes(), passphrase)
+        except (OSError, RuntimeError, ValueError):
+            _portable = {}
+    return str(_portable.get(name) or "")
+
+
 def secret_get(name: str) -> str:
+    got = _from_stick(name)
+    if got:
+        return got
     if not shutil.which("secret-tool"):
         return ""
     r = subprocess.run(["secret-tool", "lookup", *SECRET_ATTRS, "key", name], capture_output=True, text=True)

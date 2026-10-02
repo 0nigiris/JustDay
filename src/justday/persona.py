@@ -91,6 +91,11 @@ ABILITIES: list[tuple[str, str, str]] = [
      "Memory: `justday memory` — files on disk; it survives a restart."),
     ("", "Напоминания и таймеры: `justday timer`, `justday alarm`, `justday reminders`.",
      "Reminders and timers: `justday timer`, `justday alarm`, `justday reminders`."),
+    ("", "Флешка: `justday portable init <папка на флешке> --keys openrouter,groq` — собрать "
+         "переносную копию. Пароль для ключей спрашивается у человека, сам не придумывай и не "
+         "сохраняй его.",
+     "USB stick: `justday portable init <folder on the stick> --keys openrouter,groq`. The "
+     "passphrase is asked of the person — never invent or store it."),
     ("", "Режим сервера: `justday server on` — экраны гаснут, звук глохнет, машина не засыпает, "
          "а работа идёт дальше. `justday server off` возвращает всё. Включай, когда он ушёл, а "
          "работа осталась, и обязательно выключай, закончив.",
