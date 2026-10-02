@@ -5,6 +5,7 @@
 #
 # Options (all optional — without them the installer asks):
 #   --everything        speech recognition, the neural voice and NVIDIA acceleration
+#   --setup             ask again on an existing install (parts, screen, model, voice)
 #   --no-gpu            the same without the 2.2 GB of CUDA libraries
 #   --text-only         no microphone, no voice: 250 MB, commands typed
 #   --parts a,b,c       exactly these: speech, voice, cuda
@@ -44,6 +45,10 @@ while (($#)); do
     --parts)                  WANT="${2:-}"; ASK=0; shift ;;
     --parts=*)                WANT="${1#*=}"; ASK=0 ;;
     --yes|-y)                 ASK=0 ;;
+    # Перенастроить уже установленное: те же вопросы, что при первой установке, включая «что
+    # показывать на экране». Без него обновление молча оставляет всё как было — и правильно
+    # делает, но человеку нужен способ передумать, не вспоминая названия переменных.
+    --setup|--reconfigure)    JUSTDAY_ASK=1; JUSTDAY_SETUP=1 ;;
     --debug|-d)               DEBUG=1 ;;
     --no-sudo)                JUSTDAY_NO_SUDO=1 ;;
     --help|-h)                usage ;;
@@ -248,7 +253,7 @@ if [[ -z "$WANT" ]]; then                       # ни флага, ни пере
   if ((${#here[@]})) && [[ -z "${JUSTDAY_ASK:-}" ]]; then
     WANT="$guess"
     printf '\n  %s%s %s%s\n' "$D" "$(t 'Уже стоит:' 'Already installed:')" "${here[*]}" "$N"
-    printf '  %s%s%s\n\n' "$D" "$(t 'Обновляю это же. Сменить состав: justday parts add speech · ./install.sh --everything' 'Updating the same. To change: justday parts add speech · ./install.sh --everything')" "$N"
+    printf '  %s%s%s\n\n' "$D" "$(t 'Обновляю это же. Сменить состав: justday parts add speech · перенастроить: ./install.sh --setup' 'Updating the same. To change: justday parts add speech · reconfigure: ./install.sh --setup')" "$N"
   elif ((ASK == 1)) && { : </dev/tty; } 2>/dev/null; then
     # Выбор галочками, а не цифрами.
     #
@@ -584,6 +589,25 @@ section "$(t 'Настраиваем' 'Setting up')"
 CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/justday"
 BRAIN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/justday/brain"
 FIRST_RUN=0; [[ -f "$CONF_DIR/config.toml" ]] || FIRST_RUN=1
+# Что человек отметил на вопросе «что показывать на экране». Пишем своим же конфигуратором, а не
+# sed: вставленная строка дала бы второй ключ enabled в секции, где он уже есть, а TOML с двумя
+# одинаковыми ключами не читается вовсе — установка кончилась бы конфигом, который не открывается.
+#
+# Ставим и true, и false, а не только false: при перенастройке человек может и вернуть то, что
+# когда-то убрал, и «включить обратно» должно работать так же просто, как «убрать».
+apply_screen() {
+  [[ -n "${SCREEN+x}" ]] || return 0
+  local part on
+  for part in island dock tray; do
+    on=false
+    [[ ",$SCREEN," == *",$part,"* ]] && on=true
+    # Молча проглотить ошибку нельзя: человек снял галочку, а на экране всё осталось бы как было —
+    # и он бы решил, что выбор ничего не значит. Поэтому строкой под шагом.
+    "$APP_DIR/.venv/bin/justday" config set "$part.enabled" "$on" >/dev/null 2>&1 \
+      || warn "$(t "не удалось записать" "could not write") $part.enabled — $(t "поправьте в настройках" "change it in settings")"
+  done
+}
+
 settings() {
   mkdir -p "$CONF_DIR" "$BRAIN_DIR"
   if [[ ! -f "$CONF_DIR/config.toml" ]]; then
@@ -593,15 +617,7 @@ settings() {
     # Что человек отметил на втором вопросе. Пишем своим же конфигуратором, а не sed: вставленная
     # строка дала бы второй ключ enabled в секции, где он уже есть, а TOML с двумя одинаковыми
     # ключами не читается вовсе — установка кончилась бы конфигом, который не открывается.
-    if [[ -n "${SCREEN+x}" ]]; then
-      for part in island dock tray; do
-        [[ ",$SCREEN," == *",$part,"* ]] && continue
-        # Молча проглотить ошибку нельзя: человек снял галочку, а на экране всё осталось бы как
-        # было — и он бы решил, что выбор ничего не значит. Поэтому строкой под шагом.
-        "$APP_DIR/.venv/bin/justday" config set "$part.enabled" false >/dev/null 2>&1 \
-          || warn "$(t "не удалось отключить" "could not turn off") $part — $(t "включите в настройках" "turn it off in settings")"
-      done
-    fi
+    apply_screen
     # Настройки под выбранный набор: без распознавания речи кнопка открывает поле ввода,
     # а не запись; без нейросетевого голоса отвечает espeak-ng, а в текстовом наборе — молча.
     ((SPEECH)) || sed -i 's/^microphone = true/microphone = false/' "$CONF_DIR/config.toml"
@@ -611,7 +627,12 @@ settings() {
     fi
     note "$(t 'созданы' 'created')${mic:+ · $(t 'микрофон' 'microphone') USB}"
   else
-    note "$(t 'ваши, без изменений' 'yours, unchanged')"
+    if [[ -n "${SCREEN+x}" ]]; then
+      apply_screen
+      note "$(t 'ваши, обновлён выбор для экрана' 'yours, screen choice updated')"
+    else
+      note "$(t 'ваши, без изменений' 'yours, unchanged')"
+    fi
   fi
   [[ -f "$BRAIN_DIR/CLAUDE.md" ]] || "$APP_DIR/scripts/make-profile.sh" > "$BRAIN_DIR/CLAUDE.md"
 }
