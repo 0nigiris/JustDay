@@ -1512,7 +1512,12 @@ Item {
                            icon: w.minimized ? "chevron-down" : w.active ? "app-window" : "square",
                            label: JD.flat(w.title || e.name || "Окно") })
             }
-            if (ctxWins.length > 1) out.push({ id: "close", label: "Закрыть все окна", icon: "x", danger: true })
+            if (ctxWins.length > 1) {
+                // Свернуть всё разом раньше делал щелчок по значку, но щелчок теперь ведёт по
+                // окнам по кругу, и этому действию нужно место, откуда его не нажмёшь случайно.
+                out.push({ id: "minimize", label: "Свернуть все окна", icon: "chevron-down" })
+                out.push({ id: "close", label: "Закрыть все окна", icon: "x", danger: true })
+            }
             out.push({ id: "sep" })
         }
         out.push({ id: "settings", label: "Настроить док", icon: "sliders-horizontal" })
@@ -1530,6 +1535,11 @@ Item {
         else if (what === "pin") JD.dockPin(e.kind, e.id, true)
         else if (what === "unpin") JD.dockPin(e.kind, e.id, false)
         else if (what === "close") for (const w of wins) JD.windowDo("close", w.id)
+        else if (what === "minimize") {
+            const g = e && e.i !== undefined && e.i < dv.geom.length ? dv.geom[e.i] : null
+            const iconRect = g ? JD.dockIconScreenRect(g) : null
+            for (const w of wins) JD.minimizeGenie(w, iconRect)
+        }
         else if (what.startsWith("focus:")) JD.windowDo("focus", what.slice(6))
     }
 
@@ -1579,10 +1589,11 @@ Item {
     // Следующее окно этой же программы. Считаем от того, что сейчас наверху: «следующее» имеет
     // смысл только относительно текущего, а не относительно порядка, в котором окна открывали.
     property real lastCycle: 0
-    function cycle(wins, step) {
+    function cycle(wins, step, guard) {
         if (!wins || wins.length < 2) return
+        const wait = guard === undefined ? 180 : guard   // колесо катится само, щелчок — нет
         const now = Date.now()
-        if (now - lastCycle < 180) return      // одно движение колеса — одно окно, а не пять
+        if (wait && now - lastCycle < wait) return      // одно движение колеса — одно окно, а не пять
         lastCycle = now
         let at = wins.findIndex(w => w.active && !w.minimized)
         if (at < 0) at = 0
@@ -1611,6 +1622,11 @@ Item {
         if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
         const front = wins.find(w => w.active && !w.minimized)
         if (front) {
+            // У программы несколько окон — значок ведёт по ним по кругу: нажал раз, поднялось
+            // одно, нажал второй — следующее. Свернуть всё разом в этом случае не даём: прятать
+            // пять окон одним промахом хуже, чем не спрятать ни одного, а «свернуть все окна»
+            // осталось в меню правой кнопки.
+            if (wins.length > 1) { dv.cycle(wins, 1, 0); return }
             // Genie: scale each window toward this dock icon, then minimize.
             const g = e.i !== undefined && e.i < dv.geom.length ? dv.geom[e.i] : null
             const iconRect = g ? JD.dockIconScreenRect(g) : null

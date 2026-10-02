@@ -120,12 +120,24 @@ class UtteranceRecorder:
     Модель пауз грузится при первой записи, а не в конструкторе: в наборе без распознавания речи
     её в окружении нет вовсе, и демон должен запускаться — он просто никогда не начнёт запись."""
 
-    def __init__(self, mic: Microphone, silence_s: float, no_speech_timeout_s: float, max_s: float):
+    def __init__(self, mic: Microphone, silence_s: float, no_speech_timeout_s: float, max_s: float,
+                 silence_long_s: float = 2.2, long_after_s: float = 5.0):
         self.mic = mic
         self._vad = None
         self.silence_s = silence_s
         self.no_speech_timeout_s = no_speech_timeout_s
         self.max_s = max_s
+        # Терпение к паузам растёт вместе с тем, как долго человек говорит. Короткая команда
+        # («открой дискорд») должна обрываться быстро, иначе ассистент кажется тугим. Но когда
+        # человек надиктовывает беду на полминуты, он думает вслух и молчит по секунде с лишним —
+        # и одна такая пауза обрывала его на полуслове, а огрызок уходил в работу как готовая
+        # просьба. Поэтому после long_after_s речи порог паузы становится silence_long_s.
+        self.silence_long_s = max(silence_s, silence_long_s)
+        self.long_after_s = long_after_s
+
+    def patience(self, spoken_s: float) -> float:
+        """Сколько тишины считать концом просьбы, если человек говорит уже spoken_s секунд."""
+        return self.silence_long_s if spoken_s >= self.long_after_s else self.silence_s
 
     @property
     def vad(self):
@@ -175,7 +187,8 @@ class UtteranceRecorder:
                     continue
                 frames.append(frame)
                 silence = silence + FRAME / RATE if p < 0.3 else 0.0
-                if silence >= self.silence_s or len(frames) * FRAME / RATE >= self.max_s:
+                spoken = len(frames) * FRAME / RATE
+                if silence >= self.patience(spoken - silence) or spoken >= self.max_s:
                     break
             if not frames:
                 return None

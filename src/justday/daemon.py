@@ -92,7 +92,9 @@ class Daemon:
         self._colors: asyncio.Task | None = None   # one background question about track colours at a time
         self._colors_after = 0.0                   # ... and a pause before asking again after a failure
         self.recorder = audio.UtteranceRecorder(self.mic, a["silence_seconds"], a["no_speech_timeout_seconds"],
-                                                a["max_utterance_seconds"])
+                                                a["max_utterance_seconds"],
+                                                a.get("silence_long_seconds", 2.2),
+                                                a.get("long_speech_seconds", 5.0))
         self.stt = STT(self.cfg["stt"])
         self._gave_up_vram = False   # видеопамять уже отдана игре
         self.tts = TTS(self.cfg["tts"])
@@ -585,7 +587,8 @@ class Daemon:
         events.emit("listen_start", followup=followup, source=self._activation)
         rec = self.recorder
         if followup:
-            rec = audio.UtteranceRecorder(self.mic, rec.silence_s, self.cfg["audio"]["followup_seconds"], rec.max_s)
+            rec = audio.UtteranceRecorder(self.mic, rec.silence_s, self.cfg["audio"]["followup_seconds"], rec.max_s,
+                                          rec.silence_long_s, rec.long_after_s)
         loop = asyncio.get_running_loop()
 
         def level(frame: np.ndarray) -> None:
@@ -670,7 +673,7 @@ class Daemon:
             self.state = "thinking" if self.brain.busy else "idle"
             await self.earcon("done")
             return done
-        if calendar_lane.CAL_WORDS.search(text):
+        if calendar_lane.wants(text):
             try:
                 cal = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.handle, text)
             except Exception as e:  # offline, or a calendar that moved
@@ -2986,7 +2989,10 @@ class Daemon:
             elif cmd == "clip_text":
                 resp = {"cmd": "clip_text", **clipboard.text_of(str(req.get("which", "")))}
             elif cmd == "voice_mute":  # кнопка «молчи» на островке — то же, что `justday voice mute`
-                await self.set_voice(not bool(req.get("on", True)))
+                # «on» здесь значит «пусть говорит», как его и посылает островок. Раньше тут стояло
+                # отрицание, и кнопка работала наоборот: человек нажимал «говорить», голос
+                # выключался, кнопка возвращалась в «молчит» — и так сколько ни нажимай.
+                await self.set_voice(bool(req.get("on", True)))
                 resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))

@@ -19,6 +19,18 @@ from .i18n import lang, t
 CAL_WORDS = re.compile(r"\b(календар\w*|расписани\w*|встреч\w*|созвон\w*|планы? на|что у меня (сегодня|завтра|на неделе|на завтра)|"
                        r"calendar|schedule|meetings?|appointments?|what do i have (today|tomorrow|this week))", re.I)
 _cache: dict[str, tuple[float, bytes]] = {}
+# Длиннее этого просьба уже не «что у меня сегодня», а рассказ, в котором слово «встреча» просто
+# попалось. Отвечать на такое календарём — значит перебивать человека посреди мысли; раз это
+# случилось, и ассистент на середине рассказа объявил, что в календаре на сегодня ничего нет.
+SHORT_ENOUGH = 9
+
+
+def wants(text: str) -> bool:
+    """Это просьба про календарь, а не просто рассказ, в котором мелькнуло слово «встреча»."""
+    words = (text or "").strip()
+    if not CAL_WORDS.search(words):
+        return False
+    return len(words.split()) <= SHORT_ENOUGH
 
 
 def parse_urls(raw: str) -> list[str]:
@@ -121,7 +133,7 @@ def spoken(items: list[dict], when: str) -> str:
 
 def handle(text: str) -> tuple[str, dict] | None:
     """Voice request → (spoken reply, island card) or None if it is not about the calendar / no calendar set up."""
-    if not CAL_WORDS.search(text) or not urls():
+    if not wants(text) or not urls():
         return None
     low = text.lower()
     offset, when = (1, "завтра") if ("завтра" in low or "tomorrow" in low) else (0, "сегодня")

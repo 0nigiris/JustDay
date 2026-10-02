@@ -84,7 +84,12 @@ DEFAULTS: dict = {
         "volume": 100,
         "earcons": True,
         "max_utterance_seconds": 40,
+        # Пауза, после которой просьба считается законченной. Для короткой команды — первая,
+        # для долгой речи (дольше long_speech_seconds) — вторая: человек, надиктовывающий беду,
+        # думает вслух и молчит по секунде, а обрыв на полуслове отправлял огрызок в работу.
         "silence_seconds": 1.0,
+        "silence_long_seconds": 2.2,
+        "long_speech_seconds": 5.0,
         "no_speech_timeout_seconds": 7,
         # After JustDay asks a question, listen again automatically for this long (0 = off).
         "followup_seconds": 6,
