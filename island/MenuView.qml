@@ -60,6 +60,17 @@ Item {
     property string hint: ""
     function hintFor(on, text) { if (on) hint = text; else if (hint === text) hint = "" }
 
+    // Имя действия, которое ждёт второго щелчка, — его показывает подпись полки.
+    readonly property string askingName: {
+        if (!JD.menuConfirm)
+            return ""
+        const rows = JD.sessionActions
+        for (let i = 0; i < rows.length; ++i)
+            if (rows[i].id === JD.menuConfirm)
+                return rows[i].name
+        return ""
+    }
+
     // Кнопка-кружок нижней полки. Своя, а не IconButton: тот берёт островные 8% белого, которых на
     // этой карточке не видно, и подписи у него нет — а безымянный кружок не нажимают.
     component ToolDot: Rectangle {
@@ -523,11 +534,15 @@ Item {
                 Label2 {
                     Layout.fillWidth: true
                     Layout.leftMargin: 8
-                    color: JD.text3
                     font.pixelSize: 12
                     elide: Text.ElideRight
-                    text: mv.hint || (mv.user.name ? mv.user.name + (mv.user.host ? "  ·  " + mv.user.host : "") : "")
-                    opacity: mv.hint ? 1 : 0.55
+                    // Пока опасное ждёт второго щелчка, полка говорит об этом словами и красным.
+                    // Раньше про «точно?» писала сама кнопка — и, раздуваясь, уводила соседние
+                    // кнопки из-под курсора: человек целился в «выключить», а попадал в «сон».
+                    color: mv.askingName ? JD.accentRed : JD.text3
+                    text: mv.askingName ? mv.askingName + "  ·  нажмите ещё раз"
+                                        : (mv.hint || (mv.user.name ? mv.user.name + (mv.user.host ? "  ·  " + mv.user.host : "") : ""))
+                    opacity: (mv.askingName || mv.hint) ? 1 : 0.55
                     Behavior on opacity { NumberAnimation { duration: 120 } }
                 }
 
@@ -542,39 +557,39 @@ Item {
                 }
 
                 // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
-                // краснеет и подписывается «точно?». Блокировка и сон не теряют ничего и спрашивать
-                // не должны — иначе защита превращается в помеху.
+                // краснеет, а словами про второй щелчок говорит подпись полки. Кнопка при этом
+                // остаётся того же размера: раздувать её значит сдвигать соседние, и второй щелчок
+                // человека уходит не туда, куда он целился. Блокировка и сон не теряют ничего и
+                // спрашивать не должны — иначе защита превращается в помеху.
                 Repeater {
                     model: JD.sessionActions
                     delegate: Rectangle {
+                        id: pow
                         required property var modelData
                         readonly property bool asking: JD.menuConfirm === modelData.id
-                        implicitWidth: asking ? askRow.implicitWidth + 22 : 30
+                        implicitWidth: 30
                         implicitHeight: 30
                         radius: 15
                         color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : "transparent")
-                        Behavior on implicitWidth { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                         Behavior on color { ColorAnimation { duration: 140 } }
-                        RowLayout {
-                            id: askRow
+                        scale: powTap.pressed ? 0.9 : 1
+                        Behavior on scale { NumberAnimation { duration: 110 } }
+                        Icon {
                             anchors.centerIn: parent
-                            spacing: 6
-                            Icon {
-                                name: modelData.icon
-                                implicitSize: 15
-                                tint: parent.parent.asking ? JD.text1 : (powHover.hovered ? JD.text1 : JD.text3)
-                            }
-                            Label1 { visible: parent.parent.asking; font.pixelSize: 12; text: "точно?" }
+                            name: pow.modelData.icon
+                            implicitSize: 15
+                            tint: pow.asking || powHover.hovered ? JD.text1 : JD.text3
                         }
                         HoverHandler {
                             id: powHover
                             cursorShape: Qt.PointingHandCursor
-                            onHoveredChanged: mv.hintFor(hovered, modelData.danger ? modelData.name + "  ·  нажать дважды"
-                                                                                   : modelData.name)
+                            onHoveredChanged: mv.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
+                                                                                       : pow.modelData.name)
                         }
                         TapHandler {
+                            id: powTap
                             gesturePolicy: TapHandler.ReleaseWithinBounds
-                            onTapped: JD.sessionDo(modelData.id, modelData.danger)
+                            onTapped: JD.sessionDo(pow.modelData.id, pow.modelData.danger)
                         }
                     }
                 }
