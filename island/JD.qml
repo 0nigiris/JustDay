@@ -258,7 +258,7 @@ Singleton {
     // программе (выбиралка эмодзи, история буфера, монитор нагрузки), здесь лежит в нём же: одно
     // окно, одни клавиши, одни цвета. Искать умеет демон — он же отвечает и ассистенту, поэтому
     // «вставь эмодзи с котиком» и сетка на экране находят одно и то же.
-    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | plans | load
+    property string toolsPage: ""          // "" — закрыта; emoji | clip | mixer | plans | claude | load
     property int toolsPick: 0             // выбранная строка в списке: стрелками и Enter
     property string toolsQuery: ""
     property var toolsItems: []           // что нашлось: эмодзи или записи буфера
@@ -306,6 +306,13 @@ Singleton {
     // Заводить им вторую жизнь здесь нельзя: два списка одного и того же расходятся в первый день.
     property var plans: []
     function plansRefresh() { send({ cmd: "plan_list", open: false }) }
+
+    // ───────────── живые сессии Claude Code ─────────────
+    //
+    // «Клод работает ×3» — это не сведения, а обещание, что что-то происходит. Здесь видно, что
+    // именно: какая сессия что читает, правит и запускает.
+    property var sessions: []
+    function sessionsRefresh() { send({ cmd: "sessions" }) }
     function planDone(which) { send({ cmd: "plan_done", which: String(which) }); plansLater.restart() }
     function planAdd(text) {
         const s = String(text || "").trim()
@@ -322,6 +329,7 @@ Singleton {
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
         else if (toolsPage === "plans") plansRefresh()
+        else if (toolsPage === "claude") sessionsRefresh()
     }
     // Сначала закрыть панель, потом просить вставить. Пока панель на экране, клавиатура принадлежит
     // ей: напечатанное уходит в никуда, и человек видит «скопировано» вместо вставленного символа.
@@ -801,6 +809,7 @@ Singleton {
         }
         if (m.layout !== undefined) layout = m.layout
         if (m.items !== undefined && m.file !== undefined) plans = m.items
+        if (m.sessions !== undefined) sessions = m.sessions
         if (m.brain_model !== undefined) { brainModel = m.brain_model; brainWhy = m.brain_why || "" }
         if (m.mascots !== undefined) mascots = m.mascots
         if (m.dock !== undefined) { dockData = m.dock; if (m.dock.trash_full !== undefined) trashFull = m.dock.trash_full }

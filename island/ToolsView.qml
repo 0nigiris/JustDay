@@ -59,6 +59,7 @@ Item {
                     { id: "clip", name: "Буфер", icon: "clipboard" },
                     { id: "mixer", name: "Звук", icon: "volume-2" },
                     { id: "plans", name: "Планы", icon: "clipboard" },
+                    { id: "claude", name: "Клод", icon: "code" },
                     { id: "load", name: "Машина", icon: "activity" },
                 ]
                 delegate: Rectangle {
@@ -310,6 +311,13 @@ Item {
                 labelColor: JD.accentRed
                 onClicked: { JD.send({ cmd: "clip_wipe" }); JD.refreshTools() }
             }
+        }
+
+        // ───────────── живые сессии ─────────────
+        SessionsView {
+            visible: tv.page === "claude"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
 
         // ───────────── планы ─────────────

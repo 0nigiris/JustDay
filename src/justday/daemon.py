@@ -2519,6 +2519,18 @@ class Daemon:
                 from . import notes
 
                 resp = notes.add(req.get("text", ""), req.get("note", ""))
+            elif cmd == "claude_terminal":  # «открыть терминал» со страницы сессий
+                from . import workers as workers_mod
+
+                await asyncio.get_running_loop().run_in_executor(
+                    None, workers_mod.open_terminal, str(req.get("id") or "") or None, None)
+                resp = {"ok": True}
+            elif cmd == "sessions":  # что делает каждая живая сессия Claude Code
+                from . import sessions as sessions_mod
+
+                got = await asyncio.get_running_loop().run_in_executor(
+                    None, sessions_mod.live, self.cfg["brain"].get("claude_cli", "claude"))
+                resp = {"ok": True, "sessions": got}
             elif cmd == "plan_open":  # «показать в Obsidian» со страницы планов
                 from . import notes
 
@@ -2695,7 +2707,7 @@ class Daemon:
                 resp = {"ok": True, "muted": bool(self.cfg["tts"].get("muted"))}
             elif cmd == "panel":  # открыть на островке нужную панель (горячая клавиша, `justday emoji`)
                 which = str(req.get("which", ""))
-                if which not in ("emoji", "clip", "mixer", "plans", "load", "apps", ""):
+                if which not in ("emoji", "clip", "mixer", "plans", "claude", "load", "apps", ""):
                     resp = {"ok": False, "error": f"нет такой панели: {which}"}
                 elif which == "apps":     # программы переехали в собственное меню на всё окно
                     self.publish(menu=True)
