@@ -766,6 +766,9 @@ def nightly(task: str, hours: float = 8.0, tell: bool = True, dark: bool = True)
         return 1
     cmd = ["systemd-run", "--user", "--collect", f"--unit={NIGHT_UNIT}",
            "--description=JustDay: ночная работа",
+           # Работать надо там, откуда позвали: служба иначе начинает в домашней папке, и движок
+           # ищет проект, стоя рядом с ним.
+           f"--working-directory={Path.cwd()}",
            # Службе systemd достаётся окружение его менеджера, а не наше: без этих переменных
            # движок не найдёт ни программ в ~/.local/bin, ни экрана, ни связки ключей.
            *[f"--setenv={k}={os.environ[k]}" for k in
