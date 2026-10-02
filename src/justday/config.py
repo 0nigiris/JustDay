@@ -186,7 +186,12 @@ DEFAULTS: dict = {
     "notes": {"vault": "", "plans": "Планы.md", "diary": "Дневник", "diary_hour": 23},
     # face: что показывать на экране — auto (по сеансу: остров на Wayland, полоска на X11),
     # island или panel. Решается при каждом входе, а не один раз при установке.
-    "ui": {"notifications": True, "face": "auto"},
+    "ui": {
+        # Раз во сколько дней напоминать перезагрузиться. Машина, не выключавшаяся месяцами, копит
+        # обновления ядра и утёкшую память драйверов — это не катастрофа, но однажды становится ею,
+        # и всегда не вовремя. Напоминаем, а не перезагружаем: за компьютером может идти работа,
+        # которой ассистент не видит. 0 — не напоминать.
+        "reboot_reminder_days": 7,"notifications": True, "face": "auto"},
     # «Я ушёл» closes the open applications and remembers them; «я вернулся» opens them again.
     # keep: what is never closed (a substring of the window class or the application name).
     # История буфера обмена для панели на островке. Пароли в неё не попадают: то, что программа
@@ -358,7 +363,10 @@ DEFAULTS: dict = {
     # does not know. Track titles (never the audio) leave the machine for this, like any other request.
     # video_where_strict: keep the chosen place even when the request names another one
     # ("включи в островке" is honoured by default, whatever video_where says)
+    # keep_island — держать ли островок на виду, пока играет музыка. Одним нравится, что он не
+    # уходит, другим это мешает попадать по вкладкам браузера: настройка, а не замысел.
     "media": {"video_where": "ask", "video_where_strict": False, "volume": 70, "duck": True, "show_player": True,
+              "keep_island": True,
               "color": "theme", "color_web": True},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},

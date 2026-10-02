@@ -1442,6 +1442,7 @@ class Daemon:
                     self.publish(update=self.update_info)
                 except Exception as e:
                     log.info("update check failed: %s", type(e).__name__)
+            await self._reboot_maybe()
             await self._diary_maybe()
             if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
                 self._last_cal = time.monotonic()
@@ -1509,6 +1510,35 @@ class Daemon:
                     self._event_queue.put_nowait(msg)
             if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                 spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
+
+    async def _reboot_maybe(self) -> None:
+        """Раз в неделю напомнить перезагрузиться. Напомнить, а не перезагрузить.
+
+        Машина, которая не выключается месяцами, копит обновления ядра, утёкшую память драйверов и
+        службы, пережившие три своих обновления. Это не катастрофа, но однажды становится ею — и
+        всегда не вовремя.
+        Перезагружаться сам ассистент не станет: за компьютером может идти работа, которой он не
+        видит, и выбирать за человека момент потерять несохранённое — не его дело.
+        """
+        days = float(self.cfg["ui"].get("reboot_reminder_days") or 0)
+        if not days:
+            return
+        now = time.time()
+        state = events.load_state()
+        said = float(state.get("reboot_said") or 0)
+        if now - said < 20 * 3600:          # не чаще раза в сутки, даже если он не перезагрузился
+            return
+        try:
+            up = await asyncio.get_running_loop().run_in_executor(None, sysload.uptime)
+        except Exception:
+            return
+        if up < days * 86400:
+            return
+        events.save_state(reboot_said=now)
+        weeks = up / 86400
+        self.notify(t("Компьютер работает без перезагрузки {days} дней — стоит перезагрузить.")
+                    .format(days=int(weeks)), icon="system-reboot")
+        events.emit("reboot_reminder", days=round(weeks, 1))
 
     async def _diary_maybe(self) -> None:
         """Страница дня в Obsidian, вечером и сама.

@@ -655,6 +655,11 @@ Item {
                     Toggle { checked: win.d.autostart ? win.d.autostart.enabled : false
                              onToggled: v => { win.run(["autostart", v ? "on" : "off"], r => { win.d.autostart = r; win.d = Object.assign({}, win.d) }); win.notify(v ? JD.tr("Автозапуск включён") : JD.tr("Автозапуск выключен")) } }
                 }
+                Row {
+                    title: JD.tr("Напоминать перезагрузиться")
+                    subtitle: JD.tr("Машина без перезагрузки копит обновления ядра и утёкшую память. 0 — не напоминать")
+                    SSlider { key: "ui.reboot_reminder_days"; from: 0; to: 30; step: 1; decimals: 0; unit: JD.tr(" дней") }
+                }
                 Row { title: JD.tr("Уведомления"); subtitle: JD.tr("Системные уведомления о подтверждениях и ошибках"); Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
                 Row {
                     title: JD.tr("Язык распознавания")
@@ -1466,6 +1471,11 @@ Item {
                     title: JD.tr("Плеер на острове")
                     subtitle: JD.tr("Пока играет музыка — обложка и эквалайзер сверху экрана, клик открывает плеер")
                     Toggle { checked: win.get("media.show_player") !== false; onToggled: v => win.set("media.show_player", v) }
+                }
+                Row {
+                    title: JD.tr("Островок на виду, пока играет")
+                    subtitle: JD.tr("Выключите, если он мешает попадать по вкладкам браузера: тогда уходит, как обычно")
+                    Toggle { checked: win.get("media.keep_island") !== false; onToggled: v => win.set("media.keep_island", v) }
                 }
                 Row {
                     title: JD.tr("Приглушать музыку")

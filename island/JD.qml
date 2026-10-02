@@ -225,7 +225,11 @@ Singleton {
     readonly property bool musicOn: !!player && (!!player.file || !!player.loading)
     // the pill stays while music plays and for a little while after a pause
     property bool pauseGrace: false
-    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false && (!player.paused || !!player.loading || pauseGrace || peeking)
+    // Островок с музыкой на виду. Одним нравится, что он не уходит, пока играет, другим это мешает
+    // попадать по вкладкам браузера, и спорить тут не о чем — это настройка, а не замысел.
+    readonly property bool musicShown: musicOn && mediaCfg.show_player !== false
+        && (mediaCfg.keep_island !== false)
+        && (!player.paused || !!player.loading || pauseGrace || peeking)
     Timer { id: graceTimer; interval: 6000; onTriggered: jd.pauseGrace = false }
     function media(action, value) { send({ cmd: "media", action: action, value: value === undefined ? null : value }) }
     function playerPos(now) {
