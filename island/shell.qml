@@ -3822,9 +3822,11 @@ ShellRoot {
             const roomW = (width > 200 ? width : JD.screenWidth) - 24
             const roomH = (height > 200 ? height : JD.screenHeight) - 24
             if (JD.menuSearchMode) {
-                // Spotlight: узкая плавающая карточка, не 760×620 пуск.
-                cardW = Math.max(420, Math.min(roomW, 560))
-                cardH = Math.max(280, Math.min(roomH, 480))
+                // Spotlight: поверхность ровно под поиск. Ширина постоянная, высота — по тому,
+                // сколько нашлось: пустой поиск это одна строка ввода, а не пустое окно в пол-экрана.
+                cardW = Math.max(520, Math.min(roomW, 720))
+                const want = menuBody.item ? menuBody.item.implicitHeight : 86
+                cardH = Math.max(86, Math.min(roomH, Math.min(760, want)))
             } else {
                 cardW = Math.max(520, Math.min(roomW, JD.menuWidth))
                 cardH = Math.max(360, Math.min(roomH, JD.menuHeight))
@@ -3847,8 +3849,19 @@ ShellRoot {
         Rectangle {
             id: menuCard
             // Экран может быть и маленьким: меню обязано на нём поместиться целиком.
-            width: Math.min(menuWin.width - 24, menuWin.cardW)
-            height: Math.min(menuWin.height - 24, menuWin.cardH)
+            // Spotlight меряет себя сам: его высота — это строка поиска плюс то, сколько нашлось.
+            // Верх прибит, едет низ, и карточка не превращается в пустое окно на пол-экрана, когда
+            // искать ещё нечего.
+            readonly property real wantH: menuBody.item ? menuBody.item.implicitHeight : 86
+            width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
+                                     : Math.min(menuWin.width - 24, menuWin.cardW)
+            height: JD.menuSearchMode
+                    ? Math.min(menuWin.height - 48, Math.max(86, Math.min(760, wantH)))
+                    : Math.min(menuWin.height - 24, menuWin.cardH)
+            Behavior on height {
+                enabled: JD.animOn && JD.menuSearchMode
+                SpringAnimation { spring: 5; damping: 0.62; epsilon: 0.5 }
+            }
             // От значка: меню стоит над ним, но не левее края экрана и не правее его.
             // Spotlight — по центру сверху, как macOS Spotlight, а не из дока.
             x: JD.menuSearchMode
@@ -3867,11 +3880,11 @@ ShellRoot {
                                              || !(menuWin.anchor && menuWin.anchor.shown))
                                              ? menuWin.anchor.gap + 10 : 12
             y: JD.menuSearchMode
-                 ? Math.max(48, Math.round(menuWin.height * 0.14))
+                 ? Math.min(96, Math.max(24, Math.round(menuWin.height * 0.08)))
                  : menuWin.fromDock
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
-            radius: JD.menuSearchMode ? 16 : 22
+            radius: JD.menuSearchMode ? 24 : 22
             // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
             // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
             // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
@@ -3967,8 +3980,10 @@ ShellRoot {
                 id: menuBody
                 anchors.fill: parent
                 active: menuWin.alive
-                sourceComponent: MenuView {}
+                sourceComponent: JD.menuSearchMode ? spotlightBody : menuBodyFull
             }
+            Component { id: menuBodyFull; MenuView {} }
+            Component { id: spotlightBody; SpotlightView {} }
         }
     }
 

@@ -98,7 +98,13 @@ def items(query: str = "", limit: int = 40, *, windows: bool = True) -> list[dic
 def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
     words = [w for w in _flat(query).split() if w]
     order = {key: n for n, key in enumerate(recents())}
-    rows: list[tuple[int, int, str, dict]] = []
+    # Четыре числа на запись: насколько подходит, какого она рода, как давно её брали, и имя —
+    # чтобы одинаковое шло одинаково. Род важнее давности: «диск» должен находить Discord, а не
+    # файл со словом discord в имени, даже если файл трогали вчера, а Discord — на той неделе.
+    # Раньше род был подмешан в давность (файлам добавляли 500), и программа, которой нет в
+    # недавних, получала 999 — то есть проигрывала любому файлу. Discord оказывался четвёртым.
+    APP, FILE, WINDOW = 1, 2, 0
+    rows: list[tuple[int, int, int, str, dict]] = []
 
     for app in desktop.list_apps():
         name = app.get("name_ru") or app.get("name") or app["id"]
@@ -106,7 +112,7 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
         score = _score(words, name, extra) if words else 0
         if score >= 99:
             continue
-        rows.append((score, order.get(f"app:{app['id']}", 999), _flat(name),
+        rows.append((score, APP, order.get(f"app:{app['id']}", 999), _flat(name),
                      {"kind": "app", "id": app["id"], "name": name, "icon": app.get("icon", ""),
                       "sub": app.get("generic", "")}))
 
@@ -114,7 +120,7 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
         score = _score(words, game["name"], [game.get("source", "")]) if words else 0
         if score >= 99:
             continue
-        rows.append((score, order.get(f"game:{game['id']}", 999), _flat(game["name"]),
+        rows.append((score, APP, order.get(f"game:{game['id']}", 999), _flat(game["name"]),
                      {"kind": "game", "id": str(game["id"]), "name": game["name"],
                       "icon": "applications-games", "sub": game.get("source", "")}))
 
@@ -127,7 +133,7 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
                 score = _score(words, title or app, [app])
                 if score >= 99:
                     continue
-                rows.append((score, -1, _flat(title),
+                rows.append((score, WINDOW, -1, _flat(title),
                              {"kind": "window", "id": str(win.get("id") or win.get("win") or ""),
                               "name": title or app, "icon": "preferences-system-windows",
                               "sub": "открыто · " + app}))
@@ -135,20 +141,22 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
             pass    # окнами может быть нечем управлять — это не повод ломать поиск программ
 
     # Файлы: недавние всегда; по запросу — ещё индекс домашних папок / plocate / fd.
-    # Программы важнее файлов при равном совпадении (score одинаков → order у файла 500+).
     try:
         file_limit = min(limit, 20) if words else min(8, limit)
         for f in filesearch.search(query, limit=file_limit):
             score = _score(words, f["name"], [f.get("sub", ""), f["id"]]) if words else 2
             if score >= 99:
                 continue
-            rows.append((score, 500 + order.get(f"file:{f['id']}", 50), _flat(f["name"]), f))
+            rows.append((score, FILE, order.get(f"file:{f['id']}", 999), _flat(f["name"]), f))
     except Exception:
         pass
 
-    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    # С запросом главное — совпадение, потом род, потом давность. Без запроса показывать нечего,
+    # кроме недавнего, и тогда давность впереди: человек открыл пустой поиск, чтобы вернуться к
+    # тому, с чем работал, а не чтобы посмотреть на алфавит.
+    rows.sort(key=lambda r: (r[0], r[1], r[2], r[3]) if words else (r[2], r[1], r[3]))
     out, seen = [], set()
-    for _, _, _, row in rows:
+    for *_, row in rows:
         key = (row["kind"], row["id"])
         if key in seen:
             continue
