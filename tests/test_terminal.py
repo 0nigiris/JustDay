@@ -159,3 +159,71 @@ def test_a_task_typed_into_the_window_reaches_the_ladder() -> None:
     said = asyncio.run(go())
     assert "почини док" in said, "задача не попала в журнал окна"
     assert "сделал" in said, "ответ движка не дошёл до окна"
+
+
+def test_a_trifle_was_taking_the_strongest_model_and_the_highest_effort(monkeypatch) -> None:
+    """«Который час» уносил столько же лимита, сколько разбор беды, — и к вечеру его не оставалось.
+
+    Лимит один на всё. Потраченный на «спасибо» к вечеру не вернётся, а именно вечером человек
+    садится за настоящую работу. Поэтому усилие и модель выбираются по самой задаче, а лестница
+    при этом не трогается: ступень остаётся той же.
+    """
+    work = terminal.Work({"terminal": {"auto": True, "light_model": "sonnet"}, "brain": {}},
+                         rungs=rungs("claude:opus"), engines={})
+
+    monkeypatch.setattr(terminal.dispatch, "level_for",
+                        lambda text, **kw: (terminal.dispatch.LIGHT, "местная модель"))
+    rung, effort, _ = work.shape("который час")
+    assert (rung.model, effort) == ("sonnet", "low")
+
+    monkeypatch.setattr(terminal.dispatch, "level_for",
+                        lambda text, **kw: (terminal.dispatch.STRONG, "местная модель"))
+    rung, effort, _ = work.shape("разберись, почему док лагает")
+    assert (rung.model, effort) == ("opus", "high")
+    assert work.rungs[0].model == "opus", "выбор модели на один ход переписал саму лестницу"
+
+
+def test_nobody_was_asking_the_top_rung_whether_the_limit_came_back() -> None:
+    """Спустившись, оболочка оставалась внизу до перезапуска — хотя лимит возвращается через часы.
+
+    Он просил именно это: «он спрашивает у Claude Code, очухался или нет, и если нет — идёт
+    дальше вниз». Угадывать миг возвращения нечем, поэтому не гадаем, а спрашиваем одним словом —
+    и только между задачами, чтобы не забрать работу у того, кто её делает.
+    """
+    answers = {"claude:opus": terminal.Said(text="снова я"), "opencode:ollama/своя": terminal.Said(text="сделал")}
+
+    async def ask(rung, text, session, cfg, on_text, on_tool):
+        return answers[str(rung)]
+
+    work = terminal.Work({"terminal": {"auto": False, "probe_minutes": 15}, "brain": {}},
+                         rungs=rungs("claude:opus", "opencode:ollama/своя"),
+                         engines={"claude": ask, "opencode": ask})
+    work.step = 1                      # как будто уже спустились
+    notes = []
+
+    asyncio.run(work.send("продолжай", on_note=notes.append))
+
+    assert work.step == 0, "верхний снова отвечает, а работа осталась внизу"
+    assert notes and "снова отвечает" in notes[0]
+
+
+def test_the_top_rung_was_asked_on_every_single_task(monkeypatch) -> None:
+    """Спрашивать верхнего на каждой задаче — значит платить лимитом за один и тот же вопрос.
+
+    Поэтому между вопросами проходит `probe_minutes`; сразу после спуска не спрашиваем вовсе.
+    """
+    asked = []
+
+    async def ask(rung, text, session, cfg, on_text, on_tool):
+        asked.append(str(rung))
+        return terminal.Said(text="ответил")
+
+    work = terminal.Work({"terminal": {"auto": False, "probe_minutes": 15}, "brain": {}},
+                         rungs=rungs("claude:opus", "opencode:ollama/своя"),
+                         engines={"claude": ask, "opencode": ask})
+    work.step = 1
+    asyncio.run(work.send("раз", on_note=lambda _n: None))   # первый раз спросить можно
+    before = len(asked)
+    work.step = 1
+    asyncio.run(work.send("два", on_note=lambda _n: None))   # второй — ещё рано
+    assert len(asked) == before + 1, "верхнего спросили второй раз подряд, не выждав срока"

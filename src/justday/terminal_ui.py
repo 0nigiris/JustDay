@@ -64,7 +64,10 @@ class Shell(App):
         self.query_one("#ask", Input).focus()
 
     def refresh_status(self, doing: str = "") -> None:
-        bits = [self.work.now.label, f"ступень {self.work.step + 1} из {len(self.work.rungs)}"]
+        bits = [self.work.now.label]
+        if self.work.effort:
+            bits.append(f"усилие {self.work.effort} ({self.work.why})")
+        bits.append(f"ступень {self.work.step + 1} из {len(self.work.rungs)}")
         if self.work.spent:
             bits.append(f"${self.work.spent:.4f}")
         if doing:
@@ -136,6 +139,7 @@ class Shell(App):
                 on_text=lambda t: log.write(t, expand=True),
                 on_tool=lambda name: log.write(f"[#8d8d99]· {name}[/]"),
                 on_note=lambda note: log.write(f"\n[#d4a72c]— {note}[/]\n"),
+                on_pick=lambda rung, effort, why: self.refresh_status(f"думает {rung.label}"),
             )
             if said.error and not said.text:
                 log.write(f"[#ff6b6b]Беда: {said.error}[/]")

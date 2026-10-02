@@ -25,10 +25,11 @@ import contextlib
 import json
 import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import config, fallback, providers, shell
+from . import config, dispatch, fallback, providers, shell
 
 CLAUDE, OPENCODE = "claude", "opencode"
 
@@ -103,6 +104,12 @@ def reachable(rung: Rung) -> bool:
     # а в связке он живёт всегда. Проверять только окружение значило бы объявить мёртвой ступень,
     # ключ к которой у человека есть.
     return bool(os.environ.get(name) or providers.secret_get(provider))
+
+
+# Какое усилие какой задаче. «Который час» не стоит высокого: оно стоит времени и лимита, а
+# ответ от него не меняется. А «разберись, почему док лагает» без высокого усилия кончается
+# правдоподобной догадкой вместо разбора.
+EFFORT = {dispatch.TINY: "low", dispatch.LIGHT: "low", dispatch.STRONG: "high"}
 
 
 @dataclass
@@ -291,6 +298,11 @@ class Work:
         self.rungs = [r for r in self.all if r not in self.skipped] or list(self.all)
         self.step = 0
         self.spent = 0.0
+        self.probed_at = 0.0           # когда в последний раз спрашивали верхнего
+        self.why = ""                  # чем решили усилие на последней задаче — для строки состояния
+        self.effort = ""               # и какое оно вышло
+        # Сессия помнится по ступени лестницы, а не по модели: мелочь, взятую облегчённой моделью,
+        # следующий вопрос должен продолжать, а не начинать заново.
         self.sessions: dict[str, str] = {}
         # Движки берутся из таблицы, чтобы проверять лестницу без запуска нейросетей: подменить
         # движок в тесте проще и честнее, чем подменять три разные программы.
@@ -300,25 +312,95 @@ class Work:
     def now(self) -> Rung:
         return self.rungs[min(self.step, len(self.rungs) - 1)]
 
+    @property
+    def opts(self) -> dict:
+        return self.cfg.get("terminal") or {}
+
+    # ───────────── чем брать эту задачу ─────────────
+
+    def shape(self, task: str) -> tuple[Rung, str, str]:
+        """Какой моделью и каким усилием брать эту задачу. Возвращает (ступень, усилие, чем решили).
+
+        Лестницу это не меняет: ступень остаётся той же, меняется только то, чем на ней работать.
+        Мелочь не стоит ни высокого усилия, ни самой сильной модели — а лимит у неё один на всё,
+        и потраченный на «спасибо» лимит не вернётся к вечеру, когда понадобится разбор.
+        """
+        rung, effort = self.now, str(self.opts.get("effort") or "")
+        if not self.opts.get("auto", True):
+            return rung, effort, "как задано"
+        level, why = dispatch.level_for(task)
+        effort = EFFORT.get(level, effort)
+        light = str(self.opts.get("light_model") or "")
+        if level != dispatch.STRONG and rung.engine == CLAUDE and light and rung.model != light:
+            rung = Rung(CLAUDE, light)
+        return rung, effort, why
+
+    # ───────────── обратно наверх ─────────────
+
+    async def alive(self, rung: Rung) -> bool:
+        """Отвечает ли эта ступень прямо сейчас — одно слово в новом разговоре.
+
+        Спрашиваем отдельно, а не переключаем рабочую сессию: переключиться, чтобы выяснить, что
+        лимит ещё не вернулся, значит потерять место в работе ради любопытства.
+        """
+        quiet = {**self.cfg, "terminal": {**self.opts, "first_word_seconds": 30}}
+        try:
+            said = await self.engines[rung.engine](rung, "ок", "", quiet, lambda _t: None, lambda _t: None)
+        except Exception:      # мёртвая ступень не должна ронять работу на живой
+            return False
+        return not self.hopeless(said)
+
+    async def climb(self, on_note=None) -> bool:
+        """Спросить верхних, не вернулся ли к ним лимит, и подняться к первому, кто ответил.
+
+        Только между задачами. Он сказал это прямо: «он спрашивает у Claude Code, очухался или
+        нет, и если нет — идёт дальше по лестнице вниз». Угадывать миг возвращения лимита нечем:
+        внятно о нём не говорят, поэтому мы не гадаем, а спрашиваем — одним словом.
+        """
+        on_note = on_note or (lambda _t: None)
+        if self.step == 0:
+            return False
+        every = max(1.0, float(self.opts.get("probe_minutes") or 15)) * 60
+        if self.probed_at and time.monotonic() - self.probed_at < every:
+            return False
+        self.probed_at = time.monotonic()
+        for i in range(self.step):
+            rung = self.rungs[i]
+            if await self.alive(rung):
+                was = self.now
+                self.step = i
+                on_note(f"{rung.label} снова отвечает — вернулся к нему с {was.label}.")
+                return True
+        return False
+
     def down(self) -> bool:
         if self.step >= len(self.rungs) - 1:
             return False
         self.step += 1
         return True
 
-    async def send(self, task: str, on_text=None, on_tool=None, on_note=None) -> Said:
-        """Отдать задачу тому, чья очередь, и спускаться, пока кто-нибудь её не возьмёт."""
+    async def send(self, task: str, on_text=None, on_tool=None, on_note=None, on_pick=None) -> Said:
+        """Отдать задачу тому, чья очередь, и спускаться, пока кто-нибудь её не возьмёт.
+
+        `on_pick` зовётся, когда выбрано, чем брать этот ход: говорить «думает Opus», а потом
+        думать Sonnet — хуже, чем не говорить ничего.
+        """
         on_text = on_text or (lambda _t: None)
         on_tool = on_tool or (lambda _t: None)
         on_note = on_note or (lambda _t: None)
+        on_pick = on_pick or (lambda _r, _e, _w: None)
         text = task
+        await self.climb(on_note)
         while True:
-            rung = self.now
+            seat = str(self.now)                 # сессия принадлежит ступени, а не модели
+            rung, self.effort, self.why = self.shape(task)
+            on_pick(rung, self.effort, self.why)
+            turn = {**self.cfg, "terminal": {**self.opts, "effort": self.effort}}
             engine = self.engines[rung.engine]
-            said = await engine(rung, text, self.sessions.get(str(rung), ""), self.cfg, on_text, on_tool)
+            said = await engine(rung, text, self.sessions.get(seat, ""), turn, on_text, on_tool)
             self.spent += said.cost
             if said.session:
-                self.sessions[str(rung)] = said.session
+                self.sessions[seat] = said.session
             if not self.hopeless(said):
                 return said
             was, why = rung, "кончился лимит" if said.limit else f"не ответила: {said.error[:120]}"
@@ -344,9 +426,13 @@ async def plain(task: str, cfg: dict | None = None) -> int:
     work = Work(cfg)
     if work.skipped:
         print("Пропускаю ступени без входа: " + ", ".join(r.label for r in work.skipped))
-    print(f"Думает {work.now.label}…\n")
+
+    def picked(rung: Rung, effort: str, why: str) -> None:
+        tail = f" · усилие {effort} ({why})" if effort else ""
+        print(f"Думает {rung.label}{tail}…\n", flush=True)
+
     said = await work.send(task, on_text=lambda t: print(t, end="", flush=True),
-                           on_note=lambda t: print(f"\n— {t}\n"))
+                           on_note=lambda t: print(f"\n— {t}\n"), on_pick=picked)
     print()
     if said.error and not said.text:
         print("Беда: " + said.error)
