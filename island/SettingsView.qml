@@ -1095,6 +1095,11 @@ Item {
                     SSlider { key: "tray.icon_size"; from: 16; to: 40; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
                 Row {
+                    title: JD.tr("Рамка при наведении")
+                    subtitle: JD.tr("Обводит значок, на который навели. Выключите — останутся одни значки, без рамки")
+                    Toggle { checked: win.get("tray.hover_frame") !== false; onToggled: v => win.set("tray.hover_frame", v) }
+                }
+                Row {
                     title: JD.tr("Раскладка клавиатуры")
                     subtitle: JD.tr("Первой ячейкой полосы: две буквы, нажатие переключает")
                     Toggle { checked: win.get("tray.layout") !== false; onToggled: v => win.set("tray.layout", v) }

@@ -390,6 +390,26 @@ Item {
                     // ColorOverlay only for black-glyph wash — never on Discord/Waywallen.
                     // No backplate / hover disk under tray glyphs — SNI icons already
                     // bring their own art; a fill disk read as a broken badge.
+                    // Наведение: рамка вокруг самого значка, а не пузырь под ним.
+                    //
+                    // Пузырь — это заливка размером с ячейку: она больше значка, живёт своей
+                    // жизнью и читается как второй, сломанный значок под первым. Рамка обводит то,
+                    // на что человек смотрит, растёт вместе с ним и ничего собой не закрывает.
+                    // Кому и она лишняя — выключается в настройках, тогда остаются одни значки.
+                    Rectangle {
+                        visible: slotHover.hovered && JD.trayCfg.hover_frame !== false
+                        anchors.centerIn: parent
+                        width: tv.icon * slot.g.k + 10
+                        height: tv.icon * slot.g.k + 10
+                        radius: Math.round(height * 0.3)
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, slotTap.pressed ? 0.34 : 0.22)
+                        Behavior on border.color { enabled: JD.animOn; ColorAnimation { duration: 120 } }
+                        opacity: slotHover.hovered ? 1 : 0
+                        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
+                    }
+
                     Item {
                         id: trayIconWrap
                         anchors.centerIn: parent

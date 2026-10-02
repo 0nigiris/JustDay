@@ -374,6 +374,10 @@ DEFAULTS: dict = {
              "magnify": True, "magnify_scale": 60, "magnify_spread": 160,
              # Раскладка клавиатуры первой ячейкой полосы: две буквы, нажатие переключает.
              "layout": True,
+             # Наведение обводит значок рамкой, а не подкладывает под него пузырь: пузырь больше
+             # значка и читается как второй, сломанный значок под первым. false — не рисовать и
+             # рамку: остаются одни значки.
+             "hover_frame": True,
              # Палитра значков: original | auto | light | clear | tinted | mono
              "icon_style": "original", "icon_tint": "#7AC8FF"},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
