@@ -112,6 +112,7 @@ class Daemon:
         self._dock: dict = {}
         self._windows_debounce: asyncio.Task | None = None
         self._windows_pending: list[dict] | None = None
+        self._windows_sent = 0.0   # когда список окон уходил на островок в последний раз
         self._trash_full = False
         self._state = "idle"
         self._workers_active = 0
@@ -1437,12 +1438,16 @@ class Daemon:
                 return
             await asyncio.sleep(5)
 
-    async def _publish_windows_debounced(self) -> None:
-        await asyncio.sleep(0.18)
+    # Сколько держать паузу между двумя рассылками списка окон. Буря геометрии (окно тянут за
+    # угол) присылает десятки списков в секунду, и каждый — перерисовка дока.
+    WINDOWS_QUIET = 0.18
+
+    def _publish_windows_now(self) -> bool:
+        """Отправить накопленный список окон. True — отправили."""
         got = self._windows_pending
         self._windows_pending = None
         if got is None or got == self._windows:
-            return
+            return False
         # Empty flash during KWin script reload blanked the dock; keep last list
         # for ~1s, then accept a real empty desktop.
         if isinstance(got, list) and len(got) == 0 and self._windows:
@@ -1450,14 +1455,20 @@ class Daemon:
             now = time.monotonic()
             if started is None:
                 self._empty_windows_since = now
-                return
+                return False
             if now - started < 1.0:
-                return
+                return False
             self._empty_windows_since = None
         else:
             self._empty_windows_since = None
         self._windows = got
+        self._windows_sent = time.monotonic()
         self.publish(windows=got)
+        return True
+
+    async def _publish_windows_debounced(self) -> None:
+        await asyncio.sleep(self.WINDOWS_QUIET)
+        self._publish_windows_now()
 
     async def _watch_windows(self) -> None:
         """Живой список окон — для дока.
@@ -1493,10 +1504,18 @@ class Daemon:
                         continue
                     if got == self._windows or got == self._windows_pending:
                         continue
-                    # Coalesce bursts: geometry storms used to republish the full list
-                    # to the island many times per second and made Quickshell hitch.
+                    # Бурю геометрии (окно тянут за угол) надо сглаживать, иначе док
+                    # перерисовывается десятки раз в секунду. Но платить этой паузой за каждое
+                    # нажатие нельзя: человек свернул окно значком, тут же жмёт снова — и док всё
+                    # ещё думает, что окно открыто. Поэтому первое изменение уходит сразу, а
+                    # сглаживается только то, что пришло следом.
                     self._windows_pending = got
-                    if self._windows_debounce and not self._windows_debounce.done():
+                    quiet = time.monotonic() - self._windows_sent >= self.WINDOWS_QUIET
+                    waiting = self._windows_debounce is not None and not self._windows_debounce.done()
+                    if quiet and not waiting:
+                        self._publish_windows_now()
+                        continue
+                    if waiting:
                         continue
                     self._windows_debounce = asyncio.create_task(self._publish_windows_debounced())
                 await proc.wait()

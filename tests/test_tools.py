@@ -521,3 +521,36 @@ def test_the_dispatcher_answers_without_a_local_model() -> None:
     assert dispatch.level_for("открой дискорд", use_model=False)[0] == dispatch.LIGHT
     assert dispatch.level_for("напиши скрипт для переименования файлов", use_model=False)[0] == dispatch.STRONG
     assert dispatch.level_for("", use_model=False)[0] == dispatch.LIGHT
+
+
+# ──────────────────────────── карта значков для эффекта ────────────────────────────
+def test_the_same_icon_map_is_not_pushed_to_kwin_twice(tmp_path, monkeypatch) -> None:
+    """Повтор той же карты — это два лишних вызова в очереди перед самим сворачиванием.
+
+    Сворачивание значком просит «обнови карту наверняка» прямо перед тем, как свернуть окно. Пока
+    на это каждый раз писался kwinrc и дёргался KWin по dbus, окно уезжало с задержкой, а при
+    быстрых нажатиях задержки складывались и док переставал поспевать за рукой.
+    """
+    import subprocess
+
+    from justday import desktop
+
+    calls: list[list[str]] = []
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(desktop, "qdbus_bin", lambda: "")
+    monkeypatch.setattr(desktop.subprocess, "run",
+                        lambda cmd, **kw: calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0))
+    monkeypatch.setattr(desktop, "_last_icons_json", "")
+    monkeypatch.setattr(desktop, "_last_icons_applied", "")
+
+    icons = {"app:discord": {"x": 10, "y": 20, "w": 48, "h": 48}}
+    assert desktop.publish_dock_icons(icons, reconfigure=True)["ok"]
+    assert len(calls) == 1, "первая карта должна дойти до KWin"
+    assert desktop.publish_dock_icons(icons, reconfigure=True).get("skipped") is True
+    assert len(calls) == 1, "та же карта второй раз — молча"
+
+    # Значки переехали — это уже другая карта, её отдать надо.
+    assert desktop.publish_dock_icons({"app:discord": {"x": 99, "y": 20, "w": 48, "h": 48}},
+                                      reconfigure=True)["ok"]
+    assert len(calls) == 2

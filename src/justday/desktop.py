@@ -793,6 +793,7 @@ def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
 
 _last_icons_json = ""
 _last_icons_reconfigure = 0.0
+_last_icons_applied = ""     # карта, которую эффект уже получил: повторять её ему незачем
 
 
 def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | None = None) -> dict:
@@ -810,7 +811,7 @@ def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | No
     import time
     from pathlib import Path
 
-    global _last_icons_json, _last_icons_reconfigure
+    global _last_icons_json, _last_icons_reconfigure, _last_icons_applied
 
     path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-dock-icons.json"
     merged: dict = {}
@@ -835,6 +836,12 @@ def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | No
             return {"ok": True, "path": str(path), "n": len(icons or {})}
         if raw == _last_icons_json and reconfigure is not True:
             return {"ok": True, "path": str(path), "n": len(icons or {}), "skipped": True}
+        # Эффект уже знает ровно эту карту — повторять ему то же самое нечего, даже когда просят
+        # «наверняка». Раньше каждое сворачивание значком писало kwinrc и дёргало KWin по dbus, и
+        # оба вызова стояли в очереди перед самим сворачиванием: окно уезжало с задержкой, а при
+        # быстрых нажатиях задержки складывались и док переставал поспевать за рукой.
+        if raw == _last_icons_applied:
+            return {"ok": True, "path": str(path), "n": len(icons or {}), "skipped": True}
         _last_icons_json = raw
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", "Effect-justday_genie",
@@ -846,6 +853,7 @@ def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | No
             if qdbus_bin():
                 _kwin("/Effects", "org.kde.kwin.Effects.reconfigureEffect", "justday_genie")
             _last_icons_reconfigure = now
+            _last_icons_applied = raw
     except (OSError, subprocess.SubprocessError, ValueError):
         pass
     return {"ok": True, "path": str(path), "n": len(icons or {})}
