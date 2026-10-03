@@ -43,3 +43,19 @@ def test_unknown_part_is_refused_before_anything_runs(monkeypatch):
 
 def test_missing_note_tells_the_command(monkeypatch):
     assert "justday parts add speech" in parts.missing_note("speech")
+
+
+def test_the_usb_stick_was_built_without_anything_to_run() -> None:
+    """Флешка собиралась и не запускалась: окружения на ней не было вовсе.
+
+    Запускалка звала `app/.venv/bin/justday`, а сборка его не делала — и на чужом компьютере
+    скрипт умирал первой же строкой. Собрать venv прямо на флешке тоже нельзя: он заводит ссылку
+    lib64 → lib, а флешки обычно в exfat, где ссылок не бывает («Operation not permitted»).
+    Поэтому нужное ставится в обычную папку рядом.
+    """
+    from justday import portable
+
+    assert ".venv" not in portable.SCRIPT, "запускалка снова зовёт окружение, которого нет"
+    assert "--target" in portable.SCRIPT, "нужное ставится не в папку — на exfat это не заведётся"
+    assert "PYTHONPATH" in portable.SCRIPT, "поставленное некуда подключить"
+    assert "PIP_CACHE_DIR" in portable.SCRIPT, "кэш установки остался бы на чужой машине следом"

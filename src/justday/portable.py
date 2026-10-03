@@ -74,7 +74,24 @@ if [[ -f "$HERE/secrets.enc" ]]; then
   export JUSTDAY_SECRETS="$HERE/secrets.enc"
 fi
 
-exec "$HERE/app/.venv/bin/justday" "${@:-ui}"
+# Нужное ставится прямо сюда, рядом, при первом запуске на этой машине. Виртуального окружения
+# здесь нарочно нет: venv заводит ссылку lib64 → lib, а флешки обычно в exfat, где ссылок не
+# бывает вовсе («Operation not permitted»). Папка с библиотеками этого не требует и переживает
+# любую файловую систему. Копировать готовое окружение с собой тоже нельзя — оно привязано к
+# питону и путям того компьютера, где его делали.
+LIBS="$HERE/app/libs"
+export PIP_CACHE_DIR="$XDG_CACHE_HOME/pip"      # и кэш установки остаётся на флешке, не у хозяина
+if [[ ! -d "$LIBS/justday" ]]; then
+  echo "Первый запуск на этой машине: ставлю нужное на флешку. Это разово, но не быстро."
+  python3 -m pip install -q --target "$LIBS" "$HERE/app" || {
+    echo "Не вышло: нужен интернет и python3 с pip." >&2
+    exit 1
+  }
+  echo "Готово. Дальше запускается сразу."
+fi
+
+export PYTHONPATH="$LIBS${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -c 'import sys; from justday.cli import main; sys.exit(main() or 0)' "${@:-ui}"
 """
 
 READ_ME = """# Флешка JustDay

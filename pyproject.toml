@@ -3,7 +3,10 @@ name = "justday"
 version = "0.2.0"
 description = "JustDay — voice front-end that turns Claude Code into a personal desktop agent for KDE Plasma"
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+# Верхней границы нет нарочно: на чужом компьютере питон такой, какой там стоит (у Fedora 44 это
+# 3.14), и флешка должна заводиться на нём, а не отказываться. Тяжёлые части (слух, голос) сами
+# скажут, если их колёс под этот питон нет, — они необязательные.
+requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
 # Ядро: мозг, календарь, счёт. ~250 МБ — столько ставится всегда.
 dependencies = [
