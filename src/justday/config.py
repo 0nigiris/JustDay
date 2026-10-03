@@ -422,7 +422,7 @@ DEFAULTS: dict = {
     # двоеточие тоже есть. Ступени, куда нечем войти, пропускаются — иначе каждая задача начиналась
     # бы с провала: поставщик без ключа отвечает ошибкой, а ошибку лестница понимает как лимит.
     "terminal": {
-        "ladder": ["claude:opus", "claude:sonnet", "opencode:openai/gpt-6-sol",
+        "ladder": ["claude:opus", "claude:sonnet", "opencode:openai/gpt-6-luna",
                    "opencode:openrouter/qwen/qwen3-coder", "opencode:ollama/qwen3.5:9b"],
         "effort": "",          # low | medium | high; пусто — как решит сам Claude Code
         # Сколько ждать первого слова от ступени. Ступень с просроченным входом не отказывает —
