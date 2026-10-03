@@ -28,7 +28,7 @@ Item {
     readonly property var load: JD.load
 
     // Поле поиска нужно двум страницам из трёх: у нагрузки искать нечего.
-    readonly property bool searchable: page === "emoji" || page === "clip"
+    readonly property bool searchable: page === "emoji" || page === "clip" || page === "history"
 
     // Байты — байтами: скопированная строка в 25 знаков не «1 КБ».
     function fmtSize(bytes) {
@@ -66,6 +66,7 @@ Item {
                     { id: "mixer", name: "Звук", icon: "volume-2" },
                     { id: "plans", name: "Планы", icon: "clipboard" },
                     { id: "claude", name: "Клод", icon: "code" },
+                    { id: "history", name: "История", icon: "message-circle" },
                     { id: "load", name: "Машина", icon: "activity" },
                 ]
                 delegate: Rectangle {
@@ -489,6 +490,13 @@ Item {
         // ───────────── живые сессии ─────────────
         SessionsView {
             visible: tv.page === "claude"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
+        // ───────────── история разговоров ─────────────
+        HistoryView {
+            visible: tv.page === "history"
             Layout.fillWidth: true
             Layout.fillHeight: true
         }

@@ -396,6 +396,8 @@ Singleton {
     // «Клод работает ×3» — это не сведения, а обещание, что что-то происходит. Здесь видно, что
     // именно: какая сессия что читает, правит и запускает.
     property var sessions: []
+    // История разговоров: что сказал человек и что ответили (страница «История» в панели).
+    property var talk: []
     function sessionsRefresh() { send({ cmd: "sessions" }) }
     function planDone(which) { send({ cmd: "plan_done", which: String(which) }); plansLater.restart() }
     function planAdd(text) {
@@ -411,6 +413,7 @@ Singleton {
     function refreshTools() {
         if (toolsPage === "emoji") send({ cmd: "emoji", query: toolsQuery, group: emojiGroup, limit: 400 })
         else if (toolsPage === "clip") send({ cmd: "clip_list", query: toolsQuery, limit: 80 })
+        else if (toolsPage === "history") send({ cmd: "history", query: toolsQuery, limit: 80 })
         else if (toolsPage === "load") send({ cmd: "load" })
     }
     // Сначала закрыть панель, потом просить вставить. Пока панель на экране, клавиатура принадлежит
@@ -1265,6 +1268,7 @@ Singleton {
         }
         if (m.items !== undefined && m.file !== undefined) plans = m.items
         if (m.sessions !== undefined) sessions = m.sessions
+        if (m.talk !== undefined) talk = m.talk
         if (m.items !== undefined && m.path !== undefined) {
             folderPath = m.path; folderItems = m.items; folderMore = m.more || 0
         }

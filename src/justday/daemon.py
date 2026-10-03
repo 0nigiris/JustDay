@@ -2981,6 +2981,10 @@ class Daemon:
                 resp = {"ok": True, "clip": clipboard.items(int(req.get("limit") or 60),
                                                             req.get("query", "")),
                         "paused": clipboard.paused(), "skipped": clipboard.skipped()["count"]}
+            elif cmd == "history":  # что сказано и что ответили, с поиском — страница истории
+                from . import history
+
+                resp = {"ok": True, "talk": history.items(req.get("query", ""), int(req.get("limit") or 80))}
             elif cmd == "clip_use":
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: clipboard.put_back(str(req.get("which", "")),
