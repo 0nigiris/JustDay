@@ -181,6 +181,32 @@ Singleton {
     property var update: null      // {behind, changes} when GitHub has a newer version
     function runUpdate() { Quickshell.execDetached(["kitty", "--hold", "justday", "update"]); closeAll() }
 
+    // ── Режим сервера из меню пуска ──
+    // Он просил включать его оттуда: «дал задачу и лёг спать» не должно начинаться с терминала.
+    // Состояние спрашиваем при открытии меню — один дешёвый запрос, зато кнопка не врёт.
+    property bool serverMode: false
+    function askServerMode() { serverProbe.running = true }
+    Process {
+        id: serverProbe
+        command: ["justday", "server", "status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { jd.serverMode = !!JSON.parse(text).on } catch (e) { jd.serverMode = false }
+            }
+        }
+    }
+    function toggleServerMode() {
+        const wasOn = jd.serverMode
+        serverSwitch.command = ["justday", "server", wasOn ? "off" : "on"]
+        serverSwitch.running = true
+        flash(wasOn ? tr("Возвращаю машину: экраны и звук") : tr("Режим сервера: гашу экраны"),
+              wasOn ? "sun" : "moon")
+    }
+    Process {
+        id: serverSwitch
+        onExited: jd.askServerMode()
+    }
+
     // Быстрая проверка обновления из меню: кнопка в настройках была, но на самом дне страницы
     // «О программе» — человек её не находил. Здесь ответ приходит сразу всплывашкой на островке.
     function checkUpdate() {
@@ -474,6 +500,7 @@ Singleton {
         menuPick = 0
         menuConfirm = ""
         menuOpen = true
+        askServerMode()          // кнопка режима сервера не должна врать о том, что сейчас включено
         menuSerial++
         closeAll()
         send({ cmd: "apps_catalog" })

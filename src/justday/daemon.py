@@ -149,6 +149,7 @@ class Daemon:
         self._last_toggle = 0.0
         self._holding = False
         self._voice_warned = False
+        self._neural_cold_until = 0.0   # до каких пор не стучаться к нейроголосу после отказа
         self._music_started = 0.0   # music that just started speaks for itself: the reply after it stays silent
         self._offline_note = 0.0    # when the user was last told that the cloud is out
         self._fell_back_at = 0.0      # когда ушли с Claude на запасного
@@ -424,7 +425,8 @@ class Daemon:
                 engine = self.tts.cfg["engine"]
                 if engine == "elevenlabs" and await self._speak_stream(sentence, gen, "elevenlabs"):
                     continue
-                if engine in ("qwen", "elevenlabs") and await self._speak_stream(sentence, gen, "qwen"):
+                if (engine in ("qwen", "elevenlabs") and time.monotonic() >= self._neural_cold_until
+                        and await self._speak_stream(sentence, gen, "qwen")):
                     continue
                 pcm = await loop.run_in_executor(None, self.tts.synth, sentence)
                 if gen != self._speech_gen or not len(pcm):
@@ -458,8 +460,14 @@ class Daemon:
             if not self._voice_warned:
                 self._voice_warned = True
                 log.warning("%s voice unavailable (%s), falling back", engine, e)
+            # И больше не стучаться к нему каждой фразой. Нейроголос падает не разово: кончилась
+            # видеопамять — значит кончилась и на следующую фразу, а ожидание отказа человек
+            # слышит как задержку перед каждым словом. Это и есть «голос лагает».
+            self._neural_cold_until = time.monotonic() + 60 * float(
+                self.cfg["tts"].get("retry_minutes", 10) or 0)
             return False
         self._voice_warned = False
+        self._neural_cold_until = 0.0
         if gen != self._speech_gen:
             await stream.aclose()
             return True

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -81,6 +82,59 @@ def _playing() -> list[str]:
 def _players(action: str, names: list[str]) -> list[str]:
     """`pause` или `play` названным проигрывателям. Возвращает тех, кто послушался."""
     return [n for n in names if _run("playerctl", "-p", n, action)]
+
+
+def _dbus(method: str, signature: str = "", *args: str) -> str:
+    """Позвать KWin по шине. Своего `qdbus` в системе нет, а `gdbus` есть всегда."""
+    call = ["gdbus", "call", "--session", "--dest", "org.kde.KWin",
+            "--object-path", "/VirtualDesktopManager",
+            "--method", f"org.kde.KWin.VirtualDesktopManager.{method}", *args]
+    del signature
+    return _out(*call)
+
+
+def _desk_now() -> str:
+    """Какой рабочий стол открыт сейчас. Пустая строка — спросить не вышло."""
+    got = _out("gdbus", "call", "--session", "--dest", "org.kde.KWin",
+               "--object-path", "/VirtualDesktopManager", "--method",
+               "org.freedesktop.DBus.Properties.Get", "org.kde.KWin.VirtualDesktopManager",
+               "current")
+    m = re.search(r"'([0-9a-f-]{36})'", got)
+    return m.group(1) if m else ""
+
+
+def _desk_set(uuid: str) -> bool:
+    return bool(_out("gdbus", "call", "--session", "--dest", "org.kde.KWin",
+                     "--object-path", "/VirtualDesktopManager", "--method",
+                     "org.freedesktop.DBus.Properties.Set", "org.kde.KWin.VirtualDesktopManager",
+                     "current", f"<'{uuid}'>"))
+
+
+def _desk_make(name: str) -> str:
+    """Завести ассистенту свой рабочий стол и перейти на него. Возвращает его id или пусто.
+
+    Зачем это в режиме сервера. Экраны погашены, но рабочий стол под ними — его: открытые окна,
+    разложенные как он их оставил. Работая, ассистент двигает и открывает окна, и утром человек
+    находит свой стол перекопанным. Свой стол решает это целиком: мы ничего не трогаем у него, а
+    он не видит нашей работы. Это и есть «свой монитор, а не мои» — без возни с виртуальными
+    выходами, которые на NVIDIA до сих пор ненадёжны.
+    """
+    before = {m.group(1) for m in re.finditer(r"'([0-9a-f-]{36})'", _desk_list())}
+    _dbus("createDesktop", "us", "99", name)
+    after = {m.group(1) for m in re.finditer(r"'([0-9a-f-]{36})'", _desk_list())}
+    new = after - before
+    return next(iter(new)) if len(new) == 1 else ""
+
+
+def _desk_list() -> str:
+    return _out("gdbus", "call", "--session", "--dest", "org.kde.KWin",
+                "--object-path", "/VirtualDesktopManager", "--method",
+                "org.freedesktop.DBus.Properties.Get", "org.kde.KWin.VirtualDesktopManager",
+                "desktops")
+
+
+def _desk_drop(uuid: str) -> bool:
+    return bool(_dbus("removeDesktop", "s", uuid))
 
 
 def _keep_awake(why: str) -> int:
@@ -156,6 +210,13 @@ def on(why: str = "работа ассистента", hours: float = 0.0) -> di
         out["paused"] = _players("pause", _playing())
     if opts.get("mute", True):
         out["muted"] = _mute(True)
+    if opts.get("own_desktop", True):
+        # Свой рабочий стол ассистенту: экраны погашены, но стол под ними — человека, с его
+        # разложенными окнами. Работая, мы бы перекопали его к утру.
+        out["desk_was"] = _desk_now()
+        out["desk"] = _desk_make(str(opts.get("desktop_name") or "JustDay"))
+        if out["desk"]:
+            _desk_set(out["desk"])
     out["guard"] = _keep_awake(why)
     out["watchdog"] = _watchdog_on(hours)
     if opts.get("screens_off", True):
@@ -188,6 +249,12 @@ def off(resume: bool = True) -> dict:
             pass
     if was.get("muted"):
         out["unmuted"] = _mute(False)
+    if was.get("desk"):
+        # Порядок: сначала вернуть человека на его стол, потом убрать наш. Иначе KWin сам решит,
+        # куда его перекинуть, и это окажется не тот стол, с которого он уходил.
+        if was.get("desk_was"):
+            _desk_set(str(was["desk_was"]))
+        out["desk_dropped"] = _desk_drop(str(was["desk"]))
     if was.get("paused") and resume:
         # Снимаем с паузы ровно тех, кого сами остановили: включать всё, что нашлось, значит
         # устроить человеку утренний концерт из того, что он сам выключил вечером.

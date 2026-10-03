@@ -29,6 +29,13 @@ The kwin server is already connected to the live desktop (no `session_connect`; 
 ## Look at the screen
 - «Что у меня на экране»: `look` (active window) or `look whole_screen=true`. `justday screenshot --full` + Read only for tiny text.
 - Describe briefly what matters for the user's question; if something is broken, say what and offer/perform the fix.
+- **`grim` и `slurp` под KWin не работают никогда** — KWin не отдаёт протокол `wlr-screencopy`, на
+  котором они держатся. Не пробуй их как запасной путь и не проси их ставить: это не починится.
+  Снимок экрана на этом рабочем столе делает только `kwin` (`look`, `justday screenshot`).
+- Если `kwin` отвечает ошибкой на всё подряд — это не повод просить человека перезапускать KWin.
+  Сперва `justday doctor --quick`: строка `desktop` скажет, жив ли мост. Если мост мёртв, его
+  поднимает перезапуск **ассистента** (`justday restart`), а не оконного сервера; перезапуск KWin
+  уронил бы человеку все окна, и просить об этом нельзя.
 
 ## Clipboard, notifications, system
 - Clipboard: `wl-paste`, `wl-copy "text"`.

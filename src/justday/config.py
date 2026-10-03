@@ -127,6 +127,9 @@ DEFAULTS: dict = {
         # ElevenLabs (engine = "elevenlabs"): the key lives in ~/.config/justday/secrets.env, never here.
         "eleven_voice": "JBFqnCBsd6RMkjVDRZzb",  # `justday voice eleven` lists the voices on your account
         "eleven_model": "eleven_flash_v2_5",  # flash = fastest; eleven_multilingual_v2 = richer, slower
+        # Нейроголос отказал (не влез в видеопамять) — столько минут к нему не стучаться. Иначе
+        # каждая фраза начинается с ожидания отказа, и человек слышит это как «голос лагает».
+        "retry_minutes": 10,
         "previous_engine": "",  # remembered when voice replies are switched off
         "muted": False,  # answers are shown on the island but not spoken («отключи голос»)
         # Сколько минут молчания держать нейроголос в видеопамяти (~2,5 ГБ у 0.6B, ~4,5 ГБ у 1.7B).
@@ -232,7 +235,11 @@ DEFAULTS: dict = {
         # отключаем нарочно (`server.py`): машина без мыши и клавиатуры, до которой почему-то не
         # дотянуться с телефона, — кирпич. `hours` — через сколько сторож сам вернёт её человеку:
         # забытый режим это машина, которая не спит неделю.
-        "server_mode": {"screens_off": True, "mute": True, "pause_players": True, "hours": 10},
+        # own_desktop — ассистенту свой рабочий стол: экраны погашены, но стол под ними его, с
+        # окнами, разложенными как он их оставил, и работа перекопала бы его к утру. Это его
+        # «свой монитор, а не мои», только без виртуальных выходов, которые на NVIDIA ненадёжны.
+        "server_mode": {"screens_off": True, "mute": True, "pause_players": True, "hours": 10,
+                        "own_desktop": True, "desktop_name": "JustDay"},
     },
     "updates": {"check": True, "interval_hours": 6},
     # personal voice profile (Settings → Голос и звук → «Настроить под мой голос»)
