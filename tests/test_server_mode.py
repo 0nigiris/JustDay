@@ -140,3 +140,34 @@ def test_coming_back_for_a_minute_must_not_leave_the_machine_open(machine) -> No
 
     assert again["already"] and again["screens_off"] and again["locked"], \
         "второе «включить» ответило «уже включено» и оставило машину открытой"
+
+
+def test_coming_home_must_not_mean_a_dark_monitor(monkeypatch, machine) -> None:
+    """Он пришёл домой и застал погашенный монитор: режим держал экраны, пока его не выключили руками.
+
+    Ввести пароль — это и есть «я вернулся». Поэтому пока режим включён, демон смотрит на замок, и
+    как только он снят, сам отдаёт обратно экраны, звук, музыку и рабочий стол.
+    """
+    import asyncio
+    import subprocess as sp
+    import types
+
+    from justday import daemon
+
+    server.on("человек ушёл")
+    gave_back = []
+    monkeypatch.setattr(server, "off", lambda resume=True: gave_back.append(True) or {"ok": True})
+    monkeypatch.setattr(daemon.subprocess, "run",
+                        lambda *a, **kw: sp.CompletedProcess(a, 0, "LockedHint=no\n", ""))
+
+    me = types.SimpleNamespace(_lock_seen=0.0, _unlocked_at=0.0,
+                               notify=lambda *a, **kw: None)
+
+    async def go() -> None:
+        await daemon.Daemon._welcome_back(me)          # первый раз: заметили, что отперт
+        me._lock_seen = 0.0
+        me._unlocked_at = 1.0                          # и десять секунд спустя
+        await daemon.Daemon._welcome_back(me)
+
+    asyncio.run(go())
+    assert gave_back, "человек вернулся, а машина так и осталась тёмной и глухой"

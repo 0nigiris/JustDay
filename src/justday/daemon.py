@@ -1638,6 +1638,39 @@ class Daemon:
             return
         self.publish(kind="notification", notification=n)
 
+    async def _welcome_back(self) -> None:
+        """Человек вернулся и отпер сеанс — вернуть ему машину, не дожидаясь команды.
+
+        Он пришёл домой и застал погашенный монитор: режим сервера держал экраны, пока его не
+        выключили руками. Ввести пароль — это и есть «я вернулся», другого знака не нужно.
+        Поэтому пока режим включён, мы раз в несколько секунд смотрим на замок, и как только он
+        снят, отдаём всё обратно: экраны, звук, музыку, рабочий стол.
+        """
+        from . import server
+
+        if not server.state().get("on") or time.monotonic() - getattr(self, "_lock_seen", 0) < 5:
+            return
+        self._lock_seen = time.monotonic()
+        try:
+            done = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: subprocess.run(
+                    ["loginctl", "show-session", os.environ.get("XDG_SESSION_ID", "auto"),
+                     "-p", "LockedHint"], capture_output=True, text=True, timeout=5))
+        except (OSError, subprocess.SubprocessError):
+            return
+        if "LockedHint=no" not in done.stdout:
+            return
+        # Сеанс отперт — значит человек тут. Ждём чуть-чуть: он мог отпереть и сразу уйти обратно.
+        if not getattr(self, "_unlocked_at", 0):
+            self._unlocked_at = time.monotonic()
+            return
+        if time.monotonic() - self._unlocked_at < 10:
+            return
+        self._unlocked_at = 0.0
+        await asyncio.get_running_loop().run_in_executor(None, server.off)
+        log.info("человек вернулся — режим сервера выключен")
+        self.notify(t("С возвращением. Вернул экраны, звук и рабочий стол."), icon="dialog-information")
+
     async def _housekeeping(self) -> None:
         poll = self.cfg["workers"]["poll_seconds"]
         last_poll = last_mail = last_ping = last_weather = 0.0
@@ -1657,6 +1690,7 @@ class Daemon:
                 except Exception as e:
                     log.info("update check failed: %s", type(e).__name__)
             await self._reboot_maybe()
+            await self._welcome_back()
             # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
             # возвращается сам по себе, и ждать с ним до разговора незачем.
             await self._try_home()
