@@ -427,7 +427,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["list", "launch"])
     sp.add_argument("query", nargs="*")
     sp = sub.add_parser("windows", help="list/focus/close/minimize windows (KWin)")
-    sp.add_argument("action", choices=["list", "focus", "close", "minimize"])
+    sp.add_argument("action", choices=["list", "focus", "close", "minimize", "wake"])
     sp.add_argument("query", nargs="*")
     sp = sub.add_parser("click", help="щёлкнуть в точке экрана (X11: xdotool; на Wayland щелчки идут через kwin-mcp)")
     sp.add_argument("x", type=int)

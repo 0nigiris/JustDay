@@ -631,6 +631,29 @@ Singleton {
     // позже и первой смены не дождаться до вечера.
     function layoutRefresh() { send({ cmd: "layout" }) }
 
+    // Нажатие по значку многие программы отрабатывают наполовину: Activate они принимают, а
+    // поднять своё свёрнутое окно под Wayland не могут — KWin не даёт поднять себя тому, у кого
+    // нет фокуса. Telegram так пропадал совсем: значок в лотке есть, окна нет, войти некуда.
+    // Поэтому после activate() просим KWin сами — и только если окно действительно свёрнуто,
+    // иначе отняли бы у программы право спрятать окно щелчком по тому же значку.
+    property var trayWakeWho: null
+    function trayWake(item) {
+        const names = trayNames(item)
+        if (!names.length) return
+        trayWakeWho = names[0]
+        trayWaker.restart()
+    }
+    Timer {
+        id: trayWaker
+        interval: 450          // даём программе успеть самой: вмешиваемся только если не вышло
+        onTriggered: {
+            if (!jd.trayWakeWho) return
+            trayWakeRun.command = ["justday", "windows", "wake", String(jd.trayWakeWho)]
+            trayWakeRun.running = true
+        }
+    }
+    Process { id: trayWakeRun }
+
     function trayHide(ident, on, aliases) {
         if (!ident && !(aliases && aliases.length)) return
         const msg = { cmd: "tray_hide", id: String(ident || ""), on: on === undefined ? null : on }

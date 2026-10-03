@@ -328,23 +328,29 @@ def recent(hours: float = 48, limit: int = 40) -> dict:
 # ---------------- windows (KWin scripting) ----------------
 _KWIN_JS = """
 const q = %(query)s, action = %(action)s, tag = %(tag)s, wid = %(wid)s;
+// Значок в лотке и его окно зовутся по-разному: "TelegramDesktop" против "org.telegram.desktop".
+// Поэтому для wake сравниваем имена, выкинув всё, кроме букв и цифр.
+const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
 let n = 0;
 for (const w of workspace.windowList()) {
   if (!w.normalWindow) continue;
   const hay = (w.resourceClass + " " + w.resourceName + " " + w.caption).toLowerCase();
   if (action === "active" && workspace.activeWindow !== w) continue;
   if (wid && String(w.internalId) !== wid) continue;
-  if (q && !hay.includes(q)) continue;
+  if (q && !(action === "wake" ? squash(hay).includes(squash(q)) : hay.includes(q))) continue;
+  // wake поднимает только свёрнутое. Программа, которая щелчком по значку сама спрятала окно,
+  // не должна получить его обратно нашими руками — это был бы значок, который не умеет прятать.
+  if (action === "wake" && !w.minimized) continue;
   n++;
   if (action === "close") w.closeWindow();
-  else if (action === "focus") { w.minimized = false; workspace.activeWindow = w; }
+  else if (action === "focus" || action === "wake") { w.minimized = false; workspace.activeWindow = w; }
   else if (action === "minimize") w.minimized = true;
   const g = w.frameGeometry;
   console.warn(tag + JSON.stringify({id: String(w.internalId), app: w.resourceClass, title: w.caption, pid: w.pid,
                                      active: workspace.activeWindow === w, minimized: w.minimized,
                                      full: !!w.fullScreen && !w.minimized,
                                      x: Math.round(g.x), y: Math.round(g.y), w: Math.round(g.width), h: Math.round(g.height)}));
-  if (action === "focus") break;
+  if (action === "focus" || action === "wake") break;
 }
 console.warn(tag + "END " + n);
 """

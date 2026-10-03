@@ -591,7 +591,7 @@ Item {
                             // значком, а не с чужим меню.
                             JD.closeTrayMenu()
                             if (it.onlyMenu && it.hasMenu) tv.showMenu(it, slot)
-                            else it.activate()
+                            else { it.activate(); JD.trayWake(it) }
                         }
                     }
                     // Правая кнопка — меню самой программы, оно тут главное. Спрятать значок —

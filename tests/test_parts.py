@@ -59,3 +59,26 @@ def test_the_usb_stick_was_built_without_anything_to_run() -> None:
     assert "--target" in portable.SCRIPT, "нужное ставится не в папку — на exfat это не заведётся"
     assert "PYTHONPATH" in portable.SCRIPT, "поставленное некуда подключить"
     assert "PIP_CACHE_DIR" in portable.SCRIPT, "кэш установки остался бы на чужой машине следом"
+
+
+def test_the_tray_icon_could_not_bring_back_a_minimized_window() -> None:
+    """Telegram пропал совсем: значок в лотке есть, окна нет, войти некуда.
+
+    Программа честно получала Activate и честно пыталась показать себя — но под Wayland поднять
+    своё окно может только тот, у кого фокус, а фокус был у островка. Поэтому после activate()
+    окно поднимаем мы сами, через KWin. Две вещи при этом нельзя потерять:
+
+    * значок и окно зовутся по-разному («TelegramDesktop» против «org.telegram.desktop») — без
+      сведения имён мы не найдём то самое окно;
+    * поднимать можно только **свёрнутое**: если программа щелчком по значку сама спрятала окно,
+      вернуть его нашими руками — значит отнять у значка право прятать.
+    """
+    import json
+
+    from justday import desktop
+
+    js = desktop._KWIN_JS % {"query": json.dumps("telegramdesktop"), "action": json.dumps("wake"),
+                             "tag": json.dumps("T "), "wid": json.dumps("")}
+    assert "squash" in js, "имена сравниваются буква в букву — значок своего окна не найдёт"
+    assert 'action === "wake" && !w.minimized' in js, \
+        "wake хватает любое окно: программа больше не может спрятать себя щелчком по значку"
