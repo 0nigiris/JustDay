@@ -248,9 +248,19 @@ Item {
     readonly property var geom: {
         tick
         const out = []
+        // Увеличение раздувало ряд длиннее самой полосы, и крайние значки вылезали за её край —
+        // он сказал прямо, что это выглядит поломкой. Коробку растить нельзя (она тогда уезжает
+        // из-под курсора), поэтому вместо удлинения ряда перераспределяем место внутри него:
+        // тот, на кого навели, растёт, соседи ужимаются, а сумма остаётся прежней. Значки при
+        // этом по-прежнему поднимаются **над** полосой — вширь, как на доке макоси, — и это
+        // единственное, что ей позволено пересекать.
+        let want = 0
+        for (let i = 0; i < cells; i++) want += cell * (sizes[i] === undefined ? 1 : sizes[i])
+        const room = Math.max(cell, restLength) - pad * 2
+        const squeeze = want > room && want > 0 ? room / want : 1
         let at = pad
         for (let i = 0; i < cells; i++) {
-            const k = sizes[i] === undefined ? 1 : sizes[i]
+            const k = (sizes[i] === undefined ? 1 : sizes[i]) * squeeze
             const h = cell * k
             out.push({ y: at, h: h, k: k })
             at += h
