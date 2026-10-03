@@ -137,6 +137,23 @@ def _desk_drop(uuid: str) -> bool:
     return bool(_dbus("removeDesktop", "s", uuid))
 
 
+def _lock() -> bool:
+    """Запереть сеанс: подошедший человек увидит запрос пароля, а не твой рабочий стол.
+
+    Чем за это платим — честно. Пока сеанс заперт, ассистент не может водить мышью по чужим окнам:
+    экран принадлежит замку, и вся работа с GUI (нажать кнопку в Дискорде, пролистать браузер) до
+    утра недоступна. Всё остальное — код, проверки, коммиты, файлы, сеть, разговор по лестнице —
+    идёт как шло: это отдельная служба, замок ей не мешает.
+
+    Поэтому запираем **последним** действием: если бы замок встал раньше, мы не успели бы ни
+    погасить экраны, ни перейти на свой рабочий стол.
+    """
+    return _run("loginctl", "lock-session") or _run(
+        "gdbus", "call", "--session", "--dest", "org.freedesktop.ScreenSaver",
+        "--object-path", "/org/freedesktop/ScreenSaver",
+        "--method", "org.freedesktop.ScreenSaver.Lock")
+
+
 def _keep_awake(why: str) -> int:
     """Запретить засыпание, пока идёт работа. Возвращает pid сторожа, 0 — не вышло.
 
@@ -202,8 +219,10 @@ def on(why: str = "работа ассистента", hours: float = 0.0) -> di
     if was.get("on"):
         # Режим уже идёт, а экраны горят: человек вернулся, подвигал мышью — монитор проснулся сам.
         # Значит «включить» второй раз означает ровно одно: погаси обратно, я снова ухожу.
-        again = _screens(False) if (_opts().get("screens_off", True)) else False
-        return {"ok": True, "already": True, "screens_off": again, **was}
+        opts = _opts()
+        again = _screens(False) if opts.get("screens_off", True) else False
+        locked = _lock() if opts.get("lock", True) else False
+        return {"ok": True, "already": True, "screens_off": again, "locked": locked, **was}
     opts = _opts()
     hours = hours or float(opts.get("hours") or 10)
     out: dict = {"on": True, "why": why, "since": time.time(), "hours": hours}
@@ -224,6 +243,10 @@ def on(why: str = "работа ассистента", hours: float = 0.0) -> di
     out["watchdog"] = _watchdog_on(hours)
     if opts.get("screens_off", True):
         out["screens_off"] = _screens(False)
+    if opts.get("lock", True):
+        # Самым последним: заперев сеанс раньше, мы не успели бы ни погасить экраны, ни перейти
+        # на свой рабочий стол. Подошедший человек увидит запрос пароля, а не чужую работу.
+        out["locked"] = _lock()
     try:
         STATE.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     except OSError as e:

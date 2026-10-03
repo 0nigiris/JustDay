@@ -115,3 +115,28 @@ def test_the_state_file_must_survive_being_read_back(machine) -> None:
     saved = json.loads(server.STATE.read_text(encoding="utf-8"))
     assert saved["on"] and saved["guard"] == 4242 and saved["paused"] == ["spotify", "firefox"]
     assert server.status()["on"] and server.status()["hours_left"] > 9
+
+
+def test_anyone_who_walks_up_to_the_machine_must_be_asked_for_a_password(machine) -> None:
+    """Он подошёл, подвигал мышью — и всё заработало: режим сервера никого не спрашивал.
+
+    Замок ставится **последним**: запереть сеанс раньше — значит не успеть ни погасить экраны, ни
+    перейти на свой рабочий стол.
+    """
+    out = server.on("человек ушёл")
+
+    assert out["locked"], "сеанс не заперт: подошедший сядет за чужую работу"
+    order = [c for c in machine if c[0] in ("kscreen-doctor", "loginctl")]
+    assert order[-1][:2] == ("loginctl", "lock-session"), \
+        "заперлись раньше, чем погасили экраны, — остальное сделать уже некому"
+
+
+def test_coming_back_for_a_minute_must_not_leave_the_machine_open(machine) -> None:
+    """Вернулся, подвигал мышью, снова ушёл — экраны должны погаснуть и замок встать заново."""
+    server.on("человек ушёл")
+    machine.clear()
+
+    again = server.on("человек ушёл")
+
+    assert again["already"] and again["screens_off"] and again["locked"], \
+        "второе «включить» ответило «уже включено» и оставило машину открытой"

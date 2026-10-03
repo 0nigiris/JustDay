@@ -244,7 +244,11 @@ DEFAULTS: dict = {
         # окнами, разложенными как он их оставил, и работа перекопала бы его к утру. Это его
         # «свой монитор, а не мои», только без виртуальных выходов, которые на NVIDIA ненадёжны.
         "server_mode": {"screens_off": True, "mute": True, "pause_players": True, "hours": 10,
-                        "own_desktop": True, "desktop_name": "JustDay"},
+                        "own_desktop": True, "desktop_name": "JustDay",
+                        # Замок: подошедший к машине человек видит запрос пароля, а не чужую
+                        # работу. Цена честная — пока сеанс заперт, ассистент не водит мышью по
+                        # чужим окнам; всё остальное (код, проверки, коммиты, сеть) идёт как шло.
+                        "lock": True},
     },
     "updates": {"check": True, "interval_hours": 6},
     # personal voice profile (Settings → Голос и звук → «Настроить под мой голос»)
