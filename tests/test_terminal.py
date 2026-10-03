@@ -550,3 +550,34 @@ def test_the_whole_ladder_must_be_walked_when_the_subscription_is_spent() -> Non
     assert said.text == "сделал сам", "работа встала на лимите вместо того, чтобы уйти вниз"
     assert work.step == 2, "спустились не до живой ступени"
     assert "ПЕРЕДАЧА.md" in low.heard[0][1], "задача ушла вниз без передачи"
+
+
+async def test_by_day_a_dangerous_ask_goes_to_the_window_but_at_night_it_never_does() -> None:
+    """Днём «удали ветку» упиралась в отказ подпроцесса: человек сидит рядом, а спросить его не могли.
+
+    Ночью наоборот: спросить некого, и даже переданный вопрос окну не должен включать SDK —
+    иначе ночью опасное решал бы тот, кого нет.
+    """
+    calls = []
+
+    async def fake_sdk(*a):
+        calls.append(a)
+        return terminal.Said(text="ок")
+
+    async def fake_run(cmd, env, on_line, quiet_for=90.0):
+        return [], ""
+
+    async def approve(desc, reason):
+        return True
+
+    was = terminal._sdk_turn, terminal._run
+    terminal._sdk_turn, terminal._run = fake_sdk, fake_run
+    try:
+        rung = terminal.Rung("claude", "opus")
+        await terminal.ask_claude(rung, "x", "", {"terminal": {"approve": approve}}, print, print)
+        assert len(calls) == 1
+        await terminal.ask_claude(rung, "x", "", {"terminal": {"approve": approve, "unattended": True}},
+                                  print, print)
+        assert len(calls) == 1
+    finally:
+        terminal._sdk_turn, terminal._run = was

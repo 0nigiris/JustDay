@@ -512,6 +512,7 @@ class Work:
         self.wait_until = 0.0          # до каких пор ждать, если кончились все ступени (0 — не ждать)
         self.why = ""                  # чем решили усилие на последней задаче — для строки состояния
         self.effort = ""               # и какое оно вышло
+        self.approve = None            # async (что, почему) -> bool: окно, которое спросит человека днём
         self.forced = ""               # модель, которую позвала слабая: на один ход её слово верх
         # Сессия помнится по ступени лестницы, а не по модели: мелочь, взятую облегчённой моделью,
         # следующий вопрос должен продолжать, а не начинать заново.
@@ -664,7 +665,7 @@ class Work:
             seat = str(self.now)                 # сессия принадлежит ступени, а не модели
             rung, self.effort, self.why = self.shape(task)
             on_pick(rung, self.effort, self.why)
-            turn = {**self.cfg, "terminal": {**self.opts, "effort": self.effort}}
+            turn = {**self.cfg, "terminal": {**self.opts, "effort": self.effort, "approve": self.approve}}
             engine = self.engines[rung.engine]
             ask = text
             if not self.forced and self.opts.get("hand_up", True) and rung.engine == CLAUDE \

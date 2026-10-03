@@ -31,6 +31,9 @@ HELP = """[b]Команды[/b]
   /help, /quit"""
 
 
+YES = ("д", "да", "y", "yes", "ага", "ок")
+
+
 class Shell(App):
     """Одно окно: задача сверху, ответ посередине, состояние и ввод снизу."""
 
@@ -51,6 +54,8 @@ class Shell(App):
         self.turn: asyncio.Task | None = None   # ход держим за руку: без ссылки его соберёт сборщик
         self.guard = 0                          # сторож, не дающий машине заснуть ночью
         self.dark = False                       # машина в режиме сервера: экраны и звук наши
+        self.question: asyncio.Future | None = None   # вопрос человеку: следующая строка ввода — ответ
+        self.work.approve = self.approve
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -93,6 +98,10 @@ class Shell(App):
         if not text:
             return
         log = self.query_one("#log", RichLog)
+        if self.question and not self.question.done():
+            self.question.set_result(text.lower() in YES)
+            log.write(f"[b #4c8dff]›[/] {text}\n")
+            return
         if text.startswith("/") and not text.startswith("/compact"):
             self.command(text)
             return
@@ -103,6 +112,18 @@ class Shell(App):
         self.busy = True
         self.refresh_status("думает")
         self.turn = asyncio.create_task(self.ask(text))
+
+    async def approve(self, desc: str, reason: str) -> bool:
+        """Спросить человека в окне, можно ли опасное. Ждём ответа сколько надо: молчание — не «да»."""
+        log = self.query_one("#log", RichLog)
+        log.write(f"\n[b #d4a72c]? Разрешить: {desc}[/]" + (f"\n[#8d8d99]{reason}[/]" if reason else "")
+                  + "\n[#8d8d99]д — разрешить, любое другое — отклонить[/]")
+        self.question = asyncio.get_running_loop().create_future()
+        self.refresh_status("ждёт твоего ответа")
+        try:
+            return await self.question
+        finally:
+            self.question = None
 
     def command(self, line: str) -> None:
         log = self.query_one("#log", RichLog)
