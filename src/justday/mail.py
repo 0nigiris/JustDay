@@ -15,7 +15,9 @@ import json
 import re
 import smtplib
 import ssl
+import subprocess
 import time
+import urllib.parse
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from html.parser import HTMLParser
@@ -132,6 +134,15 @@ def fetch(query: str, limit: int = 10, folder: str = "INBOX") -> list[Letter]:
         box.logout()
 
 
+def web_link(letter: Letter) -> str:
+    """Ссылка на это же письмо в вебе. Поиск по Message-ID — единственный способ: у Gmail свой
+    внутренний номер письма, и по IMAP UID его не получить."""
+    if not letter.message_id or not config.load()["mail"]["imap_host"].endswith("gmail.com"):
+        return ""
+    mid = urllib.parse.quote(letter.message_id.strip().strip("<>"), safe="")
+    return f"https://mail.google.com/mail/u/0/#search/rfc822msgid:{mid}"
+
+
 def count(query: str) -> int:
     box = _imap()
     try:
@@ -190,8 +201,9 @@ DRAFT_PROMPT = """Ты пишешь письмо от имени пользов�
 Подпись: {name}."""
 
 INTENT_PROMPT = """Ты разбираешь голосовую команду о почте. Верни только JSON:
-{"action": "summary|read|reply|compose|send|cancel|edit|not_mail", "index": номер письма из списка или 0, "to": "кому (для compose)", "what": "что написать или какую правку внести"}
-summary — что пришло / проверь почту; read — прочитать/пересказать письмо; reply — ответить на письмо из списка; compose — написать новое письмо кому-то;
+{"action": "summary|read|open|reply|compose|send|cancel|edit|not_mail", "index": номер письма из списка или 0, "to": "кому (для compose)", "what": "что написать или какую правку внести"}
+summary — что пришло / проверь почту; read — прочитать/пересказать письмо вслух; open — показать письмо глазами: «открой в браузере», «покажи письмо», «открой его на экране»;
+reply — ответить на письмо из списка; compose — написать новое письмо кому-то;
 send — подтверждение отправки черновика («да», «отправляй»); cancel — не отправлять; edit — изменить черновик; not_mail — команда не про почту."""
 
 
@@ -233,7 +245,12 @@ class MailAssistant:
         action = intent.get("action", "not_mail")
         self.last_action = action
         events.emit("mail_intent", action=action)  # the command text is already in the journal; no mail content
-        if action == "not_mail" and not MAIL_WORDS.search(text):
+        if action == "not_mail":
+            # Раньше здесь стояло «и в просьбе нет слова о почте». Выходило так: человек говорил
+            # «открой мне это письмо в браузере», модель честно отвечала not_mail, но слово
+            # «письмо» в просьбе было — и дорожка вместо отказа падала в `_summary()` и опять
+            # пересказывала ящик. Человек повторял громче, получал тот же пересказ. Если местная
+            # модель говорит «это не про почту» — верим и отдаём мозгу, он умеет больше.
             self.active_until = 0
             return None
         if action == "compose" and not MAIL_WORDS.search(text):
@@ -266,6 +283,17 @@ class MailAssistant:
                     return t("Сначала скажите «проверь почту»."), False
                 self.last_letter = letter
                 return localllm.chat(READ_PROMPT + reply_language_hint(), f"От: {letter.sender}\nТема: {letter.subject}\n\n{letter.body}"), False
+            if action == "open":
+                letter = letter or self.last_letter or (self.letters[0] if self.letters else None)
+                if not letter:
+                    return t("Сначала скажите «проверь почту»."), False
+                self.last_letter = letter
+                url = web_link(letter)
+                if not url:
+                    return t("Открыть в браузере умею только для Gmail."), False
+                subprocess.Popen(["xdg-open", url], start_new_session=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return t("Открыл в браузере."), False
             if action == "reply":
                 letter = letter or (self.letters[0] if len(self.letters) == 1 else None)
                 if not letter:

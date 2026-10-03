@@ -1661,6 +1661,36 @@ Item {
 
     // Перетаскивание без мыши: взять n-й закреплённый значок, отнести в точку x спокойной полосы
     // и отпустить. Отдаёт получившийся порядок и места ячеек — по ним видно и наложение.
+    // Проба «значок несут прямо сейчас»: dragProbe отпускает значок до того, как отдать ответ, и
+    // поэтому ничего не говорит о том, как полоса выглядит В РУКЕ. Эти три живут дольше одного
+    // вызова: взять, снять картинку, положить обратно. Снимок свой, а не экрана: на вейланде
+    // снимать экран нечем (см. desktop.py::_capture_for_thumb).
+    function dragHold(n, x) {
+        const spots = lane.filter(s => s.t === "app" && s.pinned)
+        const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]
+        if (!pick) return JSON.stringify({ pinned: 0 })
+        engaged = true
+        pointerScene = anchorCentre - restLength / 2 + x
+        startDrag(pick.key)
+        moveDrag(pointerScene)
+        for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
+        return JSON.stringify({ took: pick.key, dragLocal: Math.round(dragLocal),
+                                cells: lane.map((s, i) => [s.t, s.key || s.t, Math.round(geom[i].x), Math.round(geom[i].w),
+                                                           Math.round(dv.dragKey === s.key ? dragLocal - geom[i].w / 2 : geom[i].x)]) })
+    }
+    function dragRelease() {
+        dragKey = ""
+        pinOverride = []
+        engaged = false
+        pointerScene = -99999
+        wake()
+        return "ok"
+    }
+    function shot(path) {
+        card.grabToImage(r => r.saveToFile(path))
+        return path
+    }
+
     function dragProbe(n, x) {
         const spots = lane.filter(s => s.t === "app" && s.pinned)
         const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]

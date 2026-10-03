@@ -101,6 +101,17 @@ ShellRoot {
         function dockDrag(n: int, x: real): string {
             return dockVariants.instances.length ? dockVariants.instances[0].dragProbe(n, x) : "null"
         }
+        // То же, но значок остаётся в руке: между этими двумя вызовами можно снять картинку и
+        // увидеть док ровно таким, каким его видит человек посреди перетаскивания.
+        function dockHold(n: int, x: real): string {
+            return dockVariants.instances.length ? dockVariants.instances[0].dragHold(n, x) : "null"
+        }
+        function dockRelease(): string {
+            return dockVariants.instances.length ? dockVariants.instances[0].dragRelease() : "null"
+        }
+        function dockShot(path: string): string {
+            return dockVariants.instances.length ? dockVariants.instances[0].shot(path) : "null"
+        }
         // Что док видит: открытые окна, закреплённое и точка, из которой вырастает меню.
         // `qs -p island ipc call island dock` — этим и проверяется, что окно узнали.
         function dock(): string {
@@ -3153,6 +3164,9 @@ ShellRoot {
 
             function probe(x) { return dockWin.probe(x) }
             function dragProbe(n, x) { return dockWin.dragProbe(n, x) }
+            function dragHold(n, x) { return dockWin.dragHold(n, x) }
+            function dragRelease() { return dockWin.dragRelease() }
+            function shot(path) { return dockWin.shot(path) }
             function wheelWalk(a, b, n) { return dockWin.wheelWalk(a, b, n) }
             function geom() { return dockWin.geom() }
 
@@ -3251,6 +3265,9 @@ ShellRoot {
 
                 function probe(x) { return dock.probe(x) }
                 function dragProbe(n, x) { return dock.dragProbe(n, x) }
+                function dragHold(n, x) { return dock.dragHold(n, x) }
+                function dragRelease() { return dock.dragRelease() }
+                function shot(path) { return dock.shot(path) }
                 function wheelWalk(a, b, n) { return dock.wheelWalk(a, b, n) }
                 function geom() {
                     return ({ paint: { w: Math.round(width), h: Math.round(height) },

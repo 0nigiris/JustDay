@@ -128,3 +128,18 @@ def test_the_dock_tip_hung_over_a_dragged_icon() -> None:
     assert 'dv.dragKey === ""' in want.group(1), "подпись снова всплывает во время перетаскивания"
     start = re.search(r"function startDrag\(key\) \{(.+?)\n    \}", qml, re.S)
     assert start and "tipShown = false" in start.group(1), "взяли значок — старая подпись осталась висеть"
+
+
+def test_jarvis_kept_retelling_the_inbox_instead_of_opening_a_letter() -> None:
+    """«Открой это письмо в браузере» — а он снова пересказывал ящик."""
+    import inspect
+
+    from justday import mail
+
+    src = inspect.getsource(mail.MailAssistant.handle)
+    assert 'if action == "not_mail":' in src, "not_mail снова проверяет слова о почте и глотает чужую просьбу"
+    assert 'if action == "open":' in src, "команды «открой письмо» в дорожке опять нет"
+    assert "open" in mail.INTENT_PROMPT, "местная модель не знает про «открой» — вернёт not_mail"
+    letter = mail.Letter("1", "Spotify", "no-reply@spotify.com", "Код", "", "", "<abc@spotify.com>")
+    link = mail.web_link(letter)
+    assert link == "" or "rfc822msgid:abc%40spotify.com" in link, "ссылка на письмо в вебе собрана неверно"
