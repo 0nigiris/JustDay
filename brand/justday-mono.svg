@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- JustDay. Геометрия и цвета — docs/логотип.json. Надпись переведена в кривые:
+     знак не должен зависеть от того, установлен ли Inter на чужой машине. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 288 120" width="288" height="120" role="img" aria-label="JustDay">
+  <title>JustDay</title>
+  <path fill-rule="evenodd" fill="currentColor" d="M 60 0 H 228 A 60 60 0 0 1 228 120 H 60 A 60 60 0 0 1 60 0 Z M 71.76 60 a 20.4 20.4 0 1 0 40.8 0 a 20.4 20.4 0 1 0 -40.8 0 Z M 170.232 53.064 h 51.408 a 6.936 6.936 0 0 1 0 13.872 h -51.408 a 6.936 6.936 0 0 1 0 -13.872 Z"/>
+</svg>

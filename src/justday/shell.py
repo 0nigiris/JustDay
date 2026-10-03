@@ -25,9 +25,13 @@ from . import config, providers
 # закрывает его и технически. Подписка остаётся там, где она разрешена, — в самом Claude Code,
 # которым и думает сам Джарвис.
 KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
-        "groq": "GROQ_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+        "groq": "GROQ_API_KEY", "deepseek": "DEEPSEEK_API_KEY", "nvidia": "NVIDIA_API_KEY"}
 AUTH = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "opencode" / "auth.json"
 LOCAL = {"ollama", "lmstudio", "llamacpp", "local"}
+# Поставщики, которым ключ не нужен вовсе: «opencode» — бесплатные модели самой оболочки
+# (`*-free`), они отвечают без всякого входа. Без этого списка лестница считала бы их ступенями
+# «нечем войти» и молча выбрасывала — а они как раз то, чем работают, когда подписка кончилась.
+FREE = {"opencode"}
 
 CONF_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode"
 PLUGIN = CONF_DIR / "plugin" / "justday-ladder.js"
@@ -159,6 +163,17 @@ def ensure() -> None:
         conf["skills"] = skills
     # Сжимать разговор, не дожидаясь, пока он упрётся в стену. Длинная сессия без сжатия
     # кончается тем, что модель помнит начало и не помнит, что делала десять минут назад.
+    # NVIDIA NIM: сильные модели даром, пока хватает кредитов аккаунта. Ступень ниже подписок и
+    # выше местной модели — когда лимит Клода кончился, работа продолжается, а не встаёт. Ключ
+    # сюда не пишется: {env:…} подставит оболочка из связки ключей (`shell.env`).
+    prov = dict(conf.get("provider") or {})
+    prov.setdefault("nvidia", {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "NVIDIA NIM (бесплатные кредиты)",
+        "options": {"baseURL": "https://integrate.api.nvidia.com/v1",
+                    "apiKey": "{env:NVIDIA_API_KEY}"},
+    })
+    conf["provider"] = prov
     conf.setdefault("compaction", {"auto": True, "tail_turns": 15})
     # Правила: общие для всех сессий и правила самого проекта.
     want = [str(RULES), "AGENTS.md"]
@@ -187,7 +202,7 @@ def rungs(keys: set[str] | None = None) -> dict:
     except (OSError, ValueError, AttributeError):
         all_rungs = list(DEFAULT_LADDER["ladder"])
     have = set(logged_in()) | (keys if keys is not None else {n for n in KEYS if providers.secret_get(n)})
-    live = [r for r in all_rungs if r.split("/", 1)[0] in LOCAL or r.split("/", 1)[0] in have]
+    live = [r for r in all_rungs if r.split("/", 1)[0] in LOCAL | FREE or r.split("/", 1)[0] in have]
     return {"live": live or all_rungs, "skipped": [] if not live else [r for r in all_rungs if r not in live]}
 
 

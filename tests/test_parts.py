@@ -82,3 +82,17 @@ def test_the_tray_icon_could_not_bring_back_a_minimized_window() -> None:
     assert "squash" in js, "имена сравниваются буква в букву — значок своего окна не найдёт"
     assert 'action === "wake" && !w.minimized' in js, \
         "wake хватает любое окно: программа больше не может спрятать себя щелчком по значку"
+
+
+def test_free_rungs_were_silently_dropped_from_the_ladder() -> None:
+    """Бесплатные модели OpenCode лестница считала ступенями «нечем войти» и выбрасывала.
+
+    Ключа им не нужно вовсе — они отвечают без всякого входа, — но проверка смотрела только на
+    местных поставщиков и на имена из связки ключей. В итоге человек ставил бесплатную ступень,
+    а работа после кончившейся подписки всё равно падала сразу на платную.
+    """
+    from justday import shell
+
+    live = [r for r in ("opencode/nemotron-3.5-lightning-free", "ollama/qwen3.5:9b")
+            if r.split("/", 1)[0] in shell.LOCAL | shell.FREE]
+    assert len(live) == 2, "бесплатная ступень снова считается недоступной"

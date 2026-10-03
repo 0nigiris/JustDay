@@ -431,7 +431,15 @@ DEFAULTS: dict = {
     # двоеточие тоже есть. Ступени, куда нечем войти, пропускаются — иначе каждая задача начиналась
     # бы с провала: поставщик без ключа отвечает ошибкой, а ошибку лестница понимает как лимит.
     "terminal": {
+        # Бесплатные ступени стоят выше платной (openrouter): когда подписка кончилась, работа
+        # должна продолжаться даром, а не на его кредитах. Замерено на живой машине 3 октября
+        # (`opencode run`, короткий вопрос): nemotron-3-ultra-550b через NVIDIA — 29 с,
+        # nemotron-3.5-lightning у самого OpenCode — 7 с. Запасные той же цены, если какая-то
+        # ступень испортится: nvidia/z-ai/glm-5.3 (38 с), opencode/longcat-2.5-preview-free,
+        # opencode/fledge-alpha-free, opencode/ling-3.0-flash-fin-free (все по 4–5 с).
         "ladder": ["claude:opus", "claude:sonnet", "opencode:openai/gpt-6-luna",
+                   "opencode:nvidia/nvidia/nemotron-3-ultra-550b-a55b",
+                   "opencode:opencode/nemotron-3.5-lightning-free",
                    "opencode:openrouter/qwen/qwen3-coder", "opencode:ollama/qwen3.5:9b"],
         "effort": "",          # low | medium | high; пусто — как решит сам Claude Code
         # Сколько ждать первого слова от ступени. Ступень с просроченным входом не отказывает —

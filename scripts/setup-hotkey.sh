@@ -123,6 +123,19 @@ forget() {  # $1 desktop id — убрать и сочетание, и сам ф
   rm -f "${APPS:?}/${1:?}"
 }
 
+# Свой значок в тему оформления. Без него все наши ярлыки показывались чужим микрофоном —
+# и в меню, и в настройках сочетаний, и в переключателе окон.
+icon() {
+  local here src dst
+  here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+  src="$here/brand/justday-icon.svg"
+  dst="$HOME/.local/share/icons/hicolor/scalable/apps"
+  [[ -f "$src" ]] || return 0
+  mkdir -p "$dst" && cp -f "$src" "$dst/justday.svg"
+  command -v gtk-update-icon-cache >/dev/null && \
+    gtk-update-icon-cache -q -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+}
+
 register() {  # $1 desktop id, $2 подпись, $3 команда, $4.. клавиши
   local id="$1" name="$2" cmd="$3"; shift 3
   local keys_csv keys_tab
@@ -132,7 +145,7 @@ register() {  # $1 desktop id, $2 подпись, $3 команда, $4.. кла
 Type=Application
 Name=JustDay: $name
 Exec=$cmd
-Icon=audio-input-microphone
+Icon=justday
 NoDisplay=true
 X-KDE-GlobalAccel-CommandShortcut=true
 X-KDE-Shortcuts=$keys_csv
@@ -147,7 +160,9 @@ if ((REMOVE)); then
     IFS='|' read -r name _ _ _ <<<"$row"
     forget "$(id_of "$name")"
   done
-  for old_id in "${LEGACY[@]}"; do forget "$old_id"; done
+  icon
+
+for old_id in "${LEGACY[@]}"; do forget "$old_id"; done
   { [[ -n "$MOUSE" ]] && "$KWRITE" --file kcminputrc --group ButtonRebinds --group Mouse --key "$MOUSE" --delete --notify; } || true
   { [[ -n "$KBUILD" ]] && "$KBUILD" >/dev/null 2>&1; } || true
   echo "сочетания JustDay убраны"
