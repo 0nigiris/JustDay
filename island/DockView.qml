@@ -953,12 +953,16 @@ Item {
         if (key === tipFor) return
         tipFor = key
         tipShown = false
-        if (key && labels) tipWait.restart(); else tipWait.stop()
+        if (key && labels && dragKey === "") tipWait.restart(); else tipWait.stop()
     }
 
     Rectangle {
         id: tip
-        readonly property bool want: dv.labelMode === "hover" && dv.tipShown && !!dv.focused && !ctx.visible
+        // Пока значок несут рукой, подписи быть не должно. focused — это ячейка под курсором, а при
+        // перетаскивании ячейки едут сами: человек тащил Discord, значки сдвинулись, и над курсором
+        // оказался Roblox — плашка называла чужую программу и висела не там, где рука.
+        readonly property bool want: dv.labelMode === "hover" && dv.tipShown && !!dv.focused
+                                     && !ctx.visible && dv.dragKey === ""
         readonly property string text: !dv.focused ? ""
             : dv.focused.t === "launcher" ? "Программы"
             : dv.focused.t === "trash" ? (JD.trashFull ? "Корзина — не пуста" : "Корзина пуста")
@@ -1561,6 +1565,8 @@ Item {
         if (!reorder || !key) return
         pinOverride = JD.dockItems.map(i => i.key)
         dragKey = key
+        tipWait.stop()
+        tipShown = false
     }
 
     // Куда значок встаёт: не «перепрыгнул половину соседа», а «курсор оказался над чужой ячейкой».
@@ -1593,6 +1599,10 @@ Item {
     function endDrag() {
         if (dragKey === "") return
         dragKey = ""
+        // После броска подпись не выскакивает мгновенно: отсчёт начинается заново, как после
+        // обычного наведения, — иначе она появляется ровно в миг отпускания кнопки.
+        tipShown = false
+        if (focused && labels) tipWait.restart()
         // Порядок остаётся местным, пока демон не подтвердит его своим ответом: иначе значок на
         // миг отскакивает туда, откуда его унесли.
         JD.dockArrange(pinOverride)

@@ -115,3 +115,16 @@ def test_the_dock_tip_printed_the_app_name_twice() -> None:
     assert "minimized" in body, "свёрнутое окно перестало считаться новостью — пометка пропадёт"
     assert "plain(text)" in body, "имя окна снова сравнивается с именем программы как попало"
     assert "wins.length !== 1" in body, "несколько окон должны перечисляться всегда"
+
+
+def test_the_dock_tip_hung_over_a_dragged_icon() -> None:
+    """Значок несли рукой, а подпись называла соседа и висела не над ним."""
+    import pathlib
+    import re
+
+    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    want = re.search(r"property bool want: dv\.labelMode(.+?)readonly property string text", qml, re.S)
+    assert want, "условие показа подписи пропало"
+    assert 'dv.dragKey === ""' in want.group(1), "подпись снова всплывает во время перетаскивания"
+    start = re.search(r"function startDrag\(key\) \{(.+?)\n    \}", qml, re.S)
+    assert start and "tipShown = false" in start.group(1), "взяли значок — старая подпись осталась висеть"
