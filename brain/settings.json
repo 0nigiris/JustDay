@@ -101,7 +101,36 @@
       "Bash(justday note:*)",
       "Bash(justday inbox:*)",
       "Bash(justday scene:*)",
-      "Bash(justday diary:*)"
+      "Bash(justday diary:*)",
+      "Bash(justday:*)",
+      "Bash(java:*)",
+      "Bash(kscreen-doctor:*)",
+      "Bash(wlr-randr:*)",
+      "Bash(xrandr:*)",
+      "Bash(xdotool:*)",
+      "Bash(qdbus:*)",
+      "Bash(qdbus6:*)",
+      "Bash(qdbus-qt6:*)",
+      "Bash(kreadconfig6:*)",
+      "Bash(plasma-apply-*:*)",
+      "Bash(brightnessctl:*)",
+      "Bash(pactl:*)",
+      "Bash(nproc:*)",
+      "Bash(lscpu:*)",
+      "Bash(lsblk:*)",
+      "Bash(lsusb:*)",
+      "Bash(lspci:*)",
+      "Bash(hostnamectl:*)",
+      "Bash(printenv:*)",
+      "Bash(locale:*)",
+      "Bash(sensors:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(flatpak list|info|run:*)",
+      "Bash(gsettings get:*)",
+      "Bash(dnf list|info|search:*)",
+      "Bash(rpm -q:*)",
+      "Bash(systemctl --user restart justday:*)"
     ],
     "ask": [
       "Bash(rm -rf:*)",
@@ -157,6 +186,14 @@
       "Read(~/.gnupg/**)",
       "Read(**/*.key)",
       "Read(~/.local/share/keyrings/**)"
+    ]
+  },
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Личный компьютер владельца JustDay; организации и корпоративных ограничений нет.",
+      "Домашняя папка принадлежит владельцу. Обычные действия: смотреть файлы и состояние, запускать программы, менять внешний вид рабочего стола.",
+      "Спрашивать перед удалением данных, sudo или повышением прав, отправкой сообщений/писем, оплатой/покупками, публикацией наружу, изменением системных настроек и важных системных файлов."
     ]
   }
 }
