@@ -347,9 +347,14 @@ def screenshot(all_screens: bool = False, full: bool = False) -> dict:
             "to_screen": "screen_x = origin_x + image_x / scale; screen_y = origin_y + image_y / scale"}
 
 
+def t_speed():
+    from . import speed
+    return speed.report()
+
+
 TESTS = {"daemon": t_daemon, "parts": t_parts, "mic": t_mic, "tts": t_tts, "stt": t_stt, "llm": t_llm, "mcp": t_mcp,
          "desktop": t_desktop, "browser": t_browser, "files": t_files, "claude": t_claude, "memory": t_memory,
-         "hotkey": t_hotkey, "local_llm": t_local_llm, "mail": t_mail, "software": t_software}
+         "hotkey": t_hotkey, "local_llm": t_local_llm, "mail": t_mail, "software": t_software, "speed": t_speed}
 
 
 def memory_dir():
@@ -674,7 +679,7 @@ def main(argv: list[str] | None = None) -> None:
         _print(manage.doctor())
     elif a.cmd == "doctor":
         print("JustDay doctor")
-        skip = {"llm", "mcp", "tts", "stt"} if a.quick else set()
+        skip = {"speed"} | ({"llm", "mcp", "tts", "stt"} if a.quick else set())  # замеры — отдельной командой
         ok = all([_check(n, fn) for n, fn in TESTS.items() if n not in skip])
         print(f"\nlogs: {config.STATE_DIR / 'justday.log'}  events: {config.EVENTS_FILE}")
         sys.exit(0 if ok else 1)

@@ -19,7 +19,7 @@ class Fake:
         self.published.append(kw)
 
 
-def test_simple_request_never_asks_the_judge(monkeypatch):
+def test_simple_request_never_asks_the_judge(monkeypatch, state_dir):
     """Судья съедал секунду и карту перед каждым «который час»: простая просьба его не зовёт."""
     def boom(*a, **k):
         raise AssertionError("судья на горячем пути")
@@ -29,7 +29,7 @@ def test_simple_request_never_asks_the_judge(monkeypatch):
     assert f.cfg["brain"]["model"] == "haiku" and f.reconnects == 0
 
 
-def test_light_model_calls_strong_by_itself():
+def test_light_model_calls_strong_by_itself(state_dir):
     """«Сделай сайт» → хайку отвечает «НУЖНА: opus», демон пересаживается на опус."""
     f = Fake()
     assert dispatch.hands_up("НУЖНА: opus") == "opus"
@@ -37,14 +37,14 @@ def test_light_model_calls_strong_by_itself():
     assert f.cfg["brain"]["model"] == "opus" and f.cfg["brain"]["effort"] == "high"
 
 
-def test_garbage_name_does_not_reach_config():
+def test_garbage_name_does_not_reach_config(state_dir):
     """Слово из ответа модели не должно подставлять в конфиг что попало."""
     f = Fake()
     assert asyncio.run(daemon.Daemon._lift(f, "../../etc")) is False
     assert f.cfg["brain"]["model"] == "haiku"
 
 
-def test_hand_up_is_not_spoken():
+def test_hand_up_is_not_spoken(state_dir):
     """Просьба к демону не должна прозвучать вслух."""
     from justday import brain
     spoken = []
@@ -65,3 +65,16 @@ def test_each_model_gets_only_its_own_role():
     assert "роль: для большой" in o and "роль: для большой" not in h + s
     assert "НУЖНА: opus" in h
     assert dispatch.role_for("qwen3:8b") == "" and dispatch.role_for("") == ""
+
+
+def test_speed_report_names_what_is_slow(monkeypatch, capsys):
+    """`justday test speed` обязан называть медленное по имени, иначе замер — просто числа."""
+    from justday import speed
+    monkeypatch.setattr(speed, "measure", lambda: [("демон: ответ на status", 0.001, ""),
+                                                   ("каталог программ, холодный", 3.0, "")])
+    try:
+        speed.report()
+    except RuntimeError as e:
+        assert "каталог программ, холодный" in str(e) and "status" not in str(e)
+    else:
+        raise AssertionError("медленное не названо")
