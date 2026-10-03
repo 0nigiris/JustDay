@@ -237,6 +237,71 @@ async def _run(cmd: list[str], env: dict[str, str], on_line, quiet_for: float = 
     return lines, said
 
 
+async def _sdk_turn(rung: Rung, text: str, session: str, cfg: dict, take, approve, got: Said) -> Said:
+    """Ход верхней ступени через Agent SDK: днём опасное спрашивает человека в окне.
+
+    Подпроцесс `claude -p` не умеет спросить: без человека у него есть только «разрешить всё
+    разрешённое» и «отклонить». Днём человек сидит перед окном, и отклонять за него «удали ветку»
+    значит заставлять переписывать задачу. SDK зовёт `can_use_tool` — туда и ставим вопрос окну.
+    Поток переводим в те же события, что даёт `claude -p`, чтобы разбор был один (`take`).
+    """
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ClaudeAgentOptions,
+        ClaudeSDKClient,
+        PermissionResultAllow,
+        PermissionResultDeny,
+        ResultMessage,
+        SystemMessage,
+        TextBlock,
+        ToolUseBlock,
+    )
+
+    async def can_use_tool(name, inp, ctx):
+        from .brain import describe_tool
+        if name == "AskUserQuestion":  # вопросов-карточек в окне нет: пусть спросит обычной репликой
+            return PermissionResultDeny(message="Здесь нет карточек с вопросами: спроси обычным текстом.")
+        desc = getattr(ctx, "title", None) or describe_tool(name, inp)
+        if await approve(desc, getattr(ctx, "decision_reason", None) or ""):
+            return PermissionResultAllow(updated_input=inp)
+        return PermissionResultDeny(message="Человек отклонил это действие. Не повторяй его; "
+                                            "предложи другой путь или спроси.")
+
+    b = cfg.get("brain") or {}
+    opts = ClaudeAgentOptions(
+        cli_path=shutil.which("claude") or "claude",
+        model=rung.model or None,
+        effort=(cfg.get("terminal") or {}).get("effort") or None,
+        permission_mode=b.get("permission_mode") or None,
+        setting_sources=["user", "project", "local"],  # как у `claude -p`: те же правила и разрешения
+        env=_marks(cfg),
+        can_use_tool=can_use_tool,
+        resume=session or None,
+        max_buffer_size=64 * 1024 * 1024,
+    )
+    try:
+        async with ClaudeSDKClient(opts) as client:
+            await client.query(text)
+            async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage):
+                    blocks = []
+                    for bl in msg.content:
+                        if isinstance(bl, TextBlock):
+                            blocks.append({"type": "text", "text": bl.text})
+                        elif isinstance(bl, ToolUseBlock):
+                            blocks.append({"type": "tool_use", "name": bl.name})
+                    take({"type": "assistant", "message": {"usage": msg.usage or {}, "content": blocks}})
+                elif isinstance(msg, ResultMessage):
+                    take({"type": "result", "session_id": msg.session_id, "total_cost_usd": msg.total_cost_usd,
+                          "is_error": msg.is_error, "result": msg.result})
+                elif isinstance(msg, SystemMessage):
+                    take({"type": "system", "subtype": msg.subtype, **(msg.data or {})})
+    except Exception as e:  # лимит приходит исключением — отдаём лестнице так же, как ошибку подпроцесса
+        got.error = got.error or str(e)[:400]
+    _limit_in(got, got.error)
+    return got
+
+
 async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on_tool) -> Said:
     """Ход на верхней ступени — самой программой `claude`, её же сессией и её же правами."""
     cli = shutil.which("claude") or "claude"
@@ -248,7 +313,8 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
         cmd += ["--effort", str(effort)]
     if (mode := b.get("permission_mode") or ""):
         cmd += ["--permission-mode", str(mode)]
-    if (cfg.get("terminal") or {}).get("unattended"):
+    unattended = (cfg.get("terminal") or {}).get("unattended")
+    if unattended:
         # Человека рядом нет, спросить некого. «Некого» значит «нельзя», а не «можно»: всё, что
         # потребовало бы подтверждения, отклоняется и попадает в ответ словами. Разрешать опасное
         # за спящего человека мы не будем — он прочитает утром и решит сам.
@@ -256,12 +322,9 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
     if session:
         cmd += ["--resume", session]
     got = Said(session=session)
+    approve = (cfg.get("terminal") or {}).get("approve")
 
-    def line(raw: str) -> None:
-        try:
-            ev = json.loads(raw)
-        except ValueError:
-            return
+    def take(ev: dict) -> None:
         kind = ev.get("type")
         if kind == "system" and ev.get("subtype") == "init":
             got.session = str(ev.get("session_id") or got.session)
@@ -286,6 +349,12 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
             elif not got.text:
                 got.text = str(ev.get("result") or "")
 
+    def line(raw: str) -> None:
+        with contextlib.suppress(ValueError):
+            take(json.loads(raw))
+
+    if approve and not unattended:
+        return await _sdk_turn(rung, text, session, cfg, take, approve, got)
     _, err = await _run(cmd, {**os.environ, **_marks(cfg)}, line, _quiet_for(cfg))
     if err.strip() and not got.text:
         got.error = got.error or err.strip()[:400]
