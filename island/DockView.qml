@@ -977,8 +977,20 @@ Item {
             return false
         }
         readonly property bool showsThumbs: thumbsReady
+        // Список окон под именем программы нужен, только если он говорит что-то новое. У Equibop,
+        // Discord и десятка других единственное окно называется ровно так же, как программа, — и
+        // подсказка печатала «Equibop» дважды, одно под другим. Несколько окон перечислять надо
+        // всегда; свёрнутое — тоже (пометка «свёрнуто» это новость); а одинокое окно с тем же
+        // именем или вовсе без названия не добавляет ничего.
+        readonly property bool winListAdds: {
+            if (wins.length !== 1) return wins.length > 0
+            if (wins[0].minimized) return true
+            const plain = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ")
+            const title = plain(wins[0].title)
+            return !!title && title !== plain(text)
+        }
         // Compact window-title list (macOS/KDE style) when preview is on but thumbs unavailable.
-        readonly property bool showsWinList: dv.preview && wins.length > 0 && !showsThumbs
+        readonly property bool showsWinList: dv.preview && winListAdds && !showsThumbs
         readonly property bool expanded: showsThumbs || showsWinList
         readonly property int at: dv.focused ? dv.focused.i : -1
         // Ask for thumbs in the background; tip stays classic until a JPEG lands (or capture is marked broken).

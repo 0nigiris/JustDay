@@ -96,3 +96,22 @@ def test_free_rungs_were_silently_dropped_from_the_ladder() -> None:
     live = [r for r in ("opencode/nemotron-3.5-lightning-free", "ollama/qwen3.5:9b")
             if r.split("/", 1)[0] in shell.LOCAL | shell.FREE]
     assert len(live) == 2, "бесплатная ступень снова считается недоступной"
+
+
+def test_the_dock_tip_printed_the_app_name_twice() -> None:
+    """Подсказка показывала «Equibop», а под ней списком снова «Equibop».
+
+    Список окон под именем программы существует, чтобы сказать что-то новое: какое окно открыто и
+    не свёрнуто ли оно. У Equibop, Discord и десятка других единственное окно называется ровно так
+    же, как сама программа, — и подсказка повторяла имя само под собой.
+    """
+    import pathlib
+    import re
+
+    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    adds = re.search(r"readonly property bool winListAdds: \{(.+?)\n        \}", qml, re.S)
+    assert adds, "правило «список должен добавлять новое» пропало из подсказки"
+    body = adds.group(1)
+    assert "minimized" in body, "свёрнутое окно перестало считаться новостью — пометка пропадёт"
+    assert "plain(text)" in body, "имя окна снова сравнивается с именем программы как попало"
+    assert "wins.length !== 1" in body, "несколько окон должны перечисляться всегда"
