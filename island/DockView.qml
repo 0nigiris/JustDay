@@ -583,7 +583,13 @@ Item {
                 // ещё летела. Qt в этом случае animation останавливает, значение оставляет на
                 // полпути, и привязка молчит, пока не поменяется то, от чего она зависит. Значки
                 // так и замирали внахлёст. Место значка считает физика полосы — и только она.
-                x: (dragged ? dv.dragLocal - g.w / 2 : g.x)
+                // Значок в руке идёт за курсором, но не улетает из своей дырки: раньше он уезжал на
+                // пол-ячейки и ложился поверх соседа, хотя рядом зияло его собственное место —
+                // и это читалось как «док сломался». Теперь он держится дырки, а курсор тянет его
+                // за собой на четверть ячейки — ровно настолько, чтобы рука чувствовала вес.
+                readonly property real carried: Math.max(g.x - dv.cell * 0.25,
+                                                         Math.min(g.x + dv.cell * 0.25, dv.dragLocal - g.w / 2))
+                x: (dragged ? carried : g.x)
                    + (dv.wheel && dv.nudges.length === dv.lane.length ? dv.nudges[index] : 0)
                 z: dragged ? 2 : 0
                 y: 0
@@ -1579,26 +1585,36 @@ Item {
     function moveDrag(sceneX) {
         dragLocal = sceneX - dv.x - card.x
         if (dragKey === "") return
-        const spots = []
-        for (let i = 0; i < lane.length; i++)
-            if (lane[i].t === "app" && lane[i].pinned) spots.push({ key: lane[i].key, i: i })
-        const from = spots.findIndex(s => s.key === dragKey)
-        if (from < 0) return
-        let to = from
-        const mid = (n) => { const g = geom[spots[n].i]; return g ? g.x + g.w / 2 : null }
-        const right = from + 1 < spots.length ? mid(from + 1) : null
-        const left = from > 0 ? mid(from - 1) : null
-        if (right !== null && dragLocal > right) to = from + 1
-        else if (left !== null && dragLocal < left) to = from - 1
-        if (to === from) return
-        const next = pinOverride.slice()
-        const at = next.indexOf(dragKey)
-        if (at < 0) return
-        next.splice(at, 1)
-        // Порядок в pinOverride и порядок закреплённых ячеек — одно и то же: и там и там только
-        // закреплённое, в одном и том же порядке.
-        next.splice(to, 0, dragKey)
-        pinOverride = next
+        // Шаг повторяем, пока он просится: рука дёргает значок через полполосы за один кадр, и
+        // один шаг на вызов означал бы, что значок догоняет курсор несколько кадров, всё это время
+        // лёжа на соседях. Каждый шаг считается заново, по уже переставленной полосе, так что
+        // середина соседа — по-прежнему середина соседа.
+        for (let pass = 0; pass < 16; pass++) {
+            const spots = []
+            for (let i = 0; i < lane.length; i++)
+                if (lane[i].t === "app" && lane[i].pinned) spots.push({ key: lane[i].key, i: i })
+            const from = spots.findIndex(s => s.key === dragKey)
+            if (from < 0) return
+            const hole = geom[spots[from].i]
+            if (!hole) return
+            // Мерить надо по СВОЕЙ дырке, а не по середине соседа: дырка — единственное, что в этой
+            // полосе не бегает от курсора. Пока курсор в дырке, менять нечего; вышел за её край —
+            // дырка переезжает на шаг. Запас в шестую ячейки — чтобы шаг не щёлкал от дрожи руки на
+            // самой границе; он же гарантирует, что обратный шаг не попросится тем же кадром.
+            const m = hole.w * 0.18
+            let to = from
+            if (dragLocal > hole.x + hole.w + m && from + 1 < spots.length) to = from + 1
+            else if (dragLocal < hole.x - m && from > 0) to = from - 1
+            if (to === from) return
+            const next = pinOverride.slice()
+            const at = next.indexOf(dragKey)
+            if (at < 0) return
+            next.splice(at, 1)
+            // Порядок в pinOverride и порядок закреплённых ячеек — одно и то же: и там и там только
+            // закреплённое, в одном и том же порядке.
+            next.splice(to, 0, dragKey)
+            pinOverride = next
+        }
     }
 
     function endDrag() {
@@ -1707,7 +1723,18 @@ Item {
         engaged = true
         const k = Math.max(2, Math.min(400, steps || 60))
         startDrag(pick.key)
+        // Курсор перед прогулкой ставим в начало ПЛАВНО: проба начинается не там, где значок, а
+        // прыжок через полполосы честный шаг за раз не отрабатывает за один вызов. Эти догоняющие
+        // перестановки — артефакт пробы, а не дребезг, и считать их нельзя.
+        for (let j = 0; j < 12; j++) {
+            pointerScene = anchorCentre - restLength / 2 + from
+            const was = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key).join(",")
+            moveDrag(pointerScene)
+            for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
+            if (lane.filter(s => s.t === "app" && s.pinned).map(s => s.key).join(",") === was) break
+        }
         let swaps = 0, gap = 0, last = ""
+        const trail = []
         for (let j = 0; j < k; j++) {
             const x = from + (to - from) * j / (k - 1)
             pointerScene = anchorCentre - restLength / 2 + x
@@ -1718,10 +1745,12 @@ Item {
             last = order
             const at = lane.findIndex(s => s.key === dragKey)
             if (at >= 0) gap = Math.max(gap, Math.abs(geom[at].x + geom[at].w / 2 - dragLocal))
+            trail.push([Math.round(x), lane.filter(s => s.t === "app" && s.pinned).findIndex(s => s.key === dragKey),
+                        at >= 0 ? Math.round(geom[at].x + geom[at].w / 2 - dragLocal) : 0])
         }
         const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key)
         dragRelease()
-        return JSON.stringify({ took: pick.key, swaps: swaps, gap: Math.round(gap), order: order })
+        return JSON.stringify({ took: pick.key, swaps: swaps, gap: Math.round(gap), order: order, trail: trail })
     }
 
     function dragProbe(n, x) {

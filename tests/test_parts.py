@@ -143,3 +143,18 @@ def test_jarvis_kept_retelling_the_inbox_instead_of_opening_a_letter() -> None:
     letter = mail.Letter("1", "Spotify", "no-reply@spotify.com", "Код", "", "", "<abc@spotify.com>")
     link = mail.web_link(letter)
     assert link == "" or "rfc822msgid:abc%40spotify.com" in link, "ссылка на письмо в вебе собрана неверно"
+
+
+def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
+    """Значок при переносе метался между местами и ложился поверх соседа."""
+    import pathlib
+    import re
+
+    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    move = re.search(r"function moveDrag\(sceneX\) \{(.+?)\n    \}", qml, re.S)
+    assert move, "правило перестановки пропало"
+    body = move.group(1)
+    assert "hole" in body, "порядок снова меряют по соседу, а не по собственной дырке — будет дребезг"
+    assert "0.18" in body, "запас на границе пропал: шаг защёлкает от дрожи руки"
+    assert "for (let pass" in body, "шаг перестал повторяться — быстрый рывок значок не догонит"
+    assert "readonly property real carried:" in qml, "значок в руке снова улетает из своей дырки на соседа"
