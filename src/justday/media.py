@@ -80,11 +80,122 @@ def where_asked(text: str) -> tuple[str, str]:
     return "", text.strip()
 
 
+# ───────────── музыка так, как он говорит ─────────────
+# Он не обязан знать, какие слова мы считаем командой: «врубай», «музончик давай», «Пошлая Молли»
+# — всё это музыка. Цена ошибки несимметрична: не узнать — лишние секунды и лимит, а принять
+# «включи свет» за музыку — громкий промах («я просил свет, а он врубил музыку»). Поэтому
+# исключения проверяются раньше всего остального.
+_V_ANY = (r"включи|включай|врубай|врубани|вруби|врубите|запусти|запускай|запили|давай|дай|поставь|поставьте|"
+          r"играй|сыграй|проиграй|замути|зафигачь|заведи|play|put on")
+_V_SURE = r"поставь|поставьте|играй|сыграй|проиграй|запили|замути|зафигачь|заведи|play|put on"
+_V_BARE = r"включи|включай|врубай|врубани|вруби|врубите|запусти|запускай|давай|запили|играй|погнали|поехали"
+_NOUN = (r"(?:музык\w*|музон\w*|музл\w*|музычк\w*|песн\w*|песен\w*|трек\w*|плейлист\w*|фонотек\w*|"
+         r"что нибудь|че нибудь|чё нибудь|что то|music|songs?|tracks?|playlist|something|anything)")
+_ADJ = r"(?:мою |мои |свою |свои |нашу |любимую |любимое |какую нибудь |какое нибудь |любую |немного |чуть чуть |хорошую |норм )"
+_FILLER = re.compile(r"\b(пожалуйста|плиз|пж|ка|ну|мне|нам|щас|сейчас|быстро|быстренько|тогда|уже|тут|please)\b")
+_NOT_MUSIC = re.compile(
+    r"\b(свет\w*|ламп\w*|люстр\w*|подсветк\w*|телевизор\w*|телик\w*|тв|будильник\w*|таймер\w*|секундомер\w*|"
+    r"напомин\w*|зарядк\w*|кондиционер\w*|вентилятор\w*|обогрев\w*|чайник\w*|плит\w*|духовк\w*|компьютер\w*|"
+    r"экран\w*|монитор\w*|интернет\w*|вайфай|wifi|блютуз\w*|bluetooth|звук\w*|голос\w*|громкост\w*|яркост\w*|"
+    r"фильм\w*|сериал\w*|видео|ролик\w*|клип\w*|стрим\w*|игру|игры|игре|режим\w*|тишин\w*|паузу|повтор\w*|"
+    r"заметк\w*|встреч\w*|календар\w*|температур\w*|градус\w*)\b"
+    rf"|^(?:{_V_ANY})\s+(?:на|в|во|для|у|с|за|по|к)\s")
+# Это вопрос или другая просьба, а не название песни.
+_ASKING = re.compile(r"^(что|как|кто|где|когда|почему|зачем|сколько|какой|какая|какое|какие|покажи|расскажи|найди|"
+                     r"открой|закрой|скажи|напиши|сделай|отправь|позвони|удали|перейди|прочитай|посмотри)\b")
+
+
+def _say(text: str) -> str:
+    t = _NAME.sub("", text.strip()).lower().replace("ё", "е")
+    t = re.sub(r"[^\w\s]|_", " ", t)
+    return re.sub(r"\s+", " ", _FILLER.sub(" ", t)).strip()
+
+
+def _words(s: str) -> set[str]:
+    return {w for w in re.sub(r"[^\w\s]", " ", s.lower().replace("ё", "е")).split() if len(w) > 1}
+
+
+def _sure_local(query: str) -> bool:
+    """Скачанный трек, про который сказано почти дословно — название или исполнитель, а не случайное слово.
+
+    `find_local` засчитывает любое вхождение («да» лежит внутри «дарвин»), для включения без
+    команды этого мало: проверяем ещё, что сказанные слова покрывают название или исполнителя.
+    """
+    if len(query) < 4:
+        return False
+    hit = find_local(query, limit=1)
+    if not hit or hit[0]["score"] < 0.95:
+        return False
+    say = _words(query)
+    say |= {"".join(_TR.get(c, c) for c in w) for w in say}
+    for field in (hit[0].get("title", ""), hit[0].get("artist", "")):
+        have = _words(field)
+        have_tr = {"".join(_TR.get(c, c) for c in w) for w in have}
+        for variant in (have, have_tr):
+            if variant and len(variant & say) / len(variant) >= 0.6:
+                return True
+    return False
+
+
+def _is_app(q: str) -> bool:
+    """«Включи дискорд» — это программа, а не трек: мгновенный путь программ срабатывает следом."""
+    from . import fastpath
+    try:
+        return fastpath._app(q) is not None or q in fastpath.SITES
+    except Exception:
+        return False
+
+
+def _looks_like_name(raw_rest: str) -> bool:
+    """Названием-исполнителем «поставь Пошлая Молли» выглядит то, что Whisper написал с большой буквы,
+    латиницей или через тире; «поставь чай» — нет. Без этого любое «поставь …» уходило бы в поиск."""
+    return bool(re.search(r"[a-z]", raw_rest, re.I) or re.search(r"[—–]", raw_rest)
+                or any(w[:1].isupper() for w in raw_rest.split()))
+
+
+def live_music(text: str) -> tuple[str, str] | None:
+    """("library", "") | ("music", запрос) | None — музыка ли это, как говорят люди.
+
+    Что принимается: «врубай», «включи», «музончик давай», «можно музычку», «поставь Nirvana»,
+    «Кино — Группа крови», название скачанного трека без единого слова-команды.
+    Что нет: «включи свет», «поставь будильник на семь», «поставь на зарядку», «включи телевизор».
+    """
+    raw = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
+    t = _say(text)
+    if not t or len(t) > 120 or _NOT_MUSIC.search(t) or _ASKING.match(t):
+        return None
+    if re.fullmatch(_V_BARE, t):
+        return "library", ""
+    # «можно музычку», «хочу послушать музыку», «музыку давай», «какую-нибудь песню»
+    u = re.sub(r"^(?:а |можно |хочу |хотим |хочется |я хочу |неплохо бы )+(?:послушать )?", "", t)
+    u = re.sub(r"( давай| плиз)+$", "", u)
+    if re.fullmatch(rf"(?:(?:{_V_ANY}) )?{_ADJ}?{_NOUN}", u):
+        return "library", ""
+    m = re.match(rf"^(?:{_V_ANY}) {_ADJ}?{_NOUN} (?:(?:от|группы|исполнителя|by) )?(?P<q>.+)$", t)
+    if m:
+        q = m.group("q").strip()
+        return ("music", q) if not _LOCAL.search(q) else None
+    verb = re.match(rf"^(?P<v>{_V_ANY}) (?P<q>.+)$", t)
+    if verb and not _LOCAL.search(verb.group("q")):
+        q, sure = verb.group("q"), re.fullmatch(_V_SURE, verb.group("v"))
+        if len(q.split()) > 6 or _is_app(q):
+            return None
+        raw_rest = raw.split(None, 1)[1] if len(raw.split()) > 1 else ""
+        if _sure_local(q) or (sure and _looks_like_name(raw_rest)):
+            return "music", q
+        return None
+    if not verb and len(t.split()) <= 6 and not _is_app(t) and _sure_local(t):
+        return "music", t
+    return None
+
+
 def parse(text: str) -> tuple[str, str] | None:
     """("music" | "video" | "video_random" | "library", query) for "включи песню …", else None."""
     t = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
     if _LIBRARY.match(t) and library():
         return "library", ""
+    if (got := live_music(t)) and (got[0] != "library" or library()):
+        return got
     for kind, rx in (("music", _PLAY), ("video", _VIDEO)):
         m = rx.match(t)
         if m:
@@ -101,11 +212,12 @@ def parse(text: str) -> tuple[str, str] | None:
 
 
 _CONTROLS = [
-    (re.compile(r"^(поставь на паузу|пауза|на паузу|останови (музыку|песню|трек)|pause( the music)?)$"), "pause"),
-    (re.compile(r"^(продолжи|продолжай|играй|сними с паузы|плей|включи музыку|верни музыку|resume|play|unpause)( музыку)?$"), "resume"),
-    (re.compile(r"^(следующ\w+|некст|дальше|переключи|другую|next|skip)( трек| песн\w+| track| song)?$"), "next"),
+    (re.compile(r"^(поставь на паузу|пауза|на паузу|стоп|стопани|хватит|тормозни|замолчи( музыка| музыку)?|останови (музыку|песню|трек)|pause( the music)?)$"), "pause"),
+    (re.compile(r"^(продолжи|продолжай|играй|сними с паузы|плей|включи|включай|вруби|врубай|запусти|давай|погнали|поехали|"
+                 r"включи музыку|верни музыку|resume|play|unpause)( музыку| музыка| музон| музычку)?$"), "resume"),
+    (re.compile(r"^(следующ\w+|некст|дальше|скипни|скип|пропусти|переключи|другую|next|skip)( трек| песн\w+| track| song)?$"), "next"),
     (re.compile(r"^(предыдущ\w+|назад|previous)( трек| песн\w+| track| song)?$"), "prev"),
-    (re.compile(r"^(выключи|вырубай|выруби|убери|stop|turn off) (музыку|песню|плеер|the music|music)$"), "stop"),
+    (re.compile(r"^(выключай|вырубай|туши|(выключи|вырубай|выруби|убери|туши|stop|turn off) (музыку|музон|музычку|песню|плеер|the music|music))$"), "stop"),
     (re.compile(r"^(заново|сначала|с начала|replay|restart)( трек| песню| track| song)?$"), "restart"),
     (re.compile(r"^((выключи|убери|отключи|сними) (с )?повтор\w*|без повтора|не повторяй|repeat off|stop repeating)$"), "repeat_off"),
     (re.compile(r"^(повторяй|повтор|зацикли) (все|всё|плейлист|альбом|очередь|список)|repeat all$"), "repeat_all"),
@@ -136,8 +248,8 @@ def video_word(text: str) -> str:
 
 def control_word(text: str) -> str | None:
     t = re.sub(r"[^\w\s]", " ", _NAME.sub("", text.lower().replace("ё", "е")))
-    t = re.sub(r"\b(пожалуйста|please|давай|ка|ну)\b", " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
+    # Одно слово «давай» — само команда, а не вода: «давай» над поставленной на паузу музыкой.
+    t = re.sub(r"\s+", " ", re.sub(r"\b(пожалуйста|please|давай|ка|ну)\b", " ", t)).strip() or t.strip()
     return next((act for rx, act in _CONTROLS if rx.match(t)), None)
 
 

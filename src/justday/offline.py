@@ -49,7 +49,7 @@ def decide(text: str) -> dict:
 
 
 OPEN = re.compile(r"\b(открой|запусти|включи|open|launch|start)\s+(?P<q>.+)$", re.I)
-PLAY = re.compile(r"\b(музык|песн|трек|music|song|track)", re.I)
+PLAY = re.compile(r"\b(музык|музон|музл|музычк|песн|песен|трек|music|song|track)", re.I)
 
 
 def _guess(text: str) -> dict:
