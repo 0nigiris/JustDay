@@ -21,6 +21,7 @@ from . import config, terminal
 HELP = """[b]Команды[/b]
   /model ИМЯ     сменить модель на этой ступени (opus, sonnet, haiku…)
   /effort УРОВЕНЬ  сколько думать: low, medium, high
+  /queue         показать очередь задач; /drop [N] — убрать задачу N (по умолчанию последнюю)
   /compact       попросить сжать разговор
   /ladder        показать лестницу
   /up            вернуться на верхнюю ступень
@@ -54,6 +55,7 @@ class Shell(App):
         self.turn: asyncio.Task | None = None   # ход держим за руку: без ссылки его соберёт сборщик
         self.guard = 0                          # сторож, не дающий машине заснуть ночью
         self.dark = False                       # машина в режиме сервера: экраны и звук наши
+        self.queue: list[str] = []              # задачи, написанные поверх идущей: ход один за раз
         self.question: asyncio.Future | None = None   # вопрос человеку: следующая строка ввода — ответ
         self.work.approve = self.approve
 
@@ -84,6 +86,8 @@ class Shell(App):
             bits.append(f"место {int(free * 100)}%")
         if self.guard or self.dark:
             bits.append("ночь" + (" · тёмный экран" if self.dark else ""))
+        if self.queue:
+            bits.append(f"в очереди {len(self.queue)}")
         if self.work.spent:
             bits.append(f"${self.work.spent:.4f}")
         if doing:
@@ -106,8 +110,16 @@ class Shell(App):
             self.command(text)
             return
         if self.busy:
-            log.write("[#8d8d99]Подожди: предыдущая задача ещё идёт.[/]")
+            # Лестница и сессии держат один ход за раз, поэтому не отказываем, а ставим в очередь:
+            # человек пишет три задачи и уходит.
+            self.queue.append(text)
+            log.write(f"[#8d8d99]В очереди №{len(self.queue)}: {text}[/]")
+            self.refresh_status("думает")
             return
+        self.start(text)
+
+    def start(self, text: str) -> None:
+        log = self.query_one("#log", RichLog)
         log.write(f"[b #4c8dff]›[/] {text}\n")
         self.busy = True
         self.refresh_status("думает")
@@ -133,6 +145,19 @@ class Shell(App):
             self.exit()
         elif word == "help":
             log.write(HELP + "\n")
+        elif word == "queue":
+            for i, t in enumerate(self.queue, 1):
+                log.write(f"  {i}. {t}")
+            log.write("" if self.queue else "[#8d8d99]Очередь пуста.[/]\n")
+        elif word == "drop":
+            try:
+                n = int(rest) if rest else len(self.queue)
+                gone = self.queue.pop(n - 1) if n >= 1 else self.queue.pop(len(self.queue))
+            except (ValueError, IndexError):
+                log.write("[#8d8d99]Нечего убирать: /queue покажет очередь.[/]\n")
+                return
+            log.write(f"Убрал из очереди: {gone}\n")
+            self.refresh_status("думает" if self.busy else "")
         elif word == "ladder":
             for i, r in enumerate(self.work.rungs):
                 mark = "[b #4c8dff]▸[/]" if i == self.work.step else " "
@@ -214,6 +239,10 @@ class Shell(App):
             log.write("")
             self.busy = False
             self.refresh_status()
+            # Следующую берём из `finally`, а не из конца `try`: упавший ход не должен хоронить
+            # остальную очередь.
+            if self.queue:
+                self.start(self.queue.pop(0))
 
 
     def release(self) -> None:

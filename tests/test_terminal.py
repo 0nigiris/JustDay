@@ -581,3 +581,42 @@ async def test_by_day_a_dangerous_ask_goes_to_the_window_but_at_night_it_never_d
         assert len(calls) == 1
     finally:
         terminal._sdk_turn, terminal._run = was
+
+
+def test_three_tasks_in_a_row_used_to_answer_wait_and_drop_two_of_them() -> None:
+    """Написал три задачи подряд и ушёл — вернулся к одной: остальные получали «подожди» и пропадали."""
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import terminal_ui
+
+    async def go() -> tuple[list, list]:
+        app = terminal_ui.Shell()
+        heard: list = []
+
+        async def slow(rung, text, session, cfg, on_text, on_tool):
+            heard.append((str(rung), text))
+            await asyncio.sleep(0.3)         # ход идёт, пока набираются остальные
+            return terminal.Said(text="ок")
+
+        eng = slow
+        eng.heard = heard
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.work.rungs = app.work.all = rungs("claude:opus")
+            app.work.engines = {"claude": eng}
+            for t in ("раз", "два", "три"):
+                app.query_one("#ask").value = t
+                await pilot.press("enter")
+            app.query_one("#ask").value = "/drop 2"   # убрать «три»
+            await pilot.press("enter")
+            queued = list(app.queue)
+            for _ in range(200):
+                await pilot.pause(0.05)
+                if not app.busy and not app.queue:
+                    break
+        return queued, [h[1] for h in eng.heard]
+
+    queued, heard = asyncio.run(go())
+    assert queued == ["два"]
+    # К задаче легкого хода дописана приписка (`HAND_UP`), поэтому сверяем по началу.
+    got = [w for h in heard for w in ("раз", "два", "три") if h.startswith(w)]
+    assert got == ["раз", "два"], heard
