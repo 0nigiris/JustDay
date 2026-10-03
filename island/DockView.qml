@@ -1569,8 +1569,13 @@ Item {
         tipShown = false
     }
 
-    // Куда значок встаёт: не «перепрыгнул половину соседа», а «курсор оказался над чужой ячейкой».
-    // Ячейки под курсором увеличены, и мерить надо по нарисованному — по нему рука и целится.
+    // Куда значок встаёт. Правило здесь было «курсор оказался над чужой ячейкой» — и оно
+    // дребезжало. Ячейка, в которую значок только что переехал, занимает место соседа, сосед
+    // съезжает под курсор, и следующий же кадр требует переставить обратно: значок прыгал между
+    // двумя местами, налезая на соседей, и человек видел кашу вместо переноса. Правило теперь
+    // макосное и устойчивое: шаг за раз и только когда курсор прошёл СЕРЕДИНУ соседней ячейки.
+    // После такого шага середина соседа оказывается позади курсора — и обратного шага не просит
+    // ни этот кадр, ни следующий.
     function moveDrag(sceneX) {
         dragLocal = sceneX - dv.x - card.x
         if (dragKey === "") return
@@ -1580,11 +1585,11 @@ Item {
         const from = spots.findIndex(s => s.key === dragKey)
         if (from < 0) return
         let to = from
-        for (let n = 0; n < spots.length; n++) {
-            const g = geom[spots[n].i]
-            if (!g) continue
-            if (dragLocal >= g.x && dragLocal < g.x + g.w) { to = n; break }
-        }
+        const mid = (n) => { const g = geom[spots[n].i]; return g ? g.x + g.w / 2 : null }
+        const right = from + 1 < spots.length ? mid(from + 1) : null
+        const left = from > 0 ? mid(from - 1) : null
+        if (right !== null && dragLocal > right) to = from + 1
+        else if (left !== null && dragLocal < left) to = from - 1
         if (to === from) return
         const next = pinOverride.slice()
         const at = next.indexOf(dragKey)
@@ -1689,6 +1694,34 @@ Item {
     function shot(path) {
         card.grabToImage(r => r.saveToFile(path))
         return path
+    }
+
+    // Прогулка с значком в руке: ведём курсор от одного края полосы к другому маленькими шагами и
+    // считаем, сколько раз менялся порядок и как далеко значок уезжал от собственной дырки. Одной
+    // пробой дребезг не поймать: он живёт от шага к шагу, как и под настоящей рукой. Честный
+    // перенос по пяти значкам — это 4 перестановки; больше — значит значок прыгает туда-обратно.
+    function dragWalk(n, from, to, steps) {
+        const spots0 = lane.filter(s => s.t === "app" && s.pinned)
+        const pick = spots0[Math.max(0, Math.min(spots0.length - 1, n))]
+        if (!pick) return JSON.stringify({ pinned: 0 })
+        engaged = true
+        const k = Math.max(2, Math.min(400, steps || 60))
+        startDrag(pick.key)
+        let swaps = 0, gap = 0, last = ""
+        for (let j = 0; j < k; j++) {
+            const x = from + (to - from) * j / (k - 1)
+            pointerScene = anchorCentre - restLength / 2 + x
+            moveDrag(pointerScene)
+            for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
+            const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key).join(",")
+            if (last !== "" && order !== last) swaps++
+            last = order
+            const at = lane.findIndex(s => s.key === dragKey)
+            if (at >= 0) gap = Math.max(gap, Math.abs(geom[at].x + geom[at].w / 2 - dragLocal))
+        }
+        const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key)
+        dragRelease()
+        return JSON.stringify({ took: pick.key, swaps: swaps, gap: Math.round(gap), order: order })
     }
 
     function dragProbe(n, x) {

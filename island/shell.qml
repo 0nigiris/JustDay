@@ -106,6 +106,9 @@ ShellRoot {
         function dockHold(n: int, x: real): string {
             return dockVariants.instances.length ? dockVariants.instances[0].dragHold(n, x) : "null"
         }
+        function dockWalk(n: int, from: real, to: real, steps: int): string {
+            return dockVariants.instances.length ? dockVariants.instances[0].dragWalk(n, from, to, steps) : "null"
+        }
         function dockRelease(): string {
             return dockVariants.instances.length ? dockVariants.instances[0].dragRelease() : "null"
         }
@@ -3165,6 +3168,7 @@ ShellRoot {
             function probe(x) { return dockWin.probe(x) }
             function dragProbe(n, x) { return dockWin.dragProbe(n, x) }
             function dragHold(n, x) { return dockWin.dragHold(n, x) }
+            function dragWalk(n, a, b, k) { return dockWin.dragWalk(n, a, b, k) }
             function dragRelease() { return dockWin.dragRelease() }
             function shot(path) { return dockWin.shot(path) }
             function wheelWalk(a, b, n) { return dockWin.wheelWalk(a, b, n) }
@@ -3266,6 +3270,7 @@ ShellRoot {
                 function probe(x) { return dock.probe(x) }
                 function dragProbe(n, x) { return dock.dragProbe(n, x) }
                 function dragHold(n, x) { return dock.dragHold(n, x) }
+                function dragWalk(n, a, b, k) { return dock.dragWalk(n, a, b, k) }
                 function dragRelease() { return dock.dragRelease() }
                 function shot(path) { return dock.shot(path) }
                 function wheelWalk(a, b, n) { return dock.wheelWalk(a, b, n) }
