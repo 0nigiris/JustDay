@@ -200,7 +200,10 @@ def on(why: str = "работа ассистента", hours: float = 0.0) -> di
     """Включить режим сервера. `hours` — через сколько сторож вернёт машину человеку."""
     was = state()
     if was.get("on"):
-        return {"ok": True, "already": True, **was}
+        # Режим уже идёт, а экраны горят: человек вернулся, подвигал мышью — монитор проснулся сам.
+        # Значит «включить» второй раз означает ровно одно: погаси обратно, я снова ухожу.
+        again = _screens(False) if (_opts().get("screens_off", True)) else False
+        return {"ok": True, "already": True, "screens_off": again, **was}
     opts = _opts()
     hours = hours or float(opts.get("hours") or 10)
     out: dict = {"on": True, "why": why, "since": time.time(), "hours": hours}

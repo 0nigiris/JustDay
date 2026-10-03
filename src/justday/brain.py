@@ -32,7 +32,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from . import config, events, providers
+from . import config, dispatch, events, providers
 from . import persona as persona_mod
 from .i18n import t
 
@@ -326,7 +326,7 @@ class Brain:
         self._spoke_in_turn = False
 
     async def _speak(self, text: str) -> None:
-        if SILENCE.match(text):
+        if SILENCE.match(text) or dispatch.hands_up(text):  # «НУЖНА: opus» — просьба к демону, не речь
             events.emit("say_suppressed", text=text[:200], reason="placeholder")
             return
         if self.cancelled:

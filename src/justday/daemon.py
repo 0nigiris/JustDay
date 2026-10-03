@@ -1019,8 +1019,11 @@ class Daemon:
         tiny_model = str(b.get("tiny_model") or "").strip()
         tiny_where = str(b.get("tiny_provider") or "ollama")
         tiny_ok = bool(tiny_model) and fallback.usable(tiny_where)
-        level, why = await asyncio.get_running_loop().run_in_executor(
-            None, functools.partial(dispatch.level_for, text, tiny=tiny_ok))
+        if str(b.get("ask_judge") or "never") == "always":
+            level, why = await asyncio.get_running_loop().run_in_executor(
+                None, functools.partial(dispatch.level_for, text, tiny=tiny_ok))
+        else:
+            level, why = dispatch.LIGHT, "без судьи"
         if level == dispatch.TINY and tiny_ok:
             want = (tiny_where, tiny_model)
         elif level == dispatch.BIG:
@@ -1048,6 +1051,41 @@ class Daemon:
         events.emit("model_picked", model=want[1], was=was[1], why=why)
         self.publish(brain_model=want[1], brain_why=why, provider=want[0])
         return was
+
+    async def _lift(self, name: str) -> bool:
+        """Лёгкая сказала «НУЖНА: …» — пересесть на сильную. True — пересели, вопрос надо задать снова.
+
+        Принимаем только свои ступени: слово из ответа модели не должно подставлять в конфиг
+        что угодно.
+        """
+        b = self.cfg["brain"]
+        home = str(b.get("home_provider") or "claude")
+        if not b.get("auto_model", True) or b.get("provider", "claude") != home:
+            return False
+        strong, huge = b.get("strong_model") or "sonnet", str(b.get("huge_model") or "")
+        name = name.lower()
+        if name in (huge.lower(), "opus", "huge", "big") and huge:
+            model, level = huge, dispatch.BIG
+        elif name in (strong.lower(), "sonnet", "strong"):
+            model, level = strong, dispatch.STRONG
+        else:
+            return False
+        if b.get("model") == model:
+            return False
+        was = (b.get("provider", "claude"), b.get("model", ""), b.get("effort", ""))
+        b["provider"], b["model"] = home, model
+        if b.get("auto_effort", True):
+            b["effort"] = dispatch.EFFORT[level]
+        try:
+            await self.brain.reconnect()
+        except Exception:
+            log.exception("не вышло подняться на %s", model)
+            b["provider"], b["model"], b["effort"] = was
+            return False
+        log.info("модель: %s → %s (позвала лёгкая)", was[1], model)
+        events.emit("model_picked", model=model, was=was[1], why="позвала лёгкая")
+        self.publish(brain_model=model, brain_why="позвала лёгкая", provider=home)
+        return True
 
     async def _fall_back(self, error: str) -> bool:
         """Перейти к запасному поставщику, если отказ похож на лимит. True — перешли."""
@@ -1150,6 +1188,9 @@ class Daemon:
         was_model = await self._pick_model(text)
         try:
             reply = await self.brain.ask(text, source=source)
+            # Ничего не говоря вслух про пересадку: человек услышит только ответ.
+            if (want := dispatch.hands_up(reply)) and await self._lift(want):
+                reply = await self.brain.ask(text, source=source)
             self._cloud_down_until = 0.0
         except Exception as e:
             if gen != self._cancel_gen:
