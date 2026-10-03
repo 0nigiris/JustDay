@@ -508,3 +508,45 @@ async def _claude_events(events):
                                          lambda _t: None, lambda _t: None)
     finally:
         terminal._run = was
+
+
+def test_a_limit_announced_as_plain_text_used_to_pass_for_a_finished_answer() -> None:
+    """«Зашёл в терминал, попросил — лимит. Говорю: перейди на другую модель — лимит».
+
+    Claude Code сообщает о кончившемся лимите не ошибкой, а обычной строкой ответа: «You've hit
+    your session limit · resets 2:30am». Мы смотрели только в поток ошибок, поэтому лестница
+    считала это готовым ответом и не спускалась — хотя внизу её ждали живые ступени.
+    """
+    said = terminal.Said(text="You've hit your session limit · resets 2:30am (Europe/Madrid)")
+    terminal._limit_in(said)
+    assert said.limit, "лимит в тексте опять принят за ответ"
+    assert not said.text, "сообщение о лимите уехало бы вниз как «что успел сказать предыдущий»"
+    assert terminal.Work.hopeless(said), "с таким ответом лестница так и стоит на месте"
+
+    # А рассказ про лимиты — это рассказ: спускаться из-за него нельзя.
+    story = terminal.Said(text="Лимит у подписки один на всё: " + "и его легко потратить. " * 20)
+    terminal._limit_in(story)
+    assert not story.limit, "ответ про лимиты принят за кончившийся лимит"
+
+
+def test_the_whole_ladder_must_be_walked_when_the_subscription_is_spent() -> None:
+    """Лимит подписки гасит сразу обе ступени Claude — задача должна дойти до того, кто живой."""
+    opus_and_sonnet = engine([terminal.Said(text="You've hit your session limit · resets 2:30am"),
+                              terminal.Said(text="You've hit your session limit · resets 2:30am")])
+
+    async def claude(rung, text, session, cfg, on_text, on_tool):
+        said = await opus_and_sonnet(rung, text, session, cfg, on_text, on_tool)
+        terminal._limit_in(said)
+        return said
+
+    low = engine([terminal.Said(text="сделал сам")])
+    work = terminal.Work({"terminal": {}, "brain": {}},
+                         rungs=rungs("claude:opus", "claude:sonnet", "opencode:ollama/своя"),
+                         engines={"claude": claude, "opencode": low})
+    notes = []
+
+    said = asyncio.run(work.send("сделай всё из плана", on_note=notes.append))
+
+    assert said.text == "сделал сам", "работа встала на лимите вместо того, чтобы уйти вниз"
+    assert work.step == 2, "спустились не до живой ступени"
+    assert "ПЕРЕДАЧА.md" in low.heard[0][1], "задача ушла вниз без передачи"

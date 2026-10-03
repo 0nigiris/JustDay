@@ -129,6 +129,29 @@ class Said:
     used: int = 0
 
 
+# Длиннее этого — рассказ про лимиты, а не лимит.
+LIMIT_SAID = 400
+
+
+def _limit_in(said: Said, err: str = "") -> None:
+    """Понять, что ход кончился лимитом, — даже если об этом сказали обычной строкой ответа.
+
+    Claude Code сообщает о кончившемся лимите не ошибкой: в потоке приходит обычный текст
+    «You've hit your session limit · resets 2:30am». Мы смотрели только в поток ошибок — и
+    принимали это за готовый ответ. Лестница при этом стояла на месте, хотя внизу её ждали живые
+    ступени, и человек получал вместо работы слово «лимит». Его слова: «если бы я реально запустил
+    тебя через этот терминал, ты бы мне просто послал нахуй и сказал лимит».
+    """
+    if fallback.looks_like_limit(f"{said.error} {err}"):
+        said.limit = True
+        return
+    text = (said.text or "").strip()
+    if text and len(text) <= LIMIT_SAID and fallback.looks_like_limit(text):
+        # Сам текст и есть сообщение о лимите: переносим его в беду, чтобы он не уехал вниз
+        # «тем, что успел сказать предыдущий», и не стал ответом человеку.
+        said.limit, said.error, said.text = True, text, ""
+
+
 def _marks(cfg: dict) -> dict[str, str]:
     """Чем движок узнаёт, что он запущен не сам по себе.
 
@@ -266,7 +289,7 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
     _, err = await _run(cmd, {**os.environ, **_marks(cfg)}, line, _quiet_for(cfg))
     if err.strip() and not got.text:
         got.error = got.error or err.strip()[:400]
-    got.limit = fallback.looks_like_limit(got.error + " " + err)
+    _limit_in(got, err)
     return got
 
 
@@ -304,7 +327,7 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
     _, err = await _run(cmd, {**shell.env(), **_marks(cfg)}, line, _quiet_for(cfg))
     if err.strip():
         got.error = err.strip()[:400]
-    got.limit = fallback.looks_like_limit(got.error)
+    _limit_in(got, err)
     return got
 
 

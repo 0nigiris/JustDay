@@ -32,7 +32,12 @@ log = logging.getLogger("justday.fallback")
 # безопаснее, чем в сторону «это сеть»: в худшем случае мы перейдём на запасного и будем работать.
 _LIMIT = re.compile(
     r"(rate[_ ]?limit|usage limit|quota|credit|insufficient|billing|payment required|"
-    r"429|529|overloaded|capacity|too many requests|limit reached|exhaust)", re.I)
+    r"429|529|overloaded|capacity|too many requests|limit reached|exhaust|"
+    # Про кончившуюся подписку Claude Code говорит своими словами, и ни одно из прежних сюда не
+    # подходило: «You've hit your session limit · resets 2:30am». Из-за этого оболочка принимала
+    # лимит за готовый ответ и не спускалась по лестнице.
+    r"hit your .{0,24}limit|(session|weekly|daily|monthly) limit|limit .{0,12}reset|"
+    r"out of (credits|tokens))", re.I)
 # А это именно связь: тут запасной не поможет, он в том же интернете.
 _NETWORK = re.compile(
     r"(connection refused|network is unreachable|name or service not known|timed out|"
