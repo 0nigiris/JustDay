@@ -104,14 +104,50 @@ def voice_list() -> list[dict]:
     return items
 
 
-def load_base():
+def _free_ollama() -> int:
+    """Попросить Ollama отпустить всё, что она держит на карте. Возвращает, сколько моделей отпущено.
+
+    Карта одна на слух, судью, голос и рабочий стол. Судья (до шести гигабайт) отпускается сам
+    через двадцать секунд, но голос просят загрузиться как раз в эти секунды — и он падал с
+    «CUDA out of memory», а Джарвис молчал. Ждать таймера незачем: просим отпустить сразу.
+    """
+    import urllib.request
+
+    base = os.environ.get("JUSTDAY_OLLAMA_URL", "http://127.0.0.1:11434")
+    try:
+        with urllib.request.urlopen(base + "/api/ps", timeout=2) as r:
+            names = [m["name"] for m in json.load(r).get("models", [])]
+        for name in names:
+            req = urllib.request.Request(base + "/api/generate", method="POST",
+                                         data=json.dumps({"model": name, "keep_alive": 0}).encode())
+            urllib.request.urlopen(req, timeout=5).close()
+        return len(names)
+    except (OSError, ValueError, KeyError):  # Ollama не запущена — значит, и не держит
+        return 0
+
+
+def load_base(tries: int = 3):
     global model
     if model is None:
         from faster_qwen3_tts import FasterQwen3TTS
 
         t = time.time()
-        model = FasterQwen3TTS.from_pretrained(BASE_MODEL)
-        model.warmup(prefill_len=120)
+        for attempt in range(1, tries + 1):
+            try:
+                model = FasterQwen3TTS.from_pretrained(BASE_MODEL)
+                model.warmup(prefill_len=120)
+                break
+            except torch.cuda.OutOfMemoryError as e:
+                model = None
+                gc.collect()
+                torch.cuda.empty_cache()
+                freed = _free_ollama()
+                log(f"не хватило видеопамяти на голос (попытка {attempt} из {tries}), "
+                    f"Ollama отпустила моделей: {freed}")
+                if attempt == tries:
+                    raise RuntimeError("Не хватило видеопамяти на нейронный голос: её занимают другие "
+                                       "модели. Закрой игру или тяжёлую программу и повтори.") from e
+                time.sleep(2 * attempt)
         log(f"model {BASE_MODEL} ready in {time.time() - t:.1f}s")
     return model
 
@@ -250,6 +286,11 @@ def handle(conn: socket.socket) -> None:
             if cmd == "say":
                 try:
                     say(conn, req["text"], req.get("voice", ""), str(req.get("instruct") or ""))
+                except Exception as e:
+                    # Ответ-строка здесь вреден: клиент ждёт кадры PCM и принял бы её начало за
+                    # длину (миллиард байт). Закрытое соединение он понимает как «голос недоступен»
+                    # и говорит запасным — Джарвис не молчит.
+                    log("say failed:", str(e))
                 finally:
                     busy -= 1
                 return

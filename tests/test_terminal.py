@@ -594,7 +594,7 @@ def test_three_tasks_in_a_row_used_to_answer_wait_and_drop_two_of_them() -> None
 
         async def slow(rung, text, session, cfg, on_text, on_tool):
             heard.append((str(rung), text))
-            await asyncio.sleep(0.3)         # ход идёт, пока набираются остальные
+            await asyncio.sleep(0.6)         # ход идёт, пока набираются остальные
             return terminal.Said(text="ок")
 
         eng = slow
