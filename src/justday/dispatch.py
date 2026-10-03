@@ -41,6 +41,23 @@ def hands_up(text: str) -> str:
     return m.group(1) if m else ""
 
 
+_ROLES = {"haiku": "хайку", "sonnet": "сонет", "opus": "опус"}
+
+
+def role_for(model: str) -> str:
+    """Добавка к правилам для этой модели: хайку работает на коротком поводке, опус садится за
+    большую работу, и одинаковые правила на всех плохо подходят обоим. Неизвестной модели —
+    пусто: лишний текст в чужой системной части хуже, чем его отсутствие."""
+    name = (model or "").lower()
+    for key, file in _ROLES.items():
+        if key in name:
+            try:
+                return (config.REPO_DIR / "brain" / "роли" / f"{file}.md").read_text(encoding="utf-8")
+            except OSError:
+                return ""
+    return ""
+
+
 TINY = "tiny"
 LIGHT = "light"
 STRONG = "strong"

@@ -185,6 +185,8 @@ class Brain:
         persona = (persona.replace("{address_as}", u["address_as"] or "").replace("{assistant_name}", names[0])
                    .replace("{assistant_names}", (" и " if lang == "ru" else " and ").join(f"«{n}»" for n in names)))
         claude = providers.is_claude(self.cfg)
+        if role := dispatch.role_for(b["model"]):
+            persona += "\n\n" + role
         # Claude in Chrome and the auto-mode classifier need an Anthropic account; other models use the local policy
         extra = {"chrome": None} if b.get("chrome") and claude else {}
         return ClaudeAgentOptions(

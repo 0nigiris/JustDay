@@ -277,6 +277,7 @@ async def _sdk_turn(rung: Rung, text: str, session: str, cfg: dict, take, approv
         effort=(cfg.get("terminal") or {}).get("effort") or None,
         permission_mode=b.get("permission_mode") or None,
         setting_sources=["user", "project", "local"],  # как у `claude -p`: те же правила и разрешения
+        system_prompt={"type": "preset", "preset": "claude_code", "append": dispatch.role_for(rung.model)},
         env=_marks(cfg),
         can_use_tool=can_use_tool,
         resume=session or None,
@@ -314,6 +315,8 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
         cmd += ["--model", rung.model]
     if (effort := (cfg.get("terminal") or {}).get("effort") or ""):
         cmd += ["--effort", str(effort)]
+    if role := dispatch.role_for(rung.model):
+        cmd += ["--append-system-prompt", role]
     if (mode := b.get("permission_mode") or ""):
         cmd += ["--permission-mode", str(mode)]
     unattended = (cfg.get("terminal") or {}).get("unattended")

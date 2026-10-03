@@ -55,3 +55,13 @@ def test_hand_up_is_not_spoken():
     b.cancelled, b.on_text, b._spoke_in_turn = False, on_text, False
     asyncio.run(b._speak("НУЖНА: sonnet"))
     assert spoken == []
+
+
+def test_each_model_gets_only_its_own_role():
+    """Хайку должна знать про «НУЖНА», опус — про большую работу, и чужого в системной части нет."""
+    h, s, o = (dispatch.role_for(m) for m in ("claude-haiku-4-5-20251001", "sonnet", "opus"))
+    assert "роль: быстрая" in h and "роль: быстрая" not in s + o
+    assert "роль: рабочая" in s and "роль: рабочая" not in h + o
+    assert "роль: для большой" in o and "роль: для большой" not in h + s
+    assert "НУЖНА: opus" in h
+    assert dispatch.role_for("qwen3:8b") == "" and dispatch.role_for("") == ""
