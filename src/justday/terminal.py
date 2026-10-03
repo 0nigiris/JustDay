@@ -195,8 +195,12 @@ async def _run(cmd: list[str], env: dict[str, str], on_line, quiet_for: float = 
     в начале — надёжный признак, что эта ступень не работает. Дальше ждём сколько надо: думать
     десять минут над настоящей задачей — нормально, и обрывать это по таймеру нельзя.
     """
+    # limit: одна строка потока — это целое событие движка, а в нём бывает прочитанный файл или
+    # снимок экрана. По умолчанию asyncio рвёт чтение на 64 КиБ («Separator is found, but chunk is
+    # longer than limit») — и ночная работа умирала на первом же большом ответе инструмента.
     proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE,
-                                                stderr=asyncio.subprocess.PIPE, env=env)
+                                                stderr=asyncio.subprocess.PIPE, env=env,
+                                                limit=64 * 1024 * 1024)
     lines: list[str] = []
     mute = False
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -620,3 +621,25 @@ def test_three_tasks_in_a_row_used_to_answer_wait_and_drop_two_of_them() -> None
     # К задаче легкого хода дописана приписка (`HAND_UP`), поэтому сверяем по началу.
     got = [w for h in heard for w in ("раз", "два", "три") if h.startswith(w)]
     assert got == ["раз", "два"], heard
+
+
+def test_a_big_tool_answer_used_to_kill_the_whole_night_work() -> None:
+    """Ночная работа умирала на первом же большом ответе инструмента.
+
+    Одна строка потока — это целое событие движка, и в нём бывает прочитанный файл. asyncio по
+    умолчанию рвёт чтение на 64 КиБ («Separator is found, but chunk is longer than limit»), и
+    работа валилась через четырнадцать секунд после запуска, не сделав ничего.
+    """
+    import inspect
+
+    got = inspect.getsource(terminal._run)
+    assert "limit=" in got, "предел строки не задан — длинный ответ снова уронит работу"
+
+    async def go() -> list[str]:
+        seen: list[str] = []
+        lines, _ = await terminal._run(
+            ["python3", "-c", "print('x' * (300 * 1024))"], dict(os.environ), seen.append, 30.0)
+        return lines
+
+    lines = asyncio.run(go())
+    assert lines and len(lines[0]) > 200 * 1024, "длинная строка так и не прошла целиком"
