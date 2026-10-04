@@ -768,3 +768,61 @@ def test_a_whole_page_of_work_was_handed_to_the_weakest_model() -> None:
     assert rung.model == "opus", "большую работу снова взяла самая слабая модель"
     assert effort == "high", "на большую работу осталось низкое усилие"
     assert why == "большая задача"
+
+
+# ───────────── ревью Codex после задачи ─────────────
+
+def _review_work(monkeypatch, states, notes_per_round):
+    """Work с подставными движком, состоянием репозитория и ревьюером; возвращает (work, что просили у Claude)."""
+    asked: list[str] = []
+
+    async def claude(rung, text, session, cfg, on_text, on_tool):
+        asked.append(text)
+        return terminal.Said(text="сделал", session="s1")
+
+    states = iter(states)
+
+    async def state():
+        return next(states)
+
+    rounds = iter(notes_per_round)
+
+    async def reviewer(base, opts, n):
+        return next(rounds)
+
+    monkeypatch.setattr(terminal, "repo_state", state)
+    work = terminal.Work({"terminal": {"review": True}, "brain": {}}, rungs=rungs("claude:opus"), engines={"claude": claude})
+    work.reviewer = reviewer
+    return work, asked
+
+
+def test_a_second_ai_read_the_diff_and_the_notes_went_back_to_the_first(monkeypatch) -> None:
+    """Claude писал и сам же говорил «готово», и никто не смотрел чужими глазами. Теперь после задачи,
+    изменившей репозиторий, Codex читает изменения; его замечания возвращаются Claude на исправление."""
+    work, asked = _review_work(monkeypatch, [("aaa", ""), ("bbb", "x"), ("ccc", "y")], ["1. гонка в sync()", ""])
+    notes: list[str] = []
+    said = asyncio.run(work.send("почини синк", on_note=notes.append))
+    assert len(asked) == 2 and "гонка в sync()" in asked[1] and "Ревьюер" in asked[1]
+    assert said.text == "сделал"
+    assert any("круг 1" in n for n in notes) and any("замечаний нет" in n for n in notes)
+
+
+def test_the_review_never_went_past_two_rounds(monkeypatch) -> None:
+    """Третий круг — это две нейросети, спорящие о вкусе; он стоит лимита и ничего не даёт."""
+    work, asked = _review_work(monkeypatch, [("a", ""), ("b", ""), ("c", ""), ("d", "")], ["раз", "два", "три"])
+    asyncio.run(work.send("задача"))
+    assert len(asked) == 3          # сама задача и две правки по замечаниям
+
+
+def test_nothing_changed_so_nobody_was_asked_to_review(monkeypatch) -> None:
+    """Ответили на вопрос, файлов не трогали — гонять Codex незачем."""
+    work, asked = _review_work(monkeypatch, [("a", ""), ("a", "")], [])
+    asyncio.run(work.send("который час"))
+    assert len(asked) == 1
+
+
+def test_no_codex_means_no_review_and_no_error(monkeypatch) -> None:
+    """Codex не поставлен — задача идёт как шла; ревью улучшает работу, но не вправе её ломать."""
+    monkeypatch.setattr(terminal.shutil, "which", lambda name: None)
+    work = terminal.Work({"terminal": {}, "brain": {}}, rungs=rungs("claude:opus"), engines={})
+    assert work.reviewer is None and not work.review_on()

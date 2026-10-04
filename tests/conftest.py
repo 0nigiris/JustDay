@@ -67,3 +67,16 @@ def from_the_repo_root(monkeypatch):  # type: ignore[no-untyped-def]
     Запущенный не из корня (`pytest ~/JustDay/tests`, из IDE, из другого каталога) такой тест падал на
     «нет файла», а не на настоящей беде (Р-69). Корень один — тот, где лежит этот каталог."""
     monkeypatch.chdir(Path(__file__).resolve().parent.parent)
+
+
+@pytest.fixture(autouse=True)
+def no_codex_in_tests(monkeypatch):  # type: ignore[no-untyped-def]
+    """Тесты оболочки не зовут настоящий Codex: ревью после задачи тратит лимит ChatGPT и идёт минуты.
+
+    «Не репозиторий» (None) — и шаг ревью пропускается; тесты самого ревью подставляют своё состояние."""
+    from justday import terminal
+
+    async def not_a_repo():
+        return None
+
+    monkeypatch.setattr(terminal, "repo_state", not_a_repo)

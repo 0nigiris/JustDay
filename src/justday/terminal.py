@@ -478,6 +478,75 @@ def restart_note(task: str) -> str:
     ])
 
 
+# ───────────── ревью Codex ─────────────
+
+REVIEW_PROMPT = (
+    "Ты ревьюер. Проверь изменения в этом репозитории с момента {base} (`git diff {base}` и `git status` "
+    "для новых файлов). Ищи настоящие беды: баги, гонки, обходы прав и защиты, утечки ключей, сломанные "
+    "тесты, места, где код делает не то, что сказано в комментарии. Стиль, вкус и «можно красивее» не "
+    "нужны. Ничего не меняй и не запускай ничего, что пишет. Ответ — нумерованный список: файл:строка, "
+    "что не так, чем это кончится. Нет настоящих замечаний — ответь ровно одной строкой: ЗАМЕЧАНИЙ НЕТ. "
+    "Отвечай по-русски.")
+NO_NOTES = "ЗАМЕЧАНИЙ НЕТ"
+REVIEW_FIX = (
+    "Ревьюер (другая нейросеть, Codex) прочитал твои изменения и написал замечания. Разбери каждое: "
+    "обоснованное — исправь и проверь; необоснованное — коротко скажи почему. Не переписывай то, о чём "
+    "замечаний нет.\n\nЗамечания:\n{notes}")
+REVIEW_LOG = config.STATE_DIR / "ревью.log"
+
+
+async def repo_state() -> tuple[str, str] | None:
+    """(коммит, отпечаток незакоммиченного) — чтобы понять, изменила ли задача что-нибудь. Не репозиторий — None."""
+    async def git(*args: str) -> str | None:
+        try:
+            proc = await asyncio.create_subprocess_exec("git", *args, stdout=asyncio.subprocess.PIPE,
+                                                        stderr=asyncio.subprocess.DEVNULL)
+            out, _ = await asyncio.wait_for(proc.communicate(), 20)
+        except (TimeoutError, OSError):
+            return None
+        return out.decode("utf-8", "replace") if proc.returncode == 0 else None
+
+    head = await git("rev-parse", "HEAD")
+    if head is None:
+        return None
+    dirty = await git("diff", "HEAD", "--stat", "--no-color")
+    new = await git("ls-files", "--others", "--exclude-standard")
+    return head.strip(), f"{dirty or ''}\n{new or ''}"
+
+
+async def codex_review(base: str, opts: dict, round_no: int = 1) -> str:
+    """Замечания Codex к изменениям с коммита `base`; пусто — замечаний нет, шаг не вышел или нечем.
+
+    Codex — ревьюер, не исполнитель: песочница только на чтение и без сети, правок он не делает
+    (`-s read-only`). Любой сбой — тишина, а не ошибка задачи: ревью улучшает работу, но не должно её ломать."""
+    import tempfile
+
+    fd, name = tempfile.mkstemp(prefix="jd-review-", suffix=".txt")
+    os.close(fd)     # нужен только путь: Codex пишет в файл сам
+    out = Path(name)
+    cmd = ["codex", "exec", "-s", "read-only", "--ephemeral", "-C", os.getcwd(), "-o", str(out),
+           REVIEW_PROMPT.format(base=base[:40])]
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd, stdin=asyncio.subprocess.DEVNULL,
+                                                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        await asyncio.wait_for(proc.wait(), float(opts.get("review_timeout") or 300))
+        text = out.read_text(encoding="utf-8").strip()
+    except (TimeoutError, OSError):
+        if proc and proc.returncode is None:
+            proc.kill()
+        text = ""
+    finally:
+        out.unlink(missing_ok=True)
+    if NO_NOTES in text.upper() or not text:
+        return ""
+    with contextlib.suppress(OSError):
+        REVIEW_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with REVIEW_LOG.open("a", encoding="utf-8") as f:
+            f.write(f"## {time.strftime('%Y-%m-%d %H:%M')} круг {round_no}\n{text}\n\n")
+    return text
+
+
 class Work:
     """Лестница в работе: чья очередь думать, где чья сессия и что делать при лимите."""
 
@@ -508,6 +577,8 @@ class Work:
         # движок в тесте проще и честнее, чем подменять три разные программы.
         self.engines = engines or {CLAUDE: ask_claude, OPENCODE: ask_opencode}
         self.squeezers = {CLAUDE: squeeze_claude, OPENCODE: squeeze_opencode}
+        # Ревьюер — функция, чтобы тесты подставляли своего; нет Codex — None, и шага нет.
+        self.reviewer = codex_review if shutil.which("codex") else None
 
     @property
     def now(self) -> Rung:
@@ -641,6 +712,31 @@ class Work:
         return True
 
     async def send(self, task: str, on_text=None, on_tool=None, on_note=None, on_pick=None) -> Said:
+        """Задача целиком: ход на лестнице и, если он что-то изменил в репозитории, круги ревью Codex.
+
+        Ревью — после хода, а не внутри: лестница отвечает на «кто думает», ревью — на «хорошо ли
+        получилось», и смешивать их значило бы спускаться по лестнице из-за замечаний к стилю."""
+        on_note = on_note or (lambda _t: None)
+        before = await repo_state() if self.review_on() else None
+        said = await self._turn(task, on_text, on_tool, on_note, on_pick)
+        if before is None or (said.error and not said.text):
+            return said
+        for n in range(1, max(0, int(self.opts.get("review_rounds") or 2)) + 1):
+            now = await repo_state()
+            if not now or now == before:
+                break          # ничего не менялось (или не репозиторий) — смотреть нечего
+            notes = await self.reviewer(before[0], self.opts, n)
+            if not notes:
+                on_note("Ревьюер (Codex): замечаний нет." if n == 1 else "Ревьюер (Codex): после правок замечаний нет.")
+                break
+            on_note(f"Ревьюер (Codex), круг {n}: есть замечания — отдаю на исправление.")
+            said = await self._turn(REVIEW_FIX.format(notes=notes), on_text, on_tool, on_note, on_pick)
+        return said
+
+    def review_on(self) -> bool:
+        return bool(self.opts.get("review", True)) and self.reviewer is not None
+
+    async def _turn(self, task: str, on_text=None, on_tool=None, on_note=None, on_pick=None) -> Said:
         """Отдать задачу тому, чья очередь, и спускаться, пока кто-нибудь её не возьмёт.
 
         `on_pick` зовётся, когда выбрано, чем брать этот ход: говорить «думает Opus», а потом
