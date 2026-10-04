@@ -280,14 +280,21 @@ def wipe() -> int:
     return count
 
 
-def put_back(which: str, *, paste: bool = True) -> dict:
+def put_back(which: str, *, paste: bool = True, ready=None) -> dict:
     """Запись — снова в буфер обмена и сразу в то окно, где курсор (как ⌘V на macOS).
 
     Короткий однострочный текст печатаем напрямую; длинный / многострочный / картинку —
     кладём в буфер и шлём Ctrl+V. Панель перед этим закрывается, PASTE_DELAY даёт
-    композитору вернуть фокус в прежнее окно.
+    композитору вернуть фокус в прежнее окно; демон вместо слепой паузы передаёт `ready` — ответ
+    «окно снова слушает» по событиям KWin (см. glyphs.use).
     """
     from . import face, glyphs
+
+    def settle() -> bool:
+        if ready is None:
+            time.sleep(glyphs.PASTE_DELAY)
+            return True
+        return ready()
 
     item = get(which)
     if not item:
@@ -299,8 +306,7 @@ def put_back(which: str, *, paste: bool = True) -> dict:
         ok = _copy_image(path)
         pasted = False
         how = ""
-        if paste and ok:
-            time.sleep(glyphs.PASTE_DELAY)
+        if paste and ok and settle():
             pasted, how = glyphs.paste_chord()
         return {"ok": ok, "kind": "image", "pasted": pasted, "how": how,
                 "note": "" if pasted else ("картинка в буфере — вставьте Ctrl+V" if ok
@@ -311,10 +317,10 @@ def put_back(which: str, *, paste: bool = True) -> dict:
     typed = False
     pasted = False
     how = ""
-    if paste and copied:
-        time.sleep(glyphs.PASTE_DELAY)
-        # Печатаем только короткое и в одну строку: иначе Enter на каждый \n ломает правку.
-        if len(text) <= 400 and "\n" not in text:
+    if paste and copied and settle():
+        # Печатаем только короткое, в одну строку и латиницей: иначе Enter на каждый \n ломает правку, а
+        # `ydotool type` кириллицу и эмодзи «печатает» кодом 0 — молча, с ответом «успех» (см. glyphs.use).
+        if len(text) <= 400 and "\n" not in text and text.isascii():
             typed, how = glyphs.type_out(text)
         if not typed:
             pasted, how = glyphs.paste_chord()

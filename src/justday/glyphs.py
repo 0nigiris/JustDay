@@ -284,18 +284,27 @@ def paste_chord() -> tuple[bool, str]:
     return False, last
 
 
-def use(ch: str, *, paste: bool = True) -> dict:
+def use(ch: str, *, paste: bool = True, ready=None) -> dict:
     """Выбрали символ: запомнить, положить в буфер и напечатать, если есть чем.
 
     Печатаем, а не только кладём в буфер: человек выбирает эмодзи, стоя курсором в строке, и
     «скопировано, вставьте сами» — это лишний шаг ровно там, где его меньше всего ждут.
+
+    `ready` — «окно, куда печатали, снова слушает клавиатуру»: демон знает это по событиям KWin и
+    отвечает за десятки миллисекунд. Без него (командная строка) ждём вслепую PASTE_DELAY: фиксированная
+    пауза в полсекунды была заметна глазом, а событие приходит почти сразу. Вернул False — окна нет,
+    Ctrl+V ушёл бы в никуда, и символ остаётся в буфере.
     """
     remember(ch)
     before = _clipboard_text() if paste and not ch.isascii() else None
     copied = to_clipboard(ch)
     typed, how = (False, "")
     if paste:
-        time.sleep(PASTE_DELAY)
+        if ready is None:
+            time.sleep(PASTE_DELAY)
+        elif not ready():
+            paste = False
+    if paste:
         # ydotool type знает только клавиши латиницы: эмодзи он «печатает» с кодом 0 и ничего не
         # вставляет, поэтому символ вне ASCII вставляем Ctrl+V из буфера, куда он уже лёг.
         if copied and not ch.isascii():

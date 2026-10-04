@@ -3184,8 +3184,8 @@ class Daemon:
                 resp = {"ok": True, "talk": history.items(req.get("query", ""), int(req.get("limit") or 80))}
             elif cmd == "clip_use":
                 resp = await asyncio.get_running_loop().run_in_executor(
-                    None, lambda: clipboard.put_back(str(req.get("which", "")),
-                                                     paste=req.get("paste", True)))
+                    None, lambda: clipboard.put_back(str(req.get("which", "")), paste=req.get("paste", True),
+                                                     ready=self._focus_back))
             elif cmd == "clip_forget":
                 resp = {"ok": clipboard.forget(str(req.get("which", "")))}
             elif cmd == "clip_wipe":
