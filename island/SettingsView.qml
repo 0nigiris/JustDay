@@ -1151,6 +1151,30 @@ Item {
                 }
                 Row {
                     visible: win.get("island.style") === "bar"
+                    title: JD.tr("Сеть")
+                    subtitle: JD.tr("Значок справа на полосе. Нажатие показывает Wi-Fi и VPN")
+                    Toggle { checked: win.get("island.bar_net") !== false; onToggled: v => win.set("island.bar_net", v) }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
+                    title: JD.tr("Bluetooth")
+                    subtitle: JD.tr("Значок справа на полосе")
+                    Toggle { checked: win.get("island.bar_bt") !== false; onToggled: v => win.set("island.bar_bt", v) }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
+                    title: JD.tr("Размер значков трея")
+                    subtitle: JD.tr("Значки программ на правой стороне полосы")
+                    SSlider { key: "island.bar_tray_size"; from: 14; to: 32; step: 1; decimals: 0; unit: JD.tr(" точек"); fallback: 22 }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
+                    title: JD.tr("Язык")
+                    subtitle: JD.tr("Две буквы справа на полосе. Нажатие переключает раскладку и не открывает островок")
+                    Toggle { checked: win.get("island.bar_lang") !== false; onToggled: v => win.set("island.bar_lang", v) }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
                     title: JD.tr("Прятать, пока не нужна")
                     subtitle: JD.tr("Выключено — полоса всегда видна у верхнего края. Включено — уезжает, пока не подвести курсор. Полноэкранное окно прячет её само")
                     Toggle { checked: win.get("island.bar_autohide") === true; onToggled: v => win.set("island.bar_autohide", v) }
@@ -1409,6 +1433,11 @@ Item {
                     title: JD.tr("Раскладка клавиатуры")
                     subtitle: JD.tr("Первой ячейкой полосы: две буквы, нажатие переключает")
                     Toggle { checked: win.get("tray.layout") !== false; onToggled: v => win.set("tray.layout", v) }
+                }
+                Row {
+                    title: JD.tr("На рабочем столе")
+                    subtitle: JD.tr("Выключите, если сеть, Bluetooth и язык уже на сплошной полосе и лоток у края не нужен")
+                    Toggle { checked: win.get("tray.on_desktop") !== false; onToggled: v => win.set("tray.on_desktop", v) }
                 }
                 Row {
                     title: JD.tr("Увеличение под курсором")

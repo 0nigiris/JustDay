@@ -592,6 +592,35 @@ Singleton {
     property int trayPeek: 0
     function trayToggle() { trayPeek = trayOn ? -1 : 1 }
     readonly property bool trayOn: trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false)
+    // Выкл. — лоток не занимает край рабочего стола. Значки сети, Bluetooth и языка остаются на полосе.
+    readonly property bool trayDesktop: trayCfg.on_desktop !== false
+    property bool netOn: false
+    property string netKind: ""
+    property string netName: ""
+    property string vpnName: ""
+    readonly property bool vpnOn: vpnName !== ""
+    property bool btOn: false
+    readonly property bool barNet: (settings.island || ({})).bar_net !== false
+    readonly property bool barBt: (settings.island || ({})).bar_bt !== false
+    readonly property bool barLang: (settings.island || ({})).bar_lang !== false
+    function askLinks() { if (!linkProbe.running) linkProbe.running = true }
+    Timer { interval: 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: jd.askLinks() }
+    Process {
+        id: linkProbe
+        command: ["python3", Quickshell.shellDir + "/links.py"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const o = JSON.parse(text)
+                    jd.netOn = !!o.net
+                    jd.netKind = o.kind || ""
+                    jd.netName = o.name || ""
+                    jd.vpnName = o.vpn || ""
+                    jd.btOn = !!o.bt
+                } catch (e) {}
+            }
+        }
+    }
     readonly property string dockPlace: dockCfg.position || "bottom"
     readonly property string trayPlace: trayCfg.position || "left"
     readonly property real dockIconSize: Math.max(24, Math.min(96, dockCfg.icon_size || 44))
@@ -675,13 +704,18 @@ Singleton {
     property var trayMenu: null           // сам значок (SystemTrayItem): у него спрашиваем item.menu
     property real trayMenuX: 0
     property real trayMenuY: 0
+    property bool trayMenuFromBar: false  // меню с полосы растёт влево, под значок, а не вправо от него
+    readonly property int barTraySize: {
+        const n = (settings.island || ({})).bar_tray_size
+        return Math.max(14, Math.min(32, n || 22))
+    }
     function openTrayMenu(item, x, y) {
         if (!item || !item.hasMenu) return
         trayMenuX = x
         trayMenuY = y
         trayMenu = item
     }
-    function closeTrayMenu() { trayMenu = null }
+    function closeTrayMenu() { trayMenu = null; trayMenuFromBar = false }
     // Насколько занят процессор — для кошки в доке. Демон присылает сам, раз в две секунды и
     // только когда есть кому смотреть.
     property real cpu: 0
@@ -1236,7 +1270,7 @@ Singleton {
         "skip-forward", "sparkles", "square", "sun", "terminal", "text-cursor", "trash", "user-round", "users",
         "video", "volume-2", "volume-x", "wand-sparkles", "x", "zap",
         // значки панели инструментов
-        "smile", "clipboard", "memory-stick", "hard-drive", "thermometer", "network", "gauge",
+        "smile", "clipboard", "memory-stick", "hard-drive", "thermometer", "network", "wifi", "bluetooth", "gauge",
         "trash-2", "grip-vertical", "camera", "minus", "star", "wifi-off", "list-plus",
         "mic-off", "sliders-horizontal", "volume-1", "lock", "star"
     ]
