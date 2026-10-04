@@ -967,7 +967,7 @@ Singleton {
     readonly property var dockMatch: dockData.match || ({})
     readonly property var dockSkip: dockData.skip || []
     // WM_CLASS values that get one dock slot per window (anti-detect browser profiles).
-    readonly property var dockSeparate: dockData.separate || ["octium"]
+    readonly property var dockSeparate: dockData.separate || []   // список приходит от демона (dock.SEPARATE_INSTANCES), своего у острова нет
     // Готовый файл значка меню: демон нашёл его в теме и перекрасил в белый. Пусто — рисуем свою
     // сетку точек.
     readonly property string dockLauncher: dockData.launcher || ""
