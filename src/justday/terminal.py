@@ -229,6 +229,11 @@ async def _run(cmd: list[str], env: dict[str, str], on_line, quiet_for: float = 
 
     try:
         await asyncio.gather(read_out(), read_err())
+    except asyncio.CancelledError:
+        if proc.returncode is None:
+            proc.kill()
+        await proc.wait()
+        raise
     finally:
         if mute and proc.returncode is None:
             proc.kill()

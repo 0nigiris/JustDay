@@ -125,6 +125,7 @@ class Daemon:
         self._speech_q: asyncio.Queue[str | None] = asyncio.Queue()
         self._speech_gen = 0
         self._approval: asyncio.Future | None = None
+        self._telegram_shell = None
         self._ask_choices: list[str] = []
         self._ask_free = False
         self._preapproved_until = 0.0  # a message draft the user approved: its "send" needs no second question
@@ -886,6 +887,23 @@ class Daemon:
                 continue
             for upd in got or []:
                 offset = max(offset, int(upd.get("update_id", 0)) + 1)
+                if upd.get("callback_query"):
+                    if self._telegram_shell:
+                        with contextlib.suppress(Exception):
+                            await self._telegram_shell.callback(upd)
+                    continue
+                if not tg.owned(upd):
+                    continue
+                if self._telegram_shell is None:
+                    from .telegram_shell import TelegramShell
+                    self._telegram_shell = TelegramShell(self)
+                try:
+                    handled = await self._telegram_shell.message(upd)
+                except Exception:
+                    log.exception("телеграм-оболочка: команда не удалась")
+                    continue
+                if handled:
+                    continue
                 text = tg.mine(upd)
                 if not text:
                     continue

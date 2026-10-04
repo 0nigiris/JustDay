@@ -18,7 +18,10 @@ KDE Connect работает только в своей сети, а он жив
 """
 from __future__ import annotations
 
+import html
 import json
+import os
+import re
 import subprocess
 import tempfile
 import urllib.error
@@ -80,6 +83,65 @@ def send(text: str, to: str = "") -> dict:
     for part in _cut(text, 4096):
         last = call("sendMessage", {"chat_id": where, "text": part, "disable_web_page_preview": "true"})
     return last
+
+
+def send_shell(text: str, to: str = "") -> dict:
+    """Отправить ответ оболочки, сохраняя блоки кода моноширинными и длинные ответы целыми."""
+    where = to or chat()
+    if not where:
+        raise RuntimeError("неизвестно, кому писать: нет telegram_chat в связке ключей")
+    parts = re.split(r"```[^\n`]*\n?(.*?)```", str(text or ""), flags=re.S)
+    chunks: list[str] = []
+    for i, part in enumerate(parts):
+        code = i % 2 == 1
+        body = part
+        while body:
+            size, cut, boundary = 0, 0, 0
+            for n, char in enumerate(body, 1):
+                size += len(html.escape(char, quote=False))
+                if size > 4000:
+                    break
+                cut = n
+                if char in ("\n" if code else " "):
+                    boundary = n
+            if cut < len(body) and boundary > cut // 2:
+                cut = boundary
+            piece, body = html.escape(body[:cut], quote=False), body[cut:]
+            if piece:
+                chunks.append(f"<pre>{piece}</pre>" if code else piece)
+    if not chunks:
+        raise RuntimeError("нечего отправлять")
+    last = {}
+    for part in chunks:
+        last = call("sendMessage", {"chat_id": where, "text": part, "parse_mode": "HTML",
+                                     "disable_web_page_preview": "true"})
+    return last
+
+
+def download_voice(file_id: str, max_bytes: int = 20 * 1024 * 1024) -> Path:
+    """Скачать голосовое в закрытый временный файл; Telegram ограничивает скачивание 20 МБ."""
+    info = call("getFile", {"file_id": file_id})
+    remote = str(info.get("file_path") or "")
+    if not remote or ".." in Path(remote).parts or remote.startswith("/"):
+        raise RuntimeError("телеграм вернул неверный путь голосового файла")
+    if int(info.get("file_size") or 0) > max_bytes:
+        raise RuntimeError("голосовое слишком большое (предел 20 МБ)")
+    req = urllib.request.Request(f"{API}/file/bot{token()}/{remote}")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            data = response.read(max_bytes + 1)
+    except (urllib.error.URLError, OSError) as e:
+        raise RuntimeError(f"не удалось скачать голосовое: {e}") from e
+    if len(data) > max_bytes:
+        raise RuntimeError("голосовое слишком большое (предел 20 МБ)")
+    fd, name = tempfile.mkstemp(prefix="justday-telegram-voice-", suffix=Path(remote).suffix or ".ogg")
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+    except Exception:
+        Path(name).unlink(missing_ok=True)
+        raise
+    return Path(name)
 
 
 def _cut(text: str, limit: int) -> list[str]:
@@ -186,7 +248,7 @@ def updates(offset: int = 0, seconds: int = POLL_SECONDS) -> list[dict]:
     отдать, а пустой ответ приходит один раз в минуту вместо шестидесяти в минуту.
     """
     return call("getUpdates", {"offset": offset or None, "timeout": seconds,
-                               "allowed_updates": json.dumps(["message"])},
+                               "allowed_updates": json.dumps(["message", "callback_query"])},
                 timeout=seconds + 10)  # type: ignore[return-value]
 
 
@@ -197,7 +259,20 @@ def mine(update: dict) -> str:
     почтой, окнами и правом запускать программы. Поэтому чужое молча выбрасывается.
     """
     msg = (update or {}).get("message") or {}
-    who = str(((msg.get("chat") or {}).get("id")) or "")
-    if not who or who != chat():
+    if not owned(update):
         return ""
     return str(msg.get("text") or "").strip()
+
+
+def owned(update: dict) -> bool:
+    """Владелец — единственный, кому доступны мозг и команды удалённой оболочки."""
+    msg = (update or {}).get("message") or {}
+    who = str(((msg.get("chat") or {}).get("id")) or "")
+    return bool(who and who == chat())
+
+
+def mine_callback(update: dict) -> dict | None:
+    """Кнопки подтверждения принимаются только из личного чата владельца."""
+    query = (update or {}).get("callback_query") or {}
+    who = str(((query.get("message") or {}).get("chat") or {}).get("id") or "")
+    return query if who and who == chat() else None

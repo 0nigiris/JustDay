@@ -5,9 +5,12 @@
 """
 from __future__ import annotations
 
+import asyncio
+import json
+
 import pytest
 
-from justday import telegram
+from justday import telegram, telegram_shell
 
 
 def test_a_stranger_who_found_the_bot_could_talk_straight_into_the_brain(monkeypatch) -> None:
@@ -58,3 +61,106 @@ def test_sending_without_a_token_says_what_to_do(monkeypatch) -> None:
     monkeypatch.setattr(telegram, "token", lambda: "")
     with pytest.raises(RuntimeError, match="secret-tool"):
         telegram.call("getMe")
+
+
+def test_terminal_answers_kept_code_monospace_and_within_telegram_limit(monkeypatch) -> None:
+    """Ответ оболочки с кодом нельзя превращать в нечитаемый обычный текст или рвать на лимите."""
+    sent = []
+    monkeypatch.setattr(telegram, "chat", lambda: "42")
+    monkeypatch.setattr(telegram, "call", lambda method, params: sent.append(params) or {})
+    source = "Собрал:\n```python\nprint('<ok>')\n```\n" + "x" * 5000
+
+    telegram.send_shell(source)
+
+    assert len(sent) >= 3
+    assert all(len(item["text"]) <= 4096 for item in sent)
+    assert sent[0]["parse_mode"] == "HTML"
+    assert sent[1]["text"].startswith("<pre>print('&lt;ok&gt;')")
+    assert sent[1]["text"].endswith("</pre>")
+
+
+def test_remote_terminal_kept_queued_phone_tasks_in_order(monkeypatch, tmp_path) -> None:
+    """Задачи с телефона должны пройти той же лестницей по одной, не затерев друг друга."""
+    from types import SimpleNamespace
+
+    ran, replies = [], []
+
+    class Work:
+        def __init__(self, _cfg):
+            self.now = SimpleNamespace(model="haiku", label="Claude Code · haiku")
+            self.rungs = [SimpleNamespace(engine="claude")]
+            self.skipped = []
+            self.step = 0
+
+        async def send(self, task):
+            ran.append(task)
+            return SimpleNamespace(text=f"готово: {task}", error="")
+
+    monkeypatch.setattr(telegram_shell.terminal, "Work", Work)
+    monkeypatch.setattr(telegram_shell.config, "load", lambda: {})
+    monkeypatch.setattr(telegram_shell.config, "STATE_DIR", tmp_path)
+    async def reply(text):
+        replies.append(text)
+    async def send_shell(_text):
+        return {}
+    monkeypatch.setattr(telegram_shell.TelegramShell, "reply", lambda self, text: reply(text))
+    monkeypatch.setattr(telegram, "send_shell", send_shell)
+
+    async def run():
+        shell = telegram_shell.TelegramShell(SimpleNamespace())
+        await shell.message({"message": {"text": "/задача первая", "chat": {"id": 42}}})
+        await shell.message({"message": {"text": "/задача вторая", "chat": {"id": 42}}})
+        await shell.worker
+        return shell
+
+    shell = asyncio.run(run())
+    assert ran == ["первая", "вторая"]
+    assert len(replies) == 2
+    assert "Ответ: готово: вторая" in shell.journal.read_text(encoding="utf-8")
+
+
+def test_dangerous_terminal_action_waited_for_its_telegram_button(monkeypatch) -> None:
+    """Опасное действие из оболочки нельзя считать разрешённым по молчанию или чужой кнопке."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(telegram_shell.config, "load", lambda: {})
+    monkeypatch.setattr(telegram, "chat", lambda: "42")
+    calls = []
+    monkeypatch.setattr(telegram, "call", lambda method, params: calls.append((method, params)) or {})
+
+    async def run():
+        shell = telegram_shell.TelegramShell(SimpleNamespace())
+        request = asyncio.create_task(shell.approve("удалить файл", "нужен доступ"))
+        while not calls:
+            await asyncio.sleep(0)
+        ident = next(iter(shell.pending))
+        buttons = json.loads(calls[0][1]["reply_markup"])["inline_keyboard"][0]
+        assert buttons[0]["callback_data"] == f"approve:{ident}:yes"
+        assert buttons[1]["callback_data"] == f"approve:{ident}:no"
+        wrong = {"callback_query": {"id": "foreign", "data": f"approve:{ident}:yes",
+                                    "message": {"chat": {"id": 999}}}}
+        assert telegram.mine_callback(wrong) is None
+        right = {"callback_query": {"id": "owner", "data": f"approve:{ident}:yes",
+                                     "message": {"chat": {"id": 42}}}}
+        assert await shell.callback(right)
+        return await request
+
+    assert asyncio.run(run()) is True
+
+
+def test_remote_ladder_skipped_opencode_without_a_telegram_permission_bridge(monkeypatch) -> None:
+    """Запасная ступень с правом исполнять инструменты не должна обходить Telegram-подтверждение."""
+    from types import SimpleNamespace
+
+    class Work:
+        def __init__(self, _cfg):
+            self.now = SimpleNamespace(model="opus", label="Claude Code · opus")
+            self.rungs = [SimpleNamespace(engine="claude"), SimpleNamespace(engine="opencode")]
+            self.skipped = []
+            self.step = 0
+
+    monkeypatch.setattr(telegram_shell.terminal, "Work", Work)
+    monkeypatch.setattr(telegram_shell.config, "load", lambda: {})
+    shell = telegram_shell.TelegramShell(SimpleNamespace())
+    assert [r.engine for r in shell.work.rungs] == ["claude"]
+    assert [r.engine for r in shell.work.skipped] == ["opencode"]
