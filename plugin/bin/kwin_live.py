@@ -15,6 +15,7 @@ from typing import Annotated
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # relmouse.py next to this file
 from kwin_mcp import server
+from kwin_mcp.session import LiveSession
 from mcp.server.mcpserver.utilities.types import Image
 from pydantic import Field
 
@@ -86,7 +87,58 @@ def _annotate(data: bytes, els: list[dict]) -> tuple[bytes, str]:
     return buf.getvalue(), "\n".join(legend)
 
 
+# Пока сеанс человека заперт (режим сервера), весь ввод живого стола получает экран блокировки:
+# «type» напечатал бы в поле пароля, а лишние попытки там запирают и самого человека. Снимок при
+# этом чёрный. Ломать замок нельзя — он стоит затем, чтобы подошедший чужой видел запрос пароля.
+# Работать с окнами можно в своём столе: session_start поднимает отдельный невидимый KWin
+# (dbus-run-session + kwin_wayland --virtual), и look/act ниже переходят в него сами.
+LOCKED = ("Сеанс человека заперт (режим сервера): ввод живого стола сейчас уходит экрану блокировки, "
+          "снимок чёрный. Замок не обходи. Для работы с окнами подними свой невидимый стол: session_stop, "
+          "затем session_start app_command=\"<программа>\" — look и act будут работать в нём. "
+          "Вернуться к живому столу: session_stop, затем session_connect.")
+
+
+def _isolated() -> bool:
+    """Работаем в своём столе (session_start), а не в живом сеансе человека."""
+    s = server._engine._session
+    return s is not None and not isinstance(s, LiveSession)
+
+
+def _locked() -> bool:
+    """Заперт ли графический сеанс человека. Сервер живёт под демоном, своего XDG_SESSION_ID у
+    него нет — берём сеанс, который logind считает экраном этого пользователя."""
+    def ask(*args: str) -> str:
+        return subprocess.run(["loginctl", *args], capture_output=True, text=True, timeout=3).stdout.strip()
+    try:
+        sid = ask("show-user", str(os.getuid()), "-p", "Display", "--value")
+        if not sid:
+            return True
+        return ask("show-session", sid, "-p", "LockedHint", "--value") != "no"
+    except (OSError, subprocess.SubprocessError):
+        # Ошибка logind не доказывает, что стол открыт: fail closed, иначе ввод может уйти замку.
+        return True
+
+
+def _look_own(window: str = "") -> list:
+    """Снимок своего стола. Он один и без масштаба: координаты картинки и есть координаты стола."""
+    eng = server._engine
+    if window:
+        eng.focus_window(window)
+        time.sleep(0.25)
+    path = Path(eng.screenshot().split("saved: ", 1)[1].rsplit(" (", 1)[0])
+    data = path.read_bytes()
+    path.unlink(missing_ok=True)
+    _map.update(origin_x=0, origin_y=0, scale=1.0, app="")
+    _marks.clear()
+    return ["свой стол ассистента (сеанс человека не тронут) · coordinates for act = pixels of THIS image",
+            Image(data=data, format="png")]
+
+
 def _look(window: str = "", whole_screen: bool = False) -> list:
+    if _isolated():
+        return _look_own(window)
+    if _locked():
+        return [LOCKED]
     if window:
         _justday("windows", "focus", window)
         time.sleep(0.25)
@@ -159,6 +211,9 @@ async def act(
     """Do several GUI actions in ONE call (click, type, keys, drag paths, scroll, waits) and get the
     result image back. Batch everything you can predict from the current image into one call."""
     eng, log = server._engine, []
+    own = _isolated()
+    if not own and _locked():
+        return [LOCKED]
     for raw in steps:
         op, _, rest = raw.strip().partition(" ")
         op, a = op.lower(), rest.split()
@@ -175,6 +230,13 @@ async def act(
                 pts = [_pt(a[i], a[i + 1], screen_coords) for i in range(0, len(a) - 1, 2)]
                 (x1, y1), (x2, y2) = pts[0], pts[-1]
                 eng.mouse_drag(x1, y1, x2, y2, waypoints=[[x, y, 15] for x, y in pts[1:-1]] or None)
+            elif op in ("turn", "mouse") and own:
+                # relmouse пишет в /dev/uinput, а это ввод живого KWin — то есть экрана блокировки.
+                log.append(f"{raw}: в своём столе нет (это ввод живого сеанса)")
+                continue
+            elif op == "type" and own:
+                # Буфер в своём столе по умолчанию выключен (wl-copy там зависает) — печатаем через EIS.
+                eng.keyboard_type(rest) if rest.isascii() else eng.keyboard_type_unicode(rest)
             elif op == "type":
                 _type(rest)
             elif op == "key":

@@ -559,3 +559,46 @@ def test_foreign_player_never_showed_its_cover() -> None:
     js = f"console.log(JSON.stringify({json.dumps(list(cases))}.map(src => {{ const art = {{ src }}; return {expr} }})))"
     got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
     assert dict(zip(cases, got)) == cases
+
+
+def test_assistant_typed_into_the_lock_screen_password_field() -> None:
+    """Пока сеанс заперт, «act type …» уходил экрану блокировки — то есть в поле пароля."""
+    import pathlib
+    import subprocess
+    import textwrap
+
+    import pytest
+
+    tool = pathlib.Path.home() / ".local/share/uv/tools/kwin-mcp/bin/python"
+    if not tool.exists():
+        pytest.skip("kwin-mcp не установлен")
+    probe = textwrap.dedent('''
+        import asyncio, sys
+        sys.path.insert(0, "plugin/bin")
+        from kwin_mcp import server
+        server.main = lambda: None
+        server._engine.session_connect = lambda *a, **k: None
+        import kwin_live as k
+
+        class Engine:
+            _session = None          # живой сеанс, не свой стол
+            calls = []
+            def __getattr__(self, name):
+                return lambda *a, **kw: Engine.calls.append(name)
+
+        server._engine = Engine()
+        k._locked = lambda: True
+        got = asyncio.run(k.act(["click 10 10", "type мойпароль", "key Return"]))
+        assert Engine.calls == [], Engine.calls
+        assert "заперт" in got[0] and "session_start" in got[0]
+        assert "заперт" in asyncio.run(k.look())[0]
+
+        # Ошибка logind не должна превращать неизвестное состояние в разрешение печатать.
+        def unavailable(*args, **kwargs):
+            raise OSError("logind недоступен")
+        k.subprocess.run = unavailable
+        assert k._locked(), "при сбое определения замка ввод был разрешён"
+        print("ok")
+    ''')
+    out = subprocess.run([str(tool), "-c", probe], capture_output=True, text=True, timeout=60)
+    assert out.stdout.strip().endswith("ok"), out.stderr[-1500:]
