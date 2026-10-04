@@ -1304,7 +1304,11 @@ Singleton {
         "applications-development": "code", "games-hint": "wand-sparkles", "youtube": "circle-play",
         "applications-games": "gamepad-2", "steam": "gamepad-2", "application-x-executable": "app-window",
         "preferences-system-windows": "app-window", "git": "git-branch", "help-about": "circle-help",
-        "moon": "moon", "cloud": "cloud"
+        "moon": "moon", "cloud": "cloud",
+        // Без этих имён шапка почты, календаря и вопроса показывала запасные «искры» вместо своего
+        // значка — человек это и назвал «иконки как будто не там».
+        "mail-message": "mail", "mail-send": "mail", "mail-unread": "mail", "view-calendar": "calendar-clock",
+        "dialog-question": "circle-help", "view-restore": "minimize-2"
     })
     // every file in island/icons, so a view can also name a lucide icon directly
     readonly property var localIcons: [
@@ -1319,8 +1323,9 @@ Singleton {
         "video", "volume-2", "volume-x", "wand-sparkles", "x", "zap",
         // значки панели инструментов
         "smile", "clipboard", "memory-stick", "hard-drive", "thermometer", "network", "wifi", "bluetooth", "gauge",
-        "trash-2", "grip-vertical", "camera", "minus", "star", "wifi-off", "list-plus",
-        "mic-off", "sliders-horizontal", "volume-1", "lock", "star"
+        "trash-2", "grip-vertical", "camera", "minus", "star", "wifi-off", "list-plus", "arrow-left", "pencil", "minimize-2",
+        "mic-off", "sliders-horizontal", "volume-1", "lock", "star",
+        "arrow-right", "circle-stop"
     ]
     // "" when the island has no glyph of its own for this name
     function glyph(name) { return name ? (glyphs[name] || (localIcons.indexOf(name) >= 0 ? name : "")) : "" }

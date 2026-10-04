@@ -330,7 +330,10 @@ class MailAssistant:
             return {"type": "mail_read", "from": self.last_letter.sender, "subject": self.last_letter.subject, "text": reply}
         if self.letters and self.last_action in ("summary", "send", "not_mail"):
             return {"type": "mail_list", "text": reply,
-                    "items": [{"n": i, "from": l.sender, "subject": l.subject} for i, l in enumerate(self.letters, 1)]}
+                    # preview — начало письма: по нажатию строка раскрывается прямо в списке. Раньше нажатие
+                    # только просило прочитать письмо вслух, а глазами посмотреть было нечего.
+                    "items": [{"n": i, "from": l.sender, "address": l.address, "subject": l.subject,
+                               "preview": l.body[:600]} for i, l in enumerate(self.letters, 1)]}
         return None
 
     def _summary(self, cached: bool = False) -> tuple[str, bool]:

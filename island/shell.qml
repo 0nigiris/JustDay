@@ -87,6 +87,10 @@ ShellRoot {
                                     island: [island.x, island.y, island.width, island.height, island.opacity] })
         }
         function snapshot(path: string): void { island.grabToImage(r => r.saveToFile(path)) }
+        // Подать островку сообщение, как от демона: «почта выглядит криво» иначе не посмотреть, не
+        // дождавшись настоящих писем. `qs ipc call island message '{"kind":"card","card":{…}}'`,
+        // затем snapshot. На запертом сеансе — во вложенном `kwin_wayland --virtual` (ПЕРЕДАЧА.md).
+        function message(json: string): void { JD.handle(JSON.parse(json)) }
         // Проверка движка увеличения без мыши: ставим курсор в заданную точку полосы, даём физике
         // сойтись и отдаём получившуюся раскладку. Синтетическая мышь на вейланде врёт (ускорение
         // и вторые мониторы), а «значки расступаются» иначе никак не проверить числом.
@@ -2504,6 +2508,15 @@ ShellRoot {
     component CardView: View {
         id: cv
         readonly property var c: JD.card || ({})
+        property int openLetter: 0           // номер раскрытого письма в списке почты, 0 — все свёрнуты
+        onCChanged: openLetter = 0
+        // Цвет кружка от всего адреса, а не от первой буквы: у «Google», «Gmail» и «GitHub» он был
+        // один и тот же, и список выглядел набором повторов.
+        function hue(s) {
+            let h = 7
+            for (let i = 0; i < (s || "").length; i++) h = (h * 31 + s.charCodeAt(i)) % 360
+            return h / 360
+        }
         readonly property string mediaIcon: ({ image: "image-x-generic", video: "video-x-generic", music: "audio-x-generic",
                                                speech: "audio-x-generic", "3d": "application-x-blender" })[c.kind] || "folder-pictures"
         implicitWidth: 600
@@ -2766,32 +2779,72 @@ ShellRoot {
             }
             Repeater {
                 model: cv.c.type === "mail_list" ? (cv.c.items || []) : []
+                // Нажатие раскрывает письмо прямо в списке. Раньше оно просило «прочитай письмо
+                // номер N» — Джарвис начинал читать вслух, а глазами посмотреть было нечего.
                 Rectangle {
+                    id: letterRow
                     required property var modelData
+                    readonly property bool open: cv.openLetter === modelData.n
                     Layout.fillWidth: true
-                    implicitHeight: 44
+                    implicitHeight: letterCol.implicitHeight + 18
                     radius: 12
-                    color: rowHover.hovered ? JD.fill2 : JD.fill1
+                    clip: true
+                    color: rowHover.hovered && !open ? JD.fill2 : JD.fill1
                     Behavior on color { ColorAnimation { duration: 120 } }
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
-                        Rectangle {
-                            implicitWidth: 26; implicitHeight: 26; radius: 13
-                            color: Qt.hsla((modelData.from.charCodeAt(0) % 12) / 12, 0.55, 0.45, 1)
-                            Text { font.family: JD.fontFamily; anchors.centerIn: parent; text: modelData.from.charAt(0).toUpperCase(); color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
-                        }
-                        ColumnLayout {
-                            spacing: 0
+                    Behavior on implicitHeight { NumberAnimation { duration: JD.dur(200); easing.type: Easing.OutCubic } }
+                    ColumnLayout {
+                        id: letterCol
+                        anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 9; leftMargin: 12; rightMargin: 12 }
+                        spacing: 8
+                        RowLayout {
                             Layout.fillWidth: true
-                            Label1 { text: modelData.from; font.pixelSize: 12; Layout.fillWidth: true }
-                            Label2 { text: modelData.subject; Layout.fillWidth: true }
+                            spacing: 10
+                            Rectangle {
+                                implicitWidth: 26; implicitHeight: 26; radius: 13
+                                color: Qt.hsla(cv.hue(letterRow.modelData.address || letterRow.modelData.from), 0.5, 0.45, 1)
+                                Text { font.family: JD.fontFamily; anchors.centerIn: parent; text: (letterRow.modelData.from || "?").charAt(0).toUpperCase(); color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
+                            }
+                            // Пустая тема не занимает строку: иначе имя отправителя прилипало к
+                            // верху, а кружок стоял по центру — ряд выглядел съехавшим.
+                            ColumnLayout {
+                                spacing: 1
+                                Layout.fillWidth: true
+                                Label1 { text: letterRow.modelData.from; font.pixelSize: 12; Layout.fillWidth: true }
+                                Label2 {
+                                    visible: !!letterRow.modelData.subject
+                                    text: letterRow.modelData.subject || ""
+                                    Layout.fillWidth: true
+                                    wrapMode: letterRow.open ? Text.Wrap : Text.NoWrap
+                                    maximumLineCount: letterRow.open ? 3 : 1
+                                }
+                            }
+                            Icon {
+                                name: "chevron-down"; implicitSize: 14; tint: JD.text3
+                                rotation: letterRow.open ? 180 : 0
+                                Behavior on rotation { NumberAnimation { duration: JD.dur(200); easing.type: Easing.OutCubic } }
+                            }
+                        }
+                        Label2 {
+                            visible: letterRow.open
+                            text: letterRow.modelData.preview || JD.tr("Текста в письме нет.")
+                            color: JD.text1
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 9
+                            lineHeight: 1.15
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 36
+                        }
+                        RowLayout {
+                            visible: letterRow.open
+                            Layout.leftMargin: 36
+                            Layout.bottomMargin: 2
+                            spacing: 8
+                            PillButton { label: JD.tr("Прочитать вслух"); onClicked: JD.send({ cmd: "type", text: JD.tr("прочитай письмо номер ") + letterRow.modelData.n }) }
+                            PillButton { label: JD.tr("Открыть в браузере"); onClicked: JD.send({ cmd: "type", text: JD.tr("открой письмо номер ") + letterRow.modelData.n + JD.tr(" в браузере") }) }
                         }
                     }
                     HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: JD.send({ cmd: "type", text: JD.tr("прочитай письмо номер ") + modelData.n }) }
+                    TapHandler { onTapped: cv.openLetter = letterRow.open ? 0 : letterRow.modelData.n }
                 }
             }
         }

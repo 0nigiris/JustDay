@@ -383,3 +383,48 @@ def test_server_mode_left_the_room_glowing(monkeypatch) -> None:
     assert "--save-profile" in leds, "прежнюю картину не сохраняем — возвращать будет нечего"
     assert leds.index("--save-profile") < leds.index('"--mode", "static"'), \
         "сохранение идёт после гашения: сохранится уже погасшее"
+
+
+def _island_glyph():
+    """JD.glyph() из островка, повторённый по его же таблицам: имя значка → файл svg или «» (искры)."""
+    import pathlib
+    import re
+
+    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    table = re.search(r"readonly property var glyphs: \(\{(.+?)\}\)", jd, re.S).group(1)
+    glyphs = dict(re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', table))
+    local = set(re.findall(r'"([^"]+)"', re.search(r"localIcons: \[(.+?)\]", jd, re.S).group(1)))
+    return lambda name: glyphs.get(name) or (name if name in local else "")
+
+
+def test_mail_card_showed_sparkles_instead_of_its_own_icon() -> None:
+    """«Иконки как будто не там»: шапка почты, календаря и вопроса рисовала запасные искры."""
+    import pathlib
+    import re
+
+    from justday import island
+
+    glyph = _island_glyph()
+    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
+    header = re.search(r"CardHeader \{\s*Layout\.fillWidth: true\s*icon: (.+?)\n\s*tint:", shell, re.S).group(1)
+    names = set(re.findall(r'[?:]\s*"([a-z0-9-]+)"', header)) | {"view-restore"}
+    names |= {island.tool_icon(t, i) for t, i in [("Bash", "justday play x"), ("Bash", "git status"), ("Read", ""),
+                                                  ("WebSearch", ""), ("Agent", ""), ("Skill", ""), ("Bash", "steam")]}
+    for name in sorted(names):
+        got = glyph(name)
+        assert got and pathlib.Path(f"island/icons/{got}.svg").exists(), f"«{name}» рисуется запасными искрами"
+    for svg in pathlib.Path("island/icons").glob("*.svg"):
+        assert glyph(svg.stem) == svg.stem, f"значок {svg.stem} лежит в папке, но по имени его не найти"
+
+
+def test_tapping_a_letter_showed_nothing_to_read() -> None:
+    """Нажал на письмо — Джарвис начал читать вслух, а глазами посмотреть было нечего."""
+    from justday import mail
+
+    m = mail.MailAssistant()
+    m.letters = [mail.Letter("1", "GitHub", "noreply@github.com", "", "", "Ваш доступ к репозиторию открыт. " * 40)]
+    m.last_action = "summary"
+    item = m.card("одно письмо")["items"][0]
+    assert item["preview"].startswith("Ваш доступ к репозиторию открыт.")
+    assert len(item["preview"]) <= 600, "в карточку ушло письмо целиком"
+    assert item["address"] == "noreply@github.com", "кружку не от чего брать свой цвет"

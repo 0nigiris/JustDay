@@ -995,7 +995,7 @@ class Daemon:
         prev = self.state
         prev_gen = self._cancel_gen
         self.state = "thinking"
-        self.publish(detail=t("Почта · локально"), kind="tool")
+        self.publish(detail=t("Почта · локально"), kind="tool", icon="mail-message")  # без значка крутилось кольцо
         try:
             result = await asyncio.get_running_loop().run_in_executor(None, self.mail.handle, text)
         except Exception as e:
