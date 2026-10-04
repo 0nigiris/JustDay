@@ -169,28 +169,72 @@ def to_clipboard(text: str) -> bool:
         return False
 
 
+def _ydotool_socket() -> str:
+    run = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    return f"{run}/.ydotool_socket"
+
+
+def _ydotool_ready() -> bool:
+    """Поднять ydotoold, если его нет. Он нужен один на сеанс и живёт сам.
+
+    ydotool печатает через /dev/uinput, то есть мимо композитора, — и потому работает там, где
+    виртуальная клавиатура запрещена. Демон нужен затем, что открывать uinput на каждый символ
+    дорого и небезопасно; права на устройство проверяет система, мы их не трогаем.
+    """
+    sock = _ydotool_socket()
+    if os.path.exists(sock):
+        return True
+    if not shutil.which("ydotoold") or not os.access("/dev/uinput", os.W_OK):
+        return False
+    try:
+        subprocess.Popen(["ydotoold", f"--socket-path={sock}"], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    for _ in range(20):          # демон поднимается за десятые доли секунды
+        time.sleep(0.05)
+        if os.path.exists(sock):
+            return True
+    return False
+
+
 def type_out(text: str) -> tuple[bool, str]:
     """Напечатать символ в то окно, где курсор.
 
-    На Wayland это делает `wtype` через протокол виртуальной клавиатуры — единственный
-    разрешённый способ: синтетические события ввода протокол запрещает, а виртуальную клавиатуру
-    KWin 6 поддерживает. На X11 — `xdotool type`.
+    Почему не только `wtype`. Он печатает через протокол виртуальной клавиатуры, а KWin его не
+    поддерживает вовсе: «Compositor does not support the virtual keyboard protocol». То есть на
+    Plasma 6 эмодзи никогда не вставлялся сам — человек выбирал его и получал «в буфере, вставьте
+    Ctrl+V», хотя просил ровно обратного. На других композиторах (Sway, Hyprland) wtype работает,
+    поэтому его пробуем первым и не выбрасываем.
+
+    Запасной путь — `ydotool`: он пишет в /dev/uinput, то есть мимо композитора, и потому
+    работает везде, где система дала права на это устройство.
 
     Возвращает (получилось, чем). Не получилось — символ всё равно уже в буфере, и об этом
     говорит островок: «в буфере, вставьте Ctrl+V»."""
     from . import face
 
-    if face.session() == "wayland" and shutil.which("wtype"):
-        cmd, how = ["wtype", "--", text], "wtype"
+    tries: list[tuple[str, list[str]]] = []
+    if face.session() == "wayland":
+        if shutil.which("wtype"):
+            tries.append(("wtype", ["wtype", "--", text]))
+        if shutil.which("ydotool") and _ydotool_ready():
+            tries.append(("ydotool", ["ydotool", "type", "--", text]))
     elif face.session() == "x11" and shutil.which("xdotool"):
-        cmd, how = ["xdotool", "type", "--clearmodifiers", "--", text], "xdotool"
-    else:
+        tries.append(("xdotool", ["xdotool", "type", "--clearmodifiers", "--", text]))
+    if not tries:
         return False, ""
-    try:
-        p = subprocess.run(cmd, capture_output=True, timeout=10)
-        return p.returncode == 0, how
-    except (OSError, subprocess.SubprocessError):
-        return False, how
+    env = {**os.environ, "YDOTOOL_SOCKET": _ydotool_socket()}
+    last = ""
+    for how, cmd in tries:
+        last = how
+        try:
+            p = subprocess.run(cmd, capture_output=True, timeout=10, env=env)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if p.returncode == 0:
+            return True, how
+    return False, last
 
 
 def paste_chord() -> tuple[bool, str]:
@@ -198,20 +242,32 @@ def paste_chord() -> tuple[bool, str]:
 
     Нужно для длинного и многострочного текста: набирать его посимвольно через
     type_out нельзя — редактор получит Enter на каждый перевод строки.
+
+    Та же беда, что у type_out: на KWin wtype бессилен, и за ним идёт ydotool.
     """
     from . import face
 
-    if face.session() == "wayland" and shutil.which("wtype"):
-        cmd, how = ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"], "wtype-ctrl-v"
+    tries: list[tuple[str, list[str]]] = []
+    if face.session() == "wayland":
+        if shutil.which("wtype"):
+            tries.append(("wtype-ctrl-v", ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]))
+        if shutil.which("ydotool") and _ydotool_ready():
+            tries.append(("ydotool-ctrl-v", ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]))
     elif face.session() == "x11" and shutil.which("xdotool"):
-        cmd, how = ["xdotool", "key", "--clearmodifiers", "ctrl+v"], "xdotool-ctrl-v"
-    else:
+        tries.append(("xdotool-ctrl-v", ["xdotool", "key", "--clearmodifiers", "ctrl+v"]))
+    if not tries:
         return False, ""
-    try:
-        p = subprocess.run(cmd, capture_output=True, timeout=5)
-        return p.returncode == 0, how
-    except (OSError, subprocess.SubprocessError):
-        return False, how
+    env = {**os.environ, "YDOTOOL_SOCKET": _ydotool_socket()}
+    last = ""
+    for how, cmd in tries:
+        last = how
+        try:
+            p = subprocess.run(cmd, capture_output=True, timeout=5, env=env)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if p.returncode == 0:
+            return True, how
+    return False, last
 
 
 def use(ch: str, *, paste: bool = True) -> dict:
@@ -241,7 +297,13 @@ def paste_hint() -> str:
     from . import face
 
     if face.session() == "wayland":
-        return "wtype" if shutil.which("wtype") else "нет wtype — только в буфер обмена"
+        # wtype на KWin не работает: композитор не даёт виртуальную клавиатуру. Там спасает
+        # ydotool, который пишет в /dev/uinput мимо композитора.
+        if shutil.which("ydotool") and os.access("/dev/uinput", os.W_OK):
+            return "ydotool" if not shutil.which("wtype") else "wtype, иначе ydotool"
+        if shutil.which("wtype"):
+            return "wtype (на KWin не работает — поставьте ydotool)"
+        return "нет ни wtype, ни ydotool — только в буфер обмена"
     if face.session() == "x11":
         return "xdotool" if shutil.which("xdotool") else "нет xdotool — только в буфер обмена"
     return "сеанс не опознан — только в буфер обмена"

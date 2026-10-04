@@ -329,3 +329,34 @@ def test_spamming_a_dock_icon_answered_with_open_wait_close_wait() -> None:
     assert "mine[String(w.id)]" in grouped, "намерение больше не перекрывает ответ демона"
     press = qml.split("function press(e, wins)", 1)[1].split("\n    function ", 1)[0]
     assert press.count("dv.remember(") == 2, "щелчок перестал запоминать, что он сделал с окном"
+
+
+def test_the_chosen_emoji_never_typed_itself_on_plasma(monkeypatch) -> None:
+    """Выбрал эмодзи — а он только в буфере: «вставьте Ctrl+V». Просили ровно обратного.
+
+    Печатал его `wtype` через протокол виртуальной клавиатуры, а KWin такого протокола не даёт
+    вовсе: «Compositor does not support the virtual keyboard protocol». То есть на Plasma 6
+    символ не вставлялся сам никогда. Запасной путь — ydotool: он пишет в /dev/uinput, мимо
+    композитора, и работает там, где виртуальная клавиатура запрещена.
+    """
+    from justday import face, glyphs
+
+    monkeypatch.setattr(face, "session", lambda: "wayland")
+    monkeypatch.setattr(glyphs.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(glyphs, "_ydotool_ready", lambda: True)
+    ran: list[list[str]] = []
+
+    class Done:
+        returncode = 1          # wtype на KWin всегда так и отвечает
+
+    class Ok:
+        returncode = 0
+
+    def fake_run(cmd, **kw):
+        ran.append(cmd)
+        return Ok() if cmd[0] == "ydotool" else Done()
+
+    monkeypatch.setattr(glyphs.subprocess, "run", fake_run)
+    ok, how = glyphs.type_out("😀")
+    assert ok and how == "ydotool", "после отказа wtype запасного пути снова нет"
+    assert [c[0] for c in ran] == ["wtype", "ydotool"], "порядок попыток изменился молча"
