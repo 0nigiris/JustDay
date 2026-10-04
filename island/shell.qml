@@ -263,7 +263,7 @@ ShellRoot {
             id: osdCard
             anchors.top: osdWin.oatTop ? parent.top : undefined
             anchors.bottom: osdWin.oatTop ? undefined : parent.bottom
-            anchors.topMargin: osdWin.oatTop ? JD.topMargin : 0
+            anchors.topMargin: osdWin.oatTop ? JD.topMargin + (JD.islandStyle === "bar" && JD.atTop ? JD.barHeight + 10 : 0) : 0
             anchors.bottomMargin: osdWin.oatTop ? 0 : JD.topMargin
             x: osdWin.oside === "left" ? JD.sideMargin
              : osdWin.oside === "right" ? parent.width - width - JD.sideMargin
@@ -362,6 +362,27 @@ ShellRoot {
         Component.onCompleted: Qt.callLater(osdVolWatch.push)
     }
 
+
+    PanelWindow {
+        id: barFence
+        readonly property bool live: JD.island.enabled !== false
+            && JD.islandStyle === "bar"
+            && island.mode !== "hidden"
+            && !JD.barFullscreen
+        screen: Quickshell.screens.find(s => s.name === (JD.island.screen || Quickshell.env("JUSTDAY_ISLAND_SCREEN")))
+                || Quickshell.screens.find(s => s.x === 0 && s.y === 0) || Quickshell.screens[0]
+        visible: live
+        anchors { top: true; left: true; right: true }
+        exclusionMode: live ? ExclusionMode.Normal : ExclusionMode.Ignore
+        exclusiveZone: live ? Math.round(JD.barHeight) : 0
+        WlrLayershell.layer: WlrLayer.Bottom
+        WlrLayershell.namespace: "justday-bar-fence"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        color: "transparent"
+        implicitHeight: Math.max(1, Math.round(JD.barHeight))
+        mask: Region {}
+    }
+
     // ───────────── window ─────────────
     PanelWindow {
         id: win
@@ -390,8 +411,17 @@ ShellRoot {
         Binding { target: JD; property: "screenWidth"; value: win.screen ? win.screen.width : 1920 }
         Binding { target: JD; property: "screenHeight"; value: win.screen ? win.screen.height : 1080 }
         // the text field takes the keyboard at once (it was opened by a shortcut); menus only on click
-        WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" ? WlrKeyboardFocus.Exclusive
+        // Эмодзи и буфер не забирают клавиатуру: окно под ними остаётся в фокусе.
+        // Enter и Esc ловит сам островок, пока панель открыта.
+        readonly property bool floatTools: island.mode === "tools" && JD.toolsPage === "emoji"
+        WlrLayershell.keyboardFocus: island.mode === "compose" || (island.mode === "tools" && !floatTools) ? WlrKeyboardFocus.Exclusive
                                    : big || island.mode === "video" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        function confirmTool() {
+            const item = JD.toolsItems[JD.toolsPick] || JD.toolsItems[0]
+            if (!item) return
+            if (JD.toolsPage === "emoji") JD.useEmoji(item.c)
+            else JD.useClip(item.id)
+        }
         // окно шире самого острова: видео растягивают почти во весь экран, а щелчки всё равно
         // проходят везде, кроме него самого — маска ниже отвечает за это
         // Сплошная полоса — это строка на всю ширину монитора, а не окно по ширине видео.
@@ -414,6 +444,7 @@ ShellRoot {
             item: win.modal ? backdrop
                 : (win.edgeReveal && island.mode === "hidden") ? revealPad
                 : island
+            Region { item: barStatus.page !== "" ? linkPop : null }
         }
 
         MouseArea {
@@ -495,7 +526,10 @@ ShellRoot {
             }
         }
 
-        Shortcut { sequence: "Escape"; enabled: win.big; onActivated: JD.closeAll() }
+        Shortcut { sequence: "Escape"; enabled: win.floatTools; onActivated: JD.closeTools() }
+        Shortcut { sequence: "Return"; enabled: win.floatTools; onActivated: win.confirmTool() }
+        Shortcut { sequence: "Enter"; enabled: win.floatTools; onActivated: win.confirmTool() }
+        Shortcut { sequence: "Escape"; enabled: win.big && !win.floatTools; onActivated: JD.closeAll() }
         Shortcut { sequence: "Escape"; enabled: island.mode === "video"; onActivated: videoView.close() }
 
         // Клавиши плеера — те, что ждёшь от плеера. Работают, когда по нему щёлкнули:
@@ -541,7 +575,7 @@ ShellRoot {
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen
 
             // Полоса остаётся полосой на всю ширину. Карточка живёт отдельным слоем под ней.
-            readonly property bool barHang: JD.islandStyle === "bar" && (mode === "settings" || mode === "expanded")
+            readonly property bool barHang: JD.islandStyle === "bar" && (mode === "settings" || mode === "expanded" || mode === "tools")
             readonly property bool menuBar: JD.islandStyle === "bar" && (mode === "peek" || mode === "hidden")
             readonly property bool barDock: menuBar || barHang
             width: barDock ? Math.max(1, parent.width - win.barBleed * 2)
@@ -654,21 +688,24 @@ ShellRoot {
             }
 
             TapHandler {
-                enabled: !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification", "alarm"].includes(island.mode)
+                // На полосе повторное нажатие по островку закрывает раскрытую карточку.
+                // На капсуле карточка и есть островок, поэтому там нажатие по-прежнему не гасит её.
+                enabled: (JD.islandStyle === "bar" && ["expanded", "settings", "tools"].includes(island.mode))
+                         || !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification", "alarm"].includes(island.mode)
                 onTapped: {
+                    if (statusHover.hovered) return
+                    barStatus.page = ""
+                    peekView.bump()
+                    if (JD.islandStyle === "bar" && (island.mode === "expanded" || island.mode === "settings" || island.mode === "tools")) {
+                        JD.closeAll()
+                        return
+                    }
                     if (island.mode === "music") { JD.playerOpen = true; return }
                     if (island.mode === "videopill") { JD.videoMini = false; return }   // кадр обратно на экран
                     if (island.mode === "answer") { JD.answerOpen = false; return }
                     JD.expanded = true
                 }
             }
-            // the menu is always one right click away — even while music, video or a notification holds the island
-            TapHandler {
-                acceptedButtons: Qt.RightButton
-                enabled: !["approval", "compose", "settings"].includes(island.mode)
-                onTapped: { JD.playerOpen = false; JD.expanded = true }
-            }
-
             // Every view is laid out at its own natural size; the island springs to it and the view follows.
             // The stage is masked to the island's *rounded* shape, so nothing pokes out of the corners while it grows.
             Item {
@@ -724,13 +761,217 @@ ShellRoot {
                 // сетка на 1900 клеток не должна лежать в памяти, пока её не просили.
                 View {
                     id: toolsHolder
-                    shown: island.mode === "tools"
+                    shown: JD.islandStyle === "bar"
+                           ? (dropCard.want === "tools" || dropCard.held === "tools")
+                           : island.mode === "tools"
+                    parent: JD.islandStyle === "bar" ? dropCard : stage
                     implicitWidth: 860
                     implicitHeight: 560
                     Loader {
                         anchors.fill: parent
                         active: toolsHolder.shown || toolsHolder.opacity > 0.01
                         sourceComponent: ToolsView {}
+                    }
+                }
+            }
+            // Справа налево: сеть, Bluetooth, язык. Нажатие сюда не раскрывает островок.
+            Item {
+                id: barStatus
+                property string page: ""
+                readonly property bool showLang: JD.barLang && JD.layoutShort !== ""
+                readonly property bool showBt: JD.barBt
+                readonly property bool showNet: JD.barNet
+                readonly property var trayItems: SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
+                visible: island.barDock && (showLang || showBt || showNet || trayItems.length > 0)
+                z: 4
+                anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
+                width: statusRow.implicitWidth + 12
+                height: parent.height
+                HoverHandler { id: statusHover }
+                Row {
+                    id: statusRow
+                    anchors.centerIn: parent
+                    spacing: 4
+                    Repeater {
+                        model: barStatus.trayItems
+                        delegate: Item {
+                            id: barTray
+                            required property var modelData
+                            implicitWidth: JD.barTraySize + 10
+                            implicitHeight: JD.barTraySize + 10
+                            Image {
+                                anchors.centerIn: parent
+                                width: JD.barTraySize
+                                height: JD.barTraySize
+                                sourceSize: Qt.size(JD.barTraySize * 2, JD.barTraySize * 2)
+                                source: barTray.modelData.icon || ""
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: mouse => {
+                                    const it = barTray.modelData
+                                    if (mouse.button === Qt.MiddleButton) { it.secondaryActivate(); return }
+                                    if (mouse.button === Qt.RightButton || (it.onlyMenu && it.hasMenu)) {
+                                        if (JD.trayMenu === it) { JD.closeTrayMenu(); return }
+                                        const p = barTray.mapToItem(null, barTray.width, barTray.height + 8)
+                                        JD.trayMenuFromBar = true
+                                        JD.openTrayMenu(it, p.x, p.y)
+                                        return
+                                    }
+                                    JD.closeTrayMenu()
+                                    it.activate()
+                                    JD.trayWake(it)
+                                }
+                                onWheel: wheel => barTray.modelData.scroll(wheel.angleDelta.y, false)
+                            }
+                        }
+                    }
+                    Rectangle {
+                        visible: barStatus.trayItems.length > 0 && (barStatus.showLang || barStatus.showBt || barStatus.showNet)
+                        implicitWidth: 1
+                        implicitHeight: 16
+                        color: JD.fill2
+                    }
+                    Rectangle {
+                        visible: barStatus.showLang
+                        implicitWidth: langText.implicitWidth + 16
+                        implicitHeight: 26
+                        radius: 13
+                        color: langHit.containsMouse ? JD.fill2 : "transparent"
+                        Text {
+                            id: langText
+                            anchors.centerIn: parent
+                            text: JD.layoutShort
+                            color: JD.text1
+                            font.family: JD.fontFamily
+                            font.pixelSize: 13
+                            font.weight: Font.Bold
+                        }
+                        MouseArea {
+                            id: langHit
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: JD.layoutNext()
+                        }
+                    }
+                    Rectangle {
+                        visible: barStatus.showBt
+                        implicitWidth: 28; implicitHeight: 26; radius: 13
+                        color: barStatus.page === "bt" || btHit.containsMouse ? JD.fill2 : "transparent"
+                        Icon { anchors.centerIn: parent; name: "bluetooth"; implicitSize: 16; opacity: JD.btOn ? 0.95 : 0.35 }
+                        MouseArea {
+                            id: btHit
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: barStatus.page = barStatus.page === "bt" ? "" : "bt"
+                        }
+                    }
+                    Rectangle {
+                        visible: barStatus.showNet
+                        implicitWidth: JD.vpnOn ? 42 : 28
+                        implicitHeight: 26
+                        radius: 13
+                        color: barStatus.page === "net" || netHit.containsMouse ? JD.fill2 : "transparent"
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 3
+                            Icon { name: JD.netOn ? "wifi" : "wifi-off"; implicitSize: 16; opacity: JD.netOn ? 0.95 : 0.4 }
+                            Icon { visible: JD.vpnOn; name: "shield"; implicitSize: 12; opacity: 0.95 }
+                        }
+                        MouseArea {
+                            id: netHit
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: barStatus.page = barStatus.page === "net" ? "" : "net"
+                        }
+                    }
+                }
+            }
+        }
+
+        // Короткая карточка сети или Bluetooth под правым краем полосы.
+        Rectangle {
+            id: linkPop
+            visible: barStatus.page !== ""
+            z: 6
+            width: 280
+            height: linkCol.implicitHeight + 28
+            radius: 18
+            color: JD.ink
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+            x: {
+                const p = barStatus.mapToItem(linkPop.parent, 0, 0)
+                return Math.max(8, Math.min(parent.width - width - 8, p.x + barStatus.width - width))
+            }
+            y: {
+                const p = barStatus.mapToItem(linkPop.parent, 0, 0)
+                return p.y + barStatus.height + 8
+            }
+            Column {
+                id: linkCol
+                x: 16
+                y: 14
+                width: parent.width - 32
+                spacing: 8
+                Text {
+                    text: barStatus.page === "bt" ? "Bluetooth" : JD.tr("Сеть")
+                    color: JD.text1
+                    font.family: JD.fontFamily
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
+                }
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    color: JD.text2
+                    font.family: JD.fontFamily
+                    font.pixelSize: 13
+                    text: barStatus.page === "bt"
+                          ? (JD.btOn ? JD.tr("Включён") : JD.tr("Выключен"))
+                          : (JD.netOn
+                             ? (JD.netKind === "wifi" ? "Wi-Fi" : JD.tr("Кабель")) + (JD.netName ? " · " + JD.netName : "")
+                             : JD.tr("Нет соединения"))
+                }
+                Text {
+                    visible: barStatus.page === "net"
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    color: JD.vpnOn ? JD.accentGreen : JD.text3
+                    font.family: JD.fontFamily
+                    font.pixelSize: 13
+                    text: JD.vpnOn ? "VPN · " + JD.vpnName : JD.tr("VPN не подключён")
+                }
+                Rectangle {
+                    width: parent.width
+                    implicitHeight: 32
+                    radius: 10
+                    color: setHit.containsMouse ? JD.fill2 : JD.fill1
+                    Text {
+                        anchors.centerIn: parent
+                        text: JD.tr("Открыть настройки KDE")
+                        color: JD.accentBlue
+                        font.family: JD.fontFamily
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+                    MouseArea {
+                        id: setHit
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            Quickshell.execDetached(["systemsettings", barStatus.page === "bt" ? "kcm_bluetooth" : "kcm_networkmanagement"])
+                            barStatus.page = ""
+                        }
                     }
                 }
             }
@@ -742,6 +983,7 @@ ShellRoot {
             objectName: "dropCard"
             property string want: JD.islandStyle === "bar" && island.mode === "settings" ? "settings"
                                  : JD.islandStyle === "bar" && island.mode === "expanded" ? "expanded"
+                                 : JD.islandStyle === "bar" && island.mode === "tools" ? "tools"
                                  : ""
             property string held: ""
             onWantChanged: if (want !== "") held = want
@@ -764,11 +1006,13 @@ ShellRoot {
             readonly property real growTo: {
                 if (!island.barHang) return 0
                 const item = (want === "settings" || held === "settings") ? settingsHolder
+                           : (want === "tools" || held === "tools") ? toolsHolder
                            : (want === "expanded" || held === "expanded") ? expandedView : null
                 return Math.max(1, item ? item.implicitHeight : 1)
             }
             readonly property real wideTo: {
                 const item = (want === "settings" || held === "settings") ? settingsHolder
+                           : (want === "tools" || held === "tools") ? toolsHolder
                            : (want === "expanded" || held === "expanded") ? expandedView : null
                 return Math.max(120, item ? item.implicitWidth : 120)
             }
@@ -869,6 +1113,23 @@ ShellRoot {
         readonly property color fg: JD.text1
         readonly property color fg2: JD.text2
         readonly property color hair: JD.fill2
+        // Spotify по MPRIS. Имя или desktop entry должны содержать spotify, и трек должен играть.
+        readonly property var spot: {
+            const list = Mpris.players.values
+            for (let i = 0; i < list.length; i++) {
+                const p = list[i]
+                const id = String(p.identity || "").toLowerCase()
+                const desk = String(p.desktopEntry || "").toLowerCase()
+                if ((id.indexOf("spotify") >= 0 || desk.indexOf("spotify") >= 0) && p.isPlaying)
+                    return p
+            }
+            return null
+        }
+        readonly property string spotArt: {
+            const u = pv.spot && pv.spot.trackArtUrl ? String(pv.spot.trackArtUrl) : ""
+            if (u.indexOf("file://") === 0) return decodeURIComponent(u.slice(7))
+            return u
+        }
         readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
                                         : JD.runningJob ? JD.runningJob.title + " · " + JD.jobTime(JD.runningJob)
                                         : JD.dstate === "offline" ? JD.assistantName + JD.tr(" не запущен")
@@ -877,11 +1138,24 @@ ShellRoot {
                                         : (JD.island.show_events !== false && JD.history.length && JD.history[0].a) ? JD.history[0].a : ""
         implicitWidth: peekRow.implicitWidth + 32
         implicitHeight: JD.islandStyle === "bar" ? JD.barHeight : 44
+        property real squeeze: 1
+        property real hoverScale: JD.islandStyle === "bar" && (midHover.hovered || island.mode === "expanded" || island.mode === "settings" || island.mode === "tools") ? 1.08 : 1
+        Behavior on hoverScale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        // Вниз и вверх одинаково. Повторный клик начинает цикл заново, а не ставит его в очередь.
+        function bump() { pulse.restart() }
+        SequentialAnimation {
+            id: pulse
+            NumberAnimation { target: pv; property: "squeeze"; to: 0.985; duration: 80; easing.type: Easing.InOutCubic }
+            NumberAnimation { target: pv; property: "squeeze"; to: 1; duration: 80; easing.type: Easing.InOutCubic }
+        }
         SystemClock { id: clock; precision: SystemClock.Minutes }
         RowLayout {
             id: peekRow
             anchors.centerIn: parent
             spacing: 12
+            scale: pv.hoverScale * pv.squeeze
+            transformOrigin: Item.Center
+            HoverHandler { id: midHover; enabled: JD.islandStyle === "bar" }
             Ring {
                 visible: !JD.buddyOn
                 size: 18
@@ -920,6 +1194,23 @@ ShellRoot {
             }
             Text { text: Qt.formatTime(clock.date, "HH:mm"); color: pv.fg; font.family: JD.fontFamily; font.pixelSize: 16; font.weight: Font.Bold; font.features: { "tnum": 1 } }
             Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM"); color: pv.fg2 }
+            // Только Spotify. Чужие плееры (браузер, YouTube) на полосу не выводятся.
+            Rectangle { visible: !!pv.spot; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
+            Art {
+                visible: !!pv.spot
+                size: 22
+                src: pv.spotArt
+                tint: JD.accentPink
+            }
+            Label2 {
+                visible: !!pv.spot
+                text: pv.spot ? (pv.spot.trackTitle || "") : ""
+                maximumLineCount: 1
+                wrapMode: Text.NoWrap
+                Layout.maximumWidth: 180
+                color: pv.fg
+            }
+            EqBars { visible: !!pv.spot; tint: JD.accentPink; playing: true }
             Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             Label2 { visible: !!pv.event; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : pv.fg2 }
             // a running timer, the way the phone shows one: the number, not a logo
@@ -3606,7 +3897,7 @@ ShellRoot {
                 readonly property real winLeft: Math.max(0, Math.round((screenW - capW) / 2))
                 readonly property real winTop: dockHost.atTop ? 0 : Math.max(0, screenH - bandH)
                 readonly property bool onScreen: cardX + cardW > 1 && cardX < screenW - 1 && cardY + cardH > 1 && cardY < screenH - 1
-                visible: JD.dockOn && JD.blurOn && onScreen
+                visible: JD.dockOn && JD.blurOn && dockWin.shown && onScreen
                 implicitWidth: capW
                 implicitHeight: bandH
                 margins.left: winLeft
@@ -3634,7 +3925,7 @@ ShellRoot {
     //   3) blur — strip-sized PanelWindow only. BackgroundEffect must NOT sit on paint.
     Loader {
         id: trayLoader
-        active: JD.trayOn
+        active: JD.trayOn && JD.trayDesktop
         sourceComponent: Item {
             id: trayHost
             function probeAt(at) { return trayWin.probeAt(at) }
@@ -3807,7 +4098,7 @@ ShellRoot {
                 readonly property real winTop: Math.max(0, Math.min(Math.max(0, screenH - capH), Math.round(restTop - (capH - tray.restLength) / 2)))
                 readonly property real winLeft: trayHost.atRight ? screenW - winW : 0
                 readonly property bool onScreen: stripX + stripW > 1 && stripX < screenW - 1 && stripY + stripH > 1 && stripY < screenH - 1
-                visible: JD.trayOn && JD.blurOn && !tray.empty && onScreen
+                visible: JD.trayOn && JD.blurOn && !tray.empty && trayWin.shown && onScreen
                 anchors {
                     left: !trayHost.atRight
                     right: trayHost.atRight
@@ -3973,7 +4264,7 @@ ShellRoot {
             handle: JD.trayMenu ? JD.trayMenu.menu : null
             atX: JD.trayMenuX
             atY: JD.trayMenuY
-            toLeft: JD.trayPlace === "right"
+            toLeft: JD.trayMenuFromBar || JD.trayPlace === "right"
             onDismissed: JD.closeTrayMenu()
         }
     }

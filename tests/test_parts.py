@@ -228,3 +228,20 @@ def test_flatpak_programs_did_not_start_from_the_dock(monkeypatch, tmp_path) -> 
     monkeypatch.setattr(desktop, "_app_dirs", lambda: [tmp_path])
     assert desktop._gtk_name("com.ayugram.desktop") == "com.ayugram.desktop.desktop"
     assert desktop._gtk_name("firefox") == "firefox.desktop"
+
+
+def test_the_top_strip_was_polling_the_network_even_when_it_was_not_shown() -> None:
+    """Сеть, VPN и Bluetooth опрашивались тремя программами каждые пять секунд круглые сутки.
+
+    Пятьдесят тысяч запусков в день ради значка, который меняется раз в час, — и это при любом
+    виде верхней полосы, даже когда правого края у неё нет вовсе (островок, вырез).
+    """
+    import pathlib
+    import re
+
+    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    probe = re.search(r"readonly property bool linksWanted:([^\n]+)", jd)
+    assert probe, "условие «есть кому показывать» пропало — опрос снова идёт всегда"
+    assert 'islandStyle === "bar"' in probe.group(1), "опрос не привязан к сплошной полосе"
+    timer = re.search(r"Timer \{\s*interval: (\d+)\s*running: jd\.linksWanted", jd, re.S)
+    assert timer and int(timer.group(1)) >= 15000, "опрос снова чаще раза в пятнадцать секунд"
