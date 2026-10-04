@@ -3167,8 +3167,6 @@ class Daemon:
                     self._dock = got
                 self.publish(dock=got)
                 resp = {"ok": True, "dock": got}
-            elif cmd == "session":  # что умеет кнопка питания
-                resp = {"ok": True, "session": session.actions()}
             elif cmd == "session_do":  # выход, перезагрузка, выключение — опасное только с подтверждением
                 resp = session.run(str(req.get("what", "")), confirm=bool(req.get("confirm")))
             elif cmd == "menu":  # открыть меню приложений (клавиша Windows, `justday menu`)

@@ -735,14 +735,6 @@ ShellRoot {
                 }
             }
             // Every view is laid out at its own natural size; the island springs to it and the view follows.
-            // The stage is masked to the island's *rounded* shape, so nothing pokes out of the corners while it grows.
-            Item {
-                id: islandMask
-                anchors.fill: parent
-                visible: false
-                layer.enabled: true
-                Rectangle { anchors.fill: parent; radius: island.radius; antialiasing: true }
-            }
             Item {
                 id: stage
                 anchors.fill: parent
@@ -1188,17 +1180,6 @@ ShellRoot {
             }
         }
 
-        // soft shadow under the island. Its source is a plain copy of the shape: with the island itself as the
-        // source, the effect draws the island again (border included) and that copy shows as a ring while it grows
-        Rectangle {
-            id: shadowShape
-            width: island.width
-            height: island.height
-            radius: island.radius
-            color: JD.ink
-            visible: false
-            layer.enabled: true
-        }
         // No MultiEffect shadow — enabling it at ease end caused the hitch you see.
         // Soft plate under island is enough without a post-animation GPU effect.
         Rectangle {

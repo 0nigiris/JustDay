@@ -145,10 +145,6 @@ def remember(ch: str) -> None:
         pass
 
 
-def forget_all() -> None:
-    RECENT_FILE.unlink(missing_ok=True)
-
-
 # ───────────────────────────── вставка ─────────────────────────────
 
 
