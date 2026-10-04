@@ -1,8 +1,11 @@
 """Structured event log (JSONL) + small persistent state file."""
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
+import os
+import tempfile
 import time
 from typing import Any
 
@@ -65,10 +68,16 @@ def load_state() -> dict:
 
 
 def save_state(**updates: Any) -> dict:
-    state = load_state()
-    state.update(updates)
+    """Пишут сюда четверо — цикл событий, поток почты, executor и CLI. С общим `.tmp` и без замка
+    один забирал файл из-под другого: `FileNotFoundError` на replace убивал `_housekeeping`, а
+    чужие ключи терялись между чтением и записью (Р-14). Замок общий для процессов, tmp у каждого свой."""
     config.STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = config.STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2))
-    tmp.replace(config.STATE_FILE)
+    with open(config.STATE_DIR / "state.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = load_state()
+        state.update(updates)
+        fd, tmp = tempfile.mkstemp(dir=config.STATE_DIR, prefix=".state.", suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(state, ensure_ascii=False, indent=2))
+        os.replace(tmp, config.STATE_FILE)
     return state

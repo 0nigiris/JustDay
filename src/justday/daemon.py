@@ -594,6 +594,19 @@ class Daemon:
         self._activation = "wake"
 
     async def _listen_once(self, followup: bool, prefill=None) -> None:
+        """Одно прослушивание. Любая беда внутри — и состояние всё равно возвращается: раньше ошибка
+        распознавания (CUDA после сна) оставляла «transcribing» навсегда, и _wake_by_name отказывался
+        будить до рестарта (Р-13)."""
+        try:
+            await self._listen_body(followup, prefill)
+        except Exception as e:
+            log.exception("listening failed")
+            events.emit("listen_failed", error=repr(e))
+            if self.state in ("listening", "transcribing"):
+                self.state = "thinking" if self.brain.busy else "idle"
+            await self.earcon("error")
+
+    async def _listen_body(self, followup: bool, prefill=None) -> None:
         self.mic.start()
         self._last_mic_use = time.monotonic()
         self.publish(followup=followup)  # остров: продолжение разговора не гасит ответ на экране
@@ -1807,96 +1820,111 @@ class Daemon:
         log.info("человек вернулся — режим сервера выключен")
         self.notify(t("С возвращением. Вернул экраны, звук и рабочий стол."), icon="dialog-information")
 
+    HOUSEKEEPING_EVERY = 2.0
+    HEARTBEAT_EVERY = 5.0   # островок считает демон мёртвым после 12 с тишины
+
+    async def _heartbeat(self) -> None:
+        """Пинг островку — отдельной задачей. В круге _housekeeping он стоял в хвосте, после git по сети,
+        календаря, погоды и почты; круг шёл дольше 12 с, и островок объявлял демон мёртвым и сбрасывал
+        подписку (Р-15)."""
+        while True:
+            await asyncio.sleep(self.HEARTBEAT_EVERY)
+            self.publish(ping=1, state=self.state)
+
     async def _housekeeping(self) -> None:
         poll = self.cfg["workers"]["poll_seconds"]
         last_poll = last_mail = last_ping = last_weather = 0.0
         last_update_check = time.monotonic() - self.cfg["updates"]["interval_hours"] * 3600 + 120  # first check 2 min after start
         m = self.cfg["mail"]
         while True:
-            await asyncio.sleep(2)
-            upd = self.cfg["updates"]
-            if upd["check"] and time.monotonic() - last_update_check > upd["interval_hours"] * 3600:
-                last_update_check = time.monotonic()
-                from . import manage
+            await asyncio.sleep(self.HOUSEKEEPING_EVERY)
+            # Одно исключение в круге убивало навсегда почту, воркеров, выгрузку слуха и очередь
+            # событий (Р-14): задача умирала молча. Круг, который упал, — просто пропущенный круг.
+            try:
+                upd = self.cfg["updates"]
+                if upd["check"] and time.monotonic() - last_update_check > upd["interval_hours"] * 3600:
+                    last_update_check = time.monotonic()
+                    from . import manage
 
-                try:
-                    st = await asyncio.get_running_loop().run_in_executor(None, manage.update_status)
-                    self.update_info = st if st.get("ok") and st.get("behind") else None
-                    self.publish(update=self.update_info)
-                except Exception as e:
-                    log.info("update check failed: %s", type(e).__name__)
-            await self._reboot_maybe()
-            await self._welcome_back()
-            # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
-            # возвращается сам по себе, и ждать с ним до разговора незачем.
-            await self._try_home()
-            await self._diary_maybe()
-            if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
-                self._last_cal = time.monotonic()
-                try:
-                    nxt = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.upcoming, 2)
-                except Exception:
-                    nxt = None
-                self.publish(next_event=nxt)
-            isl = self.cfg["island"]
-            if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
-                last_weather, self._weather_city = time.monotonic(), isl["city"]
-                try:
-                    self.weather = await asyncio.get_running_loop().run_in_executor(None, weather_mod.fetch_weather, isl["city"])
-                except Exception as e:
-                    log.info("weather unavailable: %s", type(e).__name__)
-                self.publish(weather=self.weather)
-            # Игра началась — видеопамять её. Голос и так молчит в играх (tts.mute_in_games), но
-            # молчащая модель занимала столько же, сколько говорящая.
-            in_game = bool(self.cfg["tts"].get("mute_in_games", True)) and bool(desktop.running_game())
-            if in_game and not self._gave_up_vram:
-                self._gave_up_vram = True
-                self.stt.unload()
-                await asyncio.get_running_loop().run_in_executor(None, self.tts.nudge, "sleep")
-                log.info("игра запущена — видеопамять отпущена")
-            elif not in_game:
-                self._gave_up_vram = False
-                mins = float(self.cfg["stt"].get("idle_unload_minutes", 15) or 0)
-                if await asyncio.get_running_loop().run_in_executor(None, self.stt.idle_unload, mins):
-                    log.info("слух молчал %g мин — видеопамять отпущена", mins)
-            if time.monotonic() - last_ping > 5:  # heartbeat: lets the island notice a dead connection
-                last_ping = time.monotonic()
-                self.stt.vocabulary = island.vocabulary(self.cfg)  # contacts learned meanwhile
-                self.publish(ping=1, state=self.state)
-            if m["address"] and m["announce"] and time.monotonic() - last_mail > m["poll_seconds"]:
-                last_mail = time.monotonic()
-                try:
-                    news = await asyncio.get_running_loop().run_in_executor(None, self.mail.check_new)
-                except Exception as e:
-                    log.warning("mail poll failed: %s", type(e).__name__)
-                    news = ""
-                if news:
-                    events.emit("mail_new")
-                    card = self.mail.card(news)
-                    if card:
-                        self.publish(kind="card", card=card)
-                    await self.say(news + " " + t("Сказать, о чём?"))
-            if not self._wake and self.state != "listening" and time.monotonic() - self._last_mic_use > 20:
-                self.mic.stop()
-            if self.cfg["workers"]["auto_review"] and time.monotonic() - last_poll > poll:
-                last_poll = time.monotonic()
-                try:
-                    reports, active = await asyncio.get_running_loop().run_in_executor(None, workers.pending_reports)
-                    if active != self._workers_active:
-                        self._workers_active = active
-                        self.publish(workers=active)
-                except Exception:
-                    log.exception("worker poll failed")
-                    reports = []
-                for r in reports:
-                    msg = (f"[Событие JustDay] Фоновая сессия Claude Code {r['id']} в {r.get('cwd')} перешла в состояние "
-                           f"«{r['state']}»" + (f" (ждёт: {r['waiting_for']})" if r.get("waiting_for") else "") +
-                           f". Её задача: {r.get('task', '')[:500]}\nПроверь результат (`justday claude result {r['id']}`, "
-                           "git diff, тесты) и действуй по исходной цели пользователя: если нужно — отправь Claude "
-                           "уточнение через `justday claude send`; если всё готово или нужен пользователь — кратко доложи голосом.")
-                    self._event_queue.put_nowait(msg)
-            if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
-                spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
+                    try:
+                        st = await asyncio.get_running_loop().run_in_executor(None, manage.update_status)
+                        self.update_info = st if st.get("ok") and st.get("behind") else None
+                        self.publish(update=self.update_info)
+                    except Exception as e:
+                        log.info("update check failed: %s", type(e).__name__)
+                await self._reboot_maybe()
+                await self._welcome_back()
+                # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
+                # возвращается сам по себе, и ждать с ним до разговора незачем.
+                await self._try_home()
+                await self._diary_maybe()
+                if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
+                    self._last_cal = time.monotonic()
+                    try:
+                        nxt = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.upcoming, 2)
+                    except Exception:
+                        nxt = None
+                    self.publish(next_event=nxt)
+                isl = self.cfg["island"]
+                if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
+                    last_weather, self._weather_city = time.monotonic(), isl["city"]
+                    try:
+                        self.weather = await asyncio.get_running_loop().run_in_executor(None, weather_mod.fetch_weather, isl["city"])
+                    except Exception as e:
+                        log.info("weather unavailable: %s", type(e).__name__)
+                    self.publish(weather=self.weather)
+                # Игра началась — видеопамять её. Голос и так молчит в играх (tts.mute_in_games), но
+                # молчащая модель занимала столько же, сколько говорящая.
+                in_game = bool(self.cfg["tts"].get("mute_in_games", True)) and bool(desktop.running_game())
+                if in_game and not self._gave_up_vram:
+                    self._gave_up_vram = True
+                    self.stt.unload()
+                    await asyncio.get_running_loop().run_in_executor(None, self.tts.nudge, "sleep")
+                    log.info("игра запущена — видеопамять отпущена")
+                elif not in_game:
+                    self._gave_up_vram = False
+                    mins = float(self.cfg["stt"].get("idle_unload_minutes", 15) or 0)
+                    if await asyncio.get_running_loop().run_in_executor(None, self.stt.idle_unload, mins):
+                        log.info("слух молчал %g мин — видеопамять отпущена", mins)
+                if time.monotonic() - last_ping > 5:
+                    last_ping = time.monotonic()
+                    self.stt.vocabulary = island.vocabulary(self.cfg)  # contacts learned meanwhile
+                if m["address"] and m["announce"] and time.monotonic() - last_mail > m["poll_seconds"]:
+                    last_mail = time.monotonic()
+                    try:
+                        news = await asyncio.get_running_loop().run_in_executor(None, self.mail.check_new)
+                    except Exception as e:
+                        log.warning("mail poll failed: %s", type(e).__name__)
+                        news = ""
+                    if news:
+                        events.emit("mail_new")
+                        card = self.mail.card(news)
+                        if card:
+                            self.publish(kind="card", card=card)
+                        await self.say(news + " " + t("Сказать, о чём?"))
+                if not self._wake and self.state != "listening" and time.monotonic() - self._last_mic_use > 20:
+                    self.mic.stop()
+                if self.cfg["workers"]["auto_review"] and time.monotonic() - last_poll > poll:
+                    last_poll = time.monotonic()
+                    try:
+                        reports, active = await asyncio.get_running_loop().run_in_executor(None, workers.pending_reports)
+                        if active != self._workers_active:
+                            self._workers_active = active
+                            self.publish(workers=active)
+                    except Exception:
+                        log.exception("worker poll failed")
+                        reports = []
+                    for r in reports:
+                        msg = (f"[Событие JustDay] Фоновая сессия Claude Code {r['id']} в {r.get('cwd')} перешла в состояние "
+                               f"«{r['state']}»" + (f" (ждёт: {r['waiting_for']})" if r.get("waiting_for") else "") +
+                               f". Её задача: {r.get('task', '')[:500]}\nПроверь результат (`justday claude result {r['id']}`, "
+                               "git diff, тесты) и действуй по исходной цели пользователя: если нужно — отправь Claude "
+                               "уточнение через `justday claude send`; если всё готово или нужен пользователь — кратко доложи голосом.")
+                        self._event_queue.put_nowait(msg)
+                if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
+                    spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
+            except Exception:
+                log.exception("housekeeping round failed")
 
     async def _reboot_maybe(self) -> None:
         """Раз в неделю напомнить перезагрузиться. Напомнить, а не перезагрузить.
@@ -3291,6 +3319,7 @@ class Daemon:
         self._reschedule()  # alarms survive a restart
         self._setup_wakeword()
         spawn(self._housekeeping())
+        spawn(self._heartbeat())
         spawn(self._load_loop())
         spawn(self._clip_watch())
         spawn(self._file_index_loop())

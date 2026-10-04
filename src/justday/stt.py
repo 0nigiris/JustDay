@@ -29,6 +29,10 @@ def _preload_cuda_libs() -> None:
                 pass
 
 
+# Видеокарта ушла из-под модели: сон машины, сброс драйвера, нехватка памяти. Модель после этого
+# мертва, но держится в self._model, и каждая следующая фраза падала той же ошибкой до рестарта (Р-13).
+GPU_GONE = re.compile(r"cuda|cublas|cudnn|out of memory|invalid device|device-side", re.I)
+
 HALLUCINATION = re.compile(
     r"субтитры\s+(сделал|создавал|подготовил|делал|созданы)|dimatorzok|диматорзок|редактор субтитров|корректор субтитров|"
     r"^\W*(продолжение следует|спасибо за просмотр|подписывайтесь на канал)\W*$|amara\.org", re.I)
@@ -126,22 +130,32 @@ class STT:
 
     vocabulary = ""  # set by the daemon: base prompt + names the user actually says (contacts, apps, assistant)
 
+    def _run(self, audio: np.ndarray, **kw) -> list:
+        """Распознать, а если видеокарта пропала — отпустить мёртвую модель и попробовать ещё раз.
+
+        Сегменты отдаются лениво, и ошибка CUDA вылетает при их чтении, поэтому читаем здесь же."""
+        try:
+            return list(self.load().transcribe(audio, **kw)[0])
+        except RuntimeError as e:
+            if not GPU_GONE.search(str(e)):
+                raise
+            log.warning("whisper lost the GPU (%s): reloading", e)
+            self.unload()
+            return list(self.load().transcribe(audio, **kw)[0])
+
     def transcribe_head(self, pcm16: np.ndarray) -> tuple[str, list[tuple[str, float]], float]:
         """The first second or two of a phrase, to hear whether it starts with the assistant's name.
         No prompt on purpose: with the names as a prompt Whisper "hears" them in any unclear speech.
         Returns (text, [(word, probability)…], highest no-speech probability)."""
-        segments, _info = self.load().transcribe(
-            pcm16.astype(np.float32) / 32768.0, language=self.cfg["language"] or None, beam_size=1,
-            condition_on_previous_text=False, word_timestamps=True)
-        segments = list(segments)
+        segments = self._run(pcm16.astype(np.float32) / 32768.0, language=self.cfg["language"] or None,
+                             beam_size=1, condition_on_previous_text=False, word_timestamps=True)
         words = [(w.word.strip(), float(w.probability)) for seg in segments for w in (seg.words or [])]
         no_speech = max((float(seg.no_speech_prob) for seg in segments), default=1.0)
         return " ".join(seg.text.strip() for seg in segments).strip(), words, no_speech
 
     def transcribe(self, pcm16: np.ndarray) -> str:
-        model = self.load()
         audio = pcm16.astype(np.float32) / 32768.0
-        segments, _info = model.transcribe(
+        segments = self._run(
             audio,
             language=self.cfg["language"] or None,
             beam_size=1,

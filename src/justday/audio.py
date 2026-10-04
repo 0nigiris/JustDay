@@ -36,6 +36,8 @@ def find_node(substring: str, kind: str = "sources") -> str | None:
 class Microphone:
     """Continuous 16 kHz mono int16 stream. Frames are delivered to subscribers from a reader thread."""
 
+    RESTART_DELAY = 2.0   # первая пауза перед перезапуском pw-record; дальше удваивается до 30 с
+
     def __init__(self, source_substring: str = ""):
         self.source = find_node(source_substring) if source_substring else None
         self._proc: subprocess.Popen | None = None
@@ -43,6 +45,7 @@ class Microphone:
         self._subscribers: list = []
         self._lock = threading.Lock()
         self.seq = 0  # number of the frame being delivered (read it inside a subscriber)
+        self._deaths = 0  # сколько раз подряд pw-record умер быстро: от этого пауза перед новым
 
     def start(self) -> None:
         if self._proc and self._proc.poll() is None:
@@ -63,6 +66,7 @@ class Microphone:
 
     def _reader(self) -> None:
         proc = self._proc
+        started = time.monotonic()
         nbytes = FRAME * 2
         while proc and proc.poll() is None:
             data = proc.stdout.read(nbytes)
@@ -78,6 +82,16 @@ class Microphone:
                 except Exception:  # a broken subscriber must not kill the mic
                     log.exception("mic subscriber failed")
         log.warning("mic reader ended")
+        # pw-record умирает сам — перезапуск PipeWire, выдернутая гарнитура, — и раньше микрофон на этом
+        # кончался до нажатия кнопки: слово пробуждения молчало часами (327 «mic reader ended» в
+        # журнале, Р-16). Если нас не останавливали, поднимаемся снова; падает раз за разом — реже.
+        if proc is None or self._proc is not proc:
+            return
+        self._deaths = 0 if time.monotonic() - started > 30 else self._deaths + 1
+        time.sleep(min(30.0, self.RESTART_DELAY * 2 ** max(0, self._deaths - 1)))
+        if self._proc is proc:
+            self._proc = None
+            self.start()
 
     def subscribe(self, cb) -> None:
         with self._lock:
