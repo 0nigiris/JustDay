@@ -909,8 +909,24 @@ def nightly_stop() -> dict:
 
 def run(args: list[str] | None = None, *, over_night: bool = False, hours: float = 8.0,
         tell: bool = False, dark: bool = False) -> int:
-    """`justday terminal`: окно, если есть куда рисовать, иначе одна задача строкой."""
+    """`justday terminal`: окно, если есть куда рисовать, иначе одна задача строкой.
+
+    Большую задачу в одну строку командной строки не напишешь: переводы строк съедает оболочка,
+    кавычки внутри ломают слово целиком. Поэтому задачу можно подать файлом (`@путь`) или через
+    трубу (`cat задача.md | justday terminal --night`) — это единственный способ отдать
+    на ночь промпт на сто строк, не надеясь на вставку в чужом терминале.
+    """
+    import sys as _sys
+
     task = " ".join(args or []).strip()
+    if task.startswith("@"):
+        path = Path(task[1:]).expanduser()
+        if not path.is_file():
+            print(f"Нет такого файла с задачей: {path}")
+            return 1
+        task = path.read_text(encoding="utf-8").strip()
+    elif not task and not _sys.stdin.isatty():
+        task = _sys.stdin.read().strip()
     if over_night:
         if not task:
             print("Ночью нужна задача: justday terminal --night \"что сделать\"")

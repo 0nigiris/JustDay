@@ -694,3 +694,48 @@ def test_alt_enter_breaks_the_line_instead_of_sending(monkeypatch) -> None:
     text = asyncio.run(go())
     assert "\n" in text, "Alt+Enter больше не переносит строку — абзац в задаче не написать"
     assert not sent, "Alt+Enter отправил задачу вместо переноса строки"
+
+
+def test_a_pasted_prompt_was_torn_into_pieces_by_its_own_newlines(monkeypatch) -> None:
+    """Вставленный промпт уходил кусками: каждый перевод строки внутри него нажимал «отправить».
+
+    Так ведёт себя терминал без скобочной вставки — текст приходит обычными нажатиями.
+    Человек не печатает быстрее десяти миллисекунд на знак, поэтому Enter впритык к предыдущей
+    клавише — это вставка, а не отправка.
+    """
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import terminal_ui
+
+    sent: list[str] = []
+    monkeypatch.setattr(terminal_ui.Shell, "start", lambda self, text: sent.append(text))
+
+    async def go() -> str:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            field = app.query_one("#ask", terminal_ui.Ask)
+            from textual.events import Key
+            # Вставка — это поток событий без пауз между ними. pilot.press ждёт после каждой
+            # клавиши и человеческую скорость как раз и изображает, поэтому здесь события
+            # кладутся в очередь подряд.
+            for ch in "раз\nдва\n":
+                field.post_message(Key("enter", None) if ch == "\n" else Key(ch, ch))
+            await pilot.pause()
+            await pilot.pause()
+            return field.text
+
+    text = asyncio.run(go())
+    assert not sent, "вставка разорвалась: половина промпта ушла в работу как целая задача"
+    assert text.count("\n") == 2, "переводы строк внутри вставки пропали"
+
+
+def test_a_long_task_can_be_handed_over_as_a_file() -> None:
+    """Промпт на сто строк в командную строку не влезает: переводы строк съедает оболочка.
+
+    Единственный надёжный способ отдать такую задачу на ночь — файлом или трубой.
+    """
+    import inspect
+
+    src = inspect.getsource(terminal.run)
+    assert 'task.startswith("@")' in src, "задача файлом (@путь) пропала"
+    assert "isatty" in src, "задача из трубы пропала"

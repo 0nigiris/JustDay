@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import ClassVar
 
 from textual.app import App, ComposeResult
@@ -53,7 +54,23 @@ class Ask(TextArea):
             self.value = value
             super().__init__()
 
+    def __init__(self, *a, **kw) -> None:
+        super().__init__(*a, **kw)
+        self._last_key = 0.0
+
     async def _on_key(self, event) -> None:
+        # Скобочную вставку умеет не всякий терминал. Там, где её нет, вставленный текст приходит
+        # обычными нажатиями — и каждый перевод строки внутри промпта нажимал бы «отправить»,
+        # разрывая задачу на куски. Человек печатает медленнее десяти миллисекунд на знак,
+        # поэтому Enter, пришедший впритык к предыдущей клавише, — это вставка, а не отправка.
+        now = time.monotonic()
+        pasted = (now - self._last_key) < 0.01
+        self._last_key = now
+        if event.key == "enter" and pasted:
+            event.prevent_default()
+            event.stop()
+            self.insert("\n")
+            return
         if event.key == "enter":
             event.prevent_default()
             event.stop()
