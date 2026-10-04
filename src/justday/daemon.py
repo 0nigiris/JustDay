@@ -113,6 +113,7 @@ class Daemon:
         self._layout_proc: asyncio.subprocess.Process | None = None
         self._windows_proc: asyncio.subprocess.Process | None = None
         self._windows: list[dict] = []
+        self._last_active_id = ""
         self._dock: dict = {}
         self._windows_debounce: asyncio.Task | None = None
         self._windows_pending: list[dict] | None = None
@@ -1628,6 +1629,11 @@ class Daemon:
         else:
             self._empty_windows_since = None
         self._windows = got
+        # Окно, где человек печатал: когда он кликнет по панели эмодзи, фокус на миг уйдёт к ней,
+        # и вставке нужно знать, куда возвращаться.
+        for w in got or []:
+            if isinstance(w, dict) and w.get("active") and w.get("id"):
+                self._last_active_id = w["id"]
         self._windows_sent = time.monotonic()
         self.publish(windows=got)
         return True
@@ -2979,8 +2985,14 @@ class Daemon:
                 # остальное, и общее имя столкнулось бы со списком входящих.
                 resp = {"ok": True, "emoji": found, "groups": glyphs.load()["groups"]}
             elif cmd == "emoji_use":  # выбрали символ: в буфер и в то окно, где курсор
-                resp = await asyncio.get_running_loop().run_in_executor(
-                    None, lambda: glyphs.use(req.get("char", ""), paste=req.get("paste", True)))
+                def _use() -> dict:
+                    # Вернуть фокус окну, где человек печатал: после клика по панели KWin отдаёт его
+                    # назад не сразу, и вставка уходила в пустоту, оставляя символ в одном буфере.
+                    if self._last_active_id:
+                        desktop.windows("focus", wid=self._last_active_id)
+                        time.sleep(0.12)
+                    return glyphs.use(req.get("char", ""), paste=req.get("paste", True))
+                resp = await asyncio.get_running_loop().run_in_executor(None, _use)
             elif cmd == "apps":  # лаунчер: программы, игры, открытые окна
                 found = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: launcher.items(req.get("query", ""), int(req.get("limit") or 40)))
