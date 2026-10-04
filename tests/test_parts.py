@@ -507,3 +507,55 @@ def test_spotlight_jumped_down_and_flashed_while_closing() -> None:
     for opener in ("openMenu", "openSearch"):
         body = re.search(rf"function {opener}\(\) \{{(.+?)\n    \}}", jd, re.S).group(1)
         assert "menuSearchMode = " in body and 'menuQuery = ""' in body, f"{opener} не сбрасывает прошлый поиск"
+
+
+def test_foreign_player_showed_the_browser_tab_title() -> None:
+    """Плеер писал «natori - Absolute Zero - YouTube» — с хвостом сервиса и счётчиком вкладки."""
+    import json
+    import pathlib
+    import re
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("нет node, чтобы выполнить функцию островка")
+    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    fn = re.search(r"(function cleanTitle\(s\) \{.+?\n    \})", jd, re.S).group(1)
+    cases = {
+        "natori - Absolute Zero - YouTube": "natori — Absolute Zero",
+        "(2) natori - Absolute Zero - YouTube": "natori — Absolute Zero",
+        "Kavinsky - Nightcall | SoundCloud": "Kavinsky — Nightcall",
+        "Земфира - Хочешь? - Яндекс Музыка": "Земфира — Хочешь?",
+        "Nightcall": "Nightcall",
+        "AC-DC - Thunderstruck": "AC-DC — Thunderstruck",
+        "": "",
+    }
+    js = fn + f"\nconsole.log(JSON.stringify({json.dumps(list(cases))}.map(cleanTitle)))"
+    got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+    assert dict(zip(cases, got)) == cases
+
+
+def test_foreign_player_never_showed_its_cover() -> None:
+    """Вместо обложки чужого плеера всегда была нота: к «file:///…» приклеивали второй file://."""
+    import json
+    import pathlib
+    import re
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("нет node, чтобы выполнить выражение островка")
+    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
+    art = re.search(r"component Art: ClippingRectangle \{(.+?)\n    \}", shell, re.S).group(1)
+    expr = re.search(r"id: artImg.+?\n\s*source: (.+?)\n", art, re.S).group(1)
+    cases = {"file:///tmp/cover.png": "file:///tmp/cover.png", "/home/oni/a.jpg": "file:///home/oni/a.jpg",
+             "https://i.ytimg.com/x.jpg": "https://i.ytimg.com/x.jpg", "": ""}
+    js = f"console.log(JSON.stringify({json.dumps(list(cases))}.map(src => {{ const art = {{ src }}; return {expr} }})))"
+    got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+    assert dict(zip(cases, got)) == cases

@@ -109,6 +109,14 @@ ShellRoot {
         function catDrop(): string { JD.catDrop(); return JD.catPlace }
         // Spotlight без клавиш: открыть или закрыть и сказать, где карточка и что в ней. Рывок
         // при закрытии ловится серией таких ответов в первые полсекунды.
+        // Что островок знает о чужом плеере — сырыми числами MPRIS, без нашего оформления.
+        function player(): string {
+            const p = JD.musicPlayer
+            const st = p ? JD.playerStream(p) : null
+            return JSON.stringify(p ? { identity: p.identity, dbus: p.dbusName, title: p.trackTitle, clean: JD.cleanTitle(p.trackTitle),
+                                        art: p.trackArtUrl, length: p.length, position: p.position, canSeek: p.canSeek,
+                                        volume: p.volume, volumeSupported: p.volumeSupported, stream: st ? st.name : null } : null)
+        }
         function spotlight(on: bool): void { if (on) JD.openSearch(); else JD.closeMenu() }
         function menuState(): string {
             return JSON.stringify({ open: JD.menuOpen, search: JD.menuSearchMode, alive: menuWin.alive,
@@ -1371,7 +1379,7 @@ ShellRoot {
             }
             Label2 {
                 visible: !!pv.spot
-                text: pv.spot ? (pv.spot.trackTitle || "") : ""
+                text: pv.spot ? JD.cleanTitle(pv.spot.trackTitle) : ""
                 maximumLineCount: 1
                 wrapMode: Text.NoWrap
                 Layout.maximumWidth: 180
@@ -1741,7 +1749,9 @@ ShellRoot {
         Image {
             id: artImg
             anchors.fill: parent
-            source: art.src ? (art.src.startsWith("http") ? art.src : "file://" + art.src) : ""
+            // MPRIS отдаёт обложку готовым адресом «file:///…». Здесь ему приклеивали второй
+            // file://, картинка не грузилась, и у чужого плеера вместо обложки всегда была нота.
+            source: !art.src ? "" : /^(https?|file|data|image):/.test(art.src) ? art.src : "file://" + art.src
             sourceSize.height: art.size * 2
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
@@ -3516,7 +3526,7 @@ ShellRoot {
                     Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1.15
-                    implicitHeight: 136
+                    implicitHeight: 136 + (seek.visible ? 22 : 0)
                     radius: 20
                     color: JD.fill1
                     clip: true
@@ -3546,11 +3556,54 @@ ShellRoot {
                                 spacing: 1
                                 Layout.fillWidth: true
                                 SectionLabel { text: np.own ? (np.p.source ? np.p.source.toUpperCase() : JD.tr("СЕЙЧАС ИГРАЕТ")) : (ev.player ? ev.player.identity.toUpperCase() : ""); color: np.tint; elide: Text.ElideRight; Layout.fillWidth: true }
-                                Label1 { text: np.own ? (np.p.title || "") : ev.player ? (ev.player.trackTitle || ev.player.identity) : ""; font.pixelSize: 14; Layout.fillWidth: true }
+                                Label1 { text: np.own ? (np.p.title || "") : ev.player ? (JD.cleanTitle(ev.player.trackTitle) || ev.player.identity) : ""; font.pixelSize: 14; Layout.fillWidth: true }
                                 Label2 { text: np.own ? (np.p.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true }
                             }
                             IconButton { visible: np.own; icon: "view-fullscreen"; size: 28; Layout.alignment: Qt.AlignTop
                                          onClicked: { JD.expanded = false; JD.playerOpen = true } }
+                        }
+                        // Полоса времени чужого плеера: где мы в треке, и потянуть — перемотать.
+                        // Позицию MPRIS сам не присылает, её надо спрашивать: раз в секунду, пока
+                        // карточка открыта и играет.
+                        RowLayout {
+                            id: seek
+                            readonly property var pl: np.own ? null : ev.player
+                            visible: !!pl && pl.lengthSupported && pl.length > 0
+                            property real dragAt: -1
+                            readonly property real frac: dragAt >= 0 ? dragAt : (pl && pl.length > 0 ? Math.max(0, Math.min(1, pl.position / pl.length)) : 0)
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Timer { interval: 1000; repeat: true; triggeredOnStart: true
+                                    running: seek.visible && ev.shown && seek.pl.isPlaying; onTriggered: seek.pl.positionChanged() }
+                            Label2 { text: JD.fmtTime(seek.frac * (seek.pl ? seek.pl.length : 0)); font.pixelSize: 11; font.features: { "tnum": 1 } }
+                            Item {
+                                Layout.fillWidth: true
+                                implicitHeight: 16
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width; height: seekHit.containsMouse || seek.dragAt >= 0 ? 6 : 4; radius: height / 2
+                                    color: JD.fill2
+                                    Behavior on height { NumberAnimation { duration: 120 } }
+                                    Rectangle { width: parent.width * seek.frac; height: parent.height; radius: parent.radius; color: np.tint }
+                                }
+                                MouseArea {
+                                    id: seekHit
+                                    anchors.fill: parent
+                                    enabled: !!seek.pl && seek.pl.canSeek
+                                    hoverEnabled: true
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    function at(mx) { return Math.max(0, Math.min(1, mx / width)) }
+                                    onPressed: m => seek.dragAt = at(m.x)
+                                    onPositionChanged: m => { if (pressed) seek.dragAt = at(m.x) }
+                                    onReleased: {
+                                        seek.pl.position = seek.dragAt * seek.pl.length
+                                        seek.pl.positionChanged()
+                                        seek.dragAt = -1
+                                    }
+                                    onCanceled: seek.dragAt = -1
+                                }
+                            }
+                            Label2 { text: JD.fmtTime(seek.pl ? seek.pl.length : 0); font.pixelSize: 11; font.features: { "tnum": 1 } }
                         }
                         RowLayout {
                             spacing: 8
@@ -3648,7 +3701,25 @@ ShellRoot {
                         onMoved: v => JD.setVolume(v * 100)
                         onMuteToggled: { const was = JD.volume; JD.setVolume(was > 0 ? 0 : (ev.voiceWas || 100)); ev.voiceWas = was }
                     }
+                    // Чужой плеер — своя ручка, только его громкость: MPRIS, если он её даёт, иначе
+                    // его поток в PipeWire. Общая «Музыка» ниже двигала лишь нашу музыку и чужую
+                    // не трогала, а «Компьютер» убавлял заодно и всё остальное.
                     VolumeRow {
+                        id: otherVol
+                        readonly property var pl: JD.musicOn ? null : ev.player
+                        readonly property bool viaMpris: !!pl && pl.volumeSupported && pl.canControl
+                        readonly property var stream: pl && !viaMpris ? JD.playerStream(pl) : null
+                        PwObjectTracker { objects: otherVol.stream ? [otherVol.stream] : [] }
+                        property real was: 0.7
+                        visible: viaMpris || (!!stream && !!stream.audio)
+                        icon: "audio-x-generic"; label: pl ? pl.identity : ""; tint: JD.accentPink
+                        value: viaMpris ? pl.volume : (stream && stream.audio ? stream.audio.volume : 0)
+                        function put(v) { if (viaMpris) pl.volume = v; else if (stream && stream.audio) stream.audio.volume = v }
+                        onMoved: v => put(v)
+                        onMuteToggled: { const now = value; put(now > 0 ? 0 : (was || 0.7)); was = now }
+                    }
+                    VolumeRow {
+                        visible: !otherVol.visible
                         readonly property int level: JD.player && JD.player.volume !== undefined ? JD.player.volume : (JD.mediaCfg.volume !== undefined ? JD.mediaCfg.volume : 70)
                         icon: "audio-x-generic"; label: JD.tr("Музыка")
                         tint: JD.musicOn ? JD.artTint(JD.player.color) : JD.accentPink

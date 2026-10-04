@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.Mpris
+import Quickshell.Services.Pipewire
 import Quickshell.Io
 import Quickshell.Wayland
 
@@ -668,6 +669,26 @@ Singleton {
         return playing.length ? playing[0] : all[0]
     }
     readonly property bool musicPlaying: !!musicPlayer && musicPlayer.isPlaying
+    // Название, как его отдаёт браузер: «(2) natori - Absolute Zero - YouTube». Счётчик вкладки
+    // и хвост сервиса — мусор, а дефис между исполнителем и песней — тире.
+    function cleanTitle(s) {
+        let t = String(s || "").replace(/^\(\d+\)\s+/, "")
+        t = t.replace(/\s+[-–—|·]\s+(YouTube Music|YouTube|SoundCloud|Spotify|Twitch|Bandcamp|Deezer|Apple Music|VK Музыка|ВКонтакте|Яндекс[ .]Музыка)\s*$/i, "")
+        return t.replace(/\s+-\s+/, " — ").trim()
+    }
+    // Громкость именно этого плеера. MPRIS умеет её не у всех: браузеры свою не отдают, и тогда
+    // берём его поток в PipeWire — тот же, что крутит микшер (MixerView), по имени программы.
+    function playerStream(p) {
+        if (!p) return null
+        const name = playerName(p) + " " + String(p.dbusName || "").toLowerCase()
+        return Pipewire.nodes.values.find(n => {
+            if (!n || !n.isStream || !n.audio) return false
+            const pr = n.properties || {}
+            if (pr["media.class"] !== "Stream/Output/Audio") return false
+            const who = String(pr["application.process.binary"] || pr["application.name"] || "").toLowerCase()
+            return who.length > 2 && name.indexOf(who) >= 0
+        }) || null
+    }
 
     readonly property string dockPlace: dockCfg.position || "bottom"
     readonly property string trayPlace: trayCfg.position || "left"
