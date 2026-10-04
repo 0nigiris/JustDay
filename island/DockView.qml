@@ -872,40 +872,49 @@ Item {
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
                     // Яблоко (или что тема зовёт start-here) рисуем без подложки: у макосных тем
                     // это готовый значок со своей формой, и квадрат под ним выглядит наклейкой.
-                    Image {
+                    // Что в ячейке, определяется её типом, и остальное в ней не заводится: раньше в каждой
+                    // ячейке жили сразу все виды содержимого, скрытые через `visible`, а скрытая картинка
+                    // всё равно декодируется — кошка (5 кадров), корзина, меню в каждой ячейке программы (Р-41).
+                    Loader {
                         anchors.fill: parent
-                        anchors.margins: Math.round(dv.icon * 0.06)
-                        visible: slot.e.t === "launcher" && dv.launcherIcon !== ""
-                        source: dv.launcherIcon ? "file://" + dv.launcherIcon : ""
-                        sourceSize: Qt.size(dv.iconPx, dv.iconPx)
-                        fillMode: Image.PreserveAspectFit
-                        mipmap: false
-                        smooth: true
-                        antialiasing: true
+                        active: slot.e.t === "launcher" && dv.launcherIcon !== ""
+                        sourceComponent: Image {
+                            anchors.fill: parent
+                            anchors.margins: Math.round(dv.icon * 0.06)
+                            source: dv.launcherIcon ? "file://" + dv.launcherIcon : ""
+                            sourceSize: Qt.size(dv.iconPx, dv.iconPx)
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: false
+                            smooth: true
+                            antialiasing: true
+                        }
                     }
 
-                    Rectangle {
+                    Loader {
                         anchors.fill: parent
-                        visible: slot.e.t === "launcher" && dv.launcherIcon === ""
-                        radius: width * 0.27
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: "#3f8cff" }
-                            GradientStop { position: 1; color: "#7a4df0" }
-                        }
-                        border.width: 1
-                        border.color: Qt.rgba(1, 1, 1, 0.22)
-                        Grid {
-                            anchors.centerIn: parent
-                            rows: 3
-                            columns: 3
-                            spacing: Math.max(2, Math.round(dv.icon * 0.12))
-                            Repeater {
-                                model: 9
-                                delegate: Rectangle {
-                                    width: Math.max(3, Math.round(dv.icon * 0.15))
-                                    height: width
-                                    radius: width / 2
-                                    color: "#ffffff"
+                        active: slot.e.t === "launcher" && dv.launcherIcon === ""
+                        sourceComponent: Rectangle {
+                            anchors.fill: parent
+                            radius: width * 0.27
+                            gradient: Gradient {
+                                GradientStop { position: 0; color: "#3f8cff" }
+                                GradientStop { position: 1; color: "#7a4df0" }
+                            }
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.22)
+                            Grid {
+                                anchors.centerIn: parent
+                                rows: 3
+                                columns: 3
+                                spacing: Math.max(2, Math.round(dv.icon * 0.12))
+                                Repeater {
+                                    model: 9
+                                    delegate: Rectangle {
+                                        width: Math.max(3, Math.round(dv.icon * 0.15))
+                                        height: width
+                                        radius: width / 2
+                                        color: "#ffffff"
+                                    }
                                 }
                             }
                         }
@@ -932,22 +941,27 @@ Item {
                             return t ? t : "#7AC8FF"
                         }
                     }
-                    Icon {
+                    Loader {
                         anchors.fill: parent
-                        visible: slot.e.t === "trash"
-                        name: JD.trashFull ? "user-trash-full" : "user-trash"
-                        fallback: "user-trash"
-                        implicitSize: dv.icon
-                        renderSize: dv.iconPx
-                        theme: true
-                        syncLoad: true
+                        active: slot.e.t === "trash"
+                        sourceComponent: Icon {
+                            anchors.fill: parent
+                            name: JD.trashFull ? "user-trash-full" : "user-trash"
+                            fallback: "user-trash"
+                            implicitSize: dv.icon
+                            renderSize: dv.iconPx
+                            theme: true
+                            syncLoad: true
+                        }
                     }
                     // Кнопка лотка: значки чужих программ за одной кнопкой, вместо полосы, которая
                     // занимает край экрана постоянно. Светится, пока полоса открыта, — иначе
                     // непонятно, нажата она или нет.
-                    Item {
+                    Loader {
                         anchors.fill: parent
-                        visible: slot.e.t === "tray"
+                        active: slot.e.t === "tray"
+                        sourceComponent: Item {
+                        anchors.fill: parent
                         Rectangle {
                             anchors.centerIn: parent
                             width: dv.icon
@@ -964,20 +978,27 @@ Item {
                                 tint: JD.trayOn ? JD.accentBlue : JD.text1
                             }
                         }
+                        }
                     }
-                    DockCat {
-                        anchors.centerIn: parent
-                        visible: slot.e.t === "cat"
-                        cpu: JD.cpu
-                        awake: dv.awake
-                        sleepBelow: JD.dockCfg.cat_sleep_below || 0
-                        size: dv.icon
+                    Loader {
+                        anchors.fill: parent
+                        active: slot.e.t === "cat"
+                        sourceComponent: DockCat {
+                            anchors.centerIn: parent
+                            cpu: JD.cpu
+                            awake: dv.awake
+                            sleepBelow: JD.dockCfg.cat_sleep_below || 0
+                            size: dv.icon
+                        }
                     }
-                    DockClock {
-                        anchors.centerIn: parent
-                        visible: slot.e.t === "clock"
-                        awake: dv.awake
-                        size: dv.icon
+                    Loader {
+                        anchors.fill: parent
+                        active: slot.e.t === "clock"
+                        sourceComponent: DockClock {
+                            anchors.centerIn: parent
+                            awake: dv.awake
+                            size: dv.icon
+                        }
                     }
                 }
 
@@ -2131,6 +2152,11 @@ Item {
     // Проверка движка без мыши: поставить курсор в точку полосы, дать физике сойтись и вернуть
     // получившуюся раскладку. Синтетическая мышь на вейланде врёт, а «значки расступаются» иначе
     // никак не проверить числом. Состояние восстанавливается первым же настоящим движением мыши.
+    // Снимок самой полосы дока в файл: глазами посмотреть на раскладку без экрана (`qs ipc call island dockShot путь`).
+    function shot(path) {
+        card.grabToImage(r => r.saveToFile(path))
+        return "ok"
+    }
     function probe(x) {
         const wasEngaged = engaged, wasAt = pointerScene
         engaged = true
