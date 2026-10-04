@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import functools
 import json
 import logging
@@ -88,6 +89,7 @@ SIDE_AFTER_S = 5.0   # a tool call this old means an injected request would sit 
 class Daemon:
     def __init__(self) -> None:
         self.cfg = config.load()
+        self._from_file = copy.deepcopy(self.cfg)   # что было в файле: с ним сравнивает reload_settings
         a = self.cfg["audio"]
         self.mic = audio.Microphone(a["input"])
         self.player = audio.Player(a["output"], int(a.get("volume", 100)))
@@ -950,13 +952,37 @@ class Daemon:
         if expects and self.cfg["audio"]["followup_seconds"] > 0:
             self.listen(followup=True)
 
+    # То, что демон меняет в настройках мозга на ходу: модель под задачу, запасной поставщик по лимиту.
+    _BRAIN_LIVE = ("provider", "model", "effort")
+
+    def _adopt(self, new: dict) -> None:
+        """Взять новые настройки, не подменяя объект.
+
+        Конфиг один на всех: его держат мозг, голос, слух. Раньше reload клал в self.cfg новый
+        словарь, а мозг оставался со старым — и после первого же щелчка в настройках выбор модели
+        писал в словарь, который мозг больше не читал: 0 смен модели из 16 до рестарта (Р-5).
+        Поэтому разделы обновляются на месте. Модель и поставщика, выбранных на ходу, перезагрузка
+        не трогает, если человек не менял их в файле: щелчок по громкости не должен возвращать
+        мозг с запасного поставщика на тот, у которого кончился лимит."""
+        last = getattr(self, "_from_file", None) or new
+        live = {k: self.cfg["brain"].get(k) for k in self._BRAIN_LIVE
+                if new["brain"].get(k) == last["brain"].get(k) and k in self.cfg["brain"]}
+        self._from_file = copy.deepcopy(new)
+        for key, value in new.items():
+            if isinstance(value, dict) and isinstance(self.cfg.get(key), dict):
+                self.cfg[key].clear()
+                self.cfg[key].update(value)
+            else:
+                self.cfg[key] = value
+        self.cfg["brain"].update(live)
+
     def reload_settings(self) -> list[str]:
         """Apply config changes without a restart where possible; returns the sections that still need one."""
-        old, new = self.cfg, config.load()
-        self.cfg = new
+        new = config.load()
+        old = getattr(self, "_from_file", None) or copy.deepcopy(self.cfg)
+        self._adopt(new)
         restart: list[str] = []
         a = new["audio"]
-        self.tts.cfg = new["tts"]
         self.recorder.silence_s = a["silence_seconds"]
         self.recorder.no_speech_timeout_s = a["no_speech_timeout_seconds"]
         self.recorder.max_s = a["max_utterance_seconds"]
@@ -983,10 +1009,7 @@ class Daemon:
         if (new["persona"] != old["persona"] or
                 {k: new["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")} !=
                 {k: old["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")}):
-            self.brain.cfg["persona"] = new["persona"]
-            self.brain.cfg["user"] = new["user"]
             spawn(self._reconnect_brain())
-        self.brain.cfg["user"] = new["user"]
         self.stt.vocabulary = island.vocabulary(new)
         restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
         if new["user"].get("language") != old["user"].get("language"):
@@ -3138,7 +3161,7 @@ class Daemon:
                     None, lambda: dock.hide_tray(str(req.get("id", "")), req.get("on"),
                                                  [str(a) for a in aliases]))
                 if got.get("ok"):
-                    self.cfg = config.load()
+                    self._adopt(config.load())
                     self.publish(settings=island.settings_snapshot(self.cfg))
                 resp = got
             elif cmd == "mascots":  # какие маскоты есть и какой выбран

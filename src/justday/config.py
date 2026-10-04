@@ -602,7 +602,9 @@ def _merge(base: dict, over: dict) -> dict:
 
 
 def load() -> dict:
-    cfg = DEFAULTS
+    # Копия, а не сами DEFAULTS: без config.toml выбор модели, громкость и язык голоса правили
+    # умолчания всего процесса, а reload_settings сравнивал объект сам с собой и не видел ничего (Р-18).
+    cfg = copy.deepcopy(DEFAULTS)
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open("rb") as f:

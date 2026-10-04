@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from justday import providers
+from justday import events, providers
 from justday.brain import Brain
 
 ASK = Brain._rules("ask")
@@ -37,8 +37,9 @@ def test_harmless_glued_commands_still_ran_without_a_question(command):
     assert not providers.risky("Bash", {"command": command}, ASK)
 
 
-def test_the_non_claude_brain_asked_before_running_what_was_not_allowed():
+def test_the_non_claude_brain_asked_before_running_what_was_not_allowed(monkeypatch):
     """Раньше не-Claude мозгу разрешалось всё, что не в ask; теперь не разрешённое — вопрос человеку."""
+    monkeypatch.setattr(events, "emit", lambda *a, **k: None)
     asked: list[str] = []
 
     async def approver(desc, reason, hard):
