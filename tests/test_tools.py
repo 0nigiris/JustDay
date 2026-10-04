@@ -835,3 +835,39 @@ def test_phone_commands_do_not_wipe_what_the_person_already_had(tmp_path, monkey
     assert now["его-команда"]["name"] == "Свет на кухне"
     assert "justday-listen" in now
     assert now["justday-listen"]["command"].endswith("justday toggle")
+
+
+def test_the_dock_preview_did_not_shoot_the_lock_screen_nor_the_password_manager(tmp_path, monkeypatch) -> None:
+    """Миниатюра окна — снимок всего экрана с вырезкой. Поэтому на запертом сеансе (там поле пароля) и на окне менеджера
+    паролей снимка быть не должно; а полный снимок не переживает вырезку, даже если она не удалась (Р-12)."""
+    from justday import desktop
+
+    shots: list[str] = []
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    import contextlib
+    from pathlib import Path
+
+    monkeypatch.setattr(desktop, "capture_screen", lambda path: shots.append(path) or Path(path).write_bytes(b"x" * 1000))
+    monkeypatch.setattr(desktop, "_get_thumb_lock", lambda: contextlib.nullcontext())
+    wins = [{"id": "1", "app": "org.keepassxc.KeePassXC", "w": 400, "h": 300, "x": 0, "y": 0},
+            {"id": "2", "app": "kate", "w": 400, "h": 300, "x": 0, "y": 0}]
+    monkeypatch.setattr(desktop, "windows", lambda *a, **kw: wins)
+    monkeypatch.setattr(desktop, "_session_locked", lambda: False)
+
+    got = desktop.window_thumb("1")
+    assert got["private"] and not shots, "окно менеджера паролей снято"
+    monkeypatch.setattr(desktop, "_session_locked", lambda: True)
+    got = desktop.window_thumb("2")
+    assert got["private"] and not shots, "запертый сеанс снят"
+
+    monkeypatch.setattr(desktop, "_session_locked", lambda: False)
+    monkeypatch.setattr(desktop.shutil, "which", lambda name: "/usr/bin/magick")
+
+    def crop_failed(*a, **kw):
+        raise OSError("magick упал")
+
+    monkeypatch.setattr(desktop.subprocess, "run", crop_failed)
+    got = desktop.window_thumb("2")
+    assert not got["ok"] and shots, "проба не дошла до снимка"
+    left = [p for p in (tmp_path / "justday-thumbs").glob("*-full.png")]
+    assert not left, "полный снимок экрана остался лежать после неудачной вырезки"

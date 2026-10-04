@@ -1606,7 +1606,7 @@ Singleton {
                     next[id] = m.path
                     thumbs = next
                     thumbFailCount = 0
-                } else if (!m.minimized) {
+                } else if (!m.minimized && !m.private) {
                     // Capture unavailable (grim/KWin) or permanently broken → stop asking this session.
                     if (m.permanent)
                         thumbCaptureBroken = true

@@ -5,6 +5,7 @@ Launching itself is delegated to standard tools: gtk-launch (desktop entries), s
 from __future__ import annotations
 
 import configparser
+import contextlib
 import difflib
 import json
 import os
@@ -757,6 +758,33 @@ def capture_screen(png: str) -> None:
     raise RuntimeError("no_safe_capture: " + "; ".join(errors)[:200])
 
 
+# Программы, чьи окна не попадают в миниатюры дока: пароли и ключи. Часть слова в имени окна, без регистра;
+# свой список — `dock.preview_skip` в config.toml.
+PREVIEW_SKIP = ("keepass", "bitwarden", "1password", "kwalletmanager", "seahorse", "gnome-keyring", "enpass",
+                "proton-pass", "passwordsafe")
+
+
+def _preview_private(app: str) -> bool:
+    from . import config
+
+    try:
+        extra = [str(x).lower() for x in (config.load().get("dock") or {}).get("preview_skip") or []]
+    except Exception:
+        extra = []
+    low = app.lower()
+    return any(word in low for word in (*PREVIEW_SKIP, *extra))
+
+
+def _session_locked() -> bool:
+    """Заперт ли сеанс. Не смогли узнать — считаем запертым: снимать экран «на всякий случай» нельзя."""
+    try:
+        out = subprocess.run(["loginctl", "show-session", os.environ.get("XDG_SESSION_ID", "auto"), "-p", "LockedHint"],
+                             capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return True
+    return "LockedHint=no" not in out
+
+
 def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
     """Crop a small JPEG of one window for dock hover previews.
 
@@ -777,6 +805,13 @@ def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
         return {"ok": False, "error": "window gone"}
     if hit.get("minimized"):
         return {"ok": False, "error": "minimized", "minimized": True}
+    # Миниатюра — это снимок всего экрана с вырезкой. Поэтому: не снимаем запертый сеанс (там пароль), и не снимаем
+    # окна менеджеров паролей и им подобных, даже если они на виду (Р-12). `private` — не поломка снимка: остров
+    # просто остаётся с подписью без картинки и не решает, что захват сломан.
+    if _preview_private(str(hit.get("app") or "")):
+        return {"ok": False, "error": "private app", "private": True}
+    if _session_locked():
+        return {"ok": False, "error": "session locked", "private": True}
     ww, wh = int(hit.get("w") or 0), int(hit.get("h") or 0)
     ox, oy = int(hit.get("x") or 0), int(hit.get("y") or 0)
     if ww < 16 or wh < 16:
@@ -802,28 +837,30 @@ def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
         except OSError:
             pass
         try:
-            capture_screen(png)
-        except Exception as e:
-            err = str(e)[:200]
-            permanent = "no_safe_capture" in err
-            return {"ok": False, "error": err, "permanent": permanent}
-        if not shutil.which("magick"):
-            return {"ok": False, "error": "magick missing"}
-        try:
-            # Clamp crop to image bounds; multi-monitor: geometry is already absolute.
-            subprocess.run(
-                ["magick", png, "-crop", f"{ww}x{wh}+{max(0, ox)}+{max(0, oy)}", "+repage",
-                 "-resize", f"{int(max_edge)}x{int(max_edge)}>", "-quality", "80", str(out)],
-                check=True, timeout=12, capture_output=True)
-        except (OSError, subprocess.SubprocessError) as e:
-            return {"ok": False, "error": str(e)[:200]}
-        try:
-            Path(png).unlink(missing_ok=True)
-        except OSError:
-            pass
-        if not out.exists() or out.stat().st_size < 200:
-            return {"ok": False, "error": "empty thumb"}
-        return {"ok": True, "path": str(out), "id": wid, "cached": False}
+            try:
+                capture_screen(png)
+            except Exception as e:
+                err = str(e)[:200]
+                permanent = "no_safe_capture" in err
+                return {"ok": False, "error": err, "permanent": permanent}
+            if not shutil.which("magick"):
+                return {"ok": False, "error": "magick missing"}
+            try:
+                # Clamp crop to image bounds; multi-monitor: geometry is already absolute.
+                subprocess.run(
+                    ["magick", png, "-crop", f"{ww}x{wh}+{max(0, ox)}+{max(0, oy)}", "+repage",
+                     "-resize", f"{int(max_edge)}x{int(max_edge)}>", "-quality", "80", str(out)],
+                    check=True, timeout=12, capture_output=True)
+            except (OSError, subprocess.SubprocessError) as e:
+                return {"ok": False, "error": str(e)[:200]}
+            if not out.exists() or out.stat().st_size < 200:
+                return {"ok": False, "error": "empty thumb"}
+            return {"ok": True, "path": str(out), "id": wid, "cached": False}
+        finally:
+            # Снимок всего экрана не должен переживать вырезку ни при каком исходе: раньше при сбое magick он
+            # оставался лежать целиком (Р-12).
+            with contextlib.suppress(OSError):
+                Path(png).unlink(missing_ok=True)
 
 
 _last_icons_json = ""
