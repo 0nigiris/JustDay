@@ -141,6 +141,29 @@ def ensure_cloud_model(model: str) -> None:
         pass  # the brain reports the real error on the first request
 
 
+# Кто вправе нажать «да». Мозг, его фоновые задачи и любая другая нейросеть на машине — нет:
+# `justday job start x -- "sleep 3; justday approve"` подтверждал опасную команду сам себе (Р-1).
+AI_PROCESSES = {"claude", "opencode", "codex"}
+
+
+def spawned_by_ai(pid: int, daemon: int) -> bool:
+    """True, если процесс — потомок демона (мозг, задачи, воркеры) или любой нейросети.
+
+    Островок, телефонная служба и терминал человека живут под systemd и сюда не попадают;
+    программы, которые демон открывает, уходят в свой scope через systemd-run и тоже."""
+    while pid > 1:
+        if pid == daemon:
+            return True
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+        except OSError:
+            return False
+        if stat[stat.index("(") + 1:stat.rindex(")")] in AI_PROCESSES:
+            return True
+        pid = int(stat[stat.rindex(")") + 2:].split()[1])
+    return False
+
+
 # ---- permission policy for models without Claude Code's auto-mode classifier ----
 _RULE = re.compile(r"^Bash\((.+?)(?::\*)?\)$")
 

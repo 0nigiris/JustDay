@@ -1054,7 +1054,7 @@ def main(argv: list[str] | None = None) -> None:
         elif a.action == "key":  # the ElevenLabs key, read from stdin so it never lands in the shell history
             key = sys.stdin.read().strip()
             config.set_secret("ELEVENLABS_API_KEY", key)
-            _print({"ok": True, "stored_in": str(config.SECRETS_FILE), "cleared": not key})
+            _print({"ok": True, "stored_in": "keyring", "cleared": not key})
         elif a.action == "eleven":  # voices on the ElevenLabs account, or switch to one of them
             from . import manage
 

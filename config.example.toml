@@ -39,7 +39,7 @@ speed = 1.15                # how fast it talks (0.5–2.0); the neural voice is
 # style = ""                # manner of speech in words: «спокойно, деловито» — the neural voice understands it
 numbers = true              # «в 7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
 latin = "auto"              # auto | keep (multilingual voices read English themselves) | translit (Silero, espeak)
-# ElevenLabs (engine = "elevenlabs"): the key goes to ~/.config/justday/secrets.env, never here.
+# ElevenLabs (engine = "elevenlabs"): the key goes to the desktop keyring (`justday secret set elevenlabs`), never here.
 #   justday voice key        — paste the key on stdin
 #   justday voice eleven     — list the voices on the account
 # eleven_voice = "JBFqnCBsd6RMkjVDRZzb"

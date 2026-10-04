@@ -15,6 +15,8 @@ import re
 import secrets
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import time
 from datetime import datetime
@@ -1381,6 +1383,15 @@ class Daemon:
                 return "deny"
         return text if self._ask_free else None
 
+    @staticmethod
+    def _peer_is_ai(writer: asyncio.StreamWriter) -> bool:
+        """Подключился ли к сокету мозг или его потомок (Р-1). Не узнали собеседника — значит нельзя."""
+        try:
+            cred = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        except (OSError, AttributeError):
+            return True
+        return providers.spawned_by_ai(struct.unpack("3i", cred)[0], os.getpid())
+
     async def _approve(self, desc: str, reason: str, hard: bool = True) -> bool:
         if not hard and time.monotonic() < self._preapproved_until:
             events.emit("approval_auto", desc=desc)  # the user already approved this in the draft card
@@ -1637,6 +1648,28 @@ class Daemon:
         self._windows_sent = time.monotonic()
         self.publish(windows=got)
         return True
+
+    def _focus_back(self) -> bool:
+        """Дождаться, пока окно, где человек печатал, снова станет активным (из потока, не из цикла).
+
+        После клика по панели эмодзи фокус на миг уходит к ней, и Ctrl+V, пришедший раньше времени,
+        пропадал. Фиксированные паузы (0,4 с) это лечили, но были заметны; список окон же обновляется
+        событием KWin, так что смотрим в него. Не вернулся за 0,15 с — просим KWin явно."""
+        want = self._last_active_id
+        if not want:
+            return False
+
+        def back() -> bool:
+            return any(w.get("id") == want and w.get("active") for w in self._windows or [] if isinstance(w, dict))
+
+        time.sleep(0.04)  # событие о смене фокуса идёт чуть позже щелчка
+        for step in range(30):
+            if back():
+                return True
+            if step == 7:
+                desktop.windows("focus", wid=want)
+            time.sleep(0.02)
+        return False
 
     async def _publish_windows_debounced(self) -> None:
         await asyncio.sleep(self.WINDOWS_QUIET)
@@ -2793,6 +2826,8 @@ class Daemon:
                         # Громкость самого ассистента: телефону она нужна, чтобы
                         # показать ползунок там же, где ползунок музыки.
                         "volume": self.player.volume}
+            elif cmd in ("approve", "answer") and self._peer_is_ai(writer):
+                resp = {"ok": False, "error": "подтверждает только человек: кнопкой, голосом или в Telegram"}
             elif cmd in ("approve", "deny"):
                 pending = self._approval is not None and not self._approval.done()
                 if pending:
@@ -2986,12 +3021,7 @@ class Daemon:
                 resp = {"ok": True, "emoji": found, "groups": glyphs.load()["groups"]}
             elif cmd == "emoji_use":  # выбрали символ: в буфер и в то окно, где курсор
                 def _use() -> dict:
-                    # Вернуть фокус окну, где человек печатал: после клика по панели KWin отдаёт его
-                    # назад не сразу, и вставка уходила в пустоту, оставляя символ в одном буфере.
-                    if self._last_active_id:
-                        desktop.windows("focus", wid=self._last_active_id)
-                        time.sleep(0.12)
-                    return glyphs.use(req.get("char", ""), paste=req.get("paste", True))
+                    return glyphs.use(req.get("char", ""), paste=req.get("paste", True), ready=self._focus_back)
                 resp = await asyncio.get_running_loop().run_in_executor(None, _use)
             elif cmd == "apps":  # лаунчер: программы, игры, открытые окна
                 found = await asyncio.get_running_loop().run_in_executor(

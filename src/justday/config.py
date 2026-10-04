@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -25,12 +26,16 @@ SECRETS_FILE = CONFIG_DIR / "secrets.env"
 
 
 def secret(name: str) -> str:
-    """An API key from the environment, or from ~/.config/justday/secrets.env (KEY=value, mode 600).
+    """An API key: the environment, then the desktop keyring, then the legacy ~/.config/justday/secrets.env.
 
-    Keys are never written to config.toml, never logged and never handed to the model."""
+    Keys are never written to config.toml, never logged and never handed to the model. The keyring is the
+    home of every key (AGENTS.md); the file is only read so an install made before that rule keeps working."""
     got = os.environ.get(name, "")
     if got:
         return got.strip()
+    got = _keyring_get(name)
+    if got:
+        return got
     try:
         for line in SECRETS_FILE.read_text(encoding="utf-8").splitlines():
             key, _, value = line.partition("=")
@@ -39,6 +44,30 @@ def secret(name: str) -> str:
     except OSError:
         pass
     return _mcp_secret(name)
+
+
+_KEYRING_CACHE: dict[str, str] = {}
+
+
+def _keyring_name(name: str) -> str:
+    """ELEVENLABS_API_KEY → elevenlabs: the keyring names keys the way `justday secret` does."""
+    return re.sub(r"_API_KEY$", "", name).lower()
+
+
+def _keyring_get(name: str) -> str:
+    """One `secret-tool` call per key per process: a hung keyring must not stall the event loop on every
+    sentence (Р-32), and an empty answer is not remembered, so a key stored later is found."""
+    if name in _KEYRING_CACHE:
+        return _KEYRING_CACHE[name]
+    try:
+        r = subprocess.run(["secret-tool", "lookup", "service", "justday", "key", _keyring_name(name)],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    got = r.stdout.strip() if r.returncode == 0 else ""
+    if got:
+        _KEYRING_CACHE[name] = got
+    return got
 
 
 def _mcp_secret(name: str) -> str:
@@ -57,17 +86,42 @@ def _mcp_secret(name: str) -> str:
 
 
 def set_secret(name: str, value: str) -> None:
-    """Store a key in secrets.env with owner-only permissions (or drop it when value is empty)."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    lines = []
-    try:
-        lines = [ln for ln in SECRETS_FILE.read_text(encoding="utf-8").splitlines() if not ln.startswith(f"{name}=")]
-    except OSError:
-        pass
+    """Put a key into the desktop keyring (or drop it when value is empty), and out of secrets.env."""
+    _KEYRING_CACHE.pop(name, None)
+    base = ["service", "justday", "key", _keyring_name(name)]
     if value:
-        lines.append(f"{name}={value}")
-    SECRETS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    SECRETS_FILE.chmod(0o600)
+        subprocess.run(["secret-tool", "store", "--label", f"JustDay: {_keyring_name(name)}", *base],
+                       input=value, text=True, check=True, timeout=10)
+    else:
+        subprocess.run(["secret-tool", "clear", *base], check=False, timeout=10)
+    _drop_from_file(name)
+
+
+def _drop_from_file(name: str) -> None:
+    try:
+        lines = SECRETS_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    keep = [ln for ln in lines if ln.partition("=")[0].strip() != name]
+    if keep != lines:
+        SECRETS_FILE.write_text("".join(ln + "\n" for ln in keep), encoding="utf-8")
+
+
+def migrate_secrets_file() -> list[str]:
+    """Move every key from the legacy secrets.env into the keyring and empty the file (it is kept, not
+    deleted). Returns the names moved; values never leave this function."""
+    try:
+        lines = SECRETS_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    moved = []
+    for line in lines:
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip("'\"")
+        if key and value:
+            set_secret(key, value)  # also removes the line from the file
+            moved.append(key)
+    return moved
 
 
 DEFAULTS: dict = {
@@ -124,7 +178,7 @@ DEFAULTS: dict = {
         "style": "",
         "latin": "auto",  # auto = spell English the Russian way only for voices that cannot read it (silero, espeak)
         "numbers": True,  # say figures as words: «7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
-        # ElevenLabs (engine = "elevenlabs"): the key lives in ~/.config/justday/secrets.env, never here.
+        # ElevenLabs (engine = "elevenlabs"): the key lives in the desktop keyring (`justday secret set elevenlabs`), never here.
         "eleven_voice": "JBFqnCBsd6RMkjVDRZzb",  # `justday voice eleven` lists the voices on your account
         "eleven_model": "eleven_flash_v2_5",  # flash = fastest; eleven_multilingual_v2 = richer, slower
         # Нейроголос отказал (не влез в видеопамять) — столько минут к нему не стучаться. Иначе
