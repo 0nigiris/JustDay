@@ -6,6 +6,7 @@ Never exposed on the network.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import json
 import logging
@@ -856,6 +857,47 @@ class Daemon:
         local = await self.handle_local(text, "phone")
         reply = local if local is not None else await self.run_turn(text, source="phone")
         return {"ok": True, "text": text, "result": reply or t("сделано")}
+
+    async def _telegram_loop(self) -> None:
+        """Слушать телеграм длинным опросом и отвечать тем же Джарвисом, что и дома.
+
+        Почему не вебхук: вебхук потребовал бы открытого наружу порта, а наше правило — только
+        127.0.0.1. Длинный опрос ходит наружу сам и ничего не слушает.
+
+        Чужие сообщения выбрасываются молча (`telegram.mine`): бот открыт всему интернету, и без
+        этой проверки любой, кто найдёт его имя, писал бы прямо в мозг — с почтой, окнами и правом
+        запускать программы.
+        """
+        from . import telegram as tg
+
+        if not tg.ready():
+            return
+        loop = asyncio.get_running_loop()
+        offset = 0
+        quiet = 0.0
+        while True:
+            try:
+                got = await loop.run_in_executor(None, tg.updates, offset)
+                quiet = 0.0
+            except Exception as e:                  # сеть рвётся; молчать об этом вечно нельзя
+                quiet = min(60.0, quiet * 2 or 5.0)
+                log.debug("телеграм: %s", e)
+                await asyncio.sleep(quiet)
+                continue
+            for upd in got or []:
+                offset = max(offset, int(upd.get("update_id", 0)) + 1)
+                text = tg.mine(upd)
+                if not text:
+                    continue
+                events.emit("heard", text=text, source="telegram")
+                try:
+                    local = await self.handle_local(text, "telegram")
+                    reply = local if local is not None else await self.run_turn(text, source="telegram")
+                except Exception:
+                    log.exception("телеграм: ход не удался")
+                    reply = "Не получилось — посмотри журнал."
+                with contextlib.suppress(Exception):
+                    await loop.run_in_executor(None, tg.send, reply or "сделано")
 
     async def record_sample(self, seconds: float) -> dict:
         import wave
@@ -3168,6 +3210,7 @@ class Daemon:
         spawn(self._watch_windows())
         spawn(self._watch_layout())
         spawn(self._watch_brightness())
+        spawn(self._telegram_loop())
         spawn(self._cpu_loop())
         # Каталог дока уходит по живому сокету. Перезапускать ради него оболочку не надо.
         async def _warm_dock() -> None:

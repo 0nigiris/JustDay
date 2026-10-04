@@ -1,0 +1,203 @@
+"""Telegram как второй канал: дотянуться до него где угодно и получить ответ оттуда же.
+
+KDE Connect работает только в своей сети, а он живёт с телефоном в руках и далеко от дома.
+Телеграм закрывает ровно эту дыру: бот пишет ему на телефон в любой точке мира, и он отвечает
+боту так же, как говорил бы голосом дома.
+
+**Почему длинный опрос, а не вебхук.** Вебхук потребовал бы открытого наружу порта — у нас такого
+нет и не будет: наше правило говорит «только 127.0.0.1». Длинный опрос ходит наружу сам и ничего
+не слушает, поэтому он подходит, а вебхук нет. Это не обходной путь, а единственный правильный.
+
+**Почему голосовое сообщение, а не звонок.** Он просил, чтобы Джарвис ему позвонил. Настоящий
+звонок на телефонный номер (Telnyx) требует публичного адреса, куда оператор шлёт события звонка:
+без него нельзя узнать даже, сняли трубку или нет. Голосовое сообщение даёт то же самое — телефон
+звякнул, Джарвис говорит его голосом, — и не требует ни порта, ни денег, ни номера.
+
+Токен и `chat_id` лежат только в связке ключей (`telegram_token`, `telegram_chat`). В конфиге их
+нет и быть не должно: конфиг уезжает в репозиторий, а связка — нет.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from pathlib import Path
+
+from . import providers
+
+API = "https://api.telegram.org"
+TIMEOUT = 15
+POLL_SECONDS = 50          # сколько держать длинный опрос; телеграм разрешает до 50
+
+
+def token() -> str:
+    return providers.secret_get("telegram_token")
+
+
+def chat() -> str:
+    return providers.secret_get("telegram_chat")
+
+
+def ready() -> bool:
+    return bool(token() and chat())
+
+
+def call(method: str, params: dict | None = None, timeout: float = TIMEOUT) -> dict:
+    """Вызвать метод бота. Возвращает `result` или бросает RuntimeError с текстом от телеграма."""
+    key = token()
+    if not key:
+        raise RuntimeError("нет токена бота: secret-tool store --label 'JustDay: telegram_token' "
+                           "service justday key telegram_token")
+    data = urllib.parse.urlencode({k: v for k, v in (params or {}).items() if v is not None}).encode()
+    req = urllib.request.Request(f"{API}/bot{key}/{method}", data=data)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            got = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        # Телеграм объясняет отказ словами («chat not found»), и это ровно то, что надо показать.
+        body = e.read().decode(errors="replace")[:300]
+        raise RuntimeError(f"телеграм отказал ({e.code}): {body}") from e
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise RuntimeError(f"телеграм недоступен: {e}") from e
+    if not got.get("ok"):
+        raise RuntimeError(f"телеграм отказал: {got.get('description', got)}")
+    return got.get("result") or {}
+
+
+def send(text: str, to: str = "") -> dict:
+    """Написать ему сообщением. Длинный текст телеграм режет на 4096 знаков — режем сами, по словам."""
+    where = to or chat()
+    if not where:
+        raise RuntimeError("неизвестно, кому писать: нет telegram_chat в связке ключей")
+    text = str(text or "").strip()
+    if not text:
+        raise RuntimeError("нечего отправлять")
+    last: dict = {}
+    for part in _cut(text, 4096):
+        last = call("sendMessage", {"chat_id": where, "text": part, "disable_web_page_preview": "true"})
+    return last
+
+
+def _cut(text: str, limit: int) -> list[str]:
+    """Разрезать по границам строк и слов, а не по счёту знаков: иначе рвёт слова пополам."""
+    if len(text) <= limit:
+        return [text]
+    out, rest = [], text
+    while len(rest) > limit:
+        cut = rest.rfind("\n", 0, limit)
+        if cut < limit // 2:
+            cut = rest.rfind(" ", 0, limit)
+        if cut <= 0:
+            cut = limit
+        out.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    if rest:
+        out.append(rest)
+    return out
+
+
+def _to_ogg(pcm, rate: int) -> Path:
+    """PCM от нашего синтеза → ogg/opus, как телеграм просит для голосового сообщения.
+
+    Голосовое именно голосовым, а не файлом: оно показывается волной с кнопкой, его слушают одним
+    нажатием прямо в чате, а файл сначала качают. Разница в том, услышит он Джарвиса или нет.
+    """
+    import wave
+
+    tmp = Path(tempfile.gettempdir()) / f"justday-voice-{uuid.uuid4().hex}.wav"
+    ogg = tmp.with_suffix(".ogg")
+    with wave.open(str(tmp), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(int(rate))
+        w.writeframes(pcm.astype("int16").tobytes())
+    try:
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp),
+                        "-c:a", "libopus", "-b:a", "32k", "-ar", "48000", "-ac", "1", str(ogg)],
+                       check=True, capture_output=True, timeout=60)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return ogg
+
+
+def voice(text: str, to: str = "", cfg: dict | None = None) -> dict:
+    """Сказать ему голосом в телефон — то самое «Джарвис мне позвонил», только без номера.
+
+    Синтез берётся наш же (`tts.TTS`), значит голос тот же, что дома. Если синтеза на этой машине
+    нет или ffmpeg не справился, уходит обычный текст: промолчать хуже, чем написать.
+    """
+    from . import config
+    from .tts import TTS
+
+    where = to or chat()
+    if not where:
+        raise RuntimeError("неизвестно, кому писать: нет telegram_chat в связке ключей")
+    text = str(text or "").strip()
+    if not text:
+        raise RuntimeError("нечего отправлять")
+    ogg = None
+    try:
+        engine = TTS((cfg or config.load())["tts"])
+        pcm = engine.synth(text if len(text) < 900 else text[:900])
+        if not len(pcm):
+            raise RuntimeError("синтез отдал тишину")
+        ogg = _to_ogg(pcm, engine.rate)
+        return _send_file("sendVoice", "voice", ogg, {"chat_id": where, "caption": text[:1024]})
+    except Exception as e:    # любой отказ синтеза лечится текстом: промолчать хуже, чем написать
+        out = send(text, where)
+        out["voice_error"] = str(e)[:200]
+        return out
+    finally:
+        if ogg is not None:
+            ogg.unlink(missing_ok=True)
+
+
+def _send_file(method: str, field: str, path: Path, params: dict) -> dict:
+    """multipart вручную: ради одной отправки файла тянуть requests в зависимости незачем."""
+    key = token()
+    boundary = uuid.uuid4().hex
+    body = bytearray()
+    for name, value in params.items():
+        body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n"
+                 f"{value}\r\n").encode()
+    body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; "
+             f"filename=\"{path.name}\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()
+    body += path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(f"{API}/bot{key}/{method}", data=bytes(body),
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            got = json.loads(r.read().decode())
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise RuntimeError(f"не ушло в телеграм: {e}") from e
+    if not got.get("ok"):
+        raise RuntimeError(f"телеграм отказал: {got.get('description', got)}")
+    return got.get("result") or {}
+
+
+def updates(offset: int = 0, seconds: int = POLL_SECONDS) -> list[dict]:
+    """Длинный опрос: висим на соединении до `seconds`, пока не придёт сообщение.
+
+    Это дешевле и быстрее частых коротких запросов: телеграм отвечает сразу, как только есть что
+    отдать, а пустой ответ приходит один раз в минуту вместо шестидесяти в минуту.
+    """
+    return call("getUpdates", {"offset": offset or None, "timeout": seconds,
+                               "allowed_updates": json.dumps(["message"])},
+                timeout=seconds + 10)  # type: ignore[return-value]
+
+
+def mine(update: dict) -> str:
+    """Текст сообщения, если оно от него. Чужих не слушаем: бот открыт всему интернету.
+
+    Без этой проверки любой, кто найдёт имя бота, писал бы прямо в мозг ассистента — с его
+    почтой, окнами и правом запускать программы. Поэтому чужое молча выбрасывается.
+    """
+    msg = (update or {}).get("message") or {}
+    who = str(((msg.get("chat") or {}).get("id")) or "")
+    if not who or who != chat():
+        return ""
+    return str(msg.get("text") or "").strip()

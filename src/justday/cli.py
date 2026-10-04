@@ -459,6 +459,9 @@ def main(argv: list[str] | None = None) -> None:
                                                          "ради чего не жалко оторвать человека от дела")
     sp.add_argument("--subject", default="", help="тема письма")
     sp.add_argument("--to", default="", help="имя устройства, если их несколько")
+    sp = sub.add_parser("telegram", help="телеграм-бот: голосом или текстом ему на телефон, где бы он ни был")
+    sp.add_argument("action", choices=["voice", "send", "status"])
+    sp.add_argument("text", nargs="*")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
     sp = sub.add_parser("scene", help="сценарии: list | run <имя> | add <имя> | forget <имя>")
@@ -956,6 +959,21 @@ def main(argv: list[str] | None = None) -> None:
         from . import phone
 
         _print(phone.reach(" ".join(a.text), urgent=a.urgent, subject=a.subject, which=a.to))
+    elif a.cmd == "telegram":
+        from . import telegram as tg
+
+        try:
+            if a.action == "status":
+                _print({"ok": tg.ready(), "токен": bool(tg.token()), "кому": bool(tg.chat()),
+                        "бот": tg.call("getMe").get("username", "") if tg.token() else ""})
+            else:
+                text = " ".join(a.text).strip()
+                if not text:
+                    raise RuntimeError("нечего отправлять")
+                _print(tg.voice(text) if a.action == "voice" else tg.send(text))
+        except RuntimeError as e:
+            _print({"ok": False, "error": str(e)})
+            return 1
     elif a.cmd == "phone":
         from . import phone
 
