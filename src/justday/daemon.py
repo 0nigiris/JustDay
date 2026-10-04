@@ -1292,6 +1292,11 @@ class Daemon:
                     events.emit("turn_failed", error=repr(again))
                     self._cloud_down_until = time.monotonic() + 300
                     reply = await self.offline_turn(text)
+            elif isinstance(e, brain_mod.BrainError) and not fallback.looks_like_limit(str(e)):
+                # Модель ответила, но ошибкой: связь есть, и запирать облако на пять минут незачем.
+                # Сырой текст ошибки вслух не читаем — он для журнала, а не для ушей.
+                reply = t("У модели что-то сломалось, попробуй ещё раз.")
+                await self.say(reply)
             else:
                 self._cloud_down_until = time.monotonic() + 300
                 reply = await self.offline_turn(text)

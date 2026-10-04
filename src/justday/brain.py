@@ -137,6 +137,12 @@ def _window_env(window: int) -> dict[str, str]:
     return {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(int(window))} if window else {}
 
 
+class BrainError(RuntimeError):
+    """Ход кончился ошибкой (лимит, отказ API). Раньше её текст возвращался как ответ и читался
+    вслух — «You've hit your session limit», — а запасной поставщик не включался ни разу за месяц
+    журнала: исключения не было, и лестнице не на что было реагировать (Р-6)."""
+
+
 class Brain:
     def __init__(
         self,
@@ -162,6 +168,7 @@ class Brain:
         self._conn_lock = asyncio.Lock()  # start / new_session / stop must not overlap (a second client orphans the first)
         self._reader: asyncio.Task | None = None
         self._last_text = ""
+        self._error = ""                # ошибка текущего хода: ask() поднимет её исключением
         self._notes: list[str] = []
         self._pending: list[str] = []   # text of the current step; spoken only if it turns out to be final
         self._turn_started = 0.0
@@ -318,11 +325,14 @@ class Brain:
             self._begin_turn()
             await self.client.query(self._with_notes(text))
             await self._turn_done.wait()
+            if self._error:
+                raise BrainError(self._error)
             return self._last_text
 
     def _begin_turn(self) -> None:
         self.cancelled = False
         self._last_text = ""
+        self._error = ""
         self._pending = []
         self._turn_started = time.monotonic()
         self._spoke_in_turn = False
@@ -370,6 +380,10 @@ class Brain:
             if self._turn_done.is_set():  # a turn Claude started by itself (late injected message, bg task)
                 self._turn_done.clear()
                 self._begin_turn()
+            if getattr(msg, "error", None):  # текст такого сообщения — это ошибка, а не ответ
+                said = " ".join(b.text for b in msg.content if isinstance(b, TextBlock))
+                self._error = f"{msg.error}: {said}".strip()
+                return
             for block in msg.content:
                 if isinstance(block, TextBlock) and block.text.strip():
                     self._pending.append(block.text.strip())
@@ -393,6 +407,11 @@ class Brain:
                 if isinstance(block, ToolResultBlock) and block.is_error:
                     events.emit("tool_error", content=str(block.content)[:1000])
         elif isinstance(msg, ResultMessage):
+            if msg.is_error and not self.cancelled and not self._error:
+                self._error = f"{msg.subtype}: {msg.result or msg.api_error_status or ''}".strip()
+            if self._error:
+                events.emit("brain_error", error=self._error[:300])
+                self._pending = []
             if self._pending:
                 self._last_text = "\n".join(self._pending)
                 self._pending = []
