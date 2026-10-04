@@ -97,7 +97,6 @@ def test_the_limit_moved_the_brain_to_the_next_provider(tmp_path, monkeypatch):
     monkeypatch.setattr(d.brain, "ask", ask)
     monkeypatch.setattr(d.brain, "reconnect", nothing)
     monkeypatch.setattr(d, "earcon", nothing)
-    monkeypatch.setattr(d, "_settle_model", nothing)
     monkeypatch.setattr(d, "notify", lambda *a, **k: None)
     monkeypatch.setattr(fallback, "next_provider", lambda cfg: ("openrouter", "qwen/qwen3-coder"))
 

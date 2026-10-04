@@ -203,7 +203,11 @@ class Brain:
             effort=(b.get("effort") or None) if claude else None,
             permission_mode=b["permission_mode"] if claude else "default",
             system_prompt={"type": "preset", "preset": "claude_code", "append": persona},
-            setting_sources=["user", "project", "local"],
+            # Без "user": оттуда в каждый ход голосового мозга ехала среда разработки человека — его
+            # ~/.claude/CLAUDE.md («веди ПЕРЕДАЧА.md»), 43 навыка чужих плагинов, хуки ponytail и
+            # headroom (PreToolUse на каждый Bash), MCP context7. Минус 6–8 тыс. токенов и задержка
+            # хука на каждую команду (Р-20). Свои правила мозга — в brain/settings.json, плагин — ниже.
+            setting_sources=["project", "local"],
             settings=str(config.REPO_DIR / "brain" / "settings.json"),
             plugins=[{"type": "local", "path": str(config.REPO_DIR / "plugin")}],
             add_dirs=[str(Path.home())],

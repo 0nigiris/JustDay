@@ -1262,21 +1262,6 @@ class Daemon:
         self.notify(t("{where} снова отвечает — вернулся к нему.").format(where=name),
                     icon="dialog-information")
 
-    async def _settle_model(self, back_to) -> None:
-        """Вернуться к прежней паре после работы — молча и уже после ответа."""
-        b = self.cfg["brain"]
-        if not back_to or not b.get("auto_model", True):
-            return
-        provider, model = back_to
-        if (b.get("provider", "claude"), b.get("model", "")) == (provider, model):
-            return
-        b["provider"], b["model"] = provider, model
-        try:
-            await self.brain.reconnect()
-            self.publish(brain_model=model, brain_why="", provider=provider)
-        except Exception:
-            log.exception("не вышло вернуться на %s", model or provider)
-
     async def run_turn(self, text: str, source: str = "voice") -> str:
         self.state = "thinking"
         spoken_before = self._spoken
@@ -1284,7 +1269,11 @@ class Daemon:
         if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again
             return await self.offline_turn(text)
         await self._try_home()
-        was_model = await self._pick_model(text)
+        # Одна модель на разговор: раньше после ответа демон возвращался к модели из конфига (sonnet),
+        # а следующий ход снова уходил на лёгкую — два переподключения `claude --resume` по 1–1,5 с и
+        # сброшенный кэш промпта на каждом ходу (Р-24). Теперь выбранная модель остаётся, пока
+        # следующий выбор или «НУЖНА: …» не скажут другое.
+        await self._pick_model(text)
         try:
             reply = await self.brain.ask(text, source=source)
             # Ничего не говоря вслух про пересадку: человек услышит только ответ.
@@ -1314,9 +1303,7 @@ class Daemon:
                 self._cloud_down_until = time.monotonic() + 300
                 reply = await self.offline_turn(text)
         if gen != self._cancel_gen:  # cancelled: no "done" sound, no follow-up listening
-            spawn(self._settle_model(was_model))
             return ""
-        spawn(self._settle_model(was_model))
         await self.wait_speech_done()
         self.state = "thinking" if self.side and self.side.busy else "idle"
         if self._spoken == spoken_before and source != "event":

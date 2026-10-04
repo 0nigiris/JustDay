@@ -56,7 +56,7 @@ mode = "off"                # off | wake (wake word and follow-ups must be you) 
 [brain]
 # Easier: `justday model list` / `justday model use <provider> <model>`
 provider = "claude"         # claude | ollama | openrouter | deepseek | custom
-model = "sonnet"            # claude: sonnet, opus…; ollama: qwen3.5:9b; openrouter: vendor/model[:free]
+model = "haiku"             # claude: sonnet, opus…; ollama: qwen3.5:9b; openrouter: vendor/model[:free]
 # base_url = ""             # provider = "custom": any Anthropic-compatible endpoint (LiteLLM, vLLM…)
 # context_tokens = 0        # context window of a non-Claude model (0 = provider default)
 effort = "low"              # low = fast replies; heavy thinking is delegated to Opus subagents/workers
