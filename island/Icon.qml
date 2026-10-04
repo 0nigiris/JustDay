@@ -70,13 +70,17 @@ Item {
         smooth: true
         antialiasing: true
     }
-    MultiEffect {
+    // Оба MultiEffect заводятся только когда нужны. Раньше они жили в каждом значке — в сетке меню это сотни
+    // шейдерных объектов, которые ничего не рисуют (`visible: false`), но занимают память и время на создание (Р-42).
+    Loader {
         anchors.fill: parent
-        visible: !!ic.glyph && ic.tint !== JD.text1
-        source: glyphImage
-        colorization: 1
-        colorizationColor: ic.tint
-        brightness: 1
+        active: !!ic.glyph && ic.tint !== JD.text1
+        sourceComponent: MultiEffect {
+            source: glyphImage
+            colorization: 1
+            colorizationColor: ic.tint
+            brightness: 1
+        }
     }
     // Не IconImage из Quickshell: он жёстко просит растр по своему видимому размеру, и увеличенный
     // значок в доке расплывался. Здесь размер растра задаём сами.
@@ -101,38 +105,44 @@ Item {
         antialiasing: true
         asynchronous: ic.loadAsync
     }
-    Image {
-        id: themeImgSrc
-        anchors.fill: parent
-        visible: false
-        source: themeImg.source
-        sourceSize: Qt.size(Math.round(ic.renderSize), Math.round(ic.renderSize))
-        fillMode: Image.PreserveAspectFit
-        mipmap: false
-        smooth: true
-        antialiasing: true
-        asynchronous: ic.loadAsync
-    }
-    // iOS-style glass: keep colour, lift brightness, light colourization only.
+    // Затея со стеклом (iOS-подобная вуаль поверх значка): скрытая копия картинки и эффект над ней — только когда
+    // вуаль включена. Keep colour, lift brightness, light colourization only.
     // Old light/clear used colorization:1 + saturation:0 → flat B&W plates.
-    MultiEffect {
+    Loader {
         anchors.fill: parent
-        visible: !ic.glyph && ic._wash
-        source: themeImgSrc
-        colorization: ic._pal === "mono" ? 0
-                    : ic._pal === "tinted" ? 0.42
-                    : ic._pal === "clear" ? 0.28
-                    : 0.18   // light — soft frost, hue stays
-        colorizationColor: ic._pal === "tinted" ? ic.iconPaletteTint
-                           : ic._pal === "clear" ? "#FFFFFF"
-                           : "#E8EEF6"
-        brightness: ic._pal === "clear" ? 0.22
-                  : ic._pal === "light" ? 0.14
-                  : ic._pal === "tinted" ? 0.06
-                  : 0.0
-        saturation: ic._pal === "mono" ? 0
-                  : ic._pal === "tinted" ? 0.55
-                  : ic._pal === "clear" ? 0.75
-                  : 0.90   // light keeps almost full colour
+        active: !ic.glyph && ic._wash
+        sourceComponent: Item {
+            Image {
+                id: themeImgSrc
+                anchors.fill: parent
+                visible: false
+                source: themeImg.source
+                sourceSize: Qt.size(Math.round(ic.renderSize), Math.round(ic.renderSize))
+                fillMode: Image.PreserveAspectFit
+                mipmap: false
+                smooth: true
+                antialiasing: true
+                asynchronous: ic.loadAsync
+            }
+            MultiEffect {
+                anchors.fill: parent
+                source: themeImgSrc
+                colorization: ic._pal === "mono" ? 0
+                            : ic._pal === "tinted" ? 0.42
+                            : ic._pal === "clear" ? 0.28
+                            : 0.18   // light — soft frost, hue stays
+                colorizationColor: ic._pal === "tinted" ? ic.iconPaletteTint
+                                   : ic._pal === "clear" ? "#FFFFFF"
+                                   : "#E8EEF6"
+                brightness: ic._pal === "clear" ? 0.22
+                          : ic._pal === "light" ? 0.14
+                          : ic._pal === "tinted" ? 0.06
+                          : 0.0
+                saturation: ic._pal === "mono" ? 0
+                          : ic._pal === "tinted" ? 0.55
+                          : ic._pal === "clear" ? 0.75
+                          : 0.90   // light keeps almost full colour
+            }
+        }
     }
 }
