@@ -280,3 +280,34 @@ def test_the_player_could_not_be_turned_off_where_it_was_not_wanted() -> None:
     settings = pathlib.Path("island/SettingsView.qml").read_text(encoding="utf-8")
     for key in ("island.player_peek", "island.player_expanded", "island.player_prefer", "island.player_ignore"):
         assert key in settings, f"{key} нечем включить в окне настроек"
+
+
+def test_the_dock_and_the_tray_sometimes_forgot_to_hide() -> None:
+    """Иногда док и лоток просто оставались на экране и не прятались до перезапуска оболочки.
+
+    Весь уход за край держался на том, что придёт событие «курсор ушёл с полосы». Оно приходит
+    не всегда: курсор уходит в чужое окно, поверхность пересоздаётся, маска меняется. После
+    потерянного события полоса считала, что рука всё ещё на ней, и прятать её было некому.
+    """
+    import pathlib
+
+    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
+    edge = pathlib.Path("island/EdgeReveal.qml").read_text(encoding="utf-8")
+    assert shell.count('property: "bodyHovered"') == 2, \
+        "наведение на док и лоток снова держится на одном событии, без связки"
+    assert "id: watchdog" in edge, "сторож за забытым прятаньем пропал"
+
+
+def test_a_magnified_icon_kept_peeking_out_after_the_dock_hid() -> None:
+    """Ведёшь рукой вверх медленно — док уезжает, а поднятый значок с подписью торчит из-за края.
+
+    Док прятался на высоту карточки, но над карточкой живёт запас под увеличение, и значок под
+    курсором в него поднимается. На эту разницу он и выглядывал.
+    """
+    import pathlib
+    import re
+
+    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
+    away = re.search(r"const away = dockHost\.atTop \? ([^\n]+)", shell)
+    assert away, "правило ухода дока за край пропало"
+    assert "cardHeight" not in away.group(1), "док снова уезжает на высоту карточки, а не вида"

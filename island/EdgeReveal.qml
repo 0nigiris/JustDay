@@ -132,6 +132,21 @@ Item {
                 er.scheduleHide()
         }
     }
+    // Сторож: полоса иногда забывала спрятаться совсем. Весь уход за край держится на том, что
+    // придёт событие «курсор ушёл с полосы», а оно приходит не всегда — курсор может уйти в чужое
+    // окно, поверхность может пересоздаться, маска измениться. Тогда bodyHovered остаётся true
+    // навсегда, прятать некому, и док с лотком висят на экране до перезапуска оболочки.
+    // Поэтому раз в полсекунды проверяем само положение курсора, а не память о событиях.
+    Timer {
+        id: watchdog
+        interval: 500
+        running: er.needHide && er.hovering && !er.keepVisible
+        repeat: true
+        onTriggered: {
+            if (er.revealLocked || er.bodyHovered) return
+            if (!hideTimer.running) hideTimer.restart()
+        }
+    }
     Timer {
         id: overlapDebounce
         interval: er.overlapDebounceMs

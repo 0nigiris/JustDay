@@ -3766,8 +3766,13 @@ ShellRoot {
                     y: dockHost.atTop ? dock.y : dock.y - 220
                 }
                 HoverHandler {
+                    id: dockBodyHover
                     onHoveredChanged: dockReveal.onBodyHover(hovered)
                 }
+                // Та же правда ещё и связкой. Событие onHoveredChanged можно не получить —
+                // курсор ушёл в чужое окно, поверхность пересоздалась, маска поменялась, — и
+                // тогда полоса считает, что рука всё ещё на ней, и не прячется до перезапуска.
+                Binding { target: dockReveal; property: "bodyHovered"; value: dockBodyHover.hovered }
 
                 Binding {
                     target: JD
@@ -3826,7 +3831,11 @@ ShellRoot {
                         const rest = dockHost.atTop
                             ? dockHost.edgeMargin
                             : parent.height - height - dockHost.edgeMargin
-                        const away = dockHost.atTop ? -cardHeight - 20 : cardHeight + 20
+                        // Уезжать надо на всю высоту вида, а не на высоту карточки: над карточкой
+                        // живёт запас под увеличение, и значок под курсором в него поднимается.
+                        // Если вести рукой вверх медленно, док прятался на высоту карточки — и
+                        // поднятый значок вместе с подписью продолжал выглядывать из-за края.
+                        const away = dockHost.atTop ? -(height + 20) : height + 20
                         return rest + (dockWin.shown ? 0 : away)
                     }
                     opacity: 1
@@ -3991,8 +4000,10 @@ ShellRoot {
                     }
                 }
                 HoverHandler {
+                    id: trayBodyHover
                     onHoveredChanged: trayReveal.onBodyHover(hovered)
                 }
+                Binding { target: trayReveal; property: "bodyHovered"; value: trayBodyHover.hovered }
 
                 // Clicks pass everywhere except the strip and the edge summon strip.
                 mask: Region { item: trayWin.shown ? tray : trayEdge }
