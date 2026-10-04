@@ -488,3 +488,22 @@ def test_the_bar_cat_stood_still_and_told_no_numbers(monkeypatch) -> None:
     except asyncio.CancelledError:
         pass
     assert {"cpu": 40.0, "mem": 63.0} in sent
+
+
+def test_spotlight_jumped_down_and_flashed_while_closing() -> None:
+    """Закрытый Spotlight на прощание уезжал вниз к доку и мигал сеткой программ (Hikisey).
+
+    Проба в живом островке: до правки карточка в первые 50 мс после закрытия стояла на y=728
+    вместо 96 и уже показывала полное меню. Режим поиска должен дожить до конца угасания.
+    """
+    import pathlib
+    import re
+
+    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    close = re.search(r"function closeMenu\(\) \{(.+?)\n    \}", jd, re.S).group(1)
+    assert "menuOpen = false" in close
+    assert "menuSearchMode" not in close, "закрытие снова переключает Spotlight в меню посреди угасания"
+    assert "menuQuery" not in close, "закрытие снова стирает строку поиска посреди угасания"
+    for opener in ("openMenu", "openSearch"):
+        body = re.search(rf"function {opener}\(\) \{{(.+?)\n    \}}", jd, re.S).group(1)
+        assert "menuSearchMode = " in body and 'menuQuery = ""' in body, f"{opener} не сбрасывает прошлый поиск"

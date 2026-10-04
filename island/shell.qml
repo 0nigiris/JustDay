@@ -107,6 +107,14 @@ ShellRoot {
             return JSON.stringify({ overTray: JD.catOverTray })
         }
         function catDrop(): string { JD.catDrop(); return JD.catPlace }
+        // Spotlight без клавиш: открыть или закрыть и сказать, где карточка и что в ней. Рывок
+        // при закрытии ловится серией таких ответов в первые полсекунды.
+        function spotlight(on: bool): void { if (on) JD.openSearch(); else JD.closeMenu() }
+        function menuState(): string {
+            return JSON.stringify({ open: JD.menuOpen, search: JD.menuSearchMode, alive: menuWin.alive,
+                                    body: menuBody.sourceComponent === spotlightBody ? "spotlight" : "menu",
+                                    card: [menuCard.x, menuCard.y, menuCard.width, menuCard.height, menuCard.opacity.toFixed(2)] })
+        }
         // Проверка движка увеличения без мыши: ставим курсор в заданную точку полосы, даём физике
         // сойтись и отдаём получившуюся раскладку. Синтетическая мышь на вейланде врёт (ускорение
         // и вторые мониторы), а «значки расступаются» иначе никак не проверить числом.

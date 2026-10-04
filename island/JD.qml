@@ -520,12 +520,12 @@ Singleton {
         closeAll()
         searchMenu()                   // пустой запрос → недавние (launcher.items)
     }
+    // Закрытие гасит только menuOpen. Режим, запрос и найденное сбрасывают openMenu и openSearch.
+    // Раньше всё обнулялось здесь же — и пока Spotlight таял, он уже был «полным меню»: карточка
+    // уезжала вниз к доку, а вместо строк поиска на миг вспыхивала сетка программ.
     function closeMenu() {
         menuOpen = false
-        menuQuery = ""
-        menuFound = []
         menuConfirm = ""
-        menuSearchMode = false
     }
     function toggleMenu() { menuOpen && !menuSearchMode ? closeMenu() : openMenu() }
     function toggleSearch() { menuOpen && menuSearchMode ? closeMenu() : openSearch() }
