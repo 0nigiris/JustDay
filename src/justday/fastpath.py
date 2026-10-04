@@ -155,6 +155,34 @@ def voice_switch(text: str) -> bool | None:
 
 last_icon = ""  # freedesktop icon of the last handled command (shown by the Dynamic Island)
 
+# «Который час» уходил в облако: ход мозга с историей разговора — секунды ожидания и десятки тысяч
+# токенов подписки ради того, что знают часы на этой же машине (Р-26).
+TIME_Q = re.compile(r"^(который час|сколько (сейчас )?времени|сколько время|время|what time is it|time)$")
+DATE_Q = re.compile(r"^(какое (сегодня )?число|какой (сегодня )?день( недели)?|какая (сегодня )?дата|"
+                    r"какое сегодня|что сегодня за день|what day is it|what is the date|what s the date)$")
+THANKS = re.compile(r"^(спасибо|спс|благодарю|пасиб\w*|спасибо большое|большое спасибо|thanks|thank you)$")
+_MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября",
+           "ноября", "декабря"]
+_WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+
+
+def small_talk(text: str, now=None) -> str | None:
+    """Ответ на вопрос, которому не нужна модель: время, дата, «спасибо». Текст — для голоса."""
+    from datetime import datetime
+
+    from . import numerals
+
+    now = now or datetime.now()
+    q = _clean(text)
+    if TIME_Q.match(q):
+        return _t("Сейчас {clock}.", clock=numerals.clock(now.hour, now.minute))
+    if DATE_Q.match(q):
+        return _t("Сегодня {weekday}, {day} {month}.", weekday=_WEEKDAYS[now.weekday()],
+                  day=numerals.ordinal(now.day, "ое"), month=_MONTHS[now.month - 1])
+    if THANKS.match(q):
+        return _t("Да не за что.")
+    return None
+
 
 def try_handle(text: str) -> str | None:
     """Execute the command if it is trivial. Returns a short description of what was done, else None."""

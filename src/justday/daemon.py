@@ -693,6 +693,9 @@ class Daemon:
             return await self.session_switch(what)
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
+        if (said := fastpath.small_talk(text)) is not None:
+            await self.say(said)
+            return said
         gen = self._cancel_gen
         done = await asyncio.get_running_loop().run_in_executor(None, fastpath.try_handle, text)
         if gen != self._cancel_gen:
