@@ -33,12 +33,16 @@ def _app_dirs() -> list[Path]:
     return out
 
 
-_apps_cache: tuple[float, list[dict]] = (0.0, [])
+# None, not (0.0, []). time.monotonic() is seconds since boot, so a zero
+# timestamp looks fresh for the first half-minute and list_apps() returns []
+# without reading .desktop files. catalog() then saves a dock with no pins.
+_apps_cache: tuple[float, list[dict]] | None = None
 
 
 def list_apps() -> list[dict]:
     global _apps_cache
-    if time.monotonic() - _apps_cache[0] < 30:
+    now = time.monotonic()
+    if _apps_cache is not None and now - _apps_cache[0] < 30:
         return _apps_cache[1]
     apps: dict[str, dict] = {}
     for d in _app_dirs():

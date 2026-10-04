@@ -61,8 +61,9 @@ Item {
         source: ic.glyph ? Quickshell.shellDir + "/icons/" + ic.glyph + ".svg" : ""
         sourceSize: Qt.size(ic.renderSize, ic.renderSize)
         fillMode: Image.PreserveAspectFit
-        mipmap: true
+        mipmap: false
         smooth: true
+        antialiasing: true
     }
     MultiEffect {
         anchors.fill: parent
@@ -92,6 +93,7 @@ Item {
         fillMode: Image.PreserveAspectFit
         mipmap: false
         smooth: true
+        antialiasing: true
         asynchronous: !ic.syncLoad
     }
     Image {
@@ -103,6 +105,7 @@ Item {
         fillMode: Image.PreserveAspectFit
         mipmap: false
         smooth: true
+        antialiasing: true
         asynchronous: !ic.syncLoad
     }
     // iOS-style glass: keep colour, lift brightness, light colourization only.

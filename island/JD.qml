@@ -1223,7 +1223,7 @@ Singleton {
                     flush()
                 }
             }
-            onError: jd.lastMessage = 0
+            onError: jd.lastMessage = Date.now()
             parser: SplitParser {
                 onRead: line => {
                     jd.lastMessage = Date.now()
@@ -1242,7 +1242,11 @@ Singleton {
         interval: 2000
         repeat: true
         running: true
-        onTriggered: if (!jd.linked || Date.now() - jd.lastMessage > 12000) { jd.lastMessage = Date.now(); jd.reconnect() }
+        onTriggered: {
+            const silent = Date.now() - jd.lastMessage
+            const due = jd.linked ? silent > 12000 : silent > 4000
+            if (due) { jd.lastMessage = Date.now(); jd.reconnect() }
+        }
     }
 
     // one-shot commands: a short-lived connection per request (the daemon answers one line and closes)

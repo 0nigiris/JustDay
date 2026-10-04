@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from . import config
@@ -76,12 +78,32 @@ def pick() -> tuple[str, str]:
     return "panel", f"сеанс {kind or 'не опознан'}: острову нужен wlr-layer-shell (только Wayland)"
 
 
+
+def wait_daemon(timeout: float = 12.0) -> bool:
+    path = config.SOCKET_PATH
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(0.4)
+                s.connect(str(path))
+            return True
+        except OSError:
+            time.sleep(0.25)
+    return False
+
 def run() -> int:
     """Запустить то, что подходит этому сеансу. Остров подменяет собой этот же процесс, чтобы
     systemd следил за ним самим, а не за обёрткой."""
+    os.environ.setdefault("QS_DISABLE_FILE_WATCHER", "1")
+    os.environ.setdefault("QS_NO_RELOAD_POPUP", "1")
     what, why = pick()
     print(f"justday ui: {what} — {why}", file=sys.stderr, flush=True)
     if what == "island":
+        if wait_daemon():
+            print("justday ui: daemon socket ready", file=sys.stderr, flush=True)
+        else:
+            print("justday ui: socket missing, attaching live", file=sys.stderr, flush=True)
         exe = quickshell()
         # Цикл отрисовки Qt. «basic» (его Qt выбирает сам) крутит анимации таймером на 16 мс —
         # шестьдесят шагов в секунду при любой развёртке, и на 165 герцах движение идёт ступеньками.

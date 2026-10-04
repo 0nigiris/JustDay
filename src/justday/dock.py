@@ -624,6 +624,8 @@ def catalog_cached() -> dict:
     try:
         got = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
         if isinstance(got, dict) and isinstance(got.get("items"), list) and got.get("pinned") is not None:
+            if pinned() and not got.get("items"):
+                return catalog()
             # Keep trash/launcher fresh cheaply.
             got["trash_full"] = trash_full()
             launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
@@ -737,5 +739,17 @@ def catalog() -> dict:
     out = {"launcher": launcher, "cat": cat_frames(), "items": items,
            "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP),
            "separate": sorted(SEPARATE_INSTANCES), "trash_full": trash_full()}
+    if want and not items:
+        prev = None
+        try:
+            prev = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            prev = None
+        if isinstance(prev, dict) and (prev.get("items") or []):
+            prev["trash_full"] = out["trash_full"]
+            if out.get("launcher"):
+                prev["launcher"] = out["launcher"]
+            return prev
+        return out
     _save_catalog(out)
     return out

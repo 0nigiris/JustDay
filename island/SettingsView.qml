@@ -116,6 +116,81 @@ Item {
     }
     Component.onCompleted: reload()
     Timer { id: toastTimer; interval: 2600; onTriggered: win.toast = "" }
+    Item {
+        id: trayQuitter
+        visible: false
+        property var target: null
+        property var queue: []
+        property bool rooted: false
+        property int seen: 0
+        property int emptyTries: 0
+        property var current: null
+        QsMenuOpener { id: trayQuitOpener; menu: trayQuitter.current }
+        function looksQuit(text) {
+            const s = String(text || "").trim().toLowerCase()
+            if (!s) return false
+            if (s.indexOf("quit") === 0 || s.indexOf("exit") === 0) return true
+            if (s.indexOf("выйти") === 0 || s.indexOf("выход") === 0 || s.indexOf("завершить") === 0) return true
+            if (s === "close" || s === "закрыть") return true
+            return false
+        }
+        function start(item) {
+            target = item
+            queue = []
+            rooted = false
+            seen = 0
+            emptyTries = 0
+            if (!item || !item.menu) {
+                win.notify(JD.tr("У этого значка нет меню — закрыть нечем"))
+                current = null
+                return
+            }
+            current = item.menu
+            pause.restart()
+        }
+        function fire(entry) {
+            if (entry.sendTriggered) entry.sendTriggered()
+            else entry.triggered()
+            const name = (target && (target.title || target.id)) || ""
+            win.notify(JD.tr("Закрываю ") + name)
+            current = null
+            queue = []
+        }
+        function fail() {
+            win.notify(JD.tr("В меню нет пункта выхода"))
+            current = null
+            queue = []
+        }
+        function scan() {
+            const raw = (!current || !trayQuitOpener.children) ? [] : trayQuitOpener.children.values
+            if (!raw.length) {
+                if (emptyTries < 4) { emptyTries++; pause.restart(); return }
+                nextMenu()
+                return
+            }
+            for (let i = 0; i < raw.length; i++) {
+                const e = raw[i]
+                if (!e || e.isSeparator || e.hasChildren || e.enabled === false) continue
+                if (looksQuit(e.text)) { fire(e); return }
+            }
+            if (!rooted) {
+                for (let i = 0; i < raw.length; i++) {
+                    const e = raw[i]
+                    if (e && e.hasChildren && e.enabled !== false) queue.push(e)
+                }
+                rooted = true
+            }
+            nextMenu()
+        }
+        function nextMenu() {
+            if (!queue.length || seen >= 16) { fail(); return }
+            current = queue.shift()
+            seen++
+            emptyTries = 0
+            pause.restart()
+        }
+        Timer { id: pause; interval: 220; onTriggered: trayQuitter.scan() }
+    }
 
     // ───────────── layout ─────────────
     RowLayout {
@@ -1246,9 +1321,19 @@ Item {
                         readonly property string ident: modelData.id || modelData.title || ""
                         title: modelData.title || modelData.id || JD.tr("без имени")
                         subtitle: modelData.tooltipTitle && modelData.tooltipTitle !== title ? modelData.tooltipTitle : ""
-                        Toggle {
-                            checked: JD.trayShows(modelData)
-                            onToggled: v => { JD.trayHideItem(modelData, !v); win.notify(JD.tr("Сохранено")) }
+                        RowLayout {
+                            spacing: 8
+                            Btn {
+                                glyph: "log-out"
+                                text: ""
+                                danger: true
+                                implicitWidth: 34
+                                onClicked: trayQuitter.start(modelData)
+                            }
+                            Toggle {
+                                checked: JD.trayShows(modelData)
+                                onToggled: v => { JD.trayHideItem(modelData, !v); win.notify(JD.tr("Сохранено")) }
+                            }
                         }
                     }
                 }
@@ -1258,7 +1343,7 @@ Item {
                     subtitle: JD.tr("Ни одна запущенная программа не положила в него значок")
                 }
             }
-            Note { text: JD.tr("Громкость отдельной программы — правой кнопкой по её значку в доке, пока она что-то играет. Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
+            Note { text: JD.tr("Громкость отдельной программы — правой кнопкой по её значку в доке, пока она что-то играет. Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Кнопка выхода в этом списке закрывает программу, даже если значок спрятан. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
         }
     }
 

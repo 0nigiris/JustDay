@@ -106,6 +106,11 @@ Item {
     // под курсором и высоты карточке не добавляет.
     readonly property real labelRoom: labelMode === "always" ? 14 : 0
     readonly property real cardHeight: icon + pad * 2 + dotRoom + restDrop + labelRoom
+    // Resting app glyph, centered in the tray above the label strip. Magnify grows
+    // away from this edge so the row stays put; dots sit just past rowBottom/rowTop.
+    readonly property real trayBody: cardHeight - labelRoom
+    readonly property real rowBottom: (trayBody + icon * 1.08) / 2
+    readonly property real rowTop: (trayBody - icon * 1.08) / 2
 
     implicitWidth: laneLength
     implicitHeight: cardHeight + headroom
@@ -165,8 +170,28 @@ Item {
     // уходит один раз, когда значок отпустили.
     readonly property bool reorder: JD.dockCfg.reorder !== false
     property string dragKey: ""          // что тащим
+    property string pressKey: ""         // под каким закреплённым нажали (до порога DragHandler)
     property real dragLocal: 0           // курсор в координатах карточки
+    property real dragSceneX: 0          // курсор в сцене: значок клеится к нему, а не к плывущей карточке
+    property bool dragMoved: false       // жест сдвинул значок: отпускание не должно ещё и запустить его
+    property real lastCycle: 0
     property var pinOverride: []         // порядок закреплённого, пока тащим (и до ответа демона)
+    // Зрительный порядок всех значков программ, включая незакреплённые. Пустой — естественный.
+    // Без него список окон приходит каждый раз в другом порядке, и открытый значок на кадр
+    // уезжает к яблоку, потом возвращается.
+    property var appOrder: []
+    property var runMemo: []
+    // Визуальный порядок живёт отдельно от модели: модель во время жеста не меняется, Repeater
+    // не пересоздаёт значки, жест не обрывается. Соседи едут пружиной (slideOff), не Behavior.
+    property var dragOrder: []
+    property var dragBase: []            // замороженные x/w ячеек: увеличение во время жеста не едет
+    property var laneHold: null          // полоса не пересобирается, пока палец на значке
+    property var slideOff: []
+    property var slideVel: []
+    property int slideTick: 0
+    property bool slideOn: false
+    property bool dropAnim: false
+    property bool dropCommit: false
 
     readonly property var entries: {
         const out = [], by = grouped.by, taken = ({})
@@ -174,12 +199,33 @@ Item {
         // убрали лишнее — местный порядок устарел, и слушаем демона.
         const known = JD.dockItems
         let pinnedItems = known
-        if (dv.pinOverride.length === known.length && known.length) {
+        if (!dv.appOrder.length && dv.pinOverride.length === known.length && known.length) {
             const mapped = dv.pinOverride.map(k => known.find(i => i.key === k)).filter(i => !!i)
             if (mapped.length === known.length) pinnedItems = mapped
         }
-        for (const it of pinnedItems) taken[it.key] = true
-        const extra = showRunning ? grouped.order.filter(k => !taken[k]) : []
+        const pinnedBy = ({})
+        for (const it of pinnedItems) { taken[it.key] = true; pinnedBy[it.key] = it }
+        const rawExtra = showRunning ? grouped.order.filter(k => !taken[k] && by[k]) : []
+        const extra = []
+        const extraSeen = ({})
+        const memo = dv.appOrder.length ? dv.appOrder : dv.runMemo
+        for (const k of memo) {
+            if (!taken[k] && by[k] && !extraSeen[k]) { extra.push(k); extraSeen[k] = true }
+        }
+        for (const k of rawExtra) if (!extraSeen[k]) { extra.push(k); extraSeen[k] = true }
+        const alive = ({})
+        for (const it of pinnedItems) alive[it.key] = "pin"
+        for (const k of extra) alive[k] = "run"
+        const visual = []
+        const seen = ({})
+        const seed = dv.appOrder.length ? dv.appOrder : pinnedItems.map(it => it.key).concat(extra)
+        for (const k of seed) if (alive[k] && !seen[k]) { visual.push(k); seen[k] = true }
+        let insertAt = visual.findIndex(k => alive[k] === "run")
+        if (insertAt < 0) insertAt = visual.length
+        for (const it of pinnedItems) if (!seen[it.key]) {
+            visual.splice(insertAt, 0, it.key); seen[it.key] = true; insertAt++
+        }
+        for (const k of extra) if (!seen[k]) { visual.push(k); seen[k] = true }
 
         // Черта, за которой ничего нет, — это черта в пустоте. Поэтому разделители и промежутки
         // кладём только между тем, что действительно встало в полосу.
@@ -199,17 +245,23 @@ Item {
             else if (word === "cat") { if (showCat) put({ t: "cat" }) }
             else if (word === "clock") { if (showClock) put({ t: "clock" }) }
             else if (word === "tray") { if (showTrayButton) put({ t: "tray" }) }
-            else if (word === "pinned") {
-                for (const it of pinnedItems) {
-                    const live = by[it.key]
-                    put({ t: "app", key: it.key, kind: it.kind, id: it.id, name: it.name, icon: it.icon,
-                          pinned: true, wins: live ? live.wins : [] })
-                }
-            } else if (word === "running") {
-                for (const k of extra) {
-                    const g = by[k]
-                    put({ t: "app", key: k, kind: g.kind, id: g.id, name: g.name, icon: g.icon,
-                          pinned: false, wins: g.wins })
+            else if (word === "pinned" || word === "running") {
+                // Оба слова — одна полоса значков. Иначе перетащенный открытый значок
+                // после отпускания возвращается в свой блок и телепортируется.
+                const ip = layoutWords.indexOf("pinned"), ir = layoutWords.indexOf("running")
+                if (ip >= 0 && ir >= 0 && word !== (ip < ir ? "pinned" : "running")) continue
+                for (const key of visual) {
+                    if (alive[key] === "pin") {
+                        const it = pinnedBy[key]
+                        const live = by[key]
+                        put({ t: "app", key: key, kind: it.kind, id: it.id, name: it.name, icon: it.icon,
+                              pinned: true, wins: live ? live.wins : [] })
+                    } else {
+                        const g = by[key]
+                        if (!g) continue
+                        put({ t: "app", key: key, kind: g.kind, id: g.id, name: g.name, icon: g.icon,
+                              pinned: false, wins: g.wins })
+                    }
                 }
             }
         }
@@ -220,6 +272,9 @@ Item {
 
     // Ячейки по порядку с готовыми размерами: разделитель узкий, остальное — одинаковые квадраты.
     readonly property var lane: {
+        // Жест держит свою копию: новое окно или другой порядок окон не пересоздаёт делегаты.
+        if ((dv.dragKey !== "" || dv.dropAnim) && dv.laneHold && dv.laneHold.length)
+            return dv.laneHold
         const out = []
         let at = pad
         for (let i = 0; i < entries.length; i++) {
@@ -247,6 +302,13 @@ Item {
     readonly property real springK: Math.max(10, Math.min(600, JD.dockCfg.spring === undefined ? 180 : JD.dockCfg.spring))
     readonly property real springDamp: animStyle === "smooth" ? 1.0
         : Math.max(0.3, Math.min(1, JD.dockCfg.damping === undefined ? 0.8 : JD.dockCfg.damping))
+    // Raster size for every dock glyph: magnified logical pixels times DPR times 2.
+    // A parent scale transform was upsampling a small texture, which pixelated the dock.
+    readonly property int iconPx: {
+        const dpr = Math.max(1, (typeof Screen !== "undefined" && Screen.devicePixelRatio) ? Screen.devicePixelRatio : 1)
+        const mag = 1 + Math.max(0, amp)
+        return Math.max(96, Math.min(384, Math.round(icon * mag * dpr * 2)))
+    }
 
     property real pointerScene: -99999   // курсор в координатах окна: он-то на месте и стоит
     property bool engaged: false         // курсор в полосе
@@ -265,8 +327,12 @@ Item {
         while (s.length < n) { s.push(1); v.push(0) }
         sizes = s; speeds = v; tick++
     }
-    onLaneChanged: { resetPhysics(); iconPublish.restart() }
-    Component.onCompleted: { resetPhysics(); iconPublish.restart() }
+    onLaneChanged: {
+        if (dragKey !== "" || dropAnim || (laneHold && laneHold.length)) return
+        resetPhysics(); iconPublish.restart()
+    }
+    onGroupedChanged: refreshRunMemo()
+    Component.onCompleted: { resetPhysics(); iconPublish.restart(); refreshRunMemo() }
 
     // Середина, вокруг которой полоса растёт. Задаётся снаружи: центрирует док окно, а не он сам.
     property real anchorCentre: 0
@@ -329,21 +395,86 @@ Item {
     // пружина ползла к размеру секундами, и увеличение выглядело вялым, хотя цель была верная.
     function stepPhysics(dt) {
         // После пропущенного кадра нельзя швырять пружину на всю задолженность — она взорвётся.
+        // Жёсткую пружину режем на шаги 1/170, раскладку публикуем один раз за кадр.
         dt = Math.max(0.001, Math.min(0.033, dt))
+        // Увеличение и длина карточки заморожены, пока значок в руке или доезжает в ячейку.
+        // Иначе пружина размера двигает полосу под курсором, и хват дёргается.
+        if (dragKey !== "" || dropAnim) {
+            if (!slideOn) return false
+            return stepSlide(dt)
+        }
         const u = restUnderPointer()
         const n = lane.length
         const s = sizes, v = speeds
-        const omega = Math.sqrt(springK)          // собственная частота
-        const c = 2 * springDamp * omega          // критическое затухание — при springDamp = 1
+        const omega = Math.sqrt(springK)
+        const c = 2 * springDamp * omega
         let moving = false
         if (wheel) moving = settleWheel(u, dt) || moving
+        let left = dt
+        const hmax = 1 / 170
+        while (left > 0.00005) {
+            const h = Math.min(hmax, left)
+            left -= h
+            for (let i = 0; i < n; i++) {
+                const target = targetSize(i, u)
+                v[i] += (-(s[i] - target) * springK - c * v[i]) * h
+                s[i] += v[i] * h
+            }
+        }
         for (let i = 0; i < n; i++) {
-            const t = targetSize(i, u)
-            v[i] += (-(s[i] - t) * springK - c * v[i]) * dt
-            s[i] += v[i] * dt
-            if (Math.abs(t - s[i]) > 0.0015 || Math.abs(v[i]) > 0.0015) moving = true
+            const target = targetSize(i, u)
+            if (Math.abs(target - s[i]) < 0.0025 && Math.abs(v[i]) < 0.006) {
+                s[i] = target
+                v[i] = 0
+            } else {
+                moving = true
+            }
         }
         tick++
+        if (slideOn) moving = stepSlide(dt) || moving
+        return moving
+    }
+
+    // Сдвиг значков при перестановке. Цель — чужая ячейка, не новый порядок модели: модель
+    // меняется один раз, когда пружина уже доехала. Иначе Repeater мигает и значки телепортируются.
+    function stepSlide(dt) {
+        const n = lane.length
+        if (!n) return false
+        if (slideOff.length !== n || slideVel.length !== n) {
+            const o = slideOff.slice(), v = slideVel.slice()
+            while (o.length < n) { o.push(0); v.push(0) }
+            if (o.length > n) { o.length = n; v.length = n }
+            slideOff = o
+            slideVel = v
+        }
+        const target = slideTargets()
+        const off = slideOff
+        const vel = slideVel
+        // Критическое затухание, мелкие шаги: без перелёта и без щелчка в конце.
+        const omega = 16
+        const k = omega * omega
+        const c = 2 * omega
+        let moving = false
+        let left = dt
+        const hmax = 1 / 170
+        while (left > 0.00005) {
+            const h = Math.min(hmax, left)
+            left -= h
+            for (let i = 0; i < n; i++) {
+                const goal = target[i] || 0
+                vel[i] += (-(off[i] - goal) * k - c * vel[i]) * h
+                off[i] += vel[i] * h
+            }
+        }
+        for (let i = 0; i < n; i++) {
+            const goal = target[i] || 0
+            if (Math.abs(off[i] - goal) < 0.15 && Math.abs(vel[i]) < 2) {
+                off[i] = goal
+                vel[i] = 0
+            } else moving = true
+        }
+        slideTick++
+        if (!moving && dropAnim) dropCommit = true
         return moving
     }
 
@@ -429,7 +560,11 @@ Item {
     FrameAnimation {
         id: physics
         running: false
-        onTriggered: if (!dv.stepPhysics(frameTime)) running = false
+        onTriggered: {
+            const go = dv.stepPhysics(frameTime)
+            if (dv.dropCommit) dv.finishDrop()
+            if (!go) running = false
+        }
     }
     // «Сразу» — это не «без пружины с прежними настройками», а вовсе без физики: размер равен цели
     // в тот же кадр. Раньше этот стиль не делал ничего и молча оставался пружиной.
@@ -439,13 +574,32 @@ Item {
 
     function wake() {
         if (JD.animOn && animStyle !== "instant") physics.running = true
-        else { physics.running = false; instantly() }
+        else { physics.running = false; instantly(); if (dropCommit) finishDrop() }
     }
     // Анимации выключены совсем — значит просто ставим целевые размеры без физики.
     function instantly() {
+        if (dragKey !== "" || dropAnim) {
+            if (!slideOn) return
+            const target = slideTargets()
+            const o = [], v = []
+            for (let i = 0; i < lane.length; i++) { o.push(target[i] || 0); v.push(0) }
+            slideOff = o
+            slideVel = v
+            slideTick++
+            if (dropAnim) dropCommit = true
+            return
+        }
         const u = restUnderPointer()
         for (let i = 0; i < lane.length; i++) { sizes[i] = targetSize(i, u); speeds[i] = 0 }
         tick++
+        if (!slideOn) return
+        const target = slideTargets()
+        const o = [], v = []
+        for (let i = 0; i < lane.length; i++) { o.push(target[i] || 0); v.push(0) }
+        slideOff = o
+        slideVel = v
+        slideTick++
+        if (dropAnim) dropCommit = true
     }
 
     // Нарисованная раскладка: позиции пересчитываются из ТЕХ ЖЕ размеров, которые сейчас рисуются.
@@ -500,7 +654,16 @@ Item {
 
         HoverHandler {
             id: edgeHover
-            onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.engaged = true; dv.wake() }
+            onPointChanged: {
+                const x = point.scenePosition.x
+                // Пока значок в руке, он клеится к курсору, даже если DragHandler
+                // не отдал очередной translation.
+                if (dv.dragKey !== "") dv.moveDrag(x)
+                if (dv.engaged && Math.abs(x - dv.pointerScene) < 0.4 && dv.dragKey === "") return
+                dv.pointerScene = x
+                dv.engaged = true
+                dv.wake()
+            }
             onHoveredChanged: {
                 if (hovered) { dv.cancelLeave(); dv.engaged = true; dv.pointerScene = point.scenePosition.x }
                 else if (!cardHover.hovered && !tipHover.hovered) dv.leaveLane()
@@ -555,11 +718,55 @@ Item {
         // когда полоса под ним растёт и переезжает, — и получилась бы обратная связь.
         HoverHandler {
             id: cardHover
-            onPointChanged: { dv.pointerScene = point.scenePosition.x; dv.engaged = true; dv.wake() }
+            onPointChanged: {
+                const x = point.scenePosition.x
+                if (dv.engaged && Math.abs(x - dv.pointerScene) < 0.4) return
+                dv.pointerScene = x
+                dv.engaged = true
+                dv.wake()
+            }
             onHoveredChanged: {
                 if (hovered) { dv.cancelLeave(); dv.engaged = true; dv.pointerScene = point.scenePosition.x }
                 else if (!edgeHover.hovered && !tipHover.hovered) dv.leaveLane()
                 dv.wake()
+            }
+        }
+
+
+        // Перетаскивание живёт на карточке, а не на значке: пока тащат, порядок в модели
+        // меняется и Repeater пересоздаёт делегаты — DragHandler на слоте умер бы на первом же
+        // шаге, и жест обрывался бы. Здесь handler переживает перестановку.
+        DragHandler {
+            id: dockReorder
+            enabled: dv.reorder
+            target: null
+            dragThreshold: 2
+            xAxis.enabled: true
+            yAxis.enabled: false
+            // Жест нельзя отбирать посреди удержания: TapHandler срывал его, значок
+            // отпускался и пружиной уезжал обратно.
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+            onActiveChanged: {
+                if (active) {
+                    dv.dragMoved = false
+                    const x = centroid.scenePosition.x
+                    dv.dragSceneX = x
+                    dv.dragLocal = x - dv.x - card.x
+                    const key = dv.pressKey || dv.appKeyAtSceneX(x)
+                    if (key) dv.startDrag(key)
+                    if (dv.dragKey !== "") dv.moveDrag(x)
+                } else {
+                    if (dv.dragKey !== "") dv.endDrag()
+                    dv.pressKey = ""
+                }
+            }
+            // centroidChanged — это смена точки, не её координаты, и на движении не приходит.
+            // translation идёт за курсором: иначе значок замирает там, где его схватили.
+            onTranslationChanged: if (active) {
+                if (Math.abs(activeTranslation.x) > 6) dv.dragMoved = true
+                const x = centroid.scenePosition.x
+                dv.dragSceneX = x
+                if (dv.dragKey !== "") dv.moveDrag(x)
             }
         }
 
@@ -575,25 +782,28 @@ Item {
                 readonly property bool active: wins.some(w => w.activated && !w.minimized)
                 readonly property var g: dv.geom[index] || ({ x: e.at, w: e.w, k: 1 })
                 readonly property real k: g.k
-                // Тащимый значок идёт за курсором, а его место в полосе уже занято соседями:
-                // так видно, куда он встанет, ещё до того, как его отпустили.
+                // Тащимый значок идёт за курсором. Соседи сдвигаются пружиной slideOff: модель
+                // полосы при этом не меняется, делегаты не пересоздаются и жест не обрывается.
+                // Behavior on x сюда нельзя — при выключении на полпути Qt бросает привязку.
                 readonly property bool dragged: dv.dragKey !== "" && dv.dragKey === e.key
-                // Своей анимации у места быть не должно. Она тут была — и ломала док: анимация
-                // включалась только на время перетаскивания, а выключалась ровно в тот миг, когда
-                // ещё летела. Qt в этом случае animation останавливает, значение оставляет на
-                // полпути, и привязка молчит, пока не поменяется то, от чего она зависит. Значки
-                // так и замирали внахлёст. Место значка считает физика полосы — и только она.
-                // Значок в руке идёт за курсором, но не улетает из своей дырки: раньше он уезжал на
-                // пол-ячейки и ложился поверх соседа, хотя рядом зияло его собственное место —
-                // и это читалось как «док сломался». Теперь он держится дырки, а курсор тянет его
-                // за собой на четверть ячейки — ровно настолько, чтобы рука чувствовала вес.
-                readonly property real carried: Math.max(g.x - dv.cell * 0.25,
-                                                         Math.min(g.x + dv.cell * 0.25, dv.dragLocal - g.w / 2))
-                x: (dragged ? carried : g.x)
-                   + (dv.wheel && dv.nudges.length === dv.lane.length ? dv.nudges[index] : 0)
+                // Lift only while the finger is down. No Behavior: on release it is back
+                // on the same baseline as the others, not still sinking past the edge.
+                readonly property real dragLift: dragged ? Math.round(dv.icon * 0.22) : 0
+                // Замороженная ячейка: живой geom под курсором дёргал и хват, и соседей.
+                readonly property bool flowHold: dv.slideOn && dv.dragBase.length > index
+                readonly property real baseX: flowHold ? dv.dragBase[index].x : g.x
+                readonly property real baseW: flowHold ? dv.dragBase[index].w : g.w
+                readonly property real nudgeX: (!flowHold && dv.wheel && dv.nudges.length === dv.lane.length) ? dv.nudges[index] : 0
+                readonly property real slideX: {
+                    dv.slideTick
+                    return (dv.slideOn && dv.slideOff.length > index) ? dv.slideOff[index] : 0
+                }
+                // Хват — в координатах сцены, каждый кадр. Ширина ячейки заморожена,
+                // поэтому центр не уезжает, когда пружина размера дышит.
+                x: (dragged ? (dv.dragSceneX - dv.x - card.x - baseW / 2) : (baseX + slideX)) + nudgeX
                 z: dragged ? 2 : 0
                 y: 0
-                width: g.w
+                width: flowHold ? baseW : g.w
                 height: card.height
 
                 // Разделитель: волосяная черта, а не пустота. Без неё закреплённое и просто
@@ -610,29 +820,24 @@ Item {
                 Item {
                     id: art
                     visible: slot.e.t !== "sep"
-                    width: dv.icon
-                    height: dv.icon
                     anchors.horizontalCenter: parent.horizontalCenter
-                    // Closed icons sink slightly; running stay at the previous normal height.
-                    // Grow from the dock edge so magnification still feels anchored.
-                    readonly property real baseY: dv.atTop
-                        ? (dv.pad + dv.dotRoom + (slot.running ? 0 : dv.restDrop))
-                        : (dv.pad + (slot.running ? 0 : dv.restDrop))
-                    y: baseY + slot.bounce
-                    Behavior on y { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                     // Размер уже посчитан шагом физики — здесь только показываем. Своей анимации
                     // тут быть не должно: она разошлась бы с раскладкой, и значки бы налезли.
                     // Та же история, что и с местом: размер под пальцем считает физика, а
                     // взятый значок просто чуть крупнее. Анимации тут нет нарочно — ей было бы
                     // где замереть на полпути.
-                    // Press feedback is macOS-like (subtle scale + light fade). Do NOT drop
-                    // opacity to ~0.7: on a dark dock that reads as a black flash.
-                    property real pressScale: slotTap.pressed ? 0.9 : 1
-                    Behavior on pressScale { enabled: JD.animOn; NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                    scale: slot.k * (slot.dragged ? 1.08 : 1) * (drop.containsDrag ? 1.14 : 1) * pressScale
-                    Behavior on scale { enabled: JD.animOn && drop.containsDrag
-                                        NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
-                    transformOrigin: dv.atTop ? Item.Top : Item.Bottom
+                    // Size the glyph to magnified pixels. A scale transform upsamples
+                    // the texture Qt rasterized at the calm size, which pixelates icons.
+                    // App glyphs are a touch larger than the layout square. Dragging does
+                    // not change that size, so letting go cannot drop the icon.
+                    readonly property real draw: dv.icon * slot.k
+                        * (slot.e.t === "app" ? 1.08 : 1)
+                        * (drop.containsDrag ? 1.14 : 1)
+                        * (slotTap.pressed ? 0.9 : 1)
+                    width: draw
+                    height: draw
+                    // Centered in the tray. Bottom dock grows up from rowBottom; top grows down from rowTop.
+                    y: (dv.atTop ? dv.rowTop + slot.dragLift : dv.rowBottom - draw - slot.dragLift) + slot.bounce
                     opacity: slot.dragged ? 0.86 : (slotTap.pressed ? 0.88 : 1)
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 90 } }
 
@@ -645,10 +850,11 @@ Item {
                         anchors.margins: Math.round(dv.icon * 0.06)
                         visible: slot.e.t === "launcher" && dv.launcherIcon !== ""
                         source: dv.launcherIcon ? "file://" + dv.launcherIcon : ""
-                        sourceSize: Qt.size(dv.icon * 2.4, dv.icon * 2.4)
+                        sourceSize: Qt.size(dv.iconPx, dv.iconPx)
                         fillMode: Image.PreserveAspectFit
-                        mipmap: true
+                        mipmap: false
                         smooth: true
+                        antialiasing: true
                     }
 
                     Rectangle {
@@ -682,7 +888,7 @@ Item {
                         // Slight inset so filled theme plates (MacTahoe etc.) are not
                         // edge-to-edge in the cell — reads less "solid block", keeps aspect.
                         anchors.fill: parent
-                        anchors.margins: Math.round(dv.icon * 0.06)
+                        anchors.margins: Math.round(dv.icon * 0.02)
                         visible: slot.e.t === "app"
                         name: slot.e.icon || ""
                         fallback: "application-x-executable"
@@ -690,7 +896,7 @@ Item {
                         // Растр просят с запасом на увеличение: под курсором значок вырастает в
                         // полтора раза, и нарисованный по обычному размеру он там расплывается.
                         // Prefer ~3x for fine logos (Discord Clyde eyes).
-                        renderSize: dv.icon * 3.0
+                        renderSize: dv.iconPx
                         theme: true
                         syncLoad: true
                         iconPalette: String(JD.dockCfg.icon_style || "original").toLowerCase()
@@ -705,7 +911,7 @@ Item {
                         name: JD.trashFull ? "user-trash-full" : "user-trash"
                         fallback: "user-trash"
                         implicitSize: dv.icon
-                        renderSize: dv.icon * 2.4
+                        renderSize: dv.iconPx
                         theme: true
                         syncLoad: true
                     }
@@ -771,8 +977,9 @@ Item {
                     radius: height / 2
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: dv.mark === "glow"
-                       ? (dv.atTop ? dv.pad + dv.dotRoom : dv.pad) + (dv.icon - height) / 2
-                       : dv.atTop ? dv.pad * 0.5 : card.height - dv.labelRoom - dv.pad * 0.5 - height
+                       ? (dv.atTop ? dv.rowTop : dv.rowBottom - dv.icon * 1.08) + (dv.icon * 1.08 - height) / 2
+                       : dv.atTop ? dv.rowTop - height - 3
+                         : dv.rowBottom + 3
                     z: dv.mark === "glow" ? -1 : 0
                     color: slot.active ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.55)
                     // Появляется и исчезает, а не мигает: окно закрыли — отметка уходит, уменьшаясь.
@@ -797,18 +1004,15 @@ Item {
                                       duration: 240; easing.type: Easing.OutQuad }
                 }
 
-                // Порядок значков — рукой. Порог у DragHandler свой: обычное нажатие остаётся
-                // нажатием, перетаскивание начинается только после заметного движения.
-                DragHandler {
-                    enabled: dv.reorder && slot.e.t === "app" && slot.e.pinned
-                    target: null
-                    xAxis.enabled: true
-                    yAxis.enabled: false
+                // Запомнить, какой закреплённый значок нажали. Сам жест ведёт DragHandler на
+                // карточке — он не умирает, когда Repeater переставляет делегаты.
+                PointHandler {
+                    enabled: dv.reorder && slot.e.t === "app" && !!slot.e.key
+                    acceptedButtons: Qt.LeftButton
                     onActiveChanged: {
-                        if (active) dv.startDrag(slot.e.key)
-                        else dv.endDrag()
+                        if (active) dv.pressKey = slot.e.key
+                        else if (!dockReorder.active && dv.dragKey === "") dv.pressKey = ""
                     }
-                    onCentroidChanged: if (active) dv.moveDrag(centroid.scenePosition.x)
                 }
 
                 // Имя под значком — режим «всегда». Оно обрезается по ячейке, а не раздвигает её:
@@ -1546,6 +1750,49 @@ Item {
         return out
     }
 
+
+    // Колесо и щелчок по значку с несколькими окнами идут по кругу. Свернуть все
+    // осталось в меню правой кнопки: щелчком это слишком легко нажать случайно.
+    function cycle(wins, step, guard) {
+        if (!wins || wins.length < 2) return
+        const wait = guard === undefined ? 180 : guard
+        const now = Date.now()
+        if (wait && now - lastCycle < wait) return
+        lastCycle = now
+        let at = wins.findIndex(w => w.active && !w.minimized)
+        if (at < 0) at = 0
+        const next = wins[(at + step + wins.length) % wins.length]
+        if (next) JD.windowDo("focus", next.id)
+    }
+
+    // Нажатие: яблоко открывает меню; не запущено — запустить; несколько окон — по кругу;
+    // одно и уже сверху — свернуть. Функция пропала при переделке перетаскивания, и щелчок
+    // по яблоку доходил сюда и падал: Property 'press' is not a function.
+    function press(e, wins) {
+        if (!e) return
+        if (dragMoved) { dragMoved = false; return }
+        if (ctxEntry) { closeCtx(); return }
+        closeCtx()
+        closeStack()
+        if (e.t === "launcher") { JD.toggleMenu(); return }
+        if (JD.menuOpen) JD.closeMenu()
+        if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
+        if (e.t === "tray") { JD.trayToggle(); return }
+        if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
+        if (e.kind === "dir") { openStack(e); return }
+        if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
+        if (wins.length > 1) { cycle(wins, 1, 0); return }
+        const front = wins.find(w => w.active && !w.minimized)
+        if (front) {
+            const g = e.i !== undefined && e.i < dv.geom.length ? dv.geom[e.i] : null
+            const iconRect = g ? JD.dockIconScreenRect(g) : null
+            JD.minimizeGenie(front, iconRect)
+            return
+        }
+        const up = wins.find(w => !w.minimized) || wins[0]
+        JD.windowDo("focus", up.id)
+    }
+
     function doCtx(what) {
         const e = ctxEntry, wins = ctxWins
         if (what === "menu") JD.toggleMenu()
@@ -1565,216 +1812,263 @@ Item {
         else if (what.startsWith("focus:")) JD.windowDo("focus", what.slice(6))
     }
 
-    // Взяли значок. Порядок замораживаем сразу: дальше он меняется только этим перетаскиванием,
-    // и список из-под руки не поедет, если демон в этот момент пришлёт своё.
+    function sameList(a, b) {
+        if (!a || !b || a.length !== b.length) return false
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+        return true
+    }
+
+    // Порядок незакреплённых помним сами. Список окон демон присылает как получится,
+    // и без памяти значок на мгновение встаёт в другое место — чаще всего ближе к яблоку.
+    function refreshRunMemo() {
+        if (dragKey !== "" || dropAnim || (laneHold && laneHold.length)) return
+        const taken = ({})
+        for (const it of (JD.dockItems || [])) taken[it.key] = true
+        const raw = []
+        const g = grouped
+        if (!g || !g.order) return
+        for (const k of g.order) if (!taken[k] && g.by[k]) raw.push(k)
+        const alive = ({})
+        for (const k of raw) alive[k] = true
+        const src = appOrder.length ? appOrder : runMemo
+        const out = []
+        const seen = ({})
+        for (const k of src) if (!taken[k] && alive[k] && !seen[k]) { out.push(k); seen[k] = true }
+        for (const k of raw) if (!seen[k]) { out.push(k); seen[k] = true }
+        if (!sameList(out, runMemo)) runMemo = out
+    }
+
+    // Какой значок программы сейчас под сценой X — и закреплённый, и просто открытый.
+    function appKeyAtSceneX(sceneX) {
+        const local = sceneX - dv.x - card.x
+        const src = (dragBase.length === lane.length) ? dragBase : null
+        for (let i = 0; i < lane.length; i++) {
+            const e = lane[i]
+            if (!e || e.t !== "app" || !e.key) continue
+            const g = src ? src[i] : geom[i]
+            if (g && local >= g.x && local < g.x + g.w) return e.key
+        }
+        return ""
+    }
+
+    function pinnedKeyAtSceneX(sceneX) { return appKeyAtSceneX(sceneX) }
+
+    function appKeysNow() {
+        const keys = []
+        for (let i = 0; i < lane.length; i++) {
+            const e = lane[i]
+            if (e && e.t === "app" && e.key) keys.push(e.key)
+        }
+        return keys
+    }
+
+    function pinnedKeysNow() {
+        const keys = []
+        for (let i = 0; i < lane.length; i++) {
+            const e = lane[i]
+            if (e && e.t === "app" && e.pinned && e.key) keys.push(e.key)
+        }
+        return keys
+    }
+
+    // Куда каждый значок программы должен съехать. Дырки — замороженные ячейки исходного
+    // порядка; яблоко, черты и часы в них не входят, поэтому к ним никто не летит.
+    function slideTargets() {
+        const n = lane.length
+        const t = []
+        for (let i = 0; i < n; i++) t.push(0)
+        if (!(dragKey !== "" || dropAnim) || !dragOrder.length) return t
+        const spots = []
+        for (let i = 0; i < n; i++)
+            if (lane[i].t === "app" && lane[i].key) spots.push(i)
+        const srcOf = ({})
+        for (const i of spots) srcOf[lane[i].key] = i
+        const base = dragBase.length === n ? dragBase : null
+        // While the icon is in hand, skip its insertion cell so the row packs
+        // and that one cell is the only gap. On drop the key is empty and the
+        // same order lands the icon in the gap.
+        const gap = dragKey !== "" ? dragOrder.indexOf(dragKey) : -1
+        let destAt = 0
+        for (let h = 0; h < dragOrder.length; h++) {
+            const key = dragOrder[h]
+            const src = srcOf[key]
+            if (src === undefined) continue
+            if (h === gap) { destAt++; continue }
+            if (destAt >= spots.length) break
+            const dest = spots[destAt++]
+            const gs = base ? base[src] : geom[src]
+            const gd = base ? base[dest] : geom[dest]
+            if (!gs || !gd) continue
+            t[src] = gd.x - gs.x
+        }
+        return t
+    }
+
+    // Взяли значок. Модель не переписываем: новый массив в полосе пересоздал бы делегаты
+    // и оборвал бы жест. Курсор записывается до dragKey, чтобы значок не вспыхнул у яблока.
     function startDrag(key) {
         if (!reorder || !key) return
-        pinOverride = JD.dockItems.map(i => i.key)
+        if (dropAnim || dropCommit) finishDrop()
+        const keys = appKeysNow()
+        if (keys.indexOf(key) < 0) return
+        const snap = []
+        for (let i = 0; i < lane.length; i++) snap.push(lane[i])
+        laneHold = snap
+        const base = []
+        for (let i = 0; i < lane.length; i++) {
+            const g = geom[i] || { x: lane[i].at, w: lane[i].w }
+            base.push({ x: g.x, w: g.w })
+        }
+        dragBase = base
+        dragOrder = keys.slice()
+        const z = [], v = []
+        for (let i = 0; i < base.length; i++) { z.push(0); v.push(0) }
+        slideOff = z
+        slideVel = v
+        if (!(dragSceneX > -9000) && pointerScene > -9000) dragSceneX = pointerScene
+        dragLocal = dragSceneX - dv.x - card.x
+        slideTick++
+        slideOn = true
+        dropAnim = false
+        dropCommit = false
+        pressKey = key
         dragKey = key
         tipWait.stop()
         tipShown = false
+        wake()
     }
 
-    // Куда значок встаёт. Правило здесь было «курсор оказался над чужой ячейкой» — и оно
-    // дребезжало. Ячейка, в которую значок только что переехал, занимает место соседа, сосед
-    // съезжает под курсор, и следующий же кадр требует переставить обратно: значок прыгал между
-    // двумя местами, налезая на соседей, и человек видел кашу вместо переноса. Правило теперь
-    // макосное и устойчивое: шаг за раз и только когда курсор прошёл СЕРЕДИНУ соседней ячейки.
-    // После такого шага середина соседа оказывается позади курсора — и обратного шага не просит
-    // ни этот кадр, ни следующий.
+    // Одна дырка — там, где курсор. Остальные значки сразу смыкаются в остальные
+    // замороженные ячейки: пустое место, откуда взяли, не остаётся.
     function moveDrag(sceneX) {
+        dragSceneX = sceneX
         dragLocal = sceneX - dv.x - card.x
         if (dragKey === "") return
-        // Шаг повторяем, пока он просится: рука дёргает значок через полполосы за один кадр, и
-        // один шаг на вызов означал бы, что значок догоняет курсор несколько кадров, всё это время
-        // лёжа на соседях. Каждый шаг считается заново, по уже переставленной полосе, так что
-        // середина соседа — по-прежнему середина соседа.
-        for (let pass = 0; pass < 16; pass++) {
-            const spots = []
-            for (let i = 0; i < lane.length; i++)
-                if (lane[i].t === "app" && lane[i].pinned) spots.push({ key: lane[i].key, i: i })
-            const from = spots.findIndex(s => s.key === dragKey)
-            if (from < 0) return
-            const hole = geom[spots[from].i]
-            if (!hole) return
-            // Мерить надо по СВОЕЙ дырке, а не по середине соседа: дырка — единственное, что в этой
-            // полосе не бегает от курсора. Пока курсор в дырке, менять нечего; вышел за её край —
-            // дырка переезжает на шаг. Запас в шестую ячейки — чтобы шаг не щёлкал от дрожи руки на
-            // самой границе; он же гарантирует, что обратный шаг не попросится тем же кадром.
-            const m = hole.w * 0.18
-            let to = from
-            if (dragLocal > hole.x + hole.w + m && from + 1 < spots.length) to = from + 1
-            else if (dragLocal < hole.x - m && from > 0) to = from - 1
-            if (to === from) return
-            const next = pinOverride.slice()
-            const at = next.indexOf(dragKey)
-            if (at < 0) return
-            next.splice(at, 1)
-            // Порядок в pinOverride и порядок закреплённых ячеек — одно и то же: и там и там только
-            // закреплённое, в одном и том же порядке.
-            next.splice(to, 0, dragKey)
-            pinOverride = next
+        const spots = []
+        for (let i = 0; i < lane.length; i++)
+            if (lane[i].t === "app" && lane[i].key) spots.push(i)
+        if (dragBase.length !== lane.length || !spots.length) return
+        let to = spots.length - 1
+        for (let i = 0; i < spots.length - 1; i++) {
+            const a = dragBase[spots[i]]
+            const b = dragBase[spots[i + 1]]
+            if (!a || !b) continue
+            const boundary = (a.x + a.w * 0.5 + b.x + b.w * 0.5) * 0.5
+            if (dragLocal < boundary) { to = i; break }
         }
+        const keys = appKeysNow()
+        const next = []
+        for (let i = 0; i < keys.length; i++) if (keys[i] !== dragKey) next.push(keys[i])
+        const at = Math.max(0, Math.min(next.length, to))
+        next.splice(at, 0, dragKey)
+        let same = next.length === dragOrder.length
+        for (let i = 0; same && i < next.length; i++) if (next[i] !== dragOrder[i]) same = false
+        if (same) return
+        dragOrder = next
+        wake()
     }
 
     function endDrag() {
         if (dragKey === "") return
+        const n = lane.length
+        const off = slideOff.length === n ? slideOff.slice() : []
+        const vel = slideVel.length === n ? slideVel.slice() : []
+        while (off.length < n) { off.push(0); vel.push(0) }
+        for (let i = 0; i < n; i++) {
+            if (lane[i] && lane[i].key === dragKey && dragBase[i]) {
+                const local = dragSceneX - dv.x - card.x
+                off[i] = (local - dragBase[i].w / 2) - dragBase[i].x
+                vel[i] = 0
+            }
+        }
+        slideOff = off
+        slideVel = vel
+        slideTick++
         dragKey = ""
-        // После броска подпись не выскакивает мгновенно: отсчёт начинается заново, как после
-        // обычного наведения, — иначе она появляется ровно в миг отпускания кнопки.
+        pressKey = ""
+        dropAnim = true
+        slideOn = true
+        // Подпись не вспыхивает в миг отпускания и не остаётся над чужим значком.
         tipShown = false
         if (focused && labels) tipWait.restart()
-        // Порядок остаётся местным, пока демон не подтвердит его своим ответом: иначе значок на
-        // миг отскакивает туда, откуда его унесли.
-        JD.dockArrange(pinOverride)
-    }
-
-    // Следующее окно этой же программы. Считаем от того, что сейчас наверху: «следующее» имеет
-    // смысл только относительно текущего, а не относительно порядка, в котором окна открывали.
-    property real lastCycle: 0
-    function cycle(wins, step, guard) {
-        if (!wins || wins.length < 2) return
-        const wait = guard === undefined ? 180 : guard   // колесо катится само, щелчок — нет
-        const now = Date.now()
-        if (wait && now - lastCycle < wait) return      // одно движение колеса — одно окно, а не пять
-        lastCycle = now
-        let at = wins.findIndex(w => w.active && !w.minimized)
-        if (at < 0) at = 0
-        const next = wins[(at + step + wins.length) % wins.length]
-        if (next) JD.windowDo("focus", next.id)
-    }
-
-    // Нажатие: не запущено — запустить; запущено и не наверху — поднять; наверху — свернуть.
-    // Второй запуск того же — самая частая ошибка дока, и именно её эта развилка убирает.
-    function press(e, wins) {
-        // Открыто меню правой кнопки — первый щелчок куда угодно его просто закрывает, и больше
-        // ничего. Иначе промах мимо меню запускал бы программу, по значку которой промахнулись, —
-        // а человек в этот момент хотел всего лишь убрать меню. Второй щелчок уже работает как
-        // обычно; так это сделано везде, где меню закрывается щелчком мимо.
-        if (ctxEntry) { closeCtx(); return }
-        closeCtx()
-        if (e.t === "launcher") { JD.toggleMenu(); return }
-        // Нажали в доке при открытом меню — меню своё дело сделало и уходит.
-        if (JD.menuOpen) JD.closeMenu()
-        if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
-        if (e.t === "tray") { JD.trayToggle(); return }
-        // Папка в доке — стопка: показать, что внутри, а не открывать файловый менеджер. За самим
-        // менеджером человек пойдёт сам, если ему нужна именно папка, а не файл из неё.
-        if (e.kind === "dir") { dv.openStack(e); return }
-        if (e.t === "cat" || e.t === "clock") { JD.openTools(e.t === "cat" ? "load" : "emoji"); return }
-        if (!wins || wins.length === 0) { startBounce(e); JD.dockRun(e); return }
-        const front = wins.find(w => w.active && !w.minimized)
-        if (front) {
-            // У программы несколько окон — значок ведёт по ним по кругу: нажал раз, поднялось
-            // одно, нажал второй — следующее. Свернуть всё разом в этом случае не даём: прятать
-            // пять окон одним промахом хуже, чем не спрятать ни одного, а «свернуть все окна»
-            // осталось в меню правой кнопки.
-            if (wins.length > 1) { dv.cycle(wins, 1, 0); return }
-            // Genie: scale each window toward this dock icon, then minimize.
-            const g = e.i !== undefined && e.i < dv.geom.length ? dv.geom[e.i] : null
-            const iconRect = g ? JD.dockIconScreenRect(g) : null
-            for (const w of wins) JD.minimizeGenie(w, iconRect)
-            return
-        }
-        const up = wins.find(w => !w.minimized) || wins[0]
-        JD.windowDo("focus", up.id)
-    }
-
-    // Перетаскивание без мыши: взять n-й закреплённый значок, отнести в точку x спокойной полосы
-    // и отпустить. Отдаёт получившийся порядок и места ячеек — по ним видно и наложение.
-    // Проба «значок несут прямо сейчас»: dragProbe отпускает значок до того, как отдать ответ, и
-    // поэтому ничего не говорит о том, как полоса выглядит В РУКЕ. Эти три живут дольше одного
-    // вызова: взять, снять картинку, положить обратно. Снимок свой, а не экрана: экран снять
-    // можно (desktop.py::capture_screen, через портал), но нам нужна сама полоса, без обоев.
-    function dragHold(n, x) {
-        const spots = lane.filter(s => s.t === "app" && s.pinned)
-        const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]
-        if (!pick) return JSON.stringify({ pinned: 0 })
-        engaged = true
-        pointerScene = anchorCentre - restLength / 2 + x
-        startDrag(pick.key)
-        moveDrag(pointerScene)
-        for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
-        return JSON.stringify({ took: pick.key, dragLocal: Math.round(dragLocal),
-                                cells: lane.map((s, i) => [s.t, s.key || s.t, Math.round(geom[i].x), Math.round(geom[i].w),
-                                                           Math.round(dv.dragKey === s.key ? dragLocal - geom[i].w / 2 : geom[i].x)]) })
-    }
-    function dragRelease() {
-        dragKey = ""
-        pinOverride = []
-        engaged = false
-        pointerScene = -99999
         wake()
-        return "ok"
-    }
-    function shot(path) {
-        card.grabToImage(r => r.saveToFile(path))
-        return path
     }
 
-    // Прогулка с значком в руке: ведём курсор от одного края полосы к другому маленькими шагами и
-    // считаем, сколько раз менялся порядок и как далеко значок уезжал от собственной дырки. Одной
-    // пробой дребезг не поймать: он живёт от шага к шагу, как и под настоящей рукой. Честный
-    // перенос по пяти значкам — это 4 перестановки; больше — значит значок прыгает туда-обратно.
-    function dragWalk(n, from, to, steps) {
-        const spots0 = lane.filter(s => s.t === "app" && s.pinned)
-        const pick = spots0[Math.max(0, Math.min(spots0.length - 1, n))]
-        if (!pick) return JSON.stringify({ pinned: 0 })
-        engaged = true
-        const k = Math.max(2, Math.min(400, steps || 60))
-        startDrag(pick.key)
-        // Курсор перед прогулкой ставим в начало ПЛАВНО: проба начинается не там, где значок, а
-        // прыжок через полполосы честный шаг за раз не отрабатывает за один вызов. Эти догоняющие
-        // перестановки — артефакт пробы, а не дребезг, и считать их нельзя.
-        for (let j = 0; j < 12; j++) {
-            pointerScene = anchorCentre - restLength / 2 + from
-            const was = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key).join(",")
-            moveDrag(pointerScene)
-            for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
-            if (lane.filter(s => s.t === "app" && s.pinned).map(s => s.key).join(",") === was) break
+    function finishDrop() {
+        dropCommit = false
+        const order = dragOrder.slice()
+        const now = appKeysNow()
+        const changed = order.length > 0 && (order.length !== now.length || order.some((k, i) => k !== now[i]))
+        const pinSet = ({})
+        const nowPins = []
+        for (const it of (JD.dockItems || [])) { pinSet[it.key] = true; nowPins.push(it.key) }
+        const pins = []
+        for (const k of order) if (pinSet[k]) pins.push(k)
+        const pinsChanged = pins.length === nowPins.length && pins.length > 0 && pins.some((k, i) => k !== nowPins[i])
+        if (changed) {
+            appOrder = order
+            pinOverride = pins
         }
-        let swaps = 0, gap = 0, last = ""
-        const trail = []
-        for (let j = 0; j < k; j++) {
-            const x = from + (to - from) * j / (k - 1)
-            pointerScene = anchorCentre - restLength / 2 + x
-            moveDrag(pointerScene)
-            for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
-            const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key).join(",")
-            if (last !== "" && order !== last) swaps++
-            last = order
-            const at = lane.findIndex(s => s.key === dragKey)
-            if (at >= 0) gap = Math.max(gap, Math.abs(geom[at].x + geom[at].w / 2 - dragLocal))
-            trail.push([Math.round(x), lane.filter(s => s.t === "app" && s.pinned).findIndex(s => s.key === dragKey),
-                        at >= 0 ? Math.round(geom[at].x + geom[at].w / 2 - dragLocal) : 0])
-        }
-        const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key)
-        dragRelease()
-        return JSON.stringify({ took: pick.key, swaps: swaps, gap: Math.round(gap), order: order, trail: trail })
+        dropAnim = false
+        slideOn = false
+        dragKey = ""
+        dragOrder = []
+        laneHold = null
+        dragBase = []
+        slideOff = []
+        slideVel = []
+        slideTick++
+        if (pinsChanged) JD.dockArrange(pins)
+        refreshRunMemo()
     }
 
+    // Перетаскивание без мыши: взять n-й значок программы (закреплённый или открытый),
+    // отнести в точку x спокойной полосы и отпустить.
     function dragProbe(n, x) {
-        const spots = lane.filter(s => s.t === "app" && s.pinned)
+        const spots = lane.filter(s => s.t === "app" && s.key)
         const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]
         if (!pick) return JSON.stringify({ pinned: 0 })
         engaged = true
         pointerScene = anchorCentre - restLength / 2 + x
+        const savedOverride = pinOverride.slice()
+        const savedApp = appOrder.slice()
+        const savedMemo = runMemo.slice()
+        dragSceneX = pointerScene
         startDrag(pick.key)
         moveDrag(pointerScene)
-        for (let i = 0; i < 200 && stepPhysics(1 / 120); i++) { /* до схождения */ }
-        const order = lane.filter(s => s.t === "app" && s.pinned).map(s => s.key)
-        // Проверка не переставляет значки по-настоящему: она смотрит, что получилось бы, и
-        // кладёт всё обратно. Иначе каждый запуск проверки менял бы человеку док.
+        for (let i = 0; i < 240 && stepPhysics(1 / 120); i++) { /* до схождения */ }
+        const order = dragOrder.slice()
+        const painted = []
+        for (let i = 0; i < lane.length; i++) {
+            const b = dragBase.length > i ? dragBase[i] : (geom[i] || { x: 0, w: 0 })
+            const off = slideOff.length > i ? slideOff[i] : 0
+            const px = (lane[i].key && lane[i].key === pick.key)
+                ? (dragSceneX - dv.x - card.x - b.w / 2) : (b.x + off)
+            painted.push({ x: px, w: b.w })
+        }
         dragKey = ""
-        pinOverride = []
+        dropAnim = false
+        dropCommit = false
+        slideOn = false
+        dragOrder = []
+        laneHold = null
+        dragBase = []
+        slideOff = []
+        slideVel = []
+        slideTick++
+        pinOverride = savedOverride
+        appOrder = savedApp
+        runMemo = savedMemo
         engaged = false
         pointerScene = -99999
+        dragSceneX = 0
         wake()
+        const sorted = painted.map((r, i) => ({ i: i, x: r.x, w: r.w })).sort((a, b) => a.x - b.x)
         let overlap = 0
-        for (let i = 1; i < lane.length; i++)
-            if (geom[i].x + 0.5 < geom[i - 1].x + geom[i - 1].w) overlap++
+        for (let i = 1; i < sorted.length; i++)
+            if (sorted[i].x + 0.5 < sorted[i - 1].x + sorted[i - 1].w) overlap++
         return JSON.stringify({ took: pick.key, order: order, overlap: overlap,
-                                cells: lane.map((s, i) => [s.t, Math.round(geom[i].x), Math.round(geom[i].w)]) })
+                                cells: lane.map((s, i) => [s.t, Math.round(painted[i].x), Math.round(painted[i].w)]) })
     }
 
     // Прогулка курсора по полосе маленькими шагами: где именно колесо щёлкает. Одной пробой этого

@@ -482,6 +482,15 @@ ShellRoot {
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, win.big ? 0.10 : 0.06)
 
+            // Empty settings chrome does not take clicks, so they fell through to the
+            // backdrop and closed the island. Swallow them here. Outside still closes.
+            MouseArea {
+                anchors.fill: parent
+                enabled: island.mode === "settings"
+                z: -1
+                onClicked: {}
+            }
+
             // Size morphs + reveal/hide: short OutCubic only. Soft SpringAnimation sampled
             // poorly on high-Hz panels and fought notification open/close + EdgeReveal hide.
             Behavior on width { enabled: JD.animOn && !JD.videoResizing; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
@@ -2708,7 +2717,7 @@ ShellRoot {
                     size: 32
                     onClicked: JD.setMuted(!JD.muted)
                 }
-                IconButton { icon: "gauge"; size: 32; onClicked: JD.openTools("apps") }
+                IconButton { icon: "gauge"; size: 32; onClicked: JD.openTools("emoji") }
                 IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
                 IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
             }
@@ -3334,10 +3343,11 @@ ShellRoot {
                 visible: JD.dockOn
             }
 
-            // ── blur layer: card strip ONLY (never on full-screen paint) ──
-            // KWin blurs the whole layer-shell surface when BackgroundEffect sits on a
-            // full-screen PanelWindow — even with a small blurRegion. Keep blur on a
-            // separate window sized to the live card so games/desktop stay sharp.
+            // ── blur layer: card band ONLY (never on full-screen paint) ──
+            // KWin blurs the whole surface if BackgroundEffect sits on the fullscreen
+            // paint window. This window stays a short band. Its size does NOT follow
+            // the spring — that layer-shell resize is what hitch-stepped the dock.
+            // blurRegion tracks the live card inside the band.
             PanelWindow {
                 id: dockBlur
                 screen: modelData
@@ -3351,21 +3361,29 @@ ShellRoot {
                 WlrLayershell.namespace: "justday-dock-blur"
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
                 color: "transparent"
-                visible: JD.dockOn && JD.blurOn && dockWin.shown
-                implicitWidth: Math.max(1, Math.round(dock.blurItem.width))
-                implicitHeight: Math.max(1, Math.round(dock.blurItem.height))
-                margins.left: Math.max(0, Math.round(dock.x + dock.blurItem.x))
-                margins.top: dockHost.atTop
-                    ? Math.max(0, Math.round(dock.y + dock.blurItem.y)) : 0
-                margins.bottom: dockHost.atTop ? 0 : Math.max(0, Math.round(
-                    ((screen ? screen.height : JD.screenHeight)
-                     - (dock.y + dock.blurItem.y + dock.blurItem.height))))
+                readonly property real screenW: screen ? screen.width : JD.screenWidth
+                readonly property real screenH: screen ? screen.height : JD.screenHeight
+                readonly property real cardX: dock.x + dock.blurItem.x
+                readonly property real cardY: dock.y + dock.blurItem.y
+                readonly property real cardW: Math.max(1, dock.blurItem.width)
+                readonly property real cardH: Math.max(1, dock.blurItem.height)
+                readonly property real capW: Math.min(Math.max(160, screenW - 32), Math.max(160, Math.round(dock.restLength + dock.magExtra * 2 + 48)))
+                readonly property real bandH: Math.max(1, Math.round(dock.cardHeight + dockHost.edgeMargin))
+                readonly property real winLeft: Math.max(0, Math.round((screenW - capW) / 2))
+                readonly property real winTop: dockHost.atTop ? 0 : Math.max(0, screenH - bandH)
+                readonly property bool onScreen: cardX + cardW > 1 && cardX < screenW - 1 && cardY + cardH > 1 && cardY < screenH - 1
+                visible: JD.dockOn && JD.blurOn && onScreen
+                implicitWidth: capW
+                implicitHeight: bandH
+                margins.left: winLeft
+                margins.top: 0
+                margins.bottom: 0
                 mask: Region {}
                 BackgroundEffect.blurRegion: Region {
-                    x: 0
-                    y: 0
-                    width: Math.round(dockBlur.width)
-                    height: Math.round(dockBlur.height)
+                    x: Math.round(dockBlur.cardX - dockBlur.winLeft)
+                    y: Math.round(dockBlur.cardY - dockBlur.winTop)
+                    width: Math.round(dockBlur.cardW)
+                    height: Math.round(dockBlur.cardH)
                     radius: Math.round(dock.blurItem.radius)
                 }
             }
@@ -3537,10 +3555,25 @@ ShellRoot {
             }
 
             // ── blur layer: strip ONLY (never on full-screen paint) ──
+            // Window size is the magnify envelope, not the live spring. Resizing the
+            // layer-shell surface every frame made the frost lead or lag the pill.
+            // blurRegion is the same rect as the strip, including the hide slide.
             PanelWindow {
                 id: trayBlur
                 screen: win.screen
-                visible: JD.trayOn && JD.blurOn && !tray.empty && trayWin.shown
+                readonly property real screenW: screen ? screen.width : JD.screenWidth
+                readonly property real screenH: screen ? screen.height : JD.screenHeight
+                readonly property real stripX: tray.x + tray.blurItem.x
+                readonly property real stripY: tray.y + tray.blurItem.y
+                readonly property real stripW: Math.max(1, tray.blurItem.width)
+                readonly property real stripH: Math.max(1, tray.blurItem.height)
+                readonly property real capH: Math.min(screenH - 32, Math.max(tray.restLength, Math.round(tray.restLength + tray.magExtra * 2 + 8)))
+                readonly property real winW: Math.max(1, Math.round(tray.restWidth + trayHost.edgeMargin + 4))
+                readonly property real restTop: trayHost.stripTop(tray.restLength, screenH)
+                readonly property real winTop: Math.max(0, Math.min(Math.max(0, screenH - capH), Math.round(restTop - (capH - tray.restLength) / 2)))
+                readonly property real winLeft: trayHost.atRight ? screenW - winW : 0
+                readonly property bool onScreen: stripX + stripW > 1 && stripX < screenW - 1 && stripY + stripH > 1 && stripY < screenH - 1
+                visible: JD.trayOn && JD.blurOn && !tray.empty && onScreen
                 anchors {
                     left: !trayHost.atRight
                     right: trayHost.atRight
@@ -3551,19 +3584,17 @@ ShellRoot {
                 WlrLayershell.namespace: "justday-tray-blur"
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
                 color: "transparent"
-                implicitWidth: Math.max(1, Math.round(tray.blurItem.width))
-                implicitHeight: Math.max(1, Math.round(tray.blurItem.height))
-                margins.top: Math.max(0, Math.round(tray.y + tray.blurItem.y))
-                margins.left: trayHost.atRight ? 0 : Math.max(0, Math.round(tray.x + tray.blurItem.x))
-                margins.right: trayHost.atRight ? Math.max(0, Math.round(
-                    ((screen ? screen.width : JD.screenWidth)
-                     - (tray.x + tray.blurItem.x + tray.blurItem.width)))) : 0
+                implicitWidth: winW
+                implicitHeight: Math.max(1, Math.round(capH))
+                margins.top: winTop
+                margins.left: 0
+                margins.right: 0
                 mask: Region {}
                 BackgroundEffect.blurRegion: Region {
-                    x: 0
-                    y: 0
-                    width: Math.round(trayBlur.width)
-                    height: Math.round(trayBlur.height)
+                    x: Math.round(trayBlur.stripX - trayBlur.winLeft)
+                    y: Math.round(trayBlur.stripY - trayBlur.winTop)
+                    width: Math.round(trayBlur.stripW)
+                    height: Math.round(trayBlur.stripH)
                     radius: Math.round(tray.blurItem.radius)
                 }
             }
