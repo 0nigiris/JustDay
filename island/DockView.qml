@@ -119,8 +119,25 @@ Item {
     //
     // Окна, разложенные по программам. Незнакомая программа — не беда: значок всё равно будет,
     // только подписанный тем, как окно назвало себя само.
+    // Что мы только что сделали с окном, пока демон об этом не сказал. Список окон приходит по
+    // сокету, и между щелчком и ответом проходит кадр-другой. Быстрые щелчки по значку попадали
+    // ровно в эту щель: второй щелчок видел прежнее состояние и сворачивал уже свёрнутое или
+    // поднимал уже поднятое — отсюда «откроется, подождёт, закроется». Своё намерение помним
+    // полсекунды: этого хватает демону ответить, и этого мало, чтобы разойтись с правдой.
+    property var justDid: ({})
+    function remember(id, minimized) {
+        const next = ({})
+        const now = Date.now()
+        for (const k in justDid) if (now - justDid[k].at < 500) next[k] = justDid[k]
+        next[String(id)] = { minimized: minimized, at: now }
+        justDid = next
+        forget.restart()
+    }
+    Timer { id: forget; interval: 520; onTriggered: dv.justDid = ({}) }
+
     readonly property var grouped: {
         const skip = JD.dockSkip, byKey = ({}), order = []
+        const mine = dv.justDid, fresh = Date.now()
         const separate = JD.dockSeparate || []
         for (const w of JD.windows) {
             const a = String(w.app || "").toLowerCase()
@@ -140,7 +157,11 @@ Item {
                                name: label, icon: rawIcon, wins: [], split: split }
                 order.push(key)
             }
-            byKey[key].wins.push(w)
+            // Своё свежее намерение важнее того, что успел сказать демон.
+            const said = mine[String(w.id)]
+            byKey[key].wins.push(said && fresh - said.at < 500
+                ? Object.assign({}, w, { minimized: said.minimized, active: !said.minimized })
+                : w)
         }
         return { by: byKey, order: order }
     }
@@ -1790,12 +1811,14 @@ Item {
         if (wins.length > 1) { cycle(wins, 1, 0); return }
         const front = wins.find(w => w.active && !w.minimized)
         if (front) {
+            dv.remember(front.id, true)
             const g = e.i !== undefined && e.i < dv.geom.length ? dv.geom[e.i] : null
             const iconRect = g ? JD.dockIconScreenRect(g) : null
             JD.minimizeGenie(front, iconRect)
             return
         }
         const up = wins.find(w => !w.minimized) || wins[0]
+        dv.remember(up.id, false)
         JD.windowDo("focus", up.id)
     }
 

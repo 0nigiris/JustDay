@@ -311,3 +311,21 @@ def test_a_magnified_icon_kept_peeking_out_after_the_dock_hid() -> None:
     away = re.search(r"const away = dockHost\.atTop \? ([^\n]+)", shell)
     assert away, "правило ухода дока за край пропало"
     assert "cardHeight" not in away.group(1), "док снова уезжает на высоту карточки, а не вида"
+
+
+def test_spamming_a_dock_icon_answered_with_open_wait_close_wait() -> None:
+    """Быстрые щелчки по значку шли рвано: откроется, подождёт, закроется, подождёт.
+
+    Список окон приходит от демона по сокету, и между щелчком и ответом проходит кадр-другой.
+    Второй щелчок попадал ровно в эту щель: он видел прежнее состояние и сворачивал уже
+    свёрнутое или поднимал уже поднятое. Своё намерение теперь помнится полсекунды — этого
+    хватает демону ответить и мало, чтобы разойтись с правдой.
+    """
+    import pathlib
+
+    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    assert "function remember(id, minimized)" in qml, "память о своём намерении пропала"
+    grouped = qml.split("readonly property var grouped:", 1)[1].split("\n    readonly property", 1)[0]
+    assert "mine[String(w.id)]" in grouped, "намерение больше не перекрывает ответ демона"
+    press = qml.split("function press(e, wins)", 1)[1].split("\n    function ", 1)[0]
+    assert press.count("dv.remember(") == 2, "щелчок перестал запоминать, что он сделал с окном"
