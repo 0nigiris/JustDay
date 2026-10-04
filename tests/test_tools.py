@@ -345,6 +345,7 @@ def docked(monkeypatch, tmp_path):
 
     monkeypatch.setattr(dock.config, "STATE_DIR", tmp_path)
     monkeypatch.setattr(dock, "PIN_FILE", tmp_path / "dock.json")
+    monkeypatch.setattr(dock, "CATALOG_FILE", tmp_path / "dock-catalog.json")
     monkeypatch.setattr(desktop, "list_apps", lambda: [
         {"id": "org.kde.dolphin", "name": "Dolphin", "name_ru": "", "generic": "", "keywords": "",
          "icon": "system-file-manager", "categories": "System;FileManager;", "exec": "dolphin %u", "wmclass": ""},
@@ -390,6 +391,28 @@ def test_a_game_shim_does_not_steal_the_windows_of_its_launcher(docked) -> None:
 def test_an_untouched_dock_is_not_empty(docked) -> None:
     """Пустая полоса у края экрана — это не чистый лист, а поломка: по ней нечего нажать."""
     assert docked.catalog()["items"], "док в первый запуск обязан чем-то заполниться"
+
+
+def test_a_restarting_dock_does_not_wait_for_a_fresh_desktop_scan(docked, monkeypatch) -> None:
+    """После перезапуска оболочки отсутствие каталога не должно задерживать первый кадр дока."""
+    from justday import dock
+
+    monkeypatch.setattr(dock, "catalog", lambda: pytest.fail("синхронно разбирали приложения"))
+
+    assert dock.catalog_cached() == {}
+
+
+def test_a_saved_dock_catalog_is_the_first_frame_not_a_new_desktop_scan(docked, monkeypatch) -> None:
+    """Сохранённые значки должны попасть в приветствие демона до обновления каталога."""
+    import json
+
+    from justday import dock
+
+    dock.CATALOG_FILE.write_text(json.dumps({"items": [{"id": "firefox"}], "pinned": []}),
+                                 encoding="utf-8")
+    monkeypatch.setattr(dock, "catalog", lambda: pytest.fail("пересобрали сохранённый каталог"))
+
+    assert dock.catalog_cached()["items"] == [{"id": "firefox"}]
 
 
 def test_pinning_keeps_the_order_things_were_pinned_in(docked) -> None:

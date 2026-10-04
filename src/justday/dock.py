@@ -620,12 +620,10 @@ def go(index: int) -> dict:
 
 
 def catalog_cached() -> dict:
-    """Instant dock payload for UI hello — last good catalog, or build fresh if missing."""
+    """Return the last saved catalog immediately; `_warm_dock` builds a miss asynchronously."""
     try:
         got = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
         if isinstance(got, dict) and isinstance(got.get("items"), list) and got.get("pinned") is not None:
-            if pinned() and not got.get("items"):
-                return catalog()
             # Keep trash/launcher fresh cheaply.
             got["trash_full"] = trash_full()
             launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
@@ -634,7 +632,7 @@ def catalog_cached() -> dict:
             return got
     except (OSError, ValueError, TypeError):
         pass
-    return catalog()
+    return {}
 
 
 # ───────────── папки-стопки ─────────────
