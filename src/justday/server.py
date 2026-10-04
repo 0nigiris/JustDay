@@ -68,6 +68,10 @@ def _out(*cmd: str, timeout: float = 10) -> str:
     return done.stdout if done.returncode == 0 else ""
 
 
+# Куда OpenRGB кладёт прежнюю картину подсветки, пока режим сервера её гасит.
+LED_PROFILE = "justday-before"
+
+
 def _opts() -> dict:
     return (config.load().get("session") or {}).get("server_mode") or {}
 
@@ -248,6 +252,26 @@ def _save(out: dict) -> bool:
         return False
 
 
+def _leds(on: bool) -> bool:
+    """Погасить или вернуть подсветку железа: память, плата, клавиатура, мышь.
+
+    Зачем это режиму сервера. Он задуман так: для человека компьютер выключен, для ассистента
+    работает. Тёмный экран при полыхающей радугой клавиатуре этого не даёт — комната всё равно
+    светится, и ночью это видно лучше, чем монитор.
+
+    Почему через профиль, а не «запомнить цвета». У OpenRGB есть свои профили, и только они
+    возвращают всё как было: режимы, скорости и цвета каждой зоны по отдельности. Складывать
+    это в наш файл состояния значит писать второй OpenRGB и ошибаться в нём.
+    """
+    if not shutil.which("openrgb"):
+        return False
+    if on:
+        return _run("openrgb", "--profile", LED_PROFILE, timeout=25)
+    # Сохраняем прежнюю картину перед тем, как гасить, — иначе возвращать будет нечего.
+    _run("openrgb", "--save-profile", LED_PROFILE, timeout=25)
+    return _run("openrgb", "--mode", "static", "--color", "000000", "--brightness", "0", timeout=25)
+
+
 def _dark(out: dict, opts: dict) -> None:
     """Отнять у человека экран и звук. Только когда его нет рядом — это проверяет вызывающий."""
     out.pop("waiting", None)
@@ -264,6 +288,8 @@ def _dark(out: dict, opts: dict) -> None:
         out["desk"] = _desk_make(str(opts.get("desktop_name") or "JustDay"))
         if out["desk"]:
             _desk_set(out["desk"])
+    if opts.get("leds_off", True):
+        out["leds_off"] = _leds(False)
     if opts.get("screens_off", True):
         out["screens_off"] = _screens(False)
     if opts.get("lock", True):
@@ -334,6 +360,8 @@ def off(resume: bool = True) -> dict:
     """
     was = state()
     out: dict = {"ok": True, "on": False, "screens_on": _screens(True)}
+    if was.get("leds_off"):
+        out["leds_on"] = _leds(True)
     _watchdog_off()
     pid = int(was.get("guard") or 0)
     if pid:
