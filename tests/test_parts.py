@@ -158,3 +158,32 @@ def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
     assert "0.18" in body, "запас на границе пропал: шаг защёлкает от дрожи руки"
     assert "for (let pass" in body, "шаг перестал повторяться — быстрый рывок значок не догонит"
     assert "readonly property real carried:" in qml, "значок в руке снова улетает из своей дырки на соседа"
+
+
+def test_jarvis_answered_that_there_was_nothing_to_grab_the_screen_with() -> None:
+    """«Нечем снять экран» — и ради снимка Джарвис перезапустил kwin, убив сессию."""
+    import inspect
+    import pathlib
+    import py_compile
+
+    from justday import cli, desktop
+
+    src = inspect.getsource(desktop.capture_screen)
+    assert "portal_shot.py" in src, "путь через портал пропал — снимать на KWin снова нечем"
+    assert "spectacle" not in src.lower().split('"""')[-1], "spectacle вернулся в снимки: он падает в KCrash"
+    helper = pathlib.Path(desktop.__file__).with_name("portal_shot.py")
+    assert helper.exists(), "помощник для портала пропал"
+    py_compile.compile(str(helper), doraise=True)
+    assert "capture_screen" in inspect.getsource(cli._capture), "у CLI снова свой список средств — разойдутся"
+
+
+def test_the_brain_restarted_the_window_manager_and_killed_the_session() -> None:
+    """Джарвис сделал killall kwin_wayland — стол умер вместе с окнами человека."""
+    import json
+    import pathlib
+
+    rules = json.loads(pathlib.Path("brain/settings.json").read_text(encoding="utf-8"))["permissions"]
+    assert "Bash(killall:*)" in rules["ask"] and "Bash(pkill:*)" in rules["ask"], \
+        "мозг снова может убить kwin без спроса, а ночью — вообще молча"
+    persona = pathlib.Path("brain/PERSONA.md").read_text(encoding="utf-8")
+    assert "kwin_wayland" in persona, "в правилах мозга не сказано, что перезапуск стола убивает сессию"

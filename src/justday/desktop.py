@@ -684,27 +684,31 @@ def _get_thumb_lock():
     return _thumb_lock
 
 
-def _capture_for_thumb(png: str) -> None:
-    """Screen grab for dock hover JPEG previews — only tools that do not coredump.
+def capture_screen(png: str) -> None:
+    """Снять весь экран в PNG. Один путь для всех: и CLI, и подсказки дока.
 
-    Why Spectacle was (and stays) out of this path:
-      On KWin/Wayland, `spectacle -b -n -f -o …` often writes a PNG then aborts in
-      tesseract teardown (KCrash / free()). Spawning it on every dock hover filled
-      the journal with coredumps. Interactive Spectacle (hotkey / menu) is unrelated
-      and may still crash on its own — that is not the dock thumb path.
-    KWin ScreenShot2 needs a portal / restricted D-Bus auth the daemon does not have
-    (`NoAuthorized`). grim needs wlr-screencopy, which KWin does not speak.
-    Without a safe grabber we raise no_safe_capture and the dock tip falls back to a
-    clean macOS-style name / window-title list (no empty thumbnail frames).
+    Долго считалось, что снимать нечем, и Джарвис отвечал «нечем снять экран»:
+      * grim хочет wlr-screencopy — KWin такого протокола не говорит;
+      * `org.kde.KWin.ScreenShot2` отвечает NoAuthorized: KWin пускает туда
+        только программы, у которых в .desktop стоит
+        X-KDE-DBUS-Restricted-Interfaces (spectacle, plasmashell, портал);
+      * spectacle пишет файл и падает в KCrash — на каждое наведение в доке
+        получался coredump, поэтому его здесь не зовут даже если он на PATH.
+    Выход — портал рабочего стола: ему KWin снимать разрешает, а он снимает
+    молча, без диалога, за треть секунды. Разговор с ним живёт в
+    portal_shot.py и идёт системным питоном: GLib стоит пакетом под него, а не
+    под наш venv.
     """
     import shutil
     from pathlib import Path
 
     errors: list[str] = []
     tools: list[tuple[str, list[str]]] = []
-    # Never call spectacle here — even if present on PATH.
     if shutil.which("grim"):
         tools.append(("grim", ["grim", png]))
+    py = "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else shutil.which("python3")
+    if py:
+        tools.append(("portal", [py, str(Path(__file__).with_name("portal_shot.py")), png]))
     # X11-style grabbers only off Wayland (maim/scrot/import are fine there).
     if not os.environ.get("WAYLAND_DISPLAY"):
         for exe, cmd in (
@@ -718,21 +722,21 @@ def _capture_for_thumb(png: str) -> None:
         raise RuntimeError("no_safe_capture")
     for exe, cmd in tools:
         try:
-            r = subprocess.run(cmd, check=False, capture_output=True, timeout=8)
-            if Path(png).exists() and Path(png).stat().st_size > 0 and r.returncode == 0:
+            r = subprocess.run(cmd, check=False, capture_output=True, timeout=20)
+            if r.returncode == 0 and Path(png).exists() and Path(png).stat().st_size > 0:
                 return
             err = (r.stderr or b"").decode("utf-8", "replace").strip()[:120]
             errors.append(f"{exe}: rc={r.returncode} {err}")
         except (OSError, subprocess.SubprocessError) as e:
             errors.append(f"{exe}: {e}")
-    raise RuntimeError("no_safe_capture: " + "; ".join(errors)[:160])
+    raise RuntimeError("no_safe_capture: " + "; ".join(errors)[:200])
 
 
 def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
     """Crop a small JPEG of one window for dock hover previews.
 
-    Uses a full-screen capture + geometry crop (KWin ScreenShot2 needs a portal
-    token we do not hold). Minimized / missing windows return ok=False.
+    Снимаем весь экран (capture_screen) и вырезаем окно по его геометрии:
+    отдельного снимка одного окна у нас нет. Свёрнутые и пропавшие — ok=False.
     Serialized: parallel hover requests must not stampede capture tools.
     """
     import shutil
@@ -773,7 +777,7 @@ def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
         except OSError:
             pass
         try:
-            _capture_for_thumb(png)
+            capture_screen(png)
         except Exception as e:
             err = str(e)[:200]
             permanent = "no_safe_capture" in err

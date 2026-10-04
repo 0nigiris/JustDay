@@ -285,38 +285,16 @@ def t_hotkey():
 
 
 def _capture(png: str) -> None:
-    """Grab the full screen with tools that do not coredump on KWin/Wayland.
+    """Снимок экрана. Вся правда о том, чем снимать на KWin, — в desktop.capture_screen."""
+    from . import desktop
 
-    Spectacle is intentionally never spawned: both `spectacle -b …` and the
-    `spectacle --dbus` service frequently abort after write (KCrash / free()).
-    Dock hover thumbs already avoid it; CLI/AI screenshot must match.
-    """
-    tools: list[tuple[str, list[str]]] = []
-    if shutil.which("grim"):
-        tools.append(("grim", ["grim", png]))
-    if not os.environ.get("WAYLAND_DISPLAY"):
-        for exe, cmd in (
-            ("maim", ["maim", png]),
-            ("scrot", ["scrot", "-o", png]),
-            ("import", ["import", "-window", "root", png]),
-        ):
-            if shutil.which(exe):
-                tools.append((exe, cmd))
-    if shutil.which("gnome-screenshot"):
-        tools.append(("gnome-screenshot", ["gnome-screenshot", "-f", png]))
-    # Never Spectacle — even if it is the only binary on PATH.
-    errors = []
-    for exe, cmd in tools:
-        try:
-            subprocess.run(cmd, check=True, stderr=subprocess.DEVNULL, timeout=20)
-            if os.path.exists(png) and os.path.getsize(png) > 0:
-                return
-        except (OSError, subprocess.SubprocessError) as e:
-            errors.append(f"{exe}: {e}")
-    raise RuntimeError(
-        "нечем снять экран: поставьте grim (или maim/scrot на X11); spectacle отключён — падает на KWin"
-        + (f" ({'; '.join(errors)})" if errors else "")
-    )
+    try:
+        desktop.capture_screen(png)
+    except RuntimeError as e:
+        raise RuntimeError(
+            "нечем снять экран: не ответил портал рабочего стола "
+            "(xdg-desktop-portal-kde), а grim на KWin не работает" + f" ({e})"
+        ) from e
 
 
 def screenshot(all_screens: bool = False, full: bool = False) -> dict:

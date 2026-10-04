@@ -172,7 +172,9 @@
       "Bash(jii sources enable:*)",
       "Bash(jii doctor:*)",
       "Bash(jii setup:*)",
-      "Bash(jii cache clear:*)"
+      "Bash(jii cache clear:*)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [
       "Bash(justday mail:*)",
