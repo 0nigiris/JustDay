@@ -281,7 +281,12 @@ def use(ch: str, *, paste: bool = True) -> dict:
     typed, how = (False, "")
     if paste:
         time.sleep(PASTE_DELAY)
-        typed, how = type_out(ch)
+        # ydotool type знает только клавиши латиницы: эмодзи он «печатает» с кодом 0 и ничего не
+        # вставляет, поэтому символ вне ASCII вставляем Ctrl+V из буфера, куда он уже лёг.
+        if copied and not ch.isascii():
+            typed, how = paste_chord()
+        else:
+            typed, how = type_out(ch)
     return {"ok": copied or typed, "char": ch, "typed": typed, "copied": copied, "how": how,
             "note": "" if typed else ("в буфере обмена — вставьте Ctrl+V" if copied
                                       else "нечем ни вставить, ни положить в буфер")}
