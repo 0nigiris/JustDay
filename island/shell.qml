@@ -362,6 +362,27 @@ ShellRoot {
         Component.onCompleted: Qt.callLater(osdVolWatch.push)
     }
 
+
+    PanelWindow {
+        id: barFence
+        readonly property bool live: JD.island.enabled !== false
+            && JD.islandStyle === "bar"
+            && island.mode !== "hidden"
+            && !JD.barFullscreen
+        screen: Quickshell.screens.find(s => s.name === (JD.island.screen || Quickshell.env("JUSTDAY_ISLAND_SCREEN")))
+                || Quickshell.screens.find(s => s.x === 0 && s.y === 0) || Quickshell.screens[0]
+        visible: live
+        anchors { top: true; left: true; right: true }
+        exclusionMode: live ? ExclusionMode.Normal : ExclusionMode.Ignore
+        exclusiveZone: live ? Math.round(JD.barHeight) : 0
+        WlrLayershell.layer: WlrLayer.Bottom
+        WlrLayershell.namespace: "justday-bar-fence"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        color: "transparent"
+        implicitHeight: Math.max(1, Math.round(JD.barHeight))
+        mask: Region {}
+    }
+
     // ───────────── window ─────────────
     PanelWindow {
         id: win
@@ -3606,7 +3627,7 @@ ShellRoot {
                 readonly property real winLeft: Math.max(0, Math.round((screenW - capW) / 2))
                 readonly property real winTop: dockHost.atTop ? 0 : Math.max(0, screenH - bandH)
                 readonly property bool onScreen: cardX + cardW > 1 && cardX < screenW - 1 && cardY + cardH > 1 && cardY < screenH - 1
-                visible: JD.dockOn && JD.blurOn && onScreen
+                visible: JD.dockOn && JD.blurOn && dockWin.shown && onScreen
                 implicitWidth: capW
                 implicitHeight: bandH
                 margins.left: winLeft
@@ -3807,7 +3828,7 @@ ShellRoot {
                 readonly property real winTop: Math.max(0, Math.min(Math.max(0, screenH - capH), Math.round(restTop - (capH - tray.restLength) / 2)))
                 readonly property real winLeft: trayHost.atRight ? screenW - winW : 0
                 readonly property bool onScreen: stripX + stripW > 1 && stripX < screenW - 1 && stripY + stripH > 1 && stripY < screenH - 1
-                visible: JD.trayOn && JD.blurOn && !tray.empty && onScreen
+                visible: JD.trayOn && JD.blurOn && !tray.empty && trayWin.shown && onScreen
                 anchors {
                     left: !trayHost.atRight
                     right: trayHost.atRight
