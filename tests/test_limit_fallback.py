@@ -58,7 +58,7 @@ def test_the_session_limit_was_read_aloud_as_an_answer():
 
 def test_a_broken_stream_gave_an_empty_answer_instead_of_an_error():
     """Поток SDK падал исключением — ask() возвращал пустую строку, и запасной не включался."""
-    b, spoken = _brain([])
+    b, _ = _brain([])
 
     async def broken():
         raise RuntimeError("API Error: 529 overloaded")
