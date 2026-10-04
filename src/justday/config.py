@@ -444,6 +444,10 @@ DEFAULTS: dict = {
              "icon_style": "original", "icon_tint": "#7AC8FF"},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
     "desktop": {"accessibility": True},
+    # Настоящий звонок (`src/justday/telnyx.py`). Ключ живёт только в связке ключей под именем
+    # telnyx — здесь его нет и быть не должно: конфиг уезжает в репозиторий, связка нет.
+    # from — купленный номер, app_id — приложение Call Control из портала. Пусто — звонков нет.
+    "phone": {"telnyx": {"from": "", "app_id": "", "voice": "female", "language": "ru-RU"}},
     # Оболочка в терминале (`justday terminal`): один терминал, лестница движков.
     #
     # Порядок — это и есть приоритет: «сначала Клод, потом ChatGPT, потом что осталось». Ступень

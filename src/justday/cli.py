@@ -459,6 +459,10 @@ def main(argv: list[str] | None = None) -> None:
                                                          "ради чего не жалко оторвать человека от дела")
     sp.add_argument("--subject", default="", help="тема письма")
     sp.add_argument("--to", default="", help="имя устройства, если их несколько")
+    sp = sub.add_parser("call", help="позвонить на номер и сказать: justday call +34612345678 «текст»")
+    sp.add_argument("to", help="номер в международном виде, +34…")
+    sp.add_argument("text", nargs="*", help="что сказать в трубку")
+    sp.add_argument("--seconds", type=int, default=0, help="потолок разговора, по умолчанию 90")
     sp = sub.add_parser("telegram", help="телеграм-бот: голосом или текстом ему на телефон, где бы он ни был")
     sp.add_argument("action", choices=["voice", "send", "status"])
     sp.add_argument("text", nargs="*")
@@ -959,6 +963,13 @@ def main(argv: list[str] | None = None) -> None:
         from . import phone
 
         _print(phone.reach(" ".join(a.text), urgent=a.urgent, subject=a.subject, which=a.to))
+    elif a.cmd == "call":
+        from . import telnyx
+
+        text = " ".join(a.text).strip()
+        got = telnyx.call(a.to, text, seconds=a.seconds or telnyx.MAX_SECONDS)
+        _print(got)
+        return 0 if got.get("ok") else 1
     elif a.cmd == "telegram":
         from . import telegram as tg
 
