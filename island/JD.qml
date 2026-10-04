@@ -767,6 +767,25 @@ Singleton {
     // Насколько занят процессор — для кошки в доке. Демон присылает сам, раз в две секунды и
     // только когда есть кому смотреть.
     property real cpu: 0
+    property real mem: 0                  // занятая память в процентах — подсказка над кошкой
+    // Где кошка на сплошной полосе. Своё значение до ответа демона: иначе отпущенная кошка
+    // прыгала бы обратно на миг, пока `config set` доходит до файла и возвращается.
+    property string catPlaceNow: ""
+    readonly property string catPlace: catPlaceNow || island.cat_place || "clock"
+    function moveCat(place) {
+        if (place === catPlace) return
+        catPlaceNow = place
+        Quickshell.execDetached(["justday", "config", "set", "island.cat_place", place])
+    }
+    property Item catTipAt: null          // над какой кошкой держат курсор — под ней подсказка
+    // Кошку несут рукой (CatCarry в shell.qml): какую, где рука в координатах окна и над треем ли.
+    property Item catFrom: null
+    property point catHand: Qt.point(0, 0)
+    property bool catOverTray: false
+    function catDrop() {
+        if (catFrom) moveCat(catOverTray ? "tray" : "clock")
+        catFrom = null
+    }
     property var dockData: ({})           // {items, pinned, match, skip} — от демона
     // Seed from on-disk catalog before the daemon hello arrives (qs restart / hot-reload
     // otherwise paints only launcher+trash+cat for a beat — the "empty dock flash").
@@ -1508,6 +1527,7 @@ Singleton {
             }
         }
         if (m.cpu !== undefined) cpu = m.cpu
+        if (m.mem !== undefined) mem = m.mem
         if (m.trash_full !== undefined) trashFull = m.trash_full
         if (m.windows !== undefined) {
             const next = m.windows || []

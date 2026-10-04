@@ -462,3 +462,29 @@ def test_island_crashed_at_start_in_the_icon_loader() -> None:
             if themed and "asynchronous:" in body:
                 assert "asynchronous: true" not in body and "asynchronous: !ic.syncLoad" not in body, \
                     f"{f.name}: значок темы снова грузится в фоновом потоке"
+
+
+def test_the_bar_cat_stood_still_and_told_no_numbers(monkeypatch) -> None:
+    """Кошка на полосе не бежала, если кошку в доке выключили, и числа о памяти не было вовсе."""
+    import asyncio
+    import types
+
+    from justday import daemon, sysload
+
+    sent, ticks = [], iter(range(3))
+
+    async def tick(_s):
+        if next(ticks, None) is None:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(daemon.asyncio, "sleep", tick)
+    monkeypatch.setattr(sysload.Load, "cpu", lambda self: {"percent": 40.0})
+    monkeypatch.setattr(sysload, "memory", lambda: {"percent": 63.0})
+    monkeypatch.setattr(daemon.dock, "trash_full", lambda: False)
+    me = types.SimpleNamespace(_subs={object()}, _trash_full=False, publish=lambda **m: sent.append(m),
+                               cfg={"dock": {"cat": False}, "island": {"cat": True}})
+    try:
+        asyncio.run(daemon.Daemon._cpu_loop(me))
+    except asyncio.CancelledError:
+        pass
+    assert {"cpu": 40.0, "mem": 63.0} in sent

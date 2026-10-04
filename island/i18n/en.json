@@ -595,5 +595,7 @@
   "Открыть в браузере": "Open in browser",
   "Текста в письме нет.": "The letter has no text.",
   "открой письмо номер ": "open email number ",
-  " в браузере": " in the browser"
+  " в браузере": " in the browser",
+  "Процессор ": "CPU ",
+  "Память ": "Memory "
 }

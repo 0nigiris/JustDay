@@ -2521,18 +2521,21 @@ class Daemon:
         """
         meter = sysload.Load()
         meter.cpu()                      # первый взгляд сравнивать не с чем
-        last = -1.0
+        last, last_mem = -1.0, -1.0
         while True:
             await asyncio.sleep(2.0)
             try:
                 pct = meter.cpu()["percent"]
+                mem = sysload.memory()["percent"]
             except OSError:
                 continue
-            if not self._subs or not self.cfg["dock"].get("cat", True):
+            # Кошка на полосе включается отдельно от кошки в доке. Раньше смотрели только на док,
+            # и с выключенной кошкой в доке кошка на полосе стояла на месте при любой нагрузке.
+            if not self._subs or not (self.cfg["dock"].get("cat", True) or self.cfg["island"].get("cat")):
                 continue
-            if abs(pct - last) >= 1.5 or (pct < 1.5) != (last < 1.5):
-                last = pct
-                self.publish(cpu=pct)
+            if abs(pct - last) >= 1.5 or (pct < 1.5) != (last < 1.5) or abs(mem - last_mem) >= 1:
+                last, last_mem = pct, mem
+                self.publish(cpu=pct, mem=mem)  # память — для подсказки при наведении на кошку
             # Заодно корзина: один взгляд в каталог до первой записи, вопрос двоичный. Значок,
             # говорящий «пусто» при сорока файлах внутри, — это ложь о состоянии машины.
             full = dock.trash_full()

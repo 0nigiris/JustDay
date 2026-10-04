@@ -294,6 +294,7 @@ DEFAULTS: dict = {
         "enabled": True,  # сам верхний островок; False убирает его совсем
         "above": True,    # держать верхнюю полосу над обычными окнами
         "cat": False,     # бегущая кошка на верхней полосе, отдельно от dock.cat
+        "cat_place": "clock",  # где она на сплошной полосе: clock — у часов, tray — среди значков трея
         "work_quiet": True,
         "notification_server": True,
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)

@@ -91,6 +91,22 @@ ShellRoot {
         // дождавшись настоящих писем. `qs ipc call island message '{"kind":"card","card":{…}}'`,
         // затем snapshot. На запертом сеансе — во вложенном `kwin_wayland --virtual` (ПЕРЕДАЧА.md).
         function message(json: string): void { JD.handle(JSON.parse(json)) }
+        // Кошка без мыши: навести (clock|tray|""), взять и держать над точкой окна, отпустить.
+        // Подсказка висит ниже капсулы, и snapshot её не видит: catTipShot снимает её саму, а
+        // catTip отвечает, где она стоит относительно кошки.
+        function catTip(which: string): void { JD.catTipAt = which === "tray" ? trayCat : which === "clock" ? peekView.cat : null }
+        function catTipShot(path: string): string {
+            catTip.grabToImage(r => r.saveToFile(path))
+            const c = catTip.at ? catTip.at.mapToItem(catTip.parent, 0, 0) : null
+            return JSON.stringify({ shown: catTip.opacity, tip: [catTip.x, catTip.y, catTip.width, catTip.height],
+                                    cat: c ? [c.x, c.y, catTip.at.width, catTip.at.height] : null, text: catTipText.text })
+        }
+        function catHold(which: string, x: real, y: real): string {
+            JD.catFrom = which === "tray" ? trayCat : peekView.cat
+            JD.catHand = Qt.point(x, y)
+            return JSON.stringify({ overTray: JD.catOverTray })
+        }
+        function catDrop(): string { JD.catDrop(); return JD.catPlace }
         // Проверка движка увеличения без мыши: ставим курсор в заданную точку полосы, даём физике
         // сойтись и отдаём получившуюся раскладку. Синтетическая мышь на вейланде врёт (ускорение
         // и вторые мониторы), а «значки расступаются» иначе никак не проверить числом.
@@ -796,6 +812,37 @@ ShellRoot {
                     id: statusRow
                     anchors.centerIn: parent
                     spacing: 4
+                    // Пришёл новый значок — вырастает на месте, соседи отъезжают, а не прыгают.
+                    add: Transition {
+                        enabled: JD.animOn
+                        NumberAnimation { property: "scale"; from: 0.4; to: 1; duration: 220; easing.type: Easing.OutBack }
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 160 }
+                    }
+                    move: Transition {
+                        enabled: JD.animOn
+                        NumberAnimation { property: "x"; duration: 200; easing.type: Easing.OutCubic }
+                    }
+                    // Кошку сюда переносят с середины полосы и уносят обратно (CatCarry).
+                    Item {
+                        visible: JD.island.cat === true && JD.catPlace === "tray"
+                        implicitWidth: trayCat.implicitWidth + 10
+                        implicitHeight: JD.barTraySize + 10
+                        DockCat {
+                            id: trayCat
+                            anchors.centerIn: parent
+                            size: JD.barTraySize
+                            cpu: JD.cpu
+                            awake: true
+                            sleepBelow: JD.dockCfg.cat_sleep_below || 0
+                            opacity: JD.catFrom === trayCat ? 0.3 : 1
+                            scale: trayCatTap.pressed ? 0.88 : trayCatHover.hovered ? 1.15 : 1
+                            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                            HoverHandler { id: trayCatHover; cursorShape: Qt.PointingHandCursor
+                                           onHoveredChanged: JD.catTipAt = hovered ? trayCat : (JD.catTipAt === trayCat ? null : JD.catTipAt) }
+                            TapHandler { id: trayCatTap; onTapped: JD.openTools("load") }
+                            CatCarry { cat: trayCat }
+                        }
+                    }
                     Repeater {
                         model: barStatus.trayItems
                         delegate: Item {
@@ -803,7 +850,22 @@ ShellRoot {
                             required property var modelData
                             implicitWidth: JD.barTraySize + 10
                             implicitHeight: JD.barTraySize + 10
+                            // Те же движения, что у лотка (TrayView): рамка под рукой, значок
+                            // подрастает, при нажатии проседает до 0.88. Раньше на полосе значки
+                            // не отвечали ничем, и было непонятно, попал ли курсор.
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: barTrayIcon.width * barTrayIcon.scale + 8
+                                height: width
+                                radius: Math.round(height * 0.3)
+                                color: "transparent"
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, barTrayHit.pressed ? 0.34 : 0.22)
+                                opacity: barTrayHit.containsMouse && JD.trayCfg.hover_frame !== false ? 1 : 0
+                                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
+                            }
                             Image {
+                                id: barTrayIcon
                                 anchors.centerIn: parent
                                 width: JD.barTraySize
                                 height: JD.barTraySize
@@ -811,8 +873,11 @@ ShellRoot {
                                 source: barTray.modelData.icon || ""
                                 fillMode: Image.PreserveAspectFit
                                 // без asynchronous: image://icon в фоновом потоке роняет KIconLoader (Icon.qml)
+                                scale: barTrayHit.pressed ? 0.88 : barTrayHit.containsMouse ? 1.15 : 1
+                                Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
                             }
                             MouseArea {
+                                id: barTrayHit
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                                 hoverEnabled: true
@@ -898,6 +963,83 @@ ShellRoot {
                         }
                     }
                 }
+            }
+        }
+
+        // Кошка в руке и место, куда она ляжет. Над треем он подсвечивается; везде, кроме него,
+        // отпущенная кошка возвращается к часам.
+        Binding {
+            target: JD; property: "catOverTray"; when: JD.catFrom !== null
+            value: {
+                const p = barStatus.mapFromItem(null, JD.catHand.x, JD.catHand.y)
+                return p.x > -24 && p.x < barStatus.width + 24 && p.y > -24 && p.y < barStatus.height + 24
+            }
+        }
+        Rectangle {
+            visible: JD.catFrom !== null && JD.catOverTray
+            z: 6
+            readonly property point p: barStatus.mapToItem(parent, 0, 0)
+            x: p.x - 4; y: p.y + 4
+            width: barStatus.width + 8; height: barStatus.height - 8
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.06)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.22)
+        }
+        DockCat {
+            id: catGhost
+            visible: JD.catFrom !== null
+            z: 7
+            size: 22
+            cpu: JD.cpu
+            awake: true
+            scale: 1.15
+            readonly property point p: parent.mapFromItem(null, JD.catHand.x, JD.catHand.y)
+            x: p.x - width / 2
+            y: p.y - height / 2
+        }
+
+        // Наведи на кошку — увидишь проценты. Раньше число было только в карточке нагрузки, а
+        // кошка сообщала одно «быстро бежит»: сколько именно и не память ли это — не узнать.
+        Rectangle {
+            id: catTip
+            property Item at: null
+            z: 7
+            visible: opacity > 0.01
+            opacity: at !== null && JD.catFrom === null ? 1 : 0
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
+            width: catTipText.implicitWidth + 22
+            height: 28
+            radius: 14
+            color: JD.ink
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+            // Ставится, когда подсказка появляется: полоса под рукой ещё 180 мс подрастает,
+            // и место, посчитанное сразу, съехало бы на эти несколько точек.
+            function place() {
+                if (!at) return
+                const p = at.mapToItem(parent, at.width / 2, 0)
+                const edge = island.mapToItem(parent, 0, JD.atTop ? island.height : 0).y   // под полосой, а не на ней
+                x = Math.max(8, Math.min(parent.width - width - 8, p.x - width / 2))
+                y = JD.atTop ? edge + 8 : edge - height - 8
+            }
+            Timer { id: catTipDelay; interval: 350; onTriggered: { catTip.at = JD.catTipAt; catTip.place() } }
+            Connections {
+                target: JD
+                function onCatTipAtChanged() {
+                    if (JD.catTipAt) catTipDelay.restart()
+                    else { catTipDelay.stop(); catTip.at = null }
+                }
+            }
+            Text {
+                id: catTipText
+                anchors.centerIn: parent
+                text: JD.tr("Процессор ") + Math.round(JD.cpu) + " %  ·  " + JD.tr("Память ") + Math.round(JD.mem) + " %"
+                color: JD.text1
+                font.family: JD.fontFamily
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                font.features: { "tnum": 1 }
             }
         }
 
@@ -1112,7 +1254,23 @@ ShellRoot {
         }
     }
 
+    // Кошку на сплошной полосе переносят рукой, как значки в доке: от часов к трею и обратно.
+    // Сама кошка остаётся на месте полупрозрачной, рядом с рукой едет её копия (catGhost), а
+    // куда она ляжет — решает отпускание, и выбор запоминается в island.cat_place.
+    component CatCarry: DragHandler {
+        property Item cat
+        target: null
+        enabled: JD.islandStyle === "bar"
+        cursorShape: active ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+        onActiveChanged: {
+            if (active) { JD.catTipAt = null; JD.catFrom = cat }
+            else JD.catDrop()
+        }
+        onCentroidChanged: if (active) JD.catHand = centroid.scenePosition
+    }
+
     component PeekView: View {
+        property alias cat: clockCat
         id: pv
         readonly property color fg: JD.text1
         readonly property color fg2: JD.text2
@@ -1182,11 +1340,16 @@ ShellRoot {
                 lookY: JD.pointerY
             }
             DockCat {
-                visible: JD.island.cat === true
+                id: clockCat
+                // На полосе кошку можно унести к значкам трея; у островка и выреза трея нет.
+                visible: JD.island.cat === true && !(JD.islandStyle === "bar" && JD.catPlace === "tray")
                 size: 22
                 cpu: JD.cpu
                 awake: true
                 sleepBelow: JD.dockCfg.cat_sleep_below || 0
+                opacity: JD.catFrom === clockCat ? 0.3 : 1
+                HoverHandler { onHoveredChanged: JD.catTipAt = hovered ? clockCat : (JD.catTipAt === clockCat ? null : JD.catTipAt) }
+                CatCarry { cat: clockCat }
             }
             Text { text: Qt.formatTime(clock.date, "HH:mm"); color: pv.fg; font.family: JD.fontFamily; font.pixelSize: 16; font.weight: Font.Bold; font.features: { "tnum": 1 } }
             Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM"); color: pv.fg2 }
