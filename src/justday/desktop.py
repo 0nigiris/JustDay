@@ -827,6 +827,7 @@ def window_thumb(wid: str, *, max_edge: int = 280) -> dict:
 
 
 _last_icons_json = ""
+_last_icons_file = ""         # что последним записали в файл карты
 _last_icons_reconfigure = 0.0
 _last_icons_applied = ""     # карта, которую эффект уже получил: повторять её ему незачем
 
@@ -846,7 +847,7 @@ def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | No
     import time
     from pathlib import Path
 
-    global _last_icons_json, _last_icons_reconfigure, _last_icons_applied
+    global _last_icons_json, _last_icons_reconfigure, _last_icons_applied, _last_icons_file
 
     path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-dock-icons.json"
     merged: dict = {}
@@ -861,7 +862,12 @@ def publish_dock_icons(icons: dict, replace: bool = True, reconfigure: bool | No
     if isinstance(icons, dict):
         merged.update(icons)
     try:
-        path.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
+        # Ту же карту повторно не пишем: док шлёт её на каждый шаг наведения (десятки раз в секунду),
+        # а файл читает только эффект сворачивания — и ему важна сама карта, а не число записей (Р-45).
+        body = json.dumps(merged, ensure_ascii=False)
+        if body != _last_icons_file or not path.exists():
+            path.write_text(body, encoding="utf-8")
+            _last_icons_file = body
         icons = merged
     except OSError as e:
         return {"ok": False, "error": str(e)}

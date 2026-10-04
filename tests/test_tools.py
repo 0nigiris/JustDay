@@ -579,6 +579,30 @@ def test_the_same_icon_map_is_not_pushed_to_kwin_twice(tmp_path, monkeypatch) ->
     assert len(calls) == 2
 
 
+def test_the_icon_map_file_was_rewritten_on_every_hover_tick(tmp_path, monkeypatch) -> None:
+    """Док шлёт карту значков на каждый шаг наведения, и демон каждый раз переписывал один и тот же файл.
+    Теперь файл пишется, только когда карта изменилась или файл пропал (Р-45)."""
+    from justday import desktop
+
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(desktop.shutil, "which", lambda name: None)      # kwriteconfig6 не трогаем
+    monkeypatch.setattr(desktop, "_last_icons_file", "")
+    path = tmp_path / "justday-dock-icons.json"
+    icons = {"app:discord": {"x": 10, "y": 20, "w": 48, "h": 48}}
+    writes: list[str] = []
+    real = type(path).write_text
+    monkeypatch.setattr(type(path), "write_text", lambda self, text, **kw: writes.append(text) or real(self, text, **kw))
+
+    desktop.publish_dock_icons(icons)
+    desktop.publish_dock_icons(icons)
+    assert len(writes) == 1, "та же карта записана дважды"
+    desktop.publish_dock_icons({"app:discord": {"x": 11, "y": 20, "w": 48, "h": 48}})
+    assert len(writes) == 2, "карта изменилась, а файл остался прежним"
+    path.unlink()
+    desktop.publish_dock_icons({"app:discord": {"x": 11, "y": 20, "w": 48, "h": 48}})
+    assert path.exists(), "файл пропал, а карту не вернули"
+
+
 # ──────────────────────────── лестница поставщиков ────────────────────────────
 def test_the_ladder_starts_at_the_one_we_want_to_think_with(monkeypatch) -> None:
     """Наверху лестницы — основной, ниже запасные по порядку, и никто не повторяется дважды."""
