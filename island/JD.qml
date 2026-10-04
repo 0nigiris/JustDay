@@ -839,7 +839,29 @@ Singleton {
     // Открытые окна. Спрашивать вейланд бесполезно: KWin не отдаёт список окон обычным клиентам —
     // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
     // демона, которому о нём рассказывает скрипт, живущий внутри самого KWin.
+    // `windows` меняется только когда поменялся состав или состояние окон (открыли, закрыли, свернули, сменили
+    // название); `windowRects` — тот же список с геометрией, он обновляется на каждое движение окна. Док
+    // пересобирает ячейки по `windows`, а когда окно просто тащат за угол, ему пересобирать нечего: раньше
+    // ячейки пересоздавались около пяти раз в секунду, пока окно двигали (Р-40). Геометрия нужна только
+    // тем, кто смотрит, накрыло ли окно док или оно во весь экран, — они читают `windowRects`.
     property var windows: []
+    property var windowRects: []
+    property string _windowShape: ""
+    function setWindows(list) {
+        windowRects = list
+        const shape = windowShape(list)
+        if (shape === _windowShape) return
+        _windowShape = shape
+        windows = list
+    }
+    // Состояние окон без геометрии — по нему решаем, трогать ли `windows`.
+    function windowShape(list) {
+        return JSON.stringify(list.map(w => {
+            const c = Object.assign({}, w)
+            for (const k of ["x", "y", "w", "h", "ox", "oy", "ow", "oh"]) delete c[k]
+            return c
+        }))
+    }
     // Есть ли впереди окно во весь экран. Считается здесь, а не в доке: то же самое пригодится
     // и островку, и уведомлениям — поверх игры им тоже не место.
     readonly property bool fullscreen: windows.some(w => w && w.full === true && !w.minimized)
@@ -932,11 +954,11 @@ Singleton {
     function dockCoveredOn(screen, stripPx, atTop, islandX, islandW) {
         if (dockCfg.hide_on_fullscreen === false) return false
         if (!screen) return false
-        if (!windows || !windows.length) return false
+        if (!windowRects || !windowRects.length) return false
         const strip = stripPx || dockStripGuess
         const top = !!atTop
-        for (let i = 0; i < windows.length; i++) {
-            if (windowCoversDockStrip(windows[i], screen, strip, top, islandX, islandW))
+        for (let i = 0; i < windowRects.length; i++) {
+            if (windowCoversDockStrip(windowRects[i], screen, strip, top, islandX, islandW))
                 return true
         }
         return false
@@ -1220,9 +1242,9 @@ Singleton {
     // Полноэкранное окно на том мониторе, где висит полоса. Не путать с «окно задело док»:
     // здесь только настоящий fullscreen KWin, и только этот экран.
     function screenHasFullscreen(screen) {
-        if (!screen || !windows || !windows.length) return false
-        for (let i = 0; i < windows.length; i++) {
-            const w = windows[i]
+        if (!screen || !windowRects || !windowRects.length) return false
+        for (let i = 0; i < windowRects.length; i++) {
+            const w = windowRects[i]
             if (!w || w.minimized || w.full !== true) continue
             const app = String(w.app || "").toLowerCase()
             if (app && dockCoverIgnore.indexOf(app) >= 0) continue
@@ -1561,7 +1583,7 @@ Singleton {
             } else {
                 _pendingEmptyWindows = false
                 emptyWinGrace.stop()
-                windows = next
+                setWindows(next)
             }
         }
         if (m.emoji !== undefined) {
@@ -1678,7 +1700,7 @@ Singleton {
         onTriggered: {
             if (jd._pendingEmptyWindows) {
                 jd._pendingEmptyWindows = false
-                jd.windows = []
+                jd.setWindows([])
             }
         }
     }

@@ -143,3 +143,44 @@ def test_tiny_corner_clip_ignored():
          "x": 2500, "y": 1300, "w": 40, "h": 140,  # only 40px wide at edge
          "screen": "DP-2", "ox": 0, "oy": 0, "ow": 2560, "oh": 1440}
     assert covers(w, SCR, island_x=ISL_X, island_w=ISL_W) is False
+
+
+def test_dragging_a_window_did_not_rebuild_the_dock() -> None:
+    """Пока окно тянули за угол, список окон приходил с новой геометрией ~5 раз в секунду, и док каждый раз
+    пересоздавал все ячейки (Р-40). Теперь `windows` — состав и состояние (док собирается по нему) — меняется
+    только когда что-то открыли, закрыли, свернули; геометрия живёт отдельно в `windowRects`, для тех, кто
+    смотрит, накрыло ли окно док. Функции берутся из настоящего JD.qml и выполняются в node."""
+    import json
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("нет node, чтобы выполнить функции островка")
+    jd = Path("island/JD.qml").read_text(encoding="utf-8")
+    src = "\n".join(re.search(r"(    function " + name + r"\(.+?\n    \})", jd, re.S).group(1) for name in ("windowShape", "setWindows"))
+    win = {"id": "1", "app": "kate", "title": "a", "minimized": False, "active": True, "x": 0, "y": 0, "w": 800, "h": 600}
+    js = """
+const S = { windows: [], windowRects: [], _windowShape: "" }
+const { setWindows } = new Function("S", "with (S) { " + SRC + "; return { setWindows } }")(S)
+const out = {}
+setWindows([WIN])
+const first = S.windows
+setWindows([MOVED])
+out.moved_kept_windows = S.windows === first
+out.moved_updated_rects = S.windowRects[0].x === 40 && S.windowRects[0].w === 900
+setWindows([MINIMIZED])
+out.minimized_rebuilt = S.windows !== first && S.windows[0].minimized === true
+setWindows([])
+out.closed_rebuilt = S.windows.length === 0
+console.log(JSON.stringify(out))
+"""
+    for key, val in (("SRC", json.dumps(src)), ("WIN", json.dumps(win)), ("MOVED", json.dumps({**win, "x": 40, "w": 900})),
+                     ("MINIMIZED", json.dumps({**win, "minimized": True, "x": 40, "w": 900}))):
+        js = js.replace(key, val)
+    got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+    assert got == {"moved_kept_windows": True, "moved_updated_rects": True, "minimized_rebuilt": True, "closed_rebuilt": True}
