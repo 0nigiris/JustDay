@@ -1,0 +1,23 @@
+# Проверки на то, что коммитится (Р-72 ревизии). Подключить: `pre-commit install` (сам не ставится —
+# хук пишет в .git/hooks и действует на все сессии, которые здесь коммитят).
+# Всё локальное: ничего не скачивается, ruff и qmllint берутся из системы.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: ruff check
+        language: system
+        types: [python]
+      - id: shell-syntax
+        name: bash -n
+        entry: bash -n
+        language: system
+        types: [shell]
+        exclude: ^phone/
+      - id: qmllint-ratchet
+        name: qmllint (число предупреждений не растёт)
+        entry: scripts/qmllint-ratchet.sh
+        language: system
+        files: ^island/.*\.qml$
+      # shellcheck стоит добавить, когда он будет в системе: `dnf install ShellCheck`.

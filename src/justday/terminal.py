@@ -311,7 +311,9 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
         cmd += ["--effort", str(effort)]
     if role := dispatch.role_for(rung.model):
         cmd += ["--append-system-prompt", role]
-    if (mode := b.get("permission_mode") or ""):
+    # Режим «в обход прав» не передаётся никогда, откуда бы он ни пришёл (config.toml, чужая правка):
+    # снятая защита — не удобство, а снятая защита (AGENTS.md).
+    if (mode := b.get("permission_mode") or "") and "bypass" not in str(mode).lower():
         cmd += ["--permission-mode", str(mode)]
     unattended = (cfg.get("terminal") or {}).get("unattended")
     if unattended:

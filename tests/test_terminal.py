@@ -297,19 +297,32 @@ def test_a_task_left_for_the_night_was_abandoned_when_every_rung_ran_out() -> No
     assert any("начинаю сверху заново" in n for n in notes)
 
 
-def test_nobody_may_approve_the_dangerous_thing_for_a_sleeping_person() -> None:
+def test_nobody_may_approve_the_dangerous_thing_for_a_sleeping_person(monkeypatch) -> None:
     """Ночью опасное отклоняется, а не разрешается молча.
 
     Соблазн понятен: человек спит, подтвердить некому, а задача упирается. Но «спросить некого»
     значит «нельзя»: снятая со спящего защита — это не забота об удобстве. Claude Code получает
     `--permission-prompts none`, то есть всё, что спросило бы, отклоняется и попадает в журнал
-    словами, а человек читает утром и решает сам.
+    словами, а человек читает утром и решает сам. Проверяется настоящая собранная командная строка,
+    а не подстроки в исходнике.
     """
-    src = (ROOT / "src" / "justday" / "terminal.py").read_text(encoding="utf-8")
-    body = src.split("async def ask_claude", 1)[1].split("async def ask_opencode", 1)[0]
-    assert '"--permission-prompts", "none"' in body
-    assert "bypassPermissions" not in src, "ночью нельзя обходить права, их можно только отклонять"
-    assert "dangerously" not in src.lower()
+    seen: list[list[str]] = []
+
+    async def fake_run(cmd, env, line, quiet):
+        seen.append(cmd)
+        return 0, ""
+
+    monkeypatch.setattr(terminal, "_run", fake_run)
+    for mode in ("", "acceptEdits", "bypassPermissions"):
+        cfg = {"terminal": {"unattended": True}, "brain": {"permission_mode": mode}}
+        asyncio.run(terminal.ask_claude(terminal.Rung("claude", "opus"), "задача", "", cfg, lambda t: None, lambda t: None))
+    assert len(seen) == 3
+    for cmd in seen:
+        at = cmd.index("--permission-prompts")
+        assert cmd[at + 1] == "none", "ночью опасное должно отклоняться"
+        flat = " ".join(cmd).lower()
+        assert "bypass" not in flat and "dangerously" not in flat, "права обходить нельзя, их можно только отклонять"
+    assert "acceptEdits" in seen[1], "обычный режим прав человека пропал"
 
 
 def test_the_window_can_be_left_for_the_night_and_gives_the_machine_back_after(monkeypatch) -> None:

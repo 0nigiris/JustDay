@@ -19,7 +19,18 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR}/scripts/verification-loop.sh\"",
-            "timeout": 1200
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/scripts/stop-check.sh\"",
+            "timeout": 600
           }
         ]
       }

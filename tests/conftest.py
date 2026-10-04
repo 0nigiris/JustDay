@@ -58,3 +58,12 @@ def no_live_machine(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     import json
     import time
     server.PRESENCE.write_text(json.dumps({"idle": True, "at": time.time()}), encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def from_the_repo_root(monkeypatch):  # type: ignore[no-untyped-def]
+    """Тесты читают файлы проекта по относительным путям («island/JD.qml», «brain/settings.json»).
+
+    Запущенный не из корня (`pytest ~/JustDay/tests`, из IDE, из другого каталога) такой тест падал на
+    «нет файла», а не на настоящей беде (Р-69). Корень один — тот, где лежит этот каталог."""
+    monkeypatch.chdir(Path(__file__).resolve().parent.parent)

@@ -1,7 +1,8 @@
 name: check
 
 # The desktop half (KDE, PipeWire, a GPU) cannot be tested on a runner. What can: the code is valid
-# Python, it passes the linter, the shell scripts parse, and the defaults still load.
+# Python, it passes the linter, the shell scripts parse, the defaults still load — and the test suite
+# (about 12 seconds, no torch or GPU: the heavy parts are optional extras and the tests do not need them).
 on:
   push:
     branches: [main]
@@ -43,3 +44,10 @@ jobs:
           assert briefing.wanted("Джарвис, доброе утро") and not briefing.wanted("привет, открой дискорд")
           print("defaults ok")
           PY
+
+      - name: Tests
+        # Core dependencies only, as on a fresh install without the speech and voice extras. The suite was
+        # run this way on a clean venv before adding the step: everything passes, a few tests skip.
+        run: |
+          pip install -q -e . pytest pytest-asyncio
+          python -m pytest -q
