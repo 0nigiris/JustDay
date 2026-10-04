@@ -269,7 +269,15 @@ DEFAULTS: dict = {
         # Вид верхней полосы: island — капсула под краем, bar — сплошная полоса во всю ширину,
         # notch — вырез, прижатый к краю и скруглённый только снизу. Капсула посреди верхнего края
         # перекрывает вкладки браузера, и это не вкусовщина, а причина иметь выбор.
+        # bar сидит вплотную к краю и красится той же заливкой, что и меню из неё.
+        # bar_autohide — уезжает, пока не подвести курсор; иначе висит всегда.
+        # Полноэкранное окно прячет полосу само, отдельно от bar_autohide.
         "style": "island",
+        "bar_autohide": False,
+        "bar_height": 44,  # solid bar thickness, points; the card grows down from this
+        "enabled": True,  # the top island itself; false hides it
+        "above": True,    # keep the top strip above ordinary windows
+        "cat": False,     # running cat on the top island, separate from dock.cat
         "work_quiet": True,
         "notification_server": True,
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)

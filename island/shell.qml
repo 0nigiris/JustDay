@@ -370,8 +370,18 @@ ShellRoot {
         // Окно во всю ширину и прижато к тому краю, где живёт остров: край задаёт и точку отсчёта,
         // и сторону роста — сверху карточка разворачивается вниз, снизу вверх, сама собой.
         anchors { left: true; right: true; top: JD.atTop; bottom: !JD.atTop }
+        // Ноль, не «как получится»: иначе слой садится ниже края, и между полосой и монитором щель.
+        // У сплошной полосы окно чуть вылезает за край экрана: эффект скругления окон
+        // срезает угол поверхности, и чёрный угол монитора остаётся обоями.
+        readonly property int barBleed: JD.islandStyle === "bar" ? 18 : 0
+        margins.top: -barBleed
+        margins.left: -barBleed
+        margins.right: -barBleed
         exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Overlay
+        // Ноль явно: иначе слой высотой в карточку сам занимает верх экрана.
+        exclusiveZone: 0
+        visible: JD.island.enabled !== false
+        WlrLayershell.layer: JD.island.above === false ? WlrLayer.Top : WlrLayer.Overlay
         WlrLayershell.namespace: "justday-island"
         readonly property bool big: ["expanded", "settings", "compose", "player", "tools"].includes(island.mode)
         // Мышь перехватывается на весь экран только там, где это нужно для закрытия щелчком мимо:
@@ -384,14 +394,26 @@ ShellRoot {
                                    : big || island.mode === "video" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         // окно шире самого острова: видео растягивают почти во весь экран, а щелчки всё равно
         // проходят везде, кроме него самого — маска ниже отвечает за это
-        implicitWidth: Math.max(1000, Math.min(JD.screenWidth, JD.videoWidth + 80))
-        implicitHeight: Math.min(JD.screenHeight, 880 + JD.topMargin)
+        // Сплошная полоса — это строка на всю ширину монитора, а не окно по ширине видео.
+        implicitWidth: JD.islandStyle === "bar"
+                       ? Math.max(win.screen ? win.screen.width : JD.screenWidth, 1000)
+                       : Math.max(1000, Math.min(JD.screenWidth, JD.videoWidth + 80))
+        implicitHeight: Math.min(JD.screenHeight, 880 + (JD.islandStyle === "island" ? JD.topMargin : 0))
         color: "transparent"
 
-        // clicks pass through everywhere except the island (and the whole area while expanded, to close on outside click)
+        // Вырез и островок прячутся сами. Полоса — только если это включено.
+        // Зона наведения должна быть в маске, иначе курсор до неё не доходит.
+        readonly property bool edgeReveal: JD.island.hover_reveal !== false
+            && (JD.islandStyle === "notch" || JD.islandStyle === "island"
+                || (JD.islandStyle === "bar" && JD.barAutohide))
+        // Клики и броски проходят сквозь окно везде, кроме видимого островка.
+        // Пока он спрятан, полоска наведения — только его ширина, не весь край:
+        // иначе курсор над пустой полосой запрещает бросить значок на стол.
+        // Сплошная полоса по-прежнему занимает всю ширину. Развёрнутое меню берёт весь фон.
         mask: Region {
-            item: win.modal ? backdrop : island
-            Region { item: hotZone }
+            item: win.modal ? backdrop
+                : (win.edgeReveal && island.mode === "hidden") ? revealPad
+                : island
         }
 
         MouseArea {
@@ -401,16 +423,76 @@ ShellRoot {
             onClicked: JD.closeAll()
         }
 
-        // thin invisible strip at the very top: hover it to reveal the island
-        Item {
-            id: hotZone
-            width: 420
-            height: island.mode === "hidden" ? JD.islandPeekHeight(JD.island.hover_reveal) : 0
-            x: JD.side === "left" ? 0
-             : JD.side === "right" ? parent.width - width
-             : (parent.width - width) / 2
-            y: JD.atTop ? 0 : parent.height - height
-            HoverHandler { onHoveredChanged: if (hovered) JD.peeking = true }
+        // Одна и та же зона: спрятанный вырез — полоска у края, открытый — сам вырез.
+        // Геометрия меняется под курсором, поэтому вход не теряется на первом наведении
+        // и уход действительно гасит peeking. Кнопки не берём: нажатия идут островку.
+        MouseArea {
+            id: revealPad
+            z: 3
+            enabled: win.edgeReveal && !win.modal
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            preventStealing: false
+            readonly property bool parked: island.mode === "hidden"
+            // Пока полоска только что выросла под курсором, это не новое наведение.
+            property bool suppressEnter: false
+            // Сплошная полоса ловит весь край. Островок и вырез — только свою ширину,
+            // по центру или у своего бока. Остальной верхний край остаётся рабочим столом.
+            readonly property bool wideEdge: JD.islandStyle === "bar"
+            readonly property real restW: Math.max(80, peekView.implicitWidth)
+            x: !parked ? island.x
+             : wideEdge ? 0
+             : JD.side === "left" ? JD.sideMargin
+             : JD.side === "right" ? parent.width - restW - JD.sideMargin
+             : (parent.width - restW) / 2
+            y: parked ? (JD.atTop ? win.barBleed : parent.height - win.barBleed - 10)
+                      : (JD.atTop ? Math.min(win.barBleed, island.y) : island.y)
+            width: parked ? (wideEdge ? parent.width : restW) : Math.max(1, island.width)
+            height: parked ? 10
+                           : Math.max(1, JD.atTop ? island.y + island.height - Math.min(win.barBleed, island.y) : island.height)
+            onParkedChanged: if (parked) { suppressEnter = true; suppressTimer.restart() }
+            Timer { id: suppressTimer; interval: 180; onTriggered: revealPad.suppressEnter = false }
+            onContainsMouseChanged: {
+                if (!revealPad.enabled) return
+                if (containsMouse) {
+                    if (suppressEnter) return
+                    JD.islandHovered = true
+                    JD.revealFromEdge()
+                } else {
+                    suppressEnter = false
+                    JD.islandHovered = false
+                    JD.kickIslandHide()
+                }
+            }
+            onPositionChanged: {
+                const p = mapToItem(win, mouseX, mouseY)
+                JD.pointerX = p.x
+                JD.pointerY = p.y
+                if (!revealPad.enabled || !containsMouse || !parked || suppressEnter) return
+                JD.revealFromEdge()
+            }
+            onEnabledChanged: {
+                if (!enabled) return
+                if (containsMouse && !suppressEnter) {
+                    JD.islandHovered = true
+                    JD.revealFromEdge()
+                } else if (!containsMouse) {
+                    JD.islandHovered = false
+                    JD.kickIslandHide()
+                }
+            }
+        }
+        // Если сигнал ухода потерялся, зона всё равно скажет правду.
+        Timer {
+            interval: 200
+            repeat: true
+            running: win.edgeReveal && JD.peeking && !win.modal
+            onTriggered: {
+                if (JD.revealLock) return
+                if (revealPad.containsMouse) { JD.holdIsland(); return }
+                if (JD.islandHovered) JD.islandHovered = false
+                else JD.scheduleIslandHide()
+            }
         }
 
         Shortcut { sequence: "Escape"; enabled: win.big; onActivated: JD.closeAll() }
@@ -438,9 +520,18 @@ ShellRoot {
         Shortcut { sequence: "F"; enabled: win.onVideo
                    onActivated: JD.videoBig ? videoView.grow(videoView.smallWidth) : videoView.grow(JD.videoRoom) }
 
+        // Одно раскрытие для полосы, выреза и островка.
+        // x и y не анимируются: иначе левый край и ширина едут врозь.
+        component DropAnim: NumberAnimation {
+            duration: JD.slideMs
+            easing.type: JD.slideEase
+        }
+
+
         // ───────────── the island ─────────────
         Rectangle {
             id: island
+            z: 1
             readonly property string mode: JD.mode
             readonly property Item content: ({
                 expanded: expandedView, settings: settingsHolder, compose: composeView, approval: approvalView, card: cardView, listening: listeningView,
@@ -449,58 +540,77 @@ ShellRoot {
                 videopill: videoPillView, tools: toolsHolder })[mode]
             readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen
 
-            // Сплошная полоса занимает всю ширину всегда: в этом и есть её смысл — она не
-            // плавает над вкладками, а живёт своей строкой экрана.
-            width: JD.islandStyle === "bar" ? parent.width
-                 : mode === "hidden" ? 140 : Math.max(120, content.implicitWidth)
-            height: mode === "hidden" ? 8 : content.implicitHeight
-            // corners follow the *animated* height every frame (a pill stays a pill while it grows);
-            // only the pill ↔ card transition itself is eased
+            // Полоса остаётся полосой на всю ширину. Карточка живёт отдельным слоем под ней.
+            readonly property bool barHang: JD.islandStyle === "bar" && (mode === "settings" || mode === "expanded")
+            readonly property bool menuBar: JD.islandStyle === "bar" && (mode === "peek" || mode === "hidden")
+            readonly property bool barDock: menuBar || barHang
+            width: barDock ? Math.max(1, parent.width - win.barBleed * 2)
+                 : mode === "hidden" ? 0
+                 : Math.max(120, content.implicitWidth)
+            height: mode === "hidden" ? 0
+                  : barDock ? JD.barHeight
+                  : content.implicitHeight
+            // corners follow the *animated* height every frame (a pill stays a pill while it grows)
             property real pill: compact ? 1 : 0
-            Behavior on pill { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
-            // Вырез скруглён только снизу, полоса не скруглена вовсе, капсула — как была.
+            Behavior on pill { enabled: JD.animOn; DropAnim {} }
+            // Вырез скруглён только снизу. Полоса прямая со всех сторон. Капсула как была.
             readonly property real soft: Math.min(height / 2, pill * height / 2 + (1 - pill) * (mode === "settings" ? 34 : 30))
-            radius: JD.islandStyle === "bar" ? 0 : soft
-            topLeftRadius: JD.islandStyle === "island" ? soft : 0
-            topRightRadius: JD.islandStyle === "island" ? soft : 0
-            bottomLeftRadius: JD.islandStyle === "bar" ? 0 : soft
-            bottomRightRadius: JD.islandStyle === "bar" ? 0 : soft
-            x: JD.islandStyle === "bar" ? 0
+            // Вырез: radius 0, иначе общий radius скругляет и верх, и между монитором и вырезом щель.
+            readonly property bool squareTop: barDock || JD.islandStyle === "notch"
+            radius: squareTop ? 0 : soft
+            topLeftRadius: squareTop ? 0 : soft
+            topRightRadius: squareTop ? 0 : soft
+            bottomLeftRadius: barDock ? 0 : soft
+            bottomRightRadius: barDock ? 0 : soft
+            antialiasing: true
+            x: barDock ? win.barBleed
              : JD.side === "left" ? JD.sideMargin
              : JD.side === "right" ? parent.width - width - JD.sideMargin
              : (parent.width - width) / 2
-            // Спрятанный остров уезжает за свой край — за тот же, у которого стоит.
-            // Полоса и вырез прижаты к самому краю: у выреза отступ означал бы, что он вырезан не
-            // в экране, а в воздухе, а полоса с отступом — это та же капсула, только шире.
-            readonly property real fromEdge: JD.islandStyle === "island"
-                ? (mode === "hidden" ? JD.topMargin - 22 : JD.topMargin) : 0
-            y: JD.atTop ? fromEdge : parent.height - height - fromEdge
+            // Вырез прижат к краю. Полоса сдвинута на barBleed: верх окна за экраном.
+            // Островок опускается на свой отступ — его задают в «Верхняя панель».
+            y: !JD.atTop ? parent.height - height
+               : JD.islandStyle === "island" ? JD.topMargin
+               : win.barBleed
             opacity: mode === "hidden" ? 0 : 1
-            scale: mode === "hidden" ? 0.7 : 1
+            scale: 1
             color: JD.ink
             clip: true
-            border.width: 1
+            border.width: JD.islandStyle === "bar" || JD.islandStyle === "notch" ? 0 : 1
             border.color: Qt.rgba(1, 1, 1, win.big ? 0.10 : 0.06)
 
-            // Empty settings chrome does not take clicks, so they fell through to the
-            // backdrop and closed the island. Swallow them here. Outside still closes.
+            Rectangle {
+                visible: JD.islandStyle === "bar" && island.mode === "peek"
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 1
+                color: Qt.rgba(1, 1, 1, 0.14)
+            }
             MouseArea {
                 anchors.fill: parent
-                enabled: island.mode === "settings"
+                enabled: island.barHang
                 z: -1
                 onClicked: {}
             }
 
-            // Size morphs + reveal/hide: short OutCubic only. Soft SpringAnimation sampled
-            // poorly on high-Hz panels and fought notification open/close + EdgeReveal hide.
-            Behavior on width { enabled: JD.animOn && !JD.videoResizing; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
-            Behavior on height { enabled: JD.animOn && !JD.videoResizing; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
-            Behavior on y { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: JD.slideEase } }
-            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
+            // Высота и ширина — один DropAnim. x и y без анимации, чтобы не было проезда вбок и щели сверху.
+            // У полосы высота меняется только когда она прячется от полноэкранного окна.
+            // Иначе Behavior доигрывает до половины и оставляет панель настроек внутри полосы.
+            readonly property bool barMove: JD.islandStyle === "bar" && (mode === "hidden" || JD.barFullscreen || JD.armedQuick)
+            Behavior on width { enabled: JD.animOn && !JD.videoResizing && !island.barDock; DropAnim {} }
+            Behavior on height {
+                enabled: JD.animOn && !JD.videoResizing && (JD.islandStyle !== "bar" || island.barMove)
+                NumberAnimation { duration: island.barMove ? 80 : JD.slideMs; easing.type: island.barMove ? Easing.OutCubic : JD.slideEase }
+            }
+            Behavior on opacity {
+                enabled: JD.animOn
+                NumberAnimation { duration: island.barMove ? 80 : JD.slideMs; easing.type: island.barMove ? Easing.OutCubic : JD.slideEase }
+            }
+
 
             HoverHandler {
+                enabled: !win.edgeReveal
                 onHoveredChanged: {
+                    if (win.edgeReveal) return
                     JD.islandHovered = hovered
                     if (!hovered) { JD.pointerX = -99999; JD.pointerY = -99999 }
                 }
@@ -573,7 +683,7 @@ ShellRoot {
                 anchors.fill: parent
                 clip: true
                 layer.enabled: false
-                PeekView { id: peekView; shown: island.mode === "peek" }
+                PeekView { id: peekView; shown: island.mode === "peek" || island.barHang }
                 MusicView { id: musicView; shown: island.mode === "music" }
                 PlayerView { id: playerView; shown: island.mode === "player" }
                 VideoView { id: videoView; shown: island.mode === "video" }
@@ -586,11 +696,22 @@ ShellRoot {
                 AnswerView { id: answerView; shown: island.mode === "answer" }
                 ApprovalView { id: approvalView; shown: island.mode === "approval" }
                 CardView { id: cardView; shown: island.mode === "card" }
-                ExpandedView { id: expandedView; shown: island.mode === "expanded" }
+                ExpandedView {
+                    id: expandedView
+                    // На полосе карточка — постоянный родитель. Возвращать содержимое в полосу
+                    // в конце анимации нельзя: крестик и верх панели остаются внутри неё.
+                    shown: JD.islandStyle === "bar"
+                           ? (dropCard.want === "expanded" || dropCard.held === "expanded")
+                           : (island.mode === "expanded" || dropCard.held === "expanded")
+                    parent: JD.islandStyle === "bar" ? dropCard : stage
+                }
                 ComposeView { id: composeView; shown: island.mode === "compose" }
                 View {
                     id: settingsHolder
-                    shown: island.mode === "settings"
+                    shown: JD.islandStyle === "bar"
+                           ? (dropCard.want === "settings" || dropCard.held === "settings")
+                           : (island.mode === "settings" || dropCard.held === "settings")
+                    parent: JD.islandStyle === "bar" ? dropCard : stage
                     implicitWidth: 940
                     implicitHeight: 640
                     Loader {
@@ -615,6 +736,60 @@ ShellRoot {
             }
         }
 
+        // Карточка сплошной полосы раскрывается вниз из-под часов. Высота — тот же DropAnim.
+        Rectangle {
+            id: dropCard
+            objectName: "dropCard"
+            property string want: JD.islandStyle === "bar" && island.mode === "settings" ? "settings"
+                                 : JD.islandStyle === "bar" && island.mode === "expanded" ? "expanded"
+                                 : ""
+            property string held: ""
+            onWantChanged: if (want !== "") held = want
+            z: 2
+            // Нельзя гасить visible: пока элемент скрыт, DropAnim на высоте перескакивает в конец.
+            visible: JD.islandStyle === "bar"
+            color: JD.ink
+            // Стык с полосой прямой. Скругление только снизу, иначе у квадратной полосы ступенька.
+            radius: 0
+            topLeftRadius: 0
+            topRightRadius: 0
+            bottomLeftRadius: 32
+            bottomRightRadius: 32
+            antialiasing: true
+            clip: true
+            x: Math.round((parent.width - width) / 2)
+            // На 3 точки под полосу: антиалиас верхнего края не рисует шов.
+            y: JD.atTop ? win.barBleed + JD.barHeight - 3
+                        : parent.height - win.barBleed - JD.barHeight + 3 - height
+            readonly property real growTo: {
+                if (!island.barHang) return 0
+                const item = (want === "settings" || held === "settings") ? settingsHolder
+                           : (want === "expanded" || held === "expanded") ? expandedView : null
+                return Math.max(1, item ? item.implicitHeight : 1)
+            }
+            readonly property real wideTo: {
+                const item = (want === "settings" || held === "settings") ? settingsHolder
+                           : (want === "expanded" || held === "expanded") ? expandedView : null
+                return Math.max(120, item ? item.implicitWidth : 120)
+            }
+            // Пишем в grow/wide, не в height: у height Qt обходит Behavior, и карточка вспыхивает целиком.
+            // Смена настроек и виджетов на той же карточке — тот же DropAnim, не скачок.
+            property real grow: 0
+            property real wide: 120
+            height: grow
+            width: wide
+            Behavior on grow { enabled: JD.animOn; DropAnim {} }
+            Behavior on wide { enabled: JD.animOn; DropAnim {} }
+            onGrowToChanged: grow = growTo
+            onWideToChanged: wide = wideTo
+            onGrowChanged: if (want === "" && grow < 1) held = ""
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onClicked: {}
+            }
+        }
+
         // soft shadow under the island. Its source is a plain copy of the shape: with the island itself as the
         // source, the effect draws the island again (border included) and that copy shows as a ring while it grows
         Rectangle {
@@ -636,12 +811,64 @@ ShellRoot {
             color: Qt.rgba(0, 0, 0, 0.35)
             scale: island.scale
             opacity: island.opacity * 0.5
-            visible: island.mode !== "hidden"
+            visible: island.mode !== "hidden" && !island.barDock
+        }
+    }
+
+    // Папка на рабочем столе слушает только панель Plasma, не exclusive zone слоя.
+    // Тонкая прозрачная панель той же высоты сдвигает значки. Прячется полоса — панель снимается.
+    Item {
+        id: barStrut
+        // Нет полосы — нет панели. Иначе значки рабочего стола остаются под пустой полосой.
+        readonly property bool live: false
+        readonly property int h: Math.round(JD.barHeight)
+        readonly property int sx: win.screen ? win.screen.x : 0
+        readonly property int sy: win.screen ? win.screen.y : 0
+        property double ticket: 0
+        function schedule() { ticket = Date.now(); strutTimer.restart() }
+        // Стиль ушёл с полосы — панель Plasma удаляется сразу, не прячется.
+        // Таймер «on» от прошлой полосы при этом гасится, иначе он создаёт панель заново.
+        function pushOff() {
+            strutTimer.stop()
+            ticket = Date.now()
+            Quickshell.execDetached(["python3", Quickshell.shellDir + "/bar_strut.py",
+                                     "off", String(h), String(sx), String(sy), String(ticket)])
+        }
+        // Только смена стиля со сплошной полосы. Островок и вырез панель не создают.
+        function drop() {
+            strutTimer.stop()
+            ticket = Date.now()
+            Quickshell.execDetached(["python3", Quickshell.shellDir + "/bar_strut.py",
+                                     "drop", String(h), String(sx), String(sy), String(ticket)])
+        }
+        function push() {
+            Quickshell.execDetached(["python3", Quickshell.shellDir + "/bar_strut.py",
+                                     (JD.islandStyle === "bar" && live) ? "on" : "off",
+                                     String(h), String(sx), String(sy), String(ticket)])
+        }
+        Timer { id: strutTimer; interval: 60; onTriggered: barStrut.push() }
+        onLiveChanged: schedule()
+        onHChanged: if (JD.islandStyle === "bar") schedule()
+        onSxChanged: schedule()
+        onSyChanged: schedule()
+        Connections {
+            target: JD
+            function onIslandStyleChanged() {
+                if (JD.islandStyle !== "bar") barStrut.drop()
+                else barStrut.schedule()
+            }
+        }
+        Component.onCompleted: {
+            if (JD.islandStyle !== "bar") pushOff()
+            else schedule()
         }
     }
 
     component PeekView: View {
         id: pv
+        readonly property color fg: JD.text1
+        readonly property color fg2: JD.text2
+        readonly property color hair: JD.fill2
         readonly property string event: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
                                         : JD.runningJob ? JD.runningJob.title + " · " + JD.jobTime(JD.runningJob)
                                         : JD.dstate === "offline" ? JD.assistantName + JD.tr(" не запущен")
@@ -649,7 +876,7 @@ ShellRoot {
                                         : JD.update ? JD.tr("Доступно обновление")
                                         : (JD.island.show_events !== false && JD.history.length && JD.history[0].a) ? JD.history[0].a : ""
         implicitWidth: peekRow.implicitWidth + 32
-        implicitHeight: 44
+        implicitHeight: JD.islandStyle === "bar" ? JD.barHeight : 44
         SystemClock { id: clock; precision: SystemClock.Minutes }
         RowLayout {
             id: peekRow
@@ -684,12 +911,19 @@ ShellRoot {
                 lookX: JD.pointerX
                 lookY: JD.pointerY
             }
-            Text { text: Qt.formatTime(clock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 16; font.weight: Font.Bold; font.features: { "tnum": 1 } }
-            Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM") }
-            Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
-            Label2 { visible: !!pv.event; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : JD.text2 }
+            DockCat {
+                visible: JD.island.cat === true
+                size: 22
+                cpu: JD.cpu
+                awake: true
+                sleepBelow: JD.dockCfg.cat_sleep_below || 0
+            }
+            Text { text: Qt.formatTime(clock.date, "HH:mm"); color: pv.fg; font.family: JD.fontFamily; font.pixelSize: 16; font.weight: Font.Bold; font.features: { "tnum": 1 } }
+            Label2 { text: clock.date.toLocaleDateString(Qt.locale(JD.lang === "ru" ? "ru_RU" : "en_US"), "ddd, d MMM"); color: pv.fg2 }
+            Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
+            Label2 { visible: !!pv.event; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : pv.fg2 }
             // a running timer, the way the phone shows one: the number, not a logo
-            Rectangle { visible: !!JD.runningTimer; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
+            Rectangle { visible: !!JD.runningTimer; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             RowLayout {
                 visible: !!JD.runningTimer
                 spacing: 5
@@ -702,7 +936,7 @@ ShellRoot {
             }
             // Молчит по просьбе. Об этом нужно говорить вслух — вернее, показывать: иначе «он мне
             // не отвечает» выглядит поломкой, хотя ассистент просто выполняет «молчи».
-            Rectangle { visible: JD.muted; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
+            Rectangle { visible: JD.muted; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             Rectangle {
                 visible: JD.muted
                 implicitWidth: mutedRow.implicitWidth + 16
@@ -720,12 +954,12 @@ ShellRoot {
                 // Нажатие прямо здесь возвращает голос: пометка — она же и кнопка.
                 TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: JD.setMuted(false) }
             }
-            Rectangle { visible: !!JD.weather && JD.island.show_weather !== false; implicitWidth: 1; implicitHeight: 18; color: JD.fill2 }
+            Rectangle { visible: !!JD.weather && JD.island.show_weather !== false; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             RowLayout {
                 visible: !!JD.weather && JD.island.show_weather !== false
                 spacing: 6
                 Image { source: JD.weather ? Quickshell.shellDir + "/icons/" + JD.weather.icon + ".svg" : ""; sourceSize: Qt.size(36, 36); Layout.preferredWidth: 18; Layout.preferredHeight: 18 }
-                Text { text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : ""; color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold }
+                Text { text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : ""; color: pv.fg; font.family: JD.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold }
             }
         }
     }

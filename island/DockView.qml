@@ -830,14 +830,20 @@ Item {
                     // the texture Qt rasterized at the calm size, which pixelates icons.
                     // App glyphs are a touch larger than the layout square. Dragging does
                     // not change that size, so letting go cannot drop the icon.
+                    // Apple, cat and trash share the app glyph's box, so their center
+                    // matches the centered apps instead of sitting on a shorter baseline.
+                    readonly property bool dockChrome: slot.e.t === "launcher" || slot.e.t === "cat" || slot.e.t === "trash"
                     readonly property real draw: dv.icon * slot.k
-                        * (slot.e.t === "app" ? 1.08 : 1)
+                        * ((slot.e.t === "app" || dockChrome) ? 1.08 : 1)
                         * (drop.containsDrag ? 1.14 : 1)
                         * (slotTap.pressed ? 0.9 : 1)
                     width: draw
                     height: draw
-                    // Centered in the tray. Bottom dock grows up from rowBottom; top grows down from rowTop.
-                    y: (dv.atTop ? dv.rowTop + slot.dragLift : dv.rowBottom - draw - slot.dragLift) + slot.bounce
+                    // App-sized box, centered on the app row. Shorter glyphs (if any) use the
+                    // same midpoint so they do not hang below the apps.
+                    readonly property real appBox: dv.icon * slot.k * 1.08
+                    readonly property real mid: dv.atTop ? dv.rowTop + appBox / 2 : dv.rowBottom - appBox / 2
+                    y: mid - draw / 2 + (dv.atTop ? slot.dragLift : -slot.dragLift) + slot.bounce
                     opacity: slot.dragged ? 0.86 : (slotTap.pressed ? 0.88 : 1)
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 90 } }
 

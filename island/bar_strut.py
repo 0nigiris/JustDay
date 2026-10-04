@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Keep a thin Plasma panel under the solid top bar.
+
+Layer-shell exclusive zones move windows, but Plasma folder view only
+shrinks for a real panel. This panel is the strut. The JustDay bar paints
+over it. off removes it so notch/island and a hidden bar do not leave a strip.
+
+A generation number makes a late "on" from the previous style lose to "off".
+"""
+import fcntl
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+def marked(panel) -> str:
+    return """
+function marked(p) {
+  var v = p.readConfig("justdayBar", "");
+  return v === "1" || v === 1 || v === true || String(v) === "1";
+}
+"""
+
+
+def main() -> int:
+    mode = sys.argv[1] if len(sys.argv) > 1 else "off"
+    height = int(sys.argv[2]) if len(sys.argv) > 2 else 44
+    sx = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+    sy = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+    try:
+        gen = int(float(sys.argv[5])) if len(sys.argv) > 5 else 0
+    except ValueError:
+        gen = 0
+    height = max(28, min(96, height))
+    # drop: panel gone and the desktop margin refreshed, only after leaving the solid bar.
+    refresh = mode == "drop"
+    on = "true" if mode == "on" else "false"
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
+    lock_path = runtime / "justday-bar-strut.lock"
+    gen_path = runtime / "justday-bar-strut.gen"
+    runtime.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            current = int(gen_path.read_text() or "0")
+        except (OSError, ValueError):
+            current = 0
+        if gen and gen < current:
+            print("stale")
+            return 0
+        if gen:
+            gen_path.write_text(str(gen))
+        js = f"""
+var wantX = {sx};
+var wantY = {sy};
+var screenIndex = 0;
+for (var i = 0; i < screenCount; i++) {{
+  var g = screenGeometry(i);
+  if (g.x === wantX && g.y === wantY) screenIndex = i;
+}}
+function marked(p) {{
+  var v = p.readConfig("justdayBar", "");
+  return v === "1" || v === 1 || v === true || String(v) === "1";
+}}
+var mine = null;
+var ps = panels();
+for (var i = 0; i < ps.length; i++) {{
+  if (!marked(ps[i])) continue;
+  if (mine) ps[i].remove();
+  else mine = ps[i];
+}}
+if (!{on}) {{
+  var removed = mine ? 1 : 0;
+  if (mine) mine.remove();
+  ps = panels();
+  for (var j = 0; j < ps.length; j++) if (marked(ps[j])) {{ ps[j].remove(); removed++; }}
+  print("off " + removed);
+}} else {{
+  if (!mine) {{
+    mine = new Panel;
+    mine.writeConfig("justdayBar", "1");
+  }}
+  mine.screen = screenIndex;
+  mine.location = "top";
+  mine.floating = false;
+  mine.hiding = "none";
+  mine.lengthMode = "fill";
+  mine.height = {height};
+  mine.opacity = "translucent";
+  mine.backgroundHints = 0;
+  if (!mine.widgetIds || mine.widgetIds.length === 0)
+    mine.addWidget("org.kde.plasma.panelspacer");
+  print("on " + mine.id + " " + mine.height);
+}}
+"""
+        r = subprocess.run(
+            ["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", js],
+            capture_output=True, text=True,
+        )
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    if r.returncode == 0 and refresh and "off 0" not in r.stdout:
+        subprocess.run(
+            ["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.refreshCurrentShell"],
+            check=False,
+        )
+    return r.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
