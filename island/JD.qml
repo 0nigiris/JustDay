@@ -1078,6 +1078,13 @@ Singleton {
         const want = String(island.style || "island").toLowerCase()
         return ["island", "bar", "notch"].indexOf(want) >= 0 ? want : "island"
     }
+    readonly property bool barAutohide: island.bar_autohide === true
+    // Толщина сплошной полосы. Карточка настроек растёт вниз от неё, сама полоса не едет.
+    readonly property real barHeight: {
+        const n = Number(island.bar_height)
+        if (!isFinite(n) || n <= 0) return 44
+        return Math.max(28, Math.min(96, Math.round(n)))
+    }
     // Пока играет музыка, работа не отбирает островок себе: обложка остаётся на месте, а о работе
     // говорит точка рядом с ней. Молчать о работе вообще — не то же самое: когда острову нечего
     // показывать, кроме работы, человек должен видеть, чем он занят, а не кружок без слов.
@@ -1088,8 +1095,38 @@ Singleton {
     property bool detailOpen: false
     property bool islandHovered: false
 
+    // Полноэкранное окно на том мониторе, где висит полоса. Не путать с «окно задело док»:
+    // здесь только настоящий fullscreen KWin, и только этот экран.
+    function screenHasFullscreen(screen) {
+        if (!screen || !windows || !windows.length) return false
+        for (let i = 0; i < windows.length; i++) {
+            const w = windows[i]
+            if (!w || w.minimized || w.full !== true) continue
+            const app = String(w.app || "").toLowerCase()
+            if (app && dockCoverIgnore.indexOf(app) >= 0) continue
+            if (w.screen && screen.name) {
+                if (w.screen === screen.name) return true
+                continue
+            }
+            if ((w.ow || 0) > 0 && Math.abs((w.ox || 0) - screen.x) <= 4 && Math.abs((w.oy || 0) - screen.y) <= 4)
+                return true
+        }
+        return false
+    }
+    readonly property bool barFullscreen: {
+        if (islandStyle !== "bar") return false
+        const screens = Quickshell.screens
+        if (!screens || !screens.length) return false
+        const named = island.screen ? screens.find(s => s.name === island.screen) : null
+        const screen = named || screens.find(s => s.x === 0 && s.y === 0) || screens[0]
+        return screenHasFullscreen(screen)
+    }
+
     readonly property string mode: {
         if (alarm) return "alarm"                      // a timer going off outranks everything: it is waiting on you
+        // Игра или любое окно во весь экран убирает полосу само. Это не настройка:
+        // автоскрытие по курсору остаётся отдельно и складывается с этим.
+        if (islandStyle === "bar" && barFullscreen) return "hidden"
         if (composeOpen && !approvalText) return "compose"
         if (expanded && !approvalText && !settingsOpen) return "expanded"
         if (approvalText) return "approval"
@@ -1113,9 +1150,26 @@ Singleton {
         if (video && videoMini && workers === 0) return "videopill"
         if (musicShown && (!workQuiet ? workers === 0 : true)) return "music"
         if (peeking || workers > 0) return "peek"
+        // Меню-бар не прячется сам: иначе у верхнего края пусто, пока не подведёшь курсор.
+        // Прятать его — отдельная настройка, и только для сплошной полосы.
+        if (islandStyle === "bar" && !barAutohide) return "peek"
         return "hidden"
     }
     onModeChanged: if (mode !== "thinking") { detailOpen = false; workStep = 1 }
+    // Прятать и возвращать полосу от полноэкранного окна быстрее, чем обычное раскрытие.
+    // Флаг живёт ещё немного после выхода: анимация показа стартует, когда fullscreen уже false.
+    property bool armedQuick: false
+    onBarFullscreenChanged: {
+        if (barFullscreen) {
+            armedQuick = true
+            expanded = false
+            settingsOpen = false
+            composeOpen = false
+        } else {
+            barQuickOff.restart()
+        }
+    }
+    Timer { id: barQuickOff; interval: 200; onTriggered: jd.armedQuick = false }
 
     // ───────────── look ─────────────
     readonly property color ink: "#000000"
@@ -1223,7 +1277,7 @@ Singleton {
                     flush()
                 }
             }
-            onError: jd.lastMessage = 0
+            onError: jd.lastMessage = Date.now()
             parser: SplitParser {
                 onRead: line => {
                     jd.lastMessage = Date.now()
@@ -1242,7 +1296,11 @@ Singleton {
         interval: 2000
         repeat: true
         running: true
-        onTriggered: if (!jd.linked || Date.now() - jd.lastMessage > 12000) { jd.lastMessage = Date.now(); jd.reconnect() }
+        onTriggered: {
+            const silent = Date.now() - jd.lastMessage
+            const due = jd.linked ? silent > 12000 : silent > 4000
+            if (due) { jd.lastMessage = Date.now(); jd.reconnect() }
+        }
     }
 
     // one-shot commands: a short-lived connection per request (the daemon answers one line and closes)
@@ -1493,6 +1551,40 @@ Singleton {
         onTriggered: if (jd.islandHovered || jd.dstate === "listening") restart(); else jd.answerOpen = false
     }
     Timer { id: cardTimer; onTriggered: if (jd.islandHovered) restart(); else jd.card = null }
-    Timer { id: leaveTimer; interval: 700; onTriggered: jd.peeking = false }
-    onIslandHoveredChanged: if (islandHovered) leaveTimer.stop(); else leaveTimer.restart()
+    property bool revealLock: false
+    function holdIsland() { leaveTimer.stop() }
+    function revealFromEdge() {
+        leaveTimer.stop()
+        peeking = true
+        revealLock = true
+        revealLockTimer.restart()
+    }
+    function scheduleIslandHide() {
+        if (revealLock || islandHovered) { if (islandHovered) leaveTimer.stop(); return }
+        if (!leaveTimer.running) leaveTimer.restart()
+    }
+    function kickIslandHide() {
+        if (revealLock || islandHovered) return
+        leaveTimer.restart()
+    }
+    Timer {
+        id: revealLockTimer
+        interval: jd.slideMs + 80
+        onTriggered: {
+            jd.revealLock = false
+            jd.scheduleIslandHide()
+        }
+    }
+    Timer {
+        id: leaveTimer
+        interval: 420
+        onTriggered: {
+            if (jd.revealLock || jd.islandHovered) return
+            jd.peeking = false
+        }
+    }
+    onIslandHoveredChanged: {
+        if (islandHovered) leaveTimer.stop()
+        else if (!revealLock) leaveTimer.restart()
+    }
 }

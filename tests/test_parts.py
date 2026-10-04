@@ -146,7 +146,13 @@ def test_jarvis_kept_retelling_the_inbox_instead_of_opening_a_letter() -> None:
 
 
 def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
-    """Значок при переносе метался между местами и ложился поверх соседа."""
+    """Значок при переносе метался между местами и ложился поверх соседа.
+
+    Место значка мерили по живой полосе, а полоса в это время жила своей жизнью: под курсором
+    росло увеличение, соседи разъезжались, граница между ячейками уезжала — и порядок защёлкивало
+    туда-сюда на каждом кадре. Лечится это одним: пока значок в руке, полоса стоит. Поэтому тест
+    проверяет не формулу, а то, что во время жеста ничего живого под руку не попадает.
+    """
     import pathlib
     import re
 
@@ -154,10 +160,14 @@ def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
     move = re.search(r"function moveDrag\(sceneX\) \{(.+?)\n    \}", qml, re.S)
     assert move, "правило перестановки пропало"
     body = move.group(1)
-    assert "hole" in body, "порядок снова меряют по соседу, а не по собственной дырке — будет дребезг"
-    assert "0.18" in body, "запас на границе пропал: шаг защёлкает от дрожи руки"
-    assert "for (let pass" in body, "шаг перестал повторяться — быстрый рывок значок не догонит"
-    assert "readonly property real carried:" in qml, "значок в руке снова улетает из своей дырки на соседа"
+    assert "dragBase" in body, "место значка снова меряют по живой полосе — она едет под рукой"
+    assert not re.search(r"\bgeom\[", body), "в перестановку вернулась живая геометрия: будет дребезг"
+    phys = re.search(r"function stepPhysics\(dt\) \{(.+?)\n    \}", qml, re.S)
+    assert phys, "шаг физики пропал"
+    assert re.search(r'dragKey\s*!==\s*""', phys.group(1)), \
+        "пружина увеличения снова работает во время жеста — полоса поедет под рукой"
+    assert re.search(r"function startDrag\(\w+\) \{(?:.|\n)+?dragBase = ", qml), \
+        "геометрию перестали замораживать в начале жеста"
 
 
 def test_jarvis_answered_that_there_was_nothing_to_grab_the_screen_with() -> None:
@@ -187,3 +197,34 @@ def test_the_brain_restarted_the_window_manager_and_killed_the_session() -> None
         "мозг снова может убить kwin без спроса, а ночью — вообще молча"
     persona = pathlib.Path("brain/PERSONA.md").read_text(encoding="utf-8")
     assert "kwin_wayland" in persona, "в правилах мозга не сказано, что перезапуск стола убивает сессию"
+
+
+def test_the_dock_was_empty_right_after_the_computer_was_turned_on(monkeypatch) -> None:
+    """Включил компьютер — док без значков, и помогал только перезапуск оболочки.
+
+    Список программ кешировался на тридцать секунд по time.monotonic(), а она считает секунды
+    с загрузки системы. Пустой начальный кеш с отметкой 0.0 первые полминуты выглядел свежим:
+    list_apps() отдавал пустоту, не читая ни одного .desktop, и каталог дока сохранялся без
+    закреплённых значков — ровно в то время, когда стол и поднимается.
+    """
+    from justday import desktop
+
+    monkeypatch.setattr(desktop, "_apps_cache", None)
+    monkeypatch.setattr(desktop.time, "monotonic", lambda: 5.0)
+    assert desktop.list_apps(), "сразу после загрузки список программ снова пуст"
+
+
+def test_flatpak_programs_did_not_start_from_the_dock(monkeypatch, tmp_path) -> None:
+    """Щелчок по значку flatpak-программы не делал ничего: gtk-launch отвечал «no such application».
+
+    У обычной программы id — это имя файла без суффикса (firefox → firefox.desktop). У flatpak id
+    сам кончается на .desktop (com.ayugram.desktop), а файл называется com.ayugram.desktop.desktop.
+    Проверка «кончается на .desktop» тут врёт, и gtk-launch искал файл, которого нет.
+    """
+    from justday import desktop
+
+    (tmp_path / "com.ayugram.desktop.desktop").write_text("[Desktop Entry]\n", encoding="utf-8")
+    (tmp_path / "firefox.desktop").write_text("[Desktop Entry]\n", encoding="utf-8")
+    monkeypatch.setattr(desktop, "_app_dirs", lambda: [tmp_path])
+    assert desktop._gtk_name("com.ayugram.desktop") == "com.ayugram.desktop.desktop"
+    assert desktop._gtk_name("firefox") == "firefox.desktop"

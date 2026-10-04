@@ -3160,8 +3160,35 @@ class Daemon:
         spawn(self._watch_layout())
         spawn(self._watch_brightness())
         spawn(self._cpu_loop())
-        # Pre-build dock catalog (resolved icon paths) so the next UI restart paints icons on try 1.
-        loop.run_in_executor(None, dock.catalog)
+        # Каталог дока уходит по живому сокету. Перезапускать ради него оболочку не надо.
+        async def _warm_dock() -> None:
+            # Пробуем, пока не опознаются закреплённые значки: пустой док поверх острова не шлём.
+            try:
+                pins = await loop.run_in_executor(None, dock.pinned)
+            except Exception:
+                pins = []
+            delay = 0.0
+            last = None
+            for _ in range(8):
+                if delay:
+                    await asyncio.sleep(delay)
+                delay = 1.5
+                try:
+                    got = await loop.run_in_executor(None, dock.catalog)
+                except Exception:
+                    log.exception("dock catalog")
+                    continue
+                if not isinstance(got, dict):
+                    continue
+                last = got
+                if got.get("items") or not pins:
+                    self._dock = got
+                    self.publish(dock=got)
+                    return
+            if isinstance(last, dict) and (last.get("items") or []):
+                self._dock = last
+                self.publish(dock=last)
+        spawn(_warm_dock())
         # Остров — единственное место для уведомлений, если так попросили.
         want_popups = bool(self.cfg["island"].get("system_popups", False))
         if notifications.system_popups().get("popups") != want_popups:

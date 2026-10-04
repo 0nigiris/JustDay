@@ -116,6 +116,81 @@ Item {
     }
     Component.onCompleted: reload()
     Timer { id: toastTimer; interval: 2600; onTriggered: win.toast = "" }
+    Item {
+        id: trayQuitter
+        visible: false
+        property var target: null
+        property var queue: []
+        property bool rooted: false
+        property int seen: 0
+        property int emptyTries: 0
+        property var current: null
+        QsMenuOpener { id: trayQuitOpener; menu: trayQuitter.current }
+        function looksQuit(text) {
+            const s = String(text || "").trim().toLowerCase()
+            if (!s) return false
+            if (s.indexOf("quit") === 0 || s.indexOf("exit") === 0) return true
+            if (s.indexOf("выйти") === 0 || s.indexOf("выход") === 0 || s.indexOf("завершить") === 0) return true
+            if (s === "close" || s === "закрыть") return true
+            return false
+        }
+        function start(item) {
+            target = item
+            queue = []
+            rooted = false
+            seen = 0
+            emptyTries = 0
+            if (!item || !item.menu) {
+                win.notify(JD.tr("У этого значка нет меню — закрыть нечем"))
+                current = null
+                return
+            }
+            current = item.menu
+            pause.restart()
+        }
+        function fire(entry) {
+            if (entry.sendTriggered) entry.sendTriggered()
+            else entry.triggered()
+            const name = (target && (target.title || target.id)) || ""
+            win.notify(JD.tr("Закрываю ") + name)
+            current = null
+            queue = []
+        }
+        function fail() {
+            win.notify(JD.tr("В меню нет пункта выхода"))
+            current = null
+            queue = []
+        }
+        function scan() {
+            const raw = (!current || !trayQuitOpener.children) ? [] : trayQuitOpener.children.values
+            if (!raw.length) {
+                if (emptyTries < 4) { emptyTries++; pause.restart(); return }
+                nextMenu()
+                return
+            }
+            for (let i = 0; i < raw.length; i++) {
+                const e = raw[i]
+                if (!e || e.isSeparator || e.hasChildren || e.enabled === false) continue
+                if (looksQuit(e.text)) { fire(e); return }
+            }
+            if (!rooted) {
+                for (let i = 0; i < raw.length; i++) {
+                    const e = raw[i]
+                    if (e && e.hasChildren && e.enabled !== false) queue.push(e)
+                }
+                rooted = true
+            }
+            nextMenu()
+        }
+        function nextMenu() {
+            if (!queue.length || seen >= 16) { fail(); return }
+            current = queue.shift()
+            seen++
+            emptyTries = 0
+            pause.restart()
+        }
+        Timer { id: pause; interval: 220; onTriggered: trayQuitter.scan() }
+    }
 
     // ───────────── layout ─────────────
     RowLayout {
@@ -160,8 +235,7 @@ Item {
                         { id: "character", title: JD.tr("Характер"), icon: "user-round", tint: "#ff9f0a" },
                         { id: "model", title: JD.tr("Модель"), icon: "cpu", tint: "#bf5af2" },
                         { group: JD.tr("Вид") },
-                        { id: "appearance", title: JD.tr("Остров и анимации"), icon: "wand-sparkles", tint: "#ff2d55" },
-                        { id: "dock", title: JD.tr("Док и лоток"), icon: "layout-grid", tint: "#5e5ce6" },
+                        { id: "dock", title: JD.tr("Панели"), icon: "layout-grid", tint: "#5e5ce6" },
                         { id: "notifications", title: JD.tr("Уведомления и виджеты"), icon: "bell", tint: "#32ade6" },
                         { group: JD.tr("Звук") },
                         { id: "voice", title: JD.tr("Голос и звук"), icon: "audio-lines", tint: "#ff375f" },
@@ -182,8 +256,11 @@ Item {
                         Layout.topMargin: caption ? 10 : 0
                         implicitHeight: caption ? 20 : 34
                         radius: caption ? 0 : 8
+                        readonly property bool selected: modelData.id === "dock"
+                            ? (win.page === "dock" || win.page === "appearance" || String(win.page).indexOf("panel-") === 0)
+                            : win.page === modelData.id
                         color: caption ? "transparent"
-                             : win.page === modelData.id ? Qt.rgba(1, 1, 1, 0.1)
+                             : selected ? Qt.rgba(1, 1, 1, 0.1)
                              : (navHover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 180 } }
                         Text {
@@ -318,11 +395,22 @@ Item {
                     // «О программе» это полстраницы. Старые имена оставлены: по ним сюда ведут
                     // ссылки с островка и из подсказок.
                     sourceComponent: ({ general: generalPage, character: characterPage, appearance: appearancePage,
-                                        dock: dockPage, widgets: notifyPage, notifications: notifyPage,
+                                        dock: dockPage, "panel-top": panelTopPage, "panel-dock": panelDockPage, "panel-tray": panelTrayPage,
+                                        widgets: notifyPage, notifications: notifyPage,
                                         voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage,
                                         mail: mailPage, people: peoplePage, memory: memoryPage, privacy: privacyPage,
                                         diagnostics: systemPage, about: systemPage })[win.page]
-                    onLoaded: { scroller.contentY = 0; pageIn.restart() }
+                    onLoaded: {
+                        scroller.contentY = 0
+                        // Сплошная полоса уже везёт карточку вниз. Сдвиг страницы слева — второй проезд.
+                        if (JD.islandStyle === "bar") {
+                            pageIn.stop()
+                            pageLoader.x = 32
+                            pageLoader.opacity = 1
+                        } else {
+                            pageIn.restart()
+                        }
+                    }
                     ParallelAnimation {
                         id: pageIn
                         NumberAnimation { target: pageLoader; property: "opacity"; from: 0; to: 1; duration: JD.dur(180); easing.type: Easing.OutCubic }
@@ -361,6 +449,51 @@ Item {
         width: size
         height: size
         smooth: true
+    }
+
+    component BackBar: Item {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 6
+        implicitHeight: 28
+        RowLayout {
+            anchors.left: parent.left
+            spacing: 4
+            Glyph { name: "arrow-left"; size: 16 }
+            Text { text: JD.tr("Панели"); color: win.blue; font.family: win.font; font.pixelSize: 14; font.weight: Font.DemiBold }
+        }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: win.page = "dock" }
+    }
+
+    component NavRow: Item {
+        id: navRow
+        property string title: ""
+        property string subtitle: ""
+        property string dest: ""
+        Layout.fillWidth: true
+        implicitHeight: Math.max(46, navTexts.implicitHeight + 20)
+        Rectangle {
+            visible: navRow.y > 0
+            anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16 }
+            height: 1
+            color: win.line
+        }
+        Item {
+            id: navChevron
+            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+            width: 16
+            height: 16
+            Glyph { anchors.centerIn: parent; name: "chevron-right"; size: 16 }
+        }
+        ColumnLayout {
+            id: navTexts
+            anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter; right: navChevron.left; rightMargin: 12 }
+            spacing: 2
+            Text { text: navRow.title; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+            Text { visible: navRow.subtitle !== ""; text: navRow.subtitle; color: win.t2; font.family: win.font; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
+        }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: win.page = navRow.dest }
     }
 
     component PageTitle: ColumnLayout {
@@ -567,12 +700,19 @@ Item {
         property real step: 0.1
         property string unit: ""
         property int decimals: 1
+        property real fallback: NaN
         spacing: 10
         Slider {
             id: sl
             implicitWidth: 200
             from: ss.from; to: ss.to; stepSize: ss.step
-            value: Number(win.get(ss.key)) || 0
+            value: {
+                const raw = win.get(ss.key)
+                const n = Number(raw)
+                if (raw === undefined || raw === null || raw === "" || !isFinite(n))
+                    return isFinite(ss.fallback) ? ss.fallback : 0
+                return n
+            }
             onPressedChanged: if (!pressed) { win.set(ss.key, Number(value.toFixed(ss.decimals))); win.notify(JD.tr("Сохранено")) }
             background: Rectangle {
                 x: sl.leftPadding; y: sl.topPadding + sl.availableHeight / 2 - height / 2
@@ -897,6 +1037,7 @@ Item {
         id: appearancePage
         ColumnLayout {
             spacing: 6
+            BackBar {}
             PageTitle { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается Dynamic Island") }
             Group {
                 Row {
@@ -977,10 +1118,54 @@ Item {
     }
 
     Component {
-        id: dockPage
+        id: panelTopPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: JD.tr("Док и лоток"); subtitle: JD.tr("Полоса программ у края экрана и чужие значки из системного лотка") }
+            BackBar {}
+            PageTitle { title: JD.tr("Верхняя панель"); subtitle: JD.tr("Островок у верхнего края экрана") }
+            GroupTitle { text: JD.tr("Верхняя панель") }
+            Group {
+                Row { title: JD.tr("Островок"); subtitle: JD.tr("Время и виджеты у верхнего края. Выключите, если он не нужен"); Toggle { checked: win.get("island.enabled") !== false; onToggled: v => win.set("island.enabled", v) } }
+                Row { title: JD.tr("Поверх всех окон"); subtitle: JD.tr("Полоса остаётся над обычными окнами. Выключите — полноэкранные окна её закрывают"); Toggle { checked: win.get("island.above") !== false; onToggled: v => win.set("island.above", v) } }
+                Row { title: JD.tr("Кошка на островке"); subtitle: JD.tr("Бегущая кошка слева от времени. Не зависит от кошки в доке"); Toggle { checked: win.get("island.cat") === true; onToggled: v => win.set("island.cat", v) } }
+                Row {
+                    title: JD.tr("Вид полосы")
+                    subtitle: JD.tr("Островок — капсула. Сплошная полоса — строка на всю ширину, как меню-бар")
+                    Choice {
+                        key: "island.style"
+                        options: [{ value: "island", label: JD.tr("Островок") },
+                                 { value: "bar", label: JD.tr("Сплошная полоса") },
+                                 { value: "notch", label: JD.tr("Вырез") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Отступ сверху")
+                    subtitle: JD.tr("На сколько опустить островок от края экрана. Вырез и сплошная полоса остаются прижатыми")
+                    SSlider { key: "island.top_margin"; from: 0; to: 64; step: 1; decimals: 0; unit: JD.tr(" точек"); fallback: 8 }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
+                    title: JD.tr("Высота полосы")
+                    subtitle: JD.tr("Насколько высокая строка у верхнего края. Карточка растёт вниз от неё")
+                    SSlider { key: "island.bar_height"; from: 28; to: 80; step: 2; decimals: 0; unit: JD.tr(" точек"); fallback: 44 }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
+                    title: JD.tr("Прятать, пока не нужна")
+                    subtitle: JD.tr("Выключено — полоса всегда видна у верхнего края. Включено — уезжает, пока не подвести курсор. Полноэкранное окно прячет её само")
+                    Toggle { checked: win.get("island.bar_autohide") === true; onToggled: v => win.set("island.bar_autohide", v) }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: panelDockPage
+        ColumnLayout {
+            spacing: 6
+            BackBar {}
+            PageTitle { title: JD.tr("Док"); subtitle: JD.tr("Полоса программ у края экрана") }
+            GroupTitle { text: JD.tr("Док") }
             Group {
                 Row { title: JD.tr("Док"); subtitle: JD.tr("Закреплённое, открытое и значок, из которого достаётся меню"); Toggle { checked: win.get("dock.enabled") !== false; onToggled: v => win.set("dock.enabled", v) } }
                 Row {
@@ -1137,6 +1322,59 @@ Item {
                     Toggle { checked: win.get("dock.reserve") === true; onToggled: v => win.set("dock.reserve", v) }
                 }
             }
+            GroupTitle { text: JD.tr("Палитра значков") }
+            Group {
+                Note { text: JD.tr("По умолчанию — как есть (чёткие Steam/Discord). «Авто» в лотке высветляет только почти чёрные (Spotify). «Светлая / Clear» — матовое стекло (цвет сохраняется, не Ч/Б). «Tinted» — цветная заливка. «Моно» — серое.") }
+                Row {
+                    title: JD.tr("Стиль лотка")
+                    subtitle: JD.tr("original · auto · light · clear · tinted · mono")
+                    Choice {
+                        key: "tray.icon_style"
+                        options: [
+                            { value: "original", label: JD.tr("Как есть") },
+                            { value: "auto", label: JD.tr("Авто (чёрные)") },
+                            { value: "light", label: JD.tr("Светлая (glass)") },
+                            { value: "clear", label: JD.tr("Clear (glass)") },
+                            { value: "tinted", label: JD.tr("Tinted") },
+                            { value: "mono", label: JD.tr("Моно") }
+                        ]
+                    }
+                }
+                Row {
+                    title: JD.tr("Цвет Tinted (лоток)")
+                    subtitle: JD.tr("HEX, например #7AC8FF — только для режима Tinted")
+                    Field { key: "tray.icon_tint"; implicitWidth: 160 }
+                }
+                Row {
+                    title: JD.tr("Стиль дока")
+                    subtitle: JD.tr("Та же палитра поверх значков программ в доке. По умолчанию — как есть")
+                    Choice {
+                        key: "dock.icon_style"
+                        options: [
+                            { value: "original", label: JD.tr("Как есть") },
+                            { value: "light", label: JD.tr("Светлая (glass)") },
+                            { value: "clear", label: JD.tr("Clear (glass)") },
+                            { value: "tinted", label: JD.tr("Tinted") },
+                            { value: "mono", label: JD.tr("Моно") }
+                        ]
+                    }
+                }
+                Row {
+                    title: JD.tr("Цвет Tinted (док)")
+                    subtitle: JD.tr("HEX для режима Tinted у дока")
+                    Field { key: "dock.icon_tint"; implicitWidth: 160 }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: panelTrayPage
+        ColumnLayout {
+            spacing: 6
+            BackBar {}
+            PageTitle { title: JD.tr("Трей"); subtitle: JD.tr("Системный лоток") }
+            GroupTitle { text: JD.tr("Трей") }
             Group {
                 Row { title: JD.tr("Полоса лотка"); subtitle: JD.tr("Значки, которые программы кладут в системный лоток"); Toggle { checked: win.get("tray.enabled") !== false; onToggled: v => win.set("tray.enabled", v) } }
                 Row {
@@ -1194,49 +1432,6 @@ Item {
                     Toggle { checked: win.get("tray.reserve") === true; onToggled: v => win.set("tray.reserve", v) }
                 }
             }
-            GroupTitle { text: JD.tr("Палитра значков") }
-            Group {
-                Note { text: JD.tr("По умолчанию — как есть (чёткие Steam/Discord). «Авто» в лотке высветляет только почти чёрные (Spotify). «Светлая / Clear» — матовое стекло (цвет сохраняется, не Ч/Б). «Tinted» — цветная заливка. «Моно» — серое.") }
-                Row {
-                    title: JD.tr("Стиль лотка")
-                    subtitle: JD.tr("original · auto · light · clear · tinted · mono")
-                    Choice {
-                        key: "tray.icon_style"
-                        options: [
-                            { value: "original", label: JD.tr("Как есть") },
-                            { value: "auto", label: JD.tr("Авто (чёрные)") },
-                            { value: "light", label: JD.tr("Светлая (glass)") },
-                            { value: "clear", label: JD.tr("Clear (glass)") },
-                            { value: "tinted", label: JD.tr("Tinted") },
-                            { value: "mono", label: JD.tr("Моно") }
-                        ]
-                    }
-                }
-                Row {
-                    title: JD.tr("Цвет Tinted (лоток)")
-                    subtitle: JD.tr("HEX, например #7AC8FF — только для режима Tinted")
-                    Field { key: "tray.icon_tint"; implicitWidth: 160 }
-                }
-                Row {
-                    title: JD.tr("Стиль дока")
-                    subtitle: JD.tr("Та же палитра поверх значков программ в доке. По умолчанию — как есть")
-                    Choice {
-                        key: "dock.icon_style"
-                        options: [
-                            { value: "original", label: JD.tr("Как есть") },
-                            { value: "light", label: JD.tr("Светлая (glass)") },
-                            { value: "clear", label: JD.tr("Clear (glass)") },
-                            { value: "tinted", label: JD.tr("Tinted") },
-                            { value: "mono", label: JD.tr("Моно") }
-                        ]
-                    }
-                }
-                Row {
-                    title: JD.tr("Цвет Tinted (док)")
-                    subtitle: JD.tr("HEX для режима Tinted у дока")
-                    Field { key: "dock.icon_tint"; implicitWidth: 160 }
-                }
-            }
             GroupTitle { text: JD.tr("Какие значки показывать") }
             Group {
                 Repeater {
@@ -1246,9 +1441,19 @@ Item {
                         readonly property string ident: modelData.id || modelData.title || ""
                         title: modelData.title || modelData.id || JD.tr("без имени")
                         subtitle: modelData.tooltipTitle && modelData.tooltipTitle !== title ? modelData.tooltipTitle : ""
-                        Toggle {
-                            checked: JD.trayShows(modelData)
-                            onToggled: v => { JD.trayHideItem(modelData, !v); win.notify(JD.tr("Сохранено")) }
+                        RowLayout {
+                            spacing: 8
+                            Btn {
+                                glyph: "log-out"
+                                text: ""
+                                danger: true
+                                implicitWidth: 34
+                                onClicked: trayQuitter.start(modelData)
+                            }
+                            Toggle {
+                                checked: JD.trayShows(modelData)
+                                onToggled: v => { JD.trayHideItem(modelData, !v); win.notify(JD.tr("Сохранено")) }
+                            }
                         }
                     }
                 }
@@ -1258,7 +1463,21 @@ Item {
                     subtitle: JD.tr("Ни одна запущенная программа не положила в него значок")
                 }
             }
-            Note { text: JD.tr("Громкость отдельной программы — правой кнопкой по её значку в доке, пока она что-то играет. Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
+        }
+    }
+
+    Component {
+        id: dockPage
+        ColumnLayout {
+            spacing: 6
+            PageTitle { title: JD.tr("Панели"); subtitle: JD.tr("Верхняя полоса, док, лоток и вид островка") }
+            Group {
+                NavRow { title: JD.tr("Верхняя панель"); subtitle: JD.tr("Островок, полоса и кошка у верхнего края"); dest: "panel-top" }
+                NavRow { title: JD.tr("Док"); subtitle: JD.tr("Полоса программ у края экрана"); dest: "panel-dock" }
+                NavRow { title: JD.tr("Трей"); subtitle: JD.tr("Системный лоток и его значки"); dest: "panel-tray" }
+                NavRow { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается Dynamic Island"); dest: "appearance" }
+            }
+            Note { text: JD.tr("Громкость отдельной программы — правой кнопкой по её значку в доке, пока она что-то играет. Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Кнопка выхода в этом списке закрывает программу, даже если значок спрятан. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
         }
     }
 

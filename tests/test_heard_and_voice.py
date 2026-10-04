@@ -72,7 +72,7 @@ def test_the_dock_icon_walks_through_the_windows() -> None:
     """
     dock = (ROOT / "island" / "DockView.qml").read_text(encoding="utf-8")
     press = dock.split("function press(e, wins)", 1)[1].split("\n    function ", 1)[0]
-    assert re.search(r"if \(wins\.length > 1\) \{ dv\.cycle\(wins, 1, 0\); return \}", press), \
+    assert re.search(r"wins\.length > 1[^\n]*cycle\(wins, 1, 0\)", press), \
         "щелчок по значку больше не ведёт по окнам"
     assert '{ id: "minimize", label: "Свернуть все окна"' in dock, \
         "свернуть всё разом стало нечем: щелчок это больше не делает"

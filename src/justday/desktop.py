@@ -33,12 +33,16 @@ def _app_dirs() -> list[Path]:
     return out
 
 
-_apps_cache: tuple[float, list[dict]] = (0.0, [])
+# None, а не (0.0, []). time.monotonic() считает секунды с загрузки, поэтому нулевая отметка
+# первые полминуты после включения выглядит свежей: list_apps() отдаёт пустой список, не читая
+# ни одного .desktop, а catalog() сохраняет док без закреплённых значков.
+_apps_cache: tuple[float, list[dict]] | None = None
 
 
 def list_apps() -> list[dict]:
     global _apps_cache
-    if time.monotonic() - _apps_cache[0] < 30:
+    now = time.monotonic()
+    if _apps_cache is not None and now - _apps_cache[0] < 30:
         return _apps_cache[1]
     apps: dict[str, dict] = {}
     for d in _app_dirs():
@@ -150,13 +154,34 @@ def tray_activate(item: dict) -> bool:
     return r.returncode == 0
 
 
+def _gtk_name(desktop_id: str) -> str:
+    """Имя для gtk-launch: имя файла, а не укороченный id.
+
+    list_apps хранит id без одного суффикса .desktop. У обычных программ это и есть имя файла
+    (firefox.desktop). У flatpak id уже кончается на .desktop (com.ayugram.desktop), а файл
+    называется com.ayugram.desktop.desktop. Проверка endswith(".desktop") тут врёт и gtk-launch
+    отвечает «no such application».
+    """
+    name = str(desktop_id)
+    if not name.endswith(".desktop"):
+        name = f"{name}.desktop"
+    dirs = _app_dirs()
+    if any((d / name).is_file() for d in dirs):
+        return name
+    doubled = f"{name}.desktop"
+    if any((d / doubled).is_file() for d in dirs):
+        return doubled
+    return name
+
+
 def launch_app_id(desktop_id: str, files: list[str] | None = None) -> None:
     """Запустить программу, при желании отдав ей файлы.
 
     gtk-launch принимает пути следом за именем — и это правильный путь: он читает .desktop и
     подставляет файлы туда, куда программа просила (%f, %U), вместо того чтобы угадывать за неё.
     """
-    args = ["gtk-launch", desktop_id, *[str(f) for f in (files or []) if str(f).strip()]]
+    name = _gtk_name(desktop_id)
+    args = ["gtk-launch", name, *[str(f) for f in (files or []) if str(f).strip()]]
     subprocess.Popen(detached(args), start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(HOME))
 
@@ -270,7 +295,7 @@ def launch_game(query: str) -> dict:
     elif match["source"] == "steam-flatpak":
         cmd = ["flatpak", "run", "com.valvesoftware.Steam", f"steam://rungameid/{match['id']}"]
     elif match["source"] == "desktop":
-        cmd = ["gtk-launch", match["id"]]
+        cmd = ["gtk-launch", _gtk_name(match["id"])]
     else:
         cmd = ["xdg-open", f"heroic://launch/{match['id']}"]
     subprocess.Popen(detached(cmd), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

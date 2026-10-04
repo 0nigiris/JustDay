@@ -8,6 +8,8 @@ After=graphical-session.target justday.service
 
 [Service]
 Type=simple
+Environment=QS_DISABLE_FILE_WATCHER=1
+Environment=QS_NO_RELOAD_POPUP=1
 ExecStart=@JUSTDAY@ ui
 Restart=on-failure
 RestartSec=3

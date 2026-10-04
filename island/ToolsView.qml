@@ -46,7 +46,12 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 18
+        // Углы карточки ~30. Равный отступ меньше радиуса, и первая вкладка
+        // со строкой списка садятся на скругление.
+        anchors.leftMargin: 22
+        anchors.rightMargin: 22
+        anchors.topMargin: 16
+        anchors.bottomMargin: 16
         spacing: 12
 
         // ───────────── заголовок: вкладки, поиск, закрыть ─────────────
@@ -59,45 +64,78 @@ Item {
             Layout.fillHeight: false
             spacing: 10
 
-            Repeater {
-                model: [
-                    { id: "emoji", name: "Эмодзи", icon: "smile" },
-                    { id: "clip", name: "Буфер", icon: "clipboard" },
-                    { id: "mixer", name: "Звук", icon: "volume-2" },
-                    { id: "plans", name: "Планы", icon: "clipboard" },
-                    { id: "claude", name: "Клод", icon: "code" },
-                    { id: "history", name: "История", icon: "message-circle" },
-                    { id: "load", name: "Машина", icon: "activity" },
-                ]
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool on: tv.page === modelData.id
-                    implicitWidth: tab.implicitWidth + 30
-                    implicitHeight: 34
-                    radius: 17
-                    color: on ? JD.accentBlue : (tabHover.hovered ? JD.fill2 : JD.fill1)
-                    Behavior on color { ColorAnimation { duration: 140 } }
-                    RowLayout {
-                        id: tab
-                        anchors.centerIn: parent
-                        spacing: 7
-                        Icon { name: modelData.icon; implicitSize: 15; tint: JD.text1 }
-                        Label1 { text: modelData.name }
-                    }
-                    HoverHandler { id: tabHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler {
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: JD.setToolsPage(modelData.id)
+            // Вкладок больше, чем влезает рядом с поиском. Ряд не растягивает карточку:
+            // лишнее уезжает в прокрутку, а не обрезается скруглением.
+            Flickable {
+                id: tabScroll
+                Layout.fillWidth: true
+                Layout.minimumWidth: 80
+                Layout.preferredHeight: 34
+                implicitWidth: 80
+                implicitHeight: 34
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                contentWidth: tabRow.implicitWidth
+                contentHeight: 34
+                function revealCurrent() {
+                    for (let i = 0; i < tabRow.children.length; i++) {
+                        const c = tabRow.children[i]
+                        if (!c || c.on !== true) continue
+                        const left = c.x
+                        const right = c.x + c.width
+                        if (left < contentX) contentX = Math.max(0, left)
+                        else if (right > contentX + width) contentX = right - width
+                        return
                     }
                 }
+                Row {
+                    id: tabRow
+                    spacing: 8
+                    height: 34
+                    Repeater {
+                        model: [
+                            { id: "emoji", name: "Эмодзи", icon: "smile" },
+                            { id: "clip", name: "Буфер", icon: "clipboard" },
+                            { id: "mixer", name: "Звук", icon: "volume-2" },
+                            { id: "plans", name: "Планы", icon: "clipboard" },
+                            { id: "claude", name: "Клод", icon: "code" },
+                            { id: "history", name: "История", icon: "message-circle" },
+                            { id: "load", name: "Машина", icon: "activity" },
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool on: tv.page === modelData.id
+                            implicitWidth: tab.implicitWidth + 30
+                            implicitHeight: 34
+                            radius: 17
+                            color: on ? JD.accentBlue : (tabHover.hovered ? JD.fill2 : JD.fill1)
+                            Behavior on color { ColorAnimation { duration: 140 } }
+                            RowLayout {
+                                id: tab
+                                anchors.centerIn: parent
+                                spacing: 7
+                                Icon { name: modelData.icon; implicitSize: 15; tint: JD.text1 }
+                                Label1 { text: modelData.name }
+                            }
+                            HoverHandler { id: tabHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: JD.setToolsPage(modelData.id)
+                            }
+                            onOnChanged: if (on) Qt.callLater(tabScroll.revealCurrent)
+                        }
+                    }
+                }
+                Component.onCompleted: Qt.callLater(revealCurrent)
             }
-
-            Item { Layout.fillWidth: true }
 
             // Поиск. Фокус берёт сразу: открыли панель — можно печатать, как в Spotlight.
             Rectangle {
                 visible: tv.searchable
-                Layout.preferredWidth: 260
+                Layout.preferredWidth: 200
+                Layout.minimumWidth: 148
+                Layout.maximumWidth: 220
                 implicitHeight: 34
                 radius: 17
                 color: JD.fill1
@@ -177,33 +215,51 @@ Item {
             visible: tv.page === "emoji"
             Layout.fillWidth: true
             Layout.fillHeight: false
-            spacing: 7
-            Repeater {
-                model: [""].concat(JD.emojiGroups || [])
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool on: JD.emojiGroup === modelData
-                    implicitWidth: chip.implicitWidth + 20
-                    implicitHeight: 26
-                    radius: 13
-                    color: on ? JD.fill2 : "transparent"
-                    border.width: on ? 0 : 1
-                    border.color: JD.fill1
-                    Label2 {
-                        id: chip
-                        anchors.centerIn: parent
-                        text: modelData || "Все"
-                        color: on ? JD.text1 : JD.text2
-                    }
-                    HoverHandler { cursorShape: Qt.PointingHandCursor }
-                    TapHandler {
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: { JD.emojiGroup = on ? "" : modelData; JD.refreshTools() }
+            spacing: 8
+            Flickable {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 40
+                Layout.preferredHeight: 26
+                implicitWidth: 40
+                implicitHeight: 26
+                clip: true
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                contentWidth: chipRow.implicitWidth
+                contentHeight: 26
+                Row {
+                    id: chipRow
+                    spacing: 7
+                    height: 26
+                    Repeater {
+                        model: [""].concat(JD.emojiGroups || [])
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool on: JD.emojiGroup === modelData
+                            implicitWidth: chip.implicitWidth + 20
+                            implicitHeight: 26
+                            radius: 13
+                            color: on ? JD.fill2 : "transparent"
+                            border.width: on ? 0 : 1
+                            border.color: JD.fill1
+                            Label2 {
+                                id: chip
+                                anchors.centerIn: parent
+                                text: modelData || "Все"
+                                color: on ? JD.text1 : JD.text2
+                            }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: { JD.emojiGroup = on ? "" : modelData; JD.refreshTools() }
+                            }
+                        }
                     }
                 }
             }
-            Item { Layout.fillWidth: true }
             Label2 {
+                Layout.maximumWidth: 160
+                elide: Text.ElideRight
                 text: JD.toolsQuery || JD.emojiGroup ? tv.items.length + " шт." : "недавние — первыми"
                 color: JD.text3
             }
@@ -305,6 +361,7 @@ Item {
                 implicitHeight: editing ? Math.max(120, editBox.implicitHeight + 58)
                                         : (isImage ? 72 : 46)
                 radius: 10
+                clip: true
                 color: editing || selected || rowHover.hovered ? JD.fill1 : "transparent"
                 border.width: selected ? 1 : 0
                 border.color: JD.accentBlue
@@ -349,7 +406,11 @@ Item {
                         visible: !row.editing
 
                         Label1 {
+                            // Без preferredWidth строка не уже своего текста и уезжает в край.
                             Layout.fillWidth: true
+                            Layout.preferredWidth: 20
+                            maximumLineCount: 1
+                            elide: Text.ElideRight
                             text: row.modelData.preview
                         }
                         Label2 {
@@ -470,6 +531,8 @@ Item {
             spacing: 10
             Label2 {
                 Layout.fillWidth: true
+                Layout.preferredWidth: 20
+                elide: Text.ElideRight
                 color: JD.text3
                 text: JD.clipPaused ? "на паузе: новое не запоминается"
                      : JD.clipSkipped ? "пароли и ключи сюда не попадают — пропущено: " + JD.clipSkipped
