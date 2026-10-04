@@ -1540,6 +1540,15 @@ Item {
                 Row { title: JD.tr("Город"); subtitle: JD.tr("Пусто — погода не запрашивается"); Field { key: "island.city"; placeholderText: JD.tr("Москва") } }
                 Row { title: JD.tr("Последние события"); subtitle: JD.tr("Последний ответ ассистента, работа Клода"); Toggle { checked: win.get("island.show_events") !== false; onToggled: v => win.set("island.show_events", v) } }
             }
+            // Плеер нужен не всем одинаково: одному трек нужен всегда, другому он мешает в
+            // свёрнутом виде и нужен только в раскрытом. Раньше выбора не было вовсе, а
+            // источником был жёстко вписанный Spotify — у всех остальных полоска пустовала.
+            Group {
+                Row { title: JD.tr("Трек в полоске"); subtitle: JD.tr("Что играет — в свёрнутом виде, при наведении на верхний край"); Toggle { checked: win.get("island.player_peek") !== false; onToggled: v => win.set("island.player_peek", v) } }
+                Row { title: JD.tr("Плеер в раскрытом островке"); subtitle: JD.tr("Карточка с обложкой, перемоткой и громкостью"); Toggle { checked: win.get("island.player_expanded") !== false; onToggled: v => win.set("island.player_expanded", v) } }
+                Row { title: JD.tr("Кого показывать первым"); subtitle: JD.tr("Через запятую. Если играет несколько сразу — покажем того, кто выше в списке"); Field { key: "island.player_prefer"; placeholderText: "spotify, youtube" } }
+                Row { title: JD.tr("Кого не показывать"); subtitle: JD.tr("Через запятую. Сюда просится браузер, если он играет рекламу в соседней вкладке"); Field { key: "island.player_ignore"; placeholderText: "firefox, chromium" } }
+            }
             Note { text: JD.tr("Погода и последние события появляются при наведении на верхний край. В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет. Тосты приложений и системный OSD — в разделе «Уведомления».") }
         }
     }

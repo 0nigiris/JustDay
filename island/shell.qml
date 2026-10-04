@@ -1113,18 +1113,10 @@ ShellRoot {
         readonly property color fg: JD.text1
         readonly property color fg2: JD.text2
         readonly property color hair: JD.fill2
-        // Spotify по MPRIS. Имя или desktop entry должны содержать spotify, и трек должен играть.
-        readonly property var spot: {
-            const list = Mpris.players.values
-            for (let i = 0; i < list.length; i++) {
-                const p = list[i]
-                const id = String(p.identity || "").toLowerCase()
-                const desk = String(p.desktopEntry || "").toLowerCase()
-                if ((id.indexOf("spotify") >= 0 || desk.indexOf("spotify") >= 0) && p.isPlaying)
-                    return p
-            }
-            return null
-        }
+        // Что играет — общим выбором из JD, а не жёстко вписанным Spotify: у всех, кто слушает
+        // не его, полоска раньше пустовала. Показываем только играющее: трек на паузе в
+        // свёрнутой полоске — это не «что сейчас», а мусор, который там и останется.
+        readonly property var spot: (JD.playerInPeek && JD.musicPlaying) ? JD.musicPlayer : null
         readonly property string spotArt: {
             const u = pv.spot && pv.spot.trackArtUrl ? String(pv.spot.trackArtUrl) : ""
             if (u.indexOf("file://") === 0) return decodeURIComponent(u.slice(7))
@@ -3157,7 +3149,7 @@ ShellRoot {
         property string pendingProvider: ""
         property int voiceWas: 0   // the level the mute button came from, for the way back
         property int musicWas: 0
-        readonly property var player: Mpris.players.values.length ? Mpris.players.values.find(p => p.isPlaying) || Mpris.players.values[0] : null
+        readonly property var player: JD.playerInExpanded ? JD.musicPlayer : null
         readonly property var sink: Pipewire.defaultAudioSink
         PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
         implicitWidth: 740

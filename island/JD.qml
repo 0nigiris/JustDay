@@ -2,6 +2,7 @@ pragma Singleton
 // Shared state of the Dynamic Island: daemon connection, live status, theme, UI mode.
 import QtQuick
 import Quickshell
+import Quickshell.Services.Mpris
 import Quickshell.Io
 import Quickshell.Wayland
 
@@ -632,6 +633,42 @@ Singleton {
             }
         }
     }
+    // ───────────── что играет ─────────────
+    // Один выбор источника на весь островок. Раньше полоска знала только Spotify — имя или
+    // desktop entry должны были содержать «spotify», — и у всех, кто слушает не его (YouTube в
+    // браузере, VLC, местный плеер), она просто пустовала. Карточка при этом брала первого
+    // попавшегося, так что полоска и карточка могли показывать разное.
+    //
+    // Порядок выбора: сначала выбрасываем нежеланных (island.player_ignore), потом среди
+    // играющих берём первого по списку предпочтений (island.player_prefer), потом любого
+    // играющего, и только если не играет никто — первого на паузе.
+    readonly property var playerPrefer: (settings.island || ({})).player_prefer || ["spotify"]
+    readonly property var playerIgnore: (settings.island || ({})).player_ignore || []
+    readonly property bool playerInPeek: (settings.island || ({})).player_peek !== false
+    readonly property bool playerInExpanded: (settings.island || ({})).player_expanded !== false
+    function playerName(p) {
+        return (String(p.identity || "") + " " + String(p.desktopEntry || "")).toLowerCase()
+    }
+    function playerWanted(p) {
+        if (!p) return false
+        const name = jd.playerName(p)
+        for (const bad of jd.playerIgnore) if (bad && name.indexOf(String(bad).toLowerCase()) >= 0) return false
+        return true
+    }
+    readonly property var musicPlayer: {
+        const all = Mpris.players.values.filter(p => jd.playerWanted(p))
+        if (!all.length) return null
+        const playing = all.filter(p => p.isPlaying)
+        for (const want of jd.playerPrefer) {
+            const w = String(want || "").toLowerCase()
+            if (!w) continue
+            const hit = playing.find(p => jd.playerName(p).indexOf(w) >= 0)
+            if (hit) return hit
+        }
+        return playing.length ? playing[0] : all[0]
+    }
+    readonly property bool musicPlaying: !!musicPlayer && musicPlayer.isPlaying
+
     readonly property string dockPlace: dockCfg.position || "bottom"
     readonly property string trayPlace: trayCfg.position || "left"
     readonly property real dockIconSize: Math.max(24, Math.min(96, dockCfg.icon_size || 44))

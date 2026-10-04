@@ -245,3 +245,38 @@ def test_the_top_strip_was_polling_the_network_even_when_it_was_not_shown() -> N
     assert 'islandStyle === "bar"' in probe.group(1), "опрос не привязан к сплошной полосе"
     timer = re.search(r"Timer \{\s*interval: (\d+)\s*running: jd\.linksWanted", jd, re.S)
     assert timer and int(timer.group(1)) >= 15000, "опрос снова чаще раза в пятнадцать секунд"
+
+
+def test_the_island_showed_music_only_to_those_who_use_spotify() -> None:
+    """У друга плеер в полоске пустовал: источник был жёстко вписанным Spotify.
+
+    Полоска искала среди MPRIS имя или desktop entry со словом «spotify» и больше ничего не
+    признавала музыкой — YouTube в браузере, VLC и местный плеер для неё не существовали.
+    Карточка при этом брала первого попавшегося, так что полоска и карточка показывали разное.
+    """
+    import pathlib
+
+    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
+    assert "readonly property var musicPlayer:" in jd, "общий выбор источника музыки пропал"
+    assert "playerPrefer" in jd and "playerIgnore" in jd, "порядок и запреты источников пропали"
+    peek = shell.split("component PeekView:", 1)[1].split("component ", 1)[0]
+    assert "JD.musicPlayer" in peek, "полоска перестала брать общий источник"
+    assert "Mpris.players" not in peek, "полоска снова разбирает список MPRIS сама, мимо общего выбора"
+    expanded = shell.split("component ExpandedView:", 1)[1].split("component ", 1)[0]
+    assert "JD.musicPlayer" in expanded, "карточка перестала брать общий источник"
+
+
+def test_the_player_could_not_be_turned_off_where_it_was_not_wanted() -> None:
+    """Один хочет трек всегда, другому он мешает в свёрнутом виде и нужен только в раскрытом."""
+    import pathlib
+
+    from justday import config
+
+    island = config.DEFAULTS["island"]
+    for key in ("player_peek", "player_expanded", "player_prefer", "player_ignore"):
+        assert key in island, f"настройка {key} пропала"
+    assert island["player_prefer"] == ["spotify"], "порядок источников по умолчанию изменился молча"
+    settings = pathlib.Path("island/SettingsView.qml").read_text(encoding="utf-8")
+    for key in ("island.player_peek", "island.player_expanded", "island.player_prefer", "island.player_ignore"):
+        assert key in settings, f"{key} нечем включить в окне настроек"
