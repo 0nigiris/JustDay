@@ -152,6 +152,20 @@ def forget_all() -> None:
 # ───────────────────────────── вставка ─────────────────────────────
 
 
+def _clipboard_text() -> str | None:
+    """Текст из буфера до того, как мы его займём. Нет текста (картинка, пусто) — None: вернуть нечего."""
+    if not shutil.which("wl-paste"):
+        return None
+    try:
+        types = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=2).stdout
+        if "text/plain" not in types:
+            return None
+        got = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, timeout=2)
+        return got.stdout.decode(errors="replace") if got.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def to_clipboard(text: str) -> bool:
     """Положить в буфер обмена. Wayland — wl-copy, X11 — xclip."""
     from . import face
@@ -277,6 +291,7 @@ def use(ch: str, *, paste: bool = True) -> dict:
     «скопировано, вставьте сами» — это лишний шаг ровно там, где его меньше всего ждут.
     """
     remember(ch)
+    before = _clipboard_text() if paste and not ch.isascii() else None
     copied = to_clipboard(ch)
     typed, how = (False, "")
     if paste:
@@ -285,6 +300,11 @@ def use(ch: str, *, paste: bool = True) -> dict:
         # вставляет, поэтому символ вне ASCII вставляем Ctrl+V из буфера, куда он уже лёг.
         if copied and not ch.isascii():
             typed, how = paste_chord()
+            if typed and before is not None:
+                # Окну нужен миг, чтобы забрать вставку; потом возвращаем то, что человек копировал
+                # сам, — на Windows выбранный эмодзи буфер не занимает.
+                time.sleep(0.2)
+                to_clipboard(before)
         else:
             typed, how = type_out(ch)
     return {"ok": copied or typed, "char": ch, "typed": typed, "copied": copied, "how": how,
