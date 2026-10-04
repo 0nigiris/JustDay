@@ -51,6 +51,13 @@ def test_the_assistant_stayed_silent_when_its_own_voice_failed(monkeypatch) -> N
     monkeypatch.setattr(telegram, "chat", lambda: "42")
     monkeypatch.setattr(telegram, "send", lambda text, to="": said.append(text) or {"ok": True})
     monkeypatch.setattr(telegram, "_to_ogg", lambda pcm, rate: (_ for _ in ()).throw(RuntimeError("нет ffmpeg")))
+    # Настоящий синтез тут не нужен: он грузил Silero через torch (2 с, SyntaxWarning, а раз — и падение
+    # процесса по SIGSEGV посреди прогона). Падать должен ffmpeg, а голос просто что-то отдаёт.
+    import numpy as np
+
+    from justday import tts
+
+    monkeypatch.setattr(tts.TTS, "synth", lambda self, text: np.ones(100, dtype=np.int16))
     out = telegram.voice("Я дозвонился")
     assert said == ["Я дозвонился"], "голос не вышел — и ассистент промолчал вовсе"
     assert "voice_error" in out, "о том, что голос не вышел, никто не узнал"
