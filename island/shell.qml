@@ -447,17 +447,12 @@ ShellRoot {
         Binding { target: JD; property: "screenWidth"; value: win.screen ? win.screen.width : 1920 }
         Binding { target: JD; property: "screenHeight"; value: win.screen ? win.screen.height : 1080 }
         // the text field takes the keyboard at once (it was opened by a shortcut); menus only on click
-        // Эмодзи и буфер не забирают клавиатуру: окно под ними остаётся в фокусе.
-        // Enter и Esc ловит сам островок, пока панель открыта.
-        readonly property bool floatTools: island.mode === "tools" && JD.toolsPage === "emoji"
-        WlrLayershell.keyboardFocus: island.mode === "compose" || (island.mode === "tools" && !floatTools) ? WlrKeyboardFocus.Exclusive
+        // Панель инструментов берёт клавиатуру целиком, и эмодзи тоже. Раньше эмодзи «не забирали» её, чтобы
+        // окно под панелью осталось в фокусе, как у Win+. на Windows, — но тогда ни стрелки, ни Enter, ни
+        // ввод в поиск до панели не доходили (Shortcut без фокуса не срабатывает). Фокус окну, где печатали,
+        // возвращает демон перед вставкой (Daemon._focus_back).
+        WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" ? WlrKeyboardFocus.Exclusive
                                    : big || island.mode === "video" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-        function confirmTool() {
-            const item = JD.toolsItems[JD.toolsPick] || JD.toolsItems[0]
-            if (!item) return
-            if (JD.toolsPage === "emoji") JD.useEmoji(item.c)
-            else JD.useClip(item.id)
-        }
         // окно шире самого острова: видео растягивают почти во весь экран, а щелчки всё равно
         // проходят везде, кроме него самого — маска ниже отвечает за это
         // Сплошная полоса — это строка на всю ширину монитора, а не окно по ширине видео.
@@ -562,10 +557,7 @@ ShellRoot {
             }
         }
 
-        Shortcut { sequence: "Escape"; enabled: win.floatTools; onActivated: JD.closeTools() }
-        Shortcut { sequence: "Return"; enabled: win.floatTools; onActivated: win.confirmTool() }
-        Shortcut { sequence: "Enter"; enabled: win.floatTools; onActivated: win.confirmTool() }
-        Shortcut { sequence: "Escape"; enabled: win.big && !win.floatTools; onActivated: JD.closeAll() }
+        Shortcut { sequence: "Escape"; enabled: win.big; onActivated: JD.closeAll() }
         Shortcut { sequence: "Escape"; enabled: island.mode === "video"; onActivated: videoView.close() }
 
         // Клавиши плеера — те, что ждёшь от плеера. Работают, когда по нему щёлкнули:

@@ -773,7 +773,7 @@ Item {
     // поэтому второе нажатие клавиши тоже возвращает фокус, а не оставляет его где было.
     Connections {
         target: JD
-        function onToolsSerialChanged() { if (tv.searchable && tv.page !== "emoji") field.forceActiveFocus() }
-        function onToolsPageChanged() { if (tv.searchable && tv.page !== "emoji") field.forceActiveFocus() }
+        function onToolsSerialChanged() { if (tv.searchable) field.forceActiveFocus() }
+        function onToolsPageChanged() { if (tv.searchable) field.forceActiveFocus() }
     }
 }
