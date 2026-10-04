@@ -428,3 +428,37 @@ def test_tapping_a_letter_showed_nothing_to_read() -> None:
     assert item["preview"].startswith("Ваш доступ к репозиторию открыт.")
     assert len(item["preview"]) <= 600, "в карточку ушло письмо целиком"
     assert item["address"] == "noreply@github.com", "кружку не от чего брать свой цвет"
+
+
+def test_the_solid_bar_never_made_room_on_fedora(tmp_path, monkeypatch) -> None:
+    """Распорка под сплошной полосой звала qdbus6, а в Fedora он зовётся qdbus-qt6: скрипт падал."""
+    import importlib.util
+    import shutil
+    import subprocess
+    import sys
+
+    spec = importlib.util.spec_from_file_location("bar_strut", "island/bar_strut.py")
+    strut = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(strut)
+    calls = []
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/qdbus-qt6" if n == "qdbus-qt6" else None)
+    monkeypatch.setattr(subprocess, "run", lambda a, **k: calls.append(a) or subprocess.CompletedProcess(a, 0, "on 1 44", ""))
+    monkeypatch.setattr(sys, "argv", ["bar_strut.py", "on", "44", "0", "0", "1"])
+    assert strut.main() == 0
+    assert calls and calls[0][0] == "/usr/bin/qdbus-qt6"
+
+
+def test_island_crashed_at_start_in_the_icon_loader() -> None:
+    """Островок через раз падал при запуске: значки темы грузились сразу из двух потоков."""
+    import pathlib
+    import re
+
+    for f in pathlib.Path("island").glob("*.qml"):
+        qml = f.read_text(encoding="utf-8")
+        for img in re.finditer(r"Image \{(.+?)\n\s*\}", qml, re.S):
+            body = img.group(1)
+            themed = "iconPath(" in body or "themeImg.source" in body or "modelData.icon" in body
+            if themed and "asynchronous:" in body:
+                assert "asynchronous: true" not in body and "asynchronous: !ic.syncLoad" not in body, \
+                    f"{f.name}: значок темы снова грузится в фоновом потоке"

@@ -9,6 +9,7 @@
 """
 import fcntl
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -85,15 +86,21 @@ if (!{on}) {{
   print("on " + mine.id + " " + mine.height);
 }}
 """
+        # В Fedora это qdbus-qt6, в Arch qdbus6. Здесь стояло одно имя, и на Fedora распорка не
+        # создавалась никогда: скрипт падал, а рабочий стол уезжал под сплошную полосу.
+        qdbus = next(filter(None, map(shutil.which, ("qdbus6", "qdbus-qt6", "qdbus"))), "")
+        if not qdbus:
+            print("нет qdbus: распорку не создать", file=sys.stderr)
+            return 1
         r = subprocess.run(
-            ["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", js],
+            [qdbus, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript", js],
             capture_output=True, text=True,
         )
     sys.stdout.write(r.stdout)
     sys.stderr.write(r.stderr)
     if r.returncode == 0 and refresh and "off 0" not in r.stdout:
         subprocess.run(
-            ["qdbus6", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.refreshCurrentShell"],
+            [qdbus, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.refreshCurrentShell"],
             check=False,
         )
     return r.returncode

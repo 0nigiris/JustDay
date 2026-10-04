@@ -810,7 +810,7 @@ ShellRoot {
                                 sourceSize: Qt.size(JD.barTraySize * 2, JD.barTraySize * 2)
                                 source: barTray.modelData.icon || ""
                                 fillMode: Image.PreserveAspectFit
-                                asynchronous: true
+                                // без asynchronous: image://icon в фоновом потоке роняет KIconLoader (Icon.qml)
                             }
                             MouseArea {
                                 anchors.fill: parent

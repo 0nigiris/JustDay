@@ -22,6 +22,11 @@ Item {
     property bool theme: false
     // Dock/tray: load icons synchronously so the first paint is not a blank slot.
     property bool syncLoad: false
+    // Значок темы — только в главном потоке. Асинхронный Image уводит его в поток чтения картинок,
+    // а KIconLoader не потокобезопасен: док грузит свои синхронно, и на старте два потока сходились
+    // в нём — островок падал с SIGSEGV в KIconLoader::loadScaledIcon через раз. Файлы с диска
+    // KIconLoader не трогают и грузятся в фоне, как раньше.
+    readonly property bool loadAsync: !syncLoad && fileIcon && !String(resolvedName).startsWith("image:")
     // iOS-like wash over theme/file icons: original | light | clear | tinted | mono
     // (auto is tray-only; dock treats auto as original).
     // light/clear = frosted-glass lift (keep hue); tinted = coloured glass; mono = grey.
@@ -94,7 +99,7 @@ Item {
         mipmap: false
         smooth: true
         antialiasing: true
-        asynchronous: !ic.syncLoad
+        asynchronous: ic.loadAsync
     }
     Image {
         id: themeImgSrc
@@ -106,7 +111,7 @@ Item {
         mipmap: false
         smooth: true
         antialiasing: true
-        asynchronous: !ic.syncLoad
+        asynchronous: ic.loadAsync
     }
     // iOS-style glass: keep colour, lift brightness, light colourization only.
     // Old light/clear used colorization:1 + saturation:0 → flat B&W plates.
