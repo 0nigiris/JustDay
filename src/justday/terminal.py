@@ -30,7 +30,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import config, dispatch, fallback, providers, shell
+from . import config, dispatch, fallback, shell
 
 CLAUDE, OPENCODE = "claude", "opencode"
 
@@ -93,18 +93,7 @@ def reachable(rung: Rung) -> bool:
         return bool(shutil.which("claude"))
     if not (shutil.which("opencode") or (Path.home() / ".opencode" / "bin" / "opencode").exists()):
         return False
-    provider = rung.model.split("/", 1)[0] if rung.model else ""
-    if not provider or provider in shell.LOCAL:
-        return True
-    if provider in shell.logged_in():
-        return True
-    name = shell.KEYS.get(provider)
-    if not name:
-        return False
-    # Ключ может лежать и в окружении, и в связке ключей: в окружение его кладёт `justday shell`,
-    # а в связке он живёт всегда. Проверять только окружение значило бы объявить мёртвой ступень,
-    # ключ к которой у человека есть.
-    return bool(os.environ.get(name) or providers.secret_get(provider))
+    return shell.can_enter(rung.model.split("/", 1)[0] if rung.model else "")
 
 
 # Какое усилие какой задаче — одна таблица на оболочку и на голосового Джарвиса (`dispatch`):

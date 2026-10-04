@@ -2146,8 +2146,8 @@ Item {
                     title: JD.tr("Провайдер")
                     subtitle: mp.info.desc || ""
                     Segmented {
-                        options: [{ value: "claude", label: "Claude" }, { value: "ollama_cloud", label: JD.tr("Бесплатная") }, { value: "ollama", label: JD.tr("Локальная") }, { value: "openrouter", label: "OpenRouter" },
-                                  { value: "deepseek", label: "DeepSeek" }, { value: "custom", label: JD.tr("Свой адрес") }]
+                        options: [{ value: "claude", label: "Claude" }, { value: "ollama", label: JD.tr("Локальная") }, { value: "openrouter", label: "OpenRouter" },
+                                  { value: "custom", label: JD.tr("Свой адрес") }]
                         current: mp.provider
                         onPicked: v => {
                             mp.provider = v
@@ -2239,7 +2239,7 @@ Item {
                 Row {
                     title: JD.tr("Когда кончится лимит")
                     subtitle: JD.tr("Перейти к следующему, у кого есть ключ, и сказать об этом. Пусто — честно ждать")
-                    Field { key: "brain.fallbacks"; placeholderText: "openrouter, ollama_cloud, ollama" }
+                    Field { key: "brain.fallbacks"; placeholderText: "openrouter, ollama" }
                 }
                 Row {
                     title: JD.tr("Через сколько начать проверять")

@@ -25,14 +25,9 @@ from . import config, providers
 # закрывает его и технически. Подписка остаётся там, где она разрешена, — в самом Claude Code,
 # которым и думает сам Джарвис.
 KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
-        "groq": "GROQ_API_KEY", "deepseek": "DEEPSEEK_API_KEY", "nvidia": "NVIDIA_API_KEY"}
+        "groq": "GROQ_API_KEY", "nvidia": "NVIDIA_API_KEY"}
 AUTH = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "opencode" / "auth.json"
 LOCAL = {"ollama", "lmstudio", "llamacpp", "local"}
-# Поставщики, которым ключ не нужен вовсе: «opencode» — бесплатные модели самой оболочки
-# (`*-free`), они отвечают без всякого входа. Без этого списка лестница считала бы их ступенями
-# «нечем войти» и молча выбрасывала — а они как раз то, чем работают, когда подписка кончилась.
-FREE = {"opencode"}
-
 CONF_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode"
 PLUGIN = CONF_DIR / "plugin" / "justday-ladder.js"
 LADDER = CONF_DIR / "justday-ladder.json"
@@ -40,9 +35,12 @@ SETTINGS = CONF_DIR / "opencode.json"
 RULES = CONF_DIR / "ПРАВИЛА.md"
 CLAUDE_HOME = Path.home() / ".claude"
 
+# Лестница оболочки одна на весь проект: `terminal.ladder` в config.toml. Сюда её переносит `ensure()`;
+# своего перечня моделей у плагина больше нет (раньше их было четыре — в конфиге, здесь, в умолчаниях
+# плагина и в json рядом, — и они расходились: см. Р-60 ревизии). Эта ступень — только на случай, когда
+# в конфиге нет ни одной ступени оболочки: местная модель, которой не нужен ни вход, ни интернет.
 DEFAULT_LADDER = {
-    # Порядок — это и есть приоритет: сверху тот, кем хочется думать всегда.
-    "ladder": ["anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-4-5"],
+    "ladder": ["ollama/qwen3.5:9b"],
     "tiny": "",
     "probeMinutes": 15,
     "tinyMaxChars": 80,
@@ -58,6 +56,12 @@ RENAMED = {
     "anthropic/claude-sonnet-4-5": "anthropic/claude-sonnet-5-5",
     "anthropic/claude-3-5-haiku": "anthropic/claude-haiku-4-5",
 }
+
+
+def config_rungs() -> list[str]:
+    """Ступени оболочки из `terminal.ladder`: «opencode:openai/gpt-6-luna» → «openai/gpt-6-luna»."""
+    rows = (config.load().get("terminal") or {}).get("ladder") or []
+    return [str(r).partition(":")[2].strip() for r in rows if str(r).strip().lower().startswith("opencode:")]
 
 
 def fresh(rungs: list[str]) -> list[str]:
@@ -132,19 +136,21 @@ def ensure() -> None:
     if src.exists() and (not PLUGIN.exists() or PLUGIN.resolve() != src):
         PLUGIN.unlink(missing_ok=True)
         PLUGIN.symlink_to(src)
-    if not LADDER.exists():
-        LADDER.write_text(json.dumps(DEFAULT_LADDER, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    else:
-        try:
-            got = json.loads(LADDER.read_text(encoding="utf-8"))
-        except ValueError:
-            got = None
-        if isinstance(got, dict) and isinstance(got.get("ladder"), list):
-            rungs = fresh([str(r) for r in got["ladder"]])
-            tiny = RENAMED.get(str(got.get("tiny") or ""), got.get("tiny"))
-            if rungs != got["ladder"] or tiny != got.get("tiny"):
-                got["ladder"], got["tiny"] = rungs, tiny
-                LADDER.write_text(json.dumps(got, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    try:
+        got = json.loads(LADDER.read_text(encoding="utf-8")) if LADDER.exists() else {}
+    except ValueError:
+        got = {}
+    if not isinstance(got, dict):
+        got = {}
+    want = {**DEFAULT_LADDER, **got}
+    rungs = config_rungs() or want["ladder"]
+    want["ladder"] = fresh([str(r) for r in rungs])
+    want["tiny"] = RENAMED.get(str(want.get("tiny") or ""), want.get("tiny"))
+    # Таблицу «какому поставщику какой ключ» плагин берёт отсюда, а не держит свою: своя уже однажды
+    # не знала про nvidia, и ступень, на которую ключ есть, считалась мёртвой.
+    want["keys"], want["local"] = dict(KEYS), sorted(LOCAL)
+    if want != got:
+        LADDER.write_text(json.dumps(want, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     try:
         conf = json.loads(SETTINGS.read_text(encoding="utf-8")) if SETTINGS.exists() else {}
@@ -190,6 +196,19 @@ def logged_in() -> set[str]:
     return {str(k) for k in got} if isinstance(got, dict) else set()
 
 
+def can_enter(provider: str) -> bool:
+    """Есть ли чем войти к поставщику: вход оболочки, ключ в окружении или в связке, либо он местный.
+
+    Одно решение на `terminal.reachable` и на строку про лестницу при запуске: две проверки одного
+    вопроса уже расходились."""
+    if not provider or provider in LOCAL or provider in logged_in():
+        return True
+    name = KEYS.get(provider)
+    # Ключ лежит и в окружении (его кладёт `justday shell`), и в связке (она всегда). Смотреть одно
+    # окружение значило бы объявить мёртвой ступень, ключ к которой у человека есть.
+    return bool(name and (os.environ.get(name) or providers.secret_get(provider)))
+
+
 def rungs(keys: set[str] | None = None) -> dict:
     """Какие ступени лестницы живые, а какие пропускаются, потому что в них нечем войти.
 
@@ -202,7 +221,7 @@ def rungs(keys: set[str] | None = None) -> dict:
     except (OSError, ValueError, AttributeError):
         all_rungs = list(DEFAULT_LADDER["ladder"])
     have = set(logged_in()) | (keys if keys is not None else {n for n in KEYS if providers.secret_get(n)})
-    live = [r for r in all_rungs if r.split("/", 1)[0] in LOCAL | FREE or r.split("/", 1)[0] in have]
+    live = [r for r in all_rungs if r.split("/", 1)[0] in LOCAL or r.split("/", 1)[0] in have]
     return {"live": live or all_rungs, "skipped": [] if not live else [r for r in all_rungs if r not in live]}
 
 

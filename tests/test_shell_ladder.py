@@ -114,15 +114,17 @@ def test_the_plugin_is_put_in_place_and_the_ladder_gets_a_default(tmp_path, monk
     monkeypatch.setattr(shell, "PLUGIN", conf / "plugin" / "justday-ladder.js")
     monkeypatch.setattr(shell, "LADDER", conf / "justday-ladder.json")
     monkeypatch.setattr(shell, "SETTINGS", conf / "opencode.json")
+    monkeypatch.setattr(shell.config, "load", lambda: {"terminal": {"ladder": ["claude:opus"]}})
     shell.ensure()
     assert (conf / "plugin" / "justday-ladder.js").resolve() == shell.source()
     first = json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))
-    assert first["ladder"][0].startswith("anthropic/")
+    assert first["ladder"] == ["ollama/qwen3.5:9b"]   # в config.toml ступеней оболочки нет — остаётся местная
 
-    # Второй запуск не должен затирать то, что человек поправил под себя.
-    (conf / "justday-ladder.json").write_text(json.dumps({"ladder": ["ollama/своя"]}), encoding="utf-8")
+    # Второй запуск не затирает остальное, что человек поправил под себя; ступени же одни, из config.toml.
+    first["probeMinutes"] = 7
+    (conf / "justday-ladder.json").write_text(json.dumps(first), encoding="utf-8")
     shell.ensure()
-    assert json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))["ladder"] == ["ollama/своя"]
+    assert json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))["probeMinutes"] == 7
 
 
 def test_the_next_model_is_told_where_to_read_up(ladder) -> None:
@@ -153,8 +155,9 @@ def test_a_last_years_model_name_dropped_the_whole_ladder(tmp_path, monkeypatch)
     monkeypatch.setattr(shell, "PLUGIN", conf / "plugin" / "justday-ladder.js")
     monkeypatch.setattr(shell, "LADDER", conf / "justday-ladder.json")
     monkeypatch.setattr(shell, "SETTINGS", conf / "opencode.json")
+    monkeypatch.setattr(shell.config, "load", lambda: {"terminal": {"ladder": [
+        "opencode:anthropic/claude-opus-4-5", "opencode:anthropic/claude-sonnet-4-5", "opencode:ollama/своя"]}})
     (conf / "justday-ladder.json").write_text(json.dumps({
-        "ladder": ["anthropic/claude-opus-4-5", "anthropic/claude-sonnet-4-5", "ollama/своя"],
         "tiny": "anthropic/claude-3-5-haiku",
         "probeMinutes": 7,
     }, ensure_ascii=False), encoding="utf-8")

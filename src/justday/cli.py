@@ -1758,9 +1758,9 @@ def _model_cmd(a) -> None:
                 acc = providers.cloud_account()
                 key = f" [вход: {acc.get('user') or 'выполнен'}]" if acc["signed_in"] else " [нужен вход: justday model signin]"
             print(f"{mark} {name:<12} {p['desc']}{key}")
-        print("\nбесплатно: justday model use ollama_cloud kimi-k3:cloud (после justday model signin) | "
-              "justday model use openrouter openrouter/free | justday model use ollama qwen3.5:9b (на вашей видеокарте)"
-              "\nплатно: justday model use claude sonnet | justday model use deepseek deepseek-v4-pro")
+        print("\nбесплатно: justday model use openrouter openrouter/free | "
+              "justday model use ollama qwen3.5:9b (на вашей видеокарте)"
+              "\nплатно: justday model use claude sonnet")
     elif a.action == "signin":
         acc = providers.cloud_account()
         if acc["signed_in"]:

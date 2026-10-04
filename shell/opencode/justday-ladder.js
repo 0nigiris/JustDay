@@ -17,7 +17,7 @@
 // там, где делать ничего не надо.
 //
 // Настройка лежит рядом: ~/.config/opencode/justday-ladder.json
-//   { "ladder": ["anthropic/claude-opus-4-5", "openrouter/deepseek/deepseek-chat"],
+//   { "ladder": ["openai/gpt-6-luna", "openrouter/qwen/qwen3-coder"],
 //     "tiny": "ollama/qwen3:0.6b", "probeMinutes": 15, "quiet": false }
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
@@ -33,16 +33,20 @@ const AUTH = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"
 // Про anthropic отдельно: войти в него подпиской Claude нельзя — с февраля 2026 Anthropic
 // разрешает такой вход только своим Claude Code и claude.ai. Для оболочки это значит ключ API
 // (платный по токенам) или ничего. Подписка остаётся там, где она разрешена: в самом Claude Code.
+//
+// Таблицу «поставщик → переменная с ключом» и список местных пишет сюда сам `justday` (`shell.ensure`),
+// и ступени тоже: они одни на весь проект (`terminal.ladder` в config.toml). Здесь — только запасная
+// таблица на случай, когда файл настройки написан руками и без неё.
 const ENV_KEY = {
   anthropic: "ANTHROPIC_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
   groq: "GROQ_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
+  nvidia: "NVIDIA_API_KEY",
   openai: "OPENAI_API_KEY",
   google: "GEMINI_API_KEY",
 }
 // Местные модели живут на этой машине: им вход не нужен, нужен запущенный ollama.
-const LOCAL = new Set(["ollama", "lmstudio", "llamacpp", "local"])
+const LOCAL = ["ollama", "lmstudio", "llamacpp", "local"]
 
 // Лимит и обрыв связи — разные беды. При лимите есть куда пойти: соседняя модель в том же
 // интернете работает. При обрыве идти некуда, и спускаться по лестнице бессмысленно — внизу тот же
@@ -55,7 +59,7 @@ const NETWORK = /(connection refused|network is unreachable|name or service not 
 const DOING = /(открой|запусти|включи|выключи|закрой|найди|поставь|сделай|напиши|перепиши|почини|разбер|собери|поищи|open|run|write|fix|refactor|search|install|deploy|commit)/i
 
 const defaults = {
-  ladder: ["anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-4-5"],
+  ladder: ["ollama/qwen3.5:9b"],
   tiny: "",
   probeMinutes: 15,
   tinyMaxChars: 80,
@@ -78,12 +82,12 @@ function logged() {
 
 // Есть ли чем войти на эту ступень: запись в auth.json оболочки или ключ в окружении (его кладёт
 // `justday shell`, достав из связки ключей рабочего стола).
-function reachable(name, auth) {
+function reachable(name, auth, cfg) {
   const p = split(name)?.providerID
   if (!p) return false
-  if (LOCAL.has(p)) return true
+  if ((cfg.local || LOCAL).includes(p)) return true
   if (auth[p]) return true
-  const env = ENV_KEY[p]
+  const env = { ...ENV_KEY, ...(cfg.keys || {}) }[p]
   return !!(env && process.env[env])
 }
 
@@ -96,12 +100,12 @@ function settings() {
   }
   const all = (cfg.ladder || []).map(String)
   const auth = logged()
-  const live = all.filter((n) => reachable(n, auth))
+  const live = all.filter((n) => reachable(n, auth, cfg))
   // Если войти нечем вообще никуда — оставляем лестницу как есть: пусть лучше скажет ошибку
   // поставщика, чем молча не ответит ничего.
   cfg.ladder = live.length ? live : all
   cfg.skipped = all.filter((n) => !live.includes(n))
-  if (cfg.tiny && !reachable(cfg.tiny, auth)) cfg.tiny = ""
+  if (cfg.tiny && !reachable(cfg.tiny, auth, cfg)) cfg.tiny = ""
   return cfg
 }
 
