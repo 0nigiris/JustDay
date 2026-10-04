@@ -372,6 +372,9 @@ class Brain:
             raise
         except Exception as e:
             events.emit("brain_error", error=repr(e))
+            # Поток упал посреди хода (обрыв, отказ API): ждущий ask() должен получить ошибку,
+            # а не пустой ответ — иначе лестнице поставщиков снова не на что реагировать.
+            self._error = self._error or f"stream: {e!r}"
         finally:
             self._turn_done.set()
 

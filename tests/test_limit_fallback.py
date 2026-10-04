@@ -56,6 +56,23 @@ def test_the_session_limit_was_read_aloud_as_an_answer():
     assert spoken == []
 
 
+def test_a_broken_stream_gave_an_empty_answer_instead_of_an_error():
+    """Поток SDK падал исключением — ask() возвращал пустую строку, и запасной не включался."""
+    b, spoken = _brain([])
+
+    async def broken():
+        raise RuntimeError("API Error: 529 overloaded")
+        yield
+
+    async def query(_text):
+        await b._read_loop()
+
+    b.client.receive_messages = broken
+    b.client.query = query
+    with pytest.raises(brain_mod.BrainError, match="529"):
+        asyncio.run(b.ask("привет"))
+
+
 def test_a_normal_answer_is_still_spoken():
     b, spoken = _brain([AssistantMessage(content=[TextBlock("Привет!")], model="m"), _result(False)])
     assert asyncio.run(b.ask("привет")) == "Привет!"
