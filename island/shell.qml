@@ -1741,7 +1741,9 @@ ShellRoot {
         property real t: 0
         implicitWidth: 22
         implicitHeight: 18
-        FrameAnimation { running: eq.visible && eq.playing && JD.animOn; onTriggered: eq.t += frameTime }
+        // 30 кадров в секунду, а не по кадру монитора: четыре столбика по 3 пикселя, ради которых окно острова
+        // (1920×880) перерисовывалось 165 раз в секунду (Р-44). Глазу на столбиках разницы нет.
+        Timer { interval: 33; repeat: true; running: eq.visible && eq.playing && JD.animOn; onTriggered: eq.t += 0.033 }
         Row {
             anchors.centerIn: parent
             spacing: 2.5

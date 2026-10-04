@@ -21,7 +21,8 @@ Item {
     readonly property var frames: JD.dockCat.run || []
     readonly property bool own: frames.length === 0
     readonly property bool sleeping: sleepBelow > 0 && cpu < sleepBelow
-    readonly property int period: Math.max(25, Math.ceil(5000 / Math.sqrt(cpu + 35) - 400))
+    // Не быстрее 30 кадров в секунду (Р-44): каждый кадр кошки — перерисовка окна дока.
+    readonly property int period: Math.max(33, Math.ceil(5000 / Math.sqrt(cpu + 35) - 400))
     property int frame: 0
 
     implicitWidth: Math.round(size * (own ? 32 / 22 : 1.15))
