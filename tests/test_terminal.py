@@ -739,3 +739,19 @@ def test_a_long_task_can_be_handed_over_as_a_file() -> None:
     src = inspect.getsource(terminal.run)
     assert 'task.startswith("@")' in src, "задача файлом (@путь) пропала"
     assert "isatty" in src, "задача из трубы пропала"
+
+
+def test_a_whole_page_of_work_was_handed_to_the_weakest_model() -> None:
+    """Промпт на шесть тысяч знаков со списком работ судья назвал мелочью и посадил на хайку.
+
+    Судья работает на крошечной модели и отвечает одним словом: для него «почини экран, док,
+    диск и дальше по плану» — одна строка. Длина задачи — признак, в котором ошибиться нельзя:
+    столько не пишут, чтобы спросить, который час.
+    """
+    models = {"light": "haiku", "strong": "sonnet", "big": "opus"}
+    work = terminal.Work({"terminal": {"auto": True, "models": models}, "brain": {}},
+                         rungs=rungs("claude:opus"), engines={})
+    rung, effort, why = work.shape("Работай по плану.\n" + "- пункт работы\n" * 40)
+    assert rung.model == "opus", "большую работу снова взяла самая слабая модель"
+    assert effort == "high", "на большую работу осталось низкое усилие"
+    assert why == "большая задача"

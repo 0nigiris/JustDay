@@ -539,6 +539,14 @@ class Work:
                 "позвала слабая модель"
         if not self.opts.get("auto", True):
             return rung, effort, "как задано"
+        # Судья видит задачу целиком, но судит её одним словом и сам работает на крошечной модели:
+        # промпт на шесть тысяч знаков со списком работ он спокойно называет мелочью и сажает на
+        # неё хайку. Длина — признак, в котором ошибиться нельзя: столько не пишут, чтобы спросить
+        # время. Поэтому у большой задачи есть пол, ниже которого судью не слушаем.
+        if len(task) >= 1200 or task.count("\n") >= 12:
+            level = dispatch.BIG
+            return (Rung(CLAUDE, m) if rung.engine == CLAUDE and (m := self.models().get(level, "")) else rung), \
+                dispatch.EFFORT.get(level, effort), "большая задача"
         level, why = dispatch.level_for(task)
         effort = dispatch.EFFORT.get(level, effort)
         if rung.engine == CLAUDE and (model := self.models().get(level, "")):
