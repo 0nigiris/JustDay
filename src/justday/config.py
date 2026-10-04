@@ -561,6 +561,10 @@ DEFAULTS: dict = {
         "review_rounds": 2,
         "review_timeout": 300,      # секунд на один круг ревью
     },
+    # Наблюдатель (`observer.py`): Джарвис пишет первым, но только о встрече, до которой осталось не больше
+    # lead_minutes, и один раз. Канал — уведомление, Telegram (бесплатно) и голос, если он за компьютером.
+    # Звонка нет: он стоит денег. Нужен подключённый календарь (`justday calendar setup`).
+    "observer": {"enabled": True, "lead_minutes": 20, "telegram": True},
     # Local model for private data (mail). Ollama listens on localhost only.
     "local_llm": {"url": "http://127.0.0.1:11434", "model": "qwen3.5:9b", "num_ctx": 16384,
                   "keep_alive": "10m",

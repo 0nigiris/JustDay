@@ -50,6 +50,7 @@ from . import (
     namespot,
     notifications,
     numerals,
+    observer,
     offline,
     palette,
     parts,
@@ -1702,6 +1703,27 @@ class Daemon:
             time.sleep(0.02)
         return False
 
+    async def _observe(self) -> None:
+        """Раз в минуту: пора ли Джарвису написать первым (observer.py)."""
+        try:
+            await observer.tick(calendar_lane.between, self._nudge, self.cfg)
+        except Exception as e:
+            log.info("наблюдатель: %s", type(e).__name__)
+
+    async def _nudge(self, text: str) -> None:
+        """Сказать ему то, что наблюдатель счёл нужным: везде, где это бесплатно. Звонок — нет, он стоит денег."""
+        from . import server, telegram
+
+        events.emit("nudge", text=text)
+        self.notify(text, "appointment-soon")
+        if (self.cfg.get("observer") or {}).get("telegram", True):
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, telegram.send, text)
+            except Exception as e:     # бота нет или он не настроен — остаются уведомление и голос
+                log.info("наблюдатель: телеграм не отправил (%s)", type(e).__name__)
+        if server.here() is True:      # за компьютером — ещё и вслух; в комнате без него голос никому не нужен
+            await self.say(text)
+
     async def _publish_windows_debounced(self) -> None:
         await asyncio.sleep(self.WINDOWS_QUIET)
         self._publish_windows_now()
@@ -1855,6 +1877,9 @@ class Daemon:
                     except Exception:
                         nxt = None
                     self.publish(next_event=nxt)
+                if time.monotonic() - getattr(self, "_last_observe", 0) > 60 and calendar_lane.urls():
+                    self._last_observe = time.monotonic()
+                    spawn(self._observe())
                 isl = self.cfg["island"]
                 if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
                     last_weather, self._weather_city = time.monotonic(), isl["city"]
