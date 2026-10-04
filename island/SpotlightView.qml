@@ -238,6 +238,12 @@ Item {
                                 name: line.row.icon || "application-x-executable"
                                 fallback: "application-x-executable"
                                 implicitSize: 40
+                                renderSize: 96
+                                // Значок самой программы, как в Пуске. Без этого признака весь список
+                                // выглядел одинаковыми пустыми окошками: наше запасное имя
+                                // application-x-executable само есть в штриховом наборе и перебивало
+                                // настоящий значок — Spotlight отделился от Пуска и потерял это.
+                                theme: true
                             }
                             // Открытое окно отмечено точкой: запускать второй раз его не надо.
                             Rectangle {

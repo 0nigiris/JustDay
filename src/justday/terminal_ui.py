@@ -14,7 +14,8 @@ from typing import ClassVar
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
-from textual.widgets import Input, RichLog, Static
+from textual.message import Message
+from textual.widgets import RichLog, Static, TextArea
 
 from . import config, terminal
 
@@ -35,6 +36,37 @@ HELP = """[b]Команды[/b]
 YES = ("д", "да", "y", "yes", "ага", "ок")
 
 
+class Ask(TextArea):
+    """Поле ввода, которое умеет быть больше одной строки.
+
+    Было `Input` — ровно одна строка. Большую задачу в него было не написать и не вставить:
+    всё после первого перевода строки отбрасывалось, а длинный текст уезжал за край, и человек
+    видел хвост вместо начала. Поэтому здесь TextArea: она растёт вниз по мере письма.
+
+    Enter отправляет — привычка дороже; перенести строку руками — Alt+Enter (shift+enter
+    различают не все терминалы, на него полагаться нельзя). Вставка многострочного текста
+    приходит одним куском и переносы сохраняет.
+    """
+
+    class Submitted(Message):
+        def __init__(self, value: str) -> None:
+            self.value = value
+            super().__init__()
+
+    async def _on_key(self, event) -> None:
+        if event.key == "enter":
+            event.prevent_default()
+            event.stop()
+            self.post_message(self.Submitted(self.text))
+            return
+        if event.key in ("alt+enter", "escape+enter", "ctrl+j"):
+            event.prevent_default()
+            event.stop()
+            self.insert("\n")
+            return
+        await super()._on_key(event)
+
+
 class Shell(App):
     """Одно окно: задача сверху, ответ посередине, состояние и ввод снизу."""
 
@@ -42,8 +74,9 @@ class Shell(App):
     Screen { background: #0b0b0d; }
     #log { background: #0b0b0d; color: #e7e7ea; padding: 1 2; }
     #status { background: #15151a; color: #8d8d99; padding: 0 2; height: 1; }
-    Input { background: #15151a; color: #e7e7ea; border: none; padding: 0 2; }
-    Input:focus { border: none; }
+    /* Растёт вниз под написанное, но не съедает весь экран: дальше листается внутри поля. */
+    Ask { background: #15151a; color: #e7e7ea; border: none; padding: 0 2; height: auto; max-height: 12; }
+    Ask:focus { border: none; }
     """
     BINDINGS: ClassVar = [("ctrl+c", "quit", "Выход")]
 
@@ -63,7 +96,8 @@ class Shell(App):
         with Vertical():
             yield RichLog(id="log", markup=True, wrap=True, auto_scroll=True)
             yield Static("", id="status")
-            yield Input(placeholder="задача…", id="ask")
+            yield Ask(placeholder="задача…  (Enter — отправить, Alt+Enter — перенести строку)",
+                      id="ask", soft_wrap=True, show_line_numbers=False)
 
     def on_mount(self) -> None:
         log = self.query_one("#log", RichLog)
@@ -73,7 +107,7 @@ class Shell(App):
                       + ", ".join(r.label for r in self.work.skipped) + "[/]")
         log.write("[#8d8d99]/help — что умеет это окно[/]\n")
         self.refresh_status()
-        self.query_one("#ask", Input).focus()
+        self.query_one("#ask", Ask).focus()
 
     def refresh_status(self, doing: str = "") -> None:
         bits = [self.work.now.label]
@@ -96,9 +130,9 @@ class Shell(App):
 
     # ───────────── ввод ─────────────
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
+    async def on_ask_submitted(self, event: Ask.Submitted) -> None:
         text = event.value.strip()
-        event.input.value = ""
+        self.query_one("#ask", Ask).text = ""
         if not text:
             return
         log = self.query_one("#log", RichLog)

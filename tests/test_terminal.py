@@ -152,7 +152,7 @@ def test_a_task_typed_into_the_window_reaches_the_ladder() -> None:
             await pilot.pause()
             app.work.rungs = app.work.all = rungs("claude:opus")
             app.work.engines = {"claude": engine([terminal.Said(text="сделал")])}
-            app.query_one("#ask").value = "почини док"
+            app.query_one("#ask").text = "почини док"
             await pilot.press("enter")
             for _ in range(40):                 # ход идёт своей задачей: ждём, пока он закончится
                 await pilot.pause()
@@ -605,9 +605,9 @@ def test_three_tasks_in_a_row_used_to_answer_wait_and_drop_two_of_them() -> None
             app.work.rungs = app.work.all = rungs("claude:opus")
             app.work.engines = {"claude": eng}
             for t in ("раз", "два", "три"):
-                app.query_one("#ask").value = t
+                app.query_one("#ask").text = t
                 await pilot.press("enter")
-            app.query_one("#ask").value = "/drop 2"   # убрать «три»
+            app.query_one("#ask").text = "/drop 2"   # убрать «три»
             await pilot.press("enter")
             queued = list(app.queue)
             for _ in range(200):
@@ -643,3 +643,54 @@ def test_a_big_tool_answer_used_to_kill_the_whole_night_work() -> None:
 
     lines = asyncio.run(go())
     assert lines and len(lines[0]) > 200 * 1024, "длинная строка так и не прошла целиком"
+
+
+def test_a_big_prompt_could_not_be_written_into_the_shell(monkeypatch) -> None:
+    """Большую задачу в окно оболочки было не написать и не вставить.
+
+    Поле ввода было однострочным (`Input`): всё после первого перевода строки отбрасывалось,
+    а длинный текст уезжал за край. Человек вставлял промпт на двадцать строк, а уходила первая.
+    Проверяем ровно это: многострочный текст доходит целиком и Enter его отправляет.
+    """
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import terminal_ui
+
+    sent: list[str] = []
+    monkeypatch.setattr(terminal_ui.Shell, "start", lambda self, text: sent.append(text))
+    big = "Работай по плану.\n\nПРАВИЛА:\n- всё по-русски\n- тесты зелёные\n" + "- строка\n" * 20
+
+    async def go() -> None:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            field = app.query_one("#ask", terminal_ui.Ask)
+            field.text = big
+            await pilot.press("enter")
+            await pilot.pause()
+            assert field.text == "", "после отправки поле не очистилось"
+
+    asyncio.run(go())
+    assert sent == [big.strip()], "многострочная задача дошла не целиком"
+
+
+def test_alt_enter_breaks_the_line_instead_of_sending(monkeypatch) -> None:
+    """Перенос строки руками: Enter отправляет, а абзац внутри задачи писать всё равно надо."""
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import terminal_ui
+
+    sent: list[str] = []
+    monkeypatch.setattr(terminal_ui.Shell, "start", lambda self, text: sent.append(text))
+
+    async def go() -> str:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            field = app.query_one("#ask", terminal_ui.Ask)
+            field.text = "первая"
+            await pilot.press("alt+enter")
+            await pilot.pause()
+            return field.text
+
+    text = asyncio.run(go())
+    assert "\n" in text, "Alt+Enter больше не переносит строку — абзац в задаче не написать"
+    assert not sent, "Alt+Enter отправил задачу вместо переноса строки"
