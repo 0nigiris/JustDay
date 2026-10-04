@@ -1648,7 +1648,16 @@ class Daemon:
         """
         from . import server
 
-        if not server.state().get("on") or time.monotonic() - getattr(self, "_lock_seen", 0) < 5:
+        st = server.state()
+        if st.get("on") and st.get("waiting"):
+            # Режим включили, пока человек сидел за машиной, и экран ему оставили. Отошёл — гасим.
+            # Замка ещё не было, так что «сеанс отперт» здесь не значит «вернулся».
+            if await asyncio.get_running_loop().run_in_executor(None, server.tick):
+                log.info("человек отошёл — режим сервера погасил экраны")
+            return
+        # Без замка отпертый сеанс ничего не говорит: с `lock: false` режим выключался бы сам через
+        # десять секунд после включения.
+        if not st.get("locked") or time.monotonic() - getattr(self, "_lock_seen", 0) < 5:
             return
         self._lock_seen = time.monotonic()
         try:

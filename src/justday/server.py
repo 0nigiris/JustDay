@@ -13,6 +13,12 @@
 это решено осознанно: машина, у которой отняты мышь и клавиатура, а канал с телефона почему-то не
 ответил, — кирпич. Пока в комнате никого, разницы нет, а цена ошибки разная.
 
+Человек за компьютером. Режим включают и из работы (`justday night`, `/night`), и человек сам — а
+он в этот миг сидит за машиной. Гасить и запирать экран под руками у работающего нельзя ни в каком
+случае: это его главное раздражение. Поэтому всё, что отнимает экран и звук, ждёт, пока он отойдёт:
+признак берётся у системы (островок слушает простой ввода, `here()`), а не угадывается. Ушёл —
+`tick()` из демона доделывает начатое так же, как сделал бы `on()`.
+
 Выход. Любое движение мышью будит экраны само — это делает монитор, а не мы. Поэтому режим
 кончается не «когда человек вернулся», а когда его выключили: `justday server off`, или сам,
 по сроку сторожа. Так честнее, чем угадывать по движению мыши, которое бывает и от кошки.
@@ -34,6 +40,12 @@ STATE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-server-mode.j
 # его стало некому: работа оборвалась, окно закрыли, человек забыл. Без неё забытый режим значит
 # машину, которая не спит неделю.
 OFF_UNIT = "justday-server-off"
+# Сидит ли человек за машиной. Пишет островок (`island/JD.qml`, IdleMonitor): у KWin нет
+# `GetSessionIdleTime` («not supported on this platform»), а `loginctl IdleHint` Plasma не ставит,
+# и простой ввода по Wayland знает только тот, у кого есть окно, — то есть островок.
+PRESENCE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "justday-presence.json"
+# Островок переписывает файл раз в 30 с. Старше — значит островок умер, и его слову верить нельзя.
+PRESENCE_STALE = 90
 
 
 def _run(*cmd: str, timeout: float = 10) -> bool:
@@ -137,6 +149,21 @@ def _desk_drop(uuid: str) -> bool:
     return bool(_dbus("removeDesktop", "s", uuid))
 
 
+def here() -> bool | None:
+    """Сидит ли человек за машиной прямо сейчас. None — система не сказала (островок не запущен).
+
+    «Сидит» — трогал мышь или клавиатуру последние 60 секунд. Видео, которое не даёт экрану
+    погаснуть, тут не в счёт нарочно: уйдя спать с включённым фильмом, он ждёт, что фильм встанет.
+    """
+    try:
+        got = json.loads(PRESENCE.read_text(encoding="utf-8"))
+        if time.time() - float(got["at"]) > PRESENCE_STALE:
+            return None
+        return not got["idle"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def _lock() -> bool:
     """Запереть сеанс: подошедший человек увидит запрос пароля, а не твой рабочий стол.
 
@@ -213,19 +240,17 @@ def state() -> dict:
         return {}
 
 
-def on(why: str = "работа ассистента", hours: float = 0.0) -> dict:
-    """Включить режим сервера. `hours` — через сколько сторож вернёт машину человеку."""
-    was = state()
-    if was.get("on"):
-        # Режим уже идёт, а экраны горят: человек вернулся, подвигал мышью — монитор проснулся сам.
-        # Значит «включить» второй раз означает ровно одно: погаси обратно, я снова ухожу.
-        opts = _opts()
-        again = _screens(False) if opts.get("screens_off", True) else False
-        locked = _lock() if opts.get("lock", True) else False
-        return {"ok": True, "already": True, "screens_off": again, "locked": locked, **was}
-    opts = _opts()
-    hours = hours or float(opts.get("hours") or 10)
-    out: dict = {"on": True, "why": why, "since": time.time(), "hours": hours}
+def _save(out: dict) -> bool:
+    try:
+        STATE.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+def _dark(out: dict, opts: dict) -> None:
+    """Отнять у человека экран и звук. Только когда его нет рядом — это проверяет вызывающий."""
+    out.pop("waiting", None)
     # Порядок важен: экраны гасим последними. Если что-то не выйдет, человек ещё увидит, что
     # именно, — а гашение экрана посреди списка превращает любую беду в тёмный экран без слов.
     if opts.get("pause_players", True):
@@ -239,20 +264,63 @@ def on(why: str = "работа ассистента", hours: float = 0.0) -> di
         out["desk"] = _desk_make(str(opts.get("desktop_name") or "JustDay"))
         if out["desk"]:
             _desk_set(out["desk"])
-    out["guard"] = _keep_awake(why)
-    out["watchdog"] = _watchdog_on(hours)
     if opts.get("screens_off", True):
         out["screens_off"] = _screens(False)
     if opts.get("lock", True):
         # Самым последним: заперев сеанс раньше, мы не успели бы ни погасить экраны, ни перейти
         # на свой рабочий стол. Подошедший человек увидит запрос пароля, а не чужую работу.
         out["locked"] = _lock()
-    try:
-        STATE.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-    except OSError as e:
-        return {"ok": False, "error": str(e)}
+
+
+def on(why: str = "работа ассистента", hours: float = 0.0) -> dict:
+    """Включить режим сервера. `hours` — через сколько сторож вернёт машину человеку.
+
+    Человек за компьютером — экран, звук и музыку не трогаем: режим встаёт в ожидание
+    (`waiting`), а гасит `tick()`, когда система подтвердила простой. Неизвестный признак тоже
+    оставляет экран человеку: отсутствие островка не доказывает, что он ушёл.
+    """
+    was = state()
+    opts = _opts()
+    if was.get("on"):
+        out = dict(was)
+        if here() is not False:
+            out["waiting"] = True
+        elif was.get("waiting"):
+            _dark(out, opts)
+        else:
+            # Режим уже идёт, а экраны горят: человек вернулся, подвигал мышью — монитор
+            # проснулся сам. Значит «включить» второй раз означает: погаси обратно, я снова ухожу.
+            if opts.get("screens_off", True):
+                out["screens_off"] = _screens(False)
+            if opts.get("lock", True):
+                out["locked"] = _lock()
+        _save(out)
+        return {"ok": True, "already": True, **out}
+    hours = hours or float(opts.get("hours") or 10)
+    out: dict = {"on": True, "why": why, "since": time.time(), "hours": hours}
+    out["guard"] = _keep_awake(why)
+    out["watchdog"] = _watchdog_on(hours)
+    if here() is not False:
+        out["waiting"] = True
+    else:
+        _dark(out, opts)
+    if not _save(out):
+        return {"ok": False, "error": f"не записать {STATE}"}
     out["ok"] = True
     return out
+
+
+def tick() -> bool:
+    """Режим ждал, пока человек отойдёт, — и он отошёл: гасим. True — погасили сейчас.
+
+    Зовётся демоном раз в несколько секунд; пока режим не ждёт, стоит одно чтение файла.
+    """
+    was = state()
+    if not was.get("on") or not was.get("waiting") or here() is not False:
+        return False
+    _dark(was, _opts())
+    _save(was)
+    return True
 
 
 def off(resume: bool = True) -> dict:
@@ -296,6 +364,7 @@ def status() -> dict:
     if was.get("on") and was.get("since") and was.get("hours"):
         left = max(0.0, float(was["since"]) + float(was["hours"]) * 3600 - time.time())
     return {"ok": True, "on": bool(was.get("on")), "why": was.get("why", ""),
+            "waiting": bool(was.get("waiting")), "here": here(),
             "guard_alive": bool(pid) and Path(f"/proc/{pid}").exists(),
             "paused": was.get("paused", []),
             "hours_left": round(left / 3600, 2),

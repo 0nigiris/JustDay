@@ -171,3 +171,67 @@ def test_coming_home_must_not_mean_a_dark_monitor(monkeypatch, machine) -> None:
 
     asyncio.run(go())
     assert gave_back, "человек вернулся, а машина так и осталась тёмной и глухой"
+
+
+def _seated(idle: bool, ago: float = 0.0) -> None:
+    """Что островок сказал о человеке: `idle` — отошёл, `ago` — сколько секунд назад сказал."""
+    import time
+    server.PRESENCE.write_text(json.dumps({"idle": idle, "at": time.time() - ago}))
+
+
+TOUCHES_HIM = ("kscreen-doctor", "loginctl", "wpctl", "playerctl")
+
+
+def test_he_was_typing_and_work_started_the_screen_must_not_go_dark_or_lock(machine) -> None:
+    """«Когда ты что-то начинаешь делать, у меня всё время блокируется экран».
+
+    Работа включает режим сервера сама (`justday night`, `/night`), а человек в этот миг сидит за
+    машиной. Пока он трогает мышь и клавиатуру, экран, звук и музыка — его, сколько бы раз режим
+    ни включали.
+    """
+    _seated(idle=False)
+
+    first = server.on("ночная работа")
+    again = server.on("ночная работа")
+
+    touched = [c for c in machine if c[0] in TOUCHES_HIM and c[:2] != ("playerctl", "-l")]
+    assert not touched, f"человек работает, а мы полезли в его экран и звук: {touched}"
+    assert first["ok"] and first["waiting"] and again["waiting"]
+    assert first["guard"], "засыпание запрещается сразу: работе оно мешает и при человеке"
+
+
+def test_once_he_walks_away_the_waiting_mode_finishes_the_job(monkeypatch, machine) -> None:
+    """Отошёл — прежнее поведение: экраны гаснут, сеанс запирается, демон не путает это с возвращением.
+
+    Без замка «сеанс отперт» ничего не значит: раньше демон выключал такой режим через десять
+    секунд, и уходящего человека встречал горящий экран.
+    """
+    import asyncio
+    import types
+
+    from justday import daemon
+
+    _seated(idle=False)
+    server.on("ночная работа")
+    assert not server.tick(), "погасили экран, пока он ещё сидит"
+
+    gave_back = []
+    monkeypatch.setattr(server, "off", lambda resume=True: gave_back.append(True) or {"ok": True})
+    me = types.SimpleNamespace(_lock_seen=0.0, _unlocked_at=0.0, notify=lambda *a, **kw: None)
+    asyncio.run(daemon.Daemon._welcome_back(me))
+    assert not gave_back, "режим ждал ухода человека, а демон счёл его вернувшимся и всё выключил"
+
+    _seated(idle=True)
+    asyncio.run(daemon.Daemon._welcome_back(me))
+
+    assert ("kscreen-doctor", "--dpms=off") in machine and ("loginctl", "lock-session") in machine
+    assert not server.state().get("waiting")
+
+
+def test_missing_presence_signal_never_blanks_a_screen_under_uncertainty(machine) -> None:
+    """Устаревший сигнал не доказывает, что человек ушёл; оставляем экран включённым."""
+    _seated(idle=False, ago=server.PRESENCE_STALE + 5)
+
+    out = server.on("человек ушёл")
+
+    assert out.get("waiting") and not any(c[:2] == ("kscreen-doctor", "--dpms=off") for c in machine)

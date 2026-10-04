@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 
 Singleton {
     id: jd
@@ -1255,6 +1256,17 @@ Singleton {
         return ({ listening: accentCyan, transcribing: accentCyan, thinking: accentOrange, speaking: accentBlue,
                   approval: accentOrange, offline: accentRed })[s] || text3
     }
+
+    // ───────────── сидит ли человек за машиной ─────────────
+    // Режим сервера гасил и запирал экран под руками у работающего человека. Простой ввода по
+    // Wayland знает только тот, у кого есть окно, а у KWin нет GetSessionIdleTime, — поэтому
+    // спрашиваем здесь и пишем в файл, который читает `server.here()`. Запрет простоя от видео не в
+    // счёт (respectInhibitors: false): ушёл спать с фильмом — значит ушёл. Переписываем раз в 30 с,
+    // чтобы мёртвый островок не оставил после себя вечное «сидит» или «ушёл».
+    IdleMonitor { id: presence; timeout: 60; respectInhibitors: false; onIsIdleChanged: jd.writePresence() }
+    FileView { id: presenceFile; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/justday-presence.json"; atomicWrites: true }
+    function writePresence() { presenceFile.setText(JSON.stringify({ idle: presence.isIdle, at: Date.now() / 1000 })) }
+    Timer { interval: 30000; repeat: true; running: true; triggeredOnStart: true; onTriggered: jd.writePresence() }
 
     // ───────────── daemon connection ─────────────
     readonly property bool connected: linked

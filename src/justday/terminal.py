@@ -787,8 +787,10 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
     # машину человеку, если её не вернул никто, но не отнимать её у работы, которая ещё идёт.
     guard, mode = 0, False
     if dark:
-        mode = bool(server.on(why, hours=hours + 1).get("ok"))
-        lines.append("Машина в режиме сервера: экраны погашены, звук заглушён." if mode
+        got = server.on(why, hours=hours + 1)
+        mode = bool(got.get("ok"))
+        lines.append("Режим сервера: экраны погашу, когда человек отойдёт." if got.get("waiting")
+                     else "Машина в режиме сервера: экраны погашены, звук заглушён." if mode
                      else "Режим сервера включить не удалось — работаю при свете.")
     if not mode:
         guard = server.awake(why)
@@ -880,7 +882,9 @@ def nightly(task: str, hours: float = 8.0, tell: bool = True, dark: bool = True)
     from . import server
     mode = server.on(f"ночная работа: {task[:60]}", hours=hours + 1) if dark else {}
     print("Работа ушла в службу justday-night — окно можно закрывать.")
-    if mode.get("ok"):
+    if mode.get("waiting"):
+        print("Режим сервера: засыпать не даю, экраны погашу и звук заглушу, когда отойдёшь.")
+    elif mode.get("ok"):
         print("Машина в режиме сервера: экраны погашены, звук заглушён, засыпать не даю.")
     print(f"Журнал: {NIGHT_DIR}\nПосмотреть: justday night --status · остановить: justday night --stop")
     return 0

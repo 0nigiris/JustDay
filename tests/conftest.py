@@ -36,3 +36,25 @@ def vault(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     monkeypatch.setattr(notes, "vault", lambda: root)
     monkeypatch.setattr(config, "load", lambda: {"notes": {"vault": str(root), "plans": "Планы.md"}})
     return root
+
+
+@pytest.fixture(autouse=True)
+def no_live_machine(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    """Ни один тест не трогает живой экран, звук и сеанс.
+
+    Так и было: два теста режима сервера подменяли экран и звук, но не замок, не `playerctl`, не
+    `systemd-run` и не рабочие столы. Каждый `pytest` любой нейросети запирал человеку сеанс посреди
+    работы, ставил музыку на паузу и заводил сторожа — «как только ты что-то начинаешь, у меня
+    блокируется экран». Теперь внешние команды режима подменены всем тестам сразу.
+    """
+    from justday import server
+
+    monkeypatch.setattr(server, "_run", lambda *cmd, timeout=10: False)
+    monkeypatch.setattr(server, "_out", lambda *cmd, timeout=10: "")
+    monkeypatch.setattr(server, "_keep_awake", lambda why: 0)
+    monkeypatch.setattr(server, "STATE", tmp_path / "server-mode.json")
+    monkeypatch.setattr(server, "PRESENCE", tmp_path / "presence.json")
+    # Старые проверки режима моделируют пустую комнату; неизвестность отдельно проверяет свой тест.
+    import json
+    import time
+    server.PRESENCE.write_text(json.dumps({"idle": True, "at": time.time()}), encoding="utf-8")
