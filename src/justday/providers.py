@@ -7,8 +7,10 @@ never in config files or in the assistant's memory.
 """
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -165,24 +167,124 @@ def spawned_by_ai(pid: int, daemon: int) -> bool:
 
 
 # ---- permission policy for models without Claude Code's auto-mode classifier ----
-_RULE = re.compile(r"^Bash\((.+?)(?::\*)?\)$")
+# Не-Claude мозгу классификатор не помогает, и раньше здесь сравнивали начало строки: `FOO=1 rm -r x`,
+# `env rm -fr x`, `/bin/dd`, `rm --recursive --force`, `git -C . push -f` проходили мимо ask, а
+# `echo x > ~/.bashrc` считался разрешённым `echo` (Р-3). Теперь команда разбирается как её разберёт
+# shell: по кавычкам, на простые команды, без префиксов окружения и обёрток, с путём к программе.
+_RULE = re.compile(r"^Bash\((.+)\)$")
+_SPLIT = {"&&", "||", ";", "|", "&", "|&", ";;", "(", ")"}
+_REDIRECT = {">", ">>", ">|", "&>", "&>>", "<>"}
+_WRAPPERS = {"env", "command", "exec", "nice", "nohup", "time", "stdbuf", "setsid", "doas", "ionice", "chrt",
+             "timeout", "xargs", "unbuffer", "builtin"}
+# Опции обёрток, которые берут следующее слово: `env -u X rm`, `nice -n 5 rm`, `xargs -I {} rm`.
+_WRAPPER_ARG = {"-u", "-C", "-n", "-c", "-k", "-s", "-p", "-o", "-e", "-t", "-d", "-L", "-P", "-I", "-E", "-S"}
+_SHELLS = {"sh", "bash", "zsh", "dash", "fish", "ksh"}
+_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
-def _pieces(cmd: str) -> list[str]:
-    return [p.strip() for p in re.split(r"&&|\|\||;|\||\n|\$\(|`", cmd) if p.strip()]
+def _simple_commands(cmd: str) -> tuple[list[list[str]], bool]:
+    """Простые команды как списки слов (программа первой) и флаг «пишет в файл перенаправлением».
+
+    Подстановка `$(…)`/`…`/`<(…)` разбирается как ещё одна команда: внутри неё может быть что угодно."""
+    inner = re.findall(r"\$\(([^()]*)\)|`([^`]*)`|<\(([^()]*)\)", cmd)
+    lexer = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:  # незакрытая кавычка: разобрать нельзя — значит и разрешить нельзя
+        return [[cmd]], True
+    out, cur, writes, i = [], [], False, 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in _SPLIT:
+            out.append(cur)
+            cur = []
+        elif tok in _REDIRECT or re.fullmatch(r"\d>>?", tok):
+            target = tokens[i + 1] if i + 1 < len(tokens) else ""
+            if target not in ("/dev/null", "&1", "&2", "/dev/stdout", "/dev/stderr") and not target.startswith("&"):
+                writes = True
+            i += 1
+        elif tok in ("<", "<<", "<<<") or re.fullmatch(r"\d<", tok):
+            i += 1
+        else:
+            cur.append(tok)
+        i += 1
+    out.append(cur)
+    out = [_unwrap(c) for c in out if c]
+    # `bash -c "rm -rf x"` и `eval "rm -rf x"`: настоящая команда спрятана в одном слове.
+    for c in list(out):
+        flag = next((i for i, w in enumerate(c) if re.fullmatch(r"-[a-z]*c", w)), None) if c[0] in _SHELLS else None
+        if c[0] != "eval" and flag is None:
+            continue
+        body = " ".join(c[1:]) if c[0] == "eval" else " ".join(c[flag + 1:flag + 2])
+        more, w = _simple_commands(body)
+        out += more
+        writes |= w
+    for groups in inner:
+        for part in groups:
+            if part:
+                more, w = _simple_commands(part)
+                out += more
+                writes |= w
+    return [c for c in out if c], writes
+
+
+def _unwrap(words: list[str]) -> list[str]:
+    """`FOO=1 env -i nice -n 5 /bin/dd …` → `dd …`: префиксы окружения и обёртки ничего не меняют в том,
+    что команда сделает."""
+    while words:
+        head = words[0]
+        if _ASSIGN.match(head) or head in ("!", "{", "}"):
+            words = words[1:]
+        elif os.path.basename(head) in _WRAPPERS:
+            words = words[1:]
+            while words and (words[0].startswith("-") or _ASSIGN.match(words[0]) or re.fullmatch(r"[\d.]+[smhd]?",
+                                                                                                    words[0])):
+                words = words[2:] if words[0] in _WRAPPER_ARG else words[1:]
+        else:
+            break
+    if words:
+        words = [os.path.basename(words[0]), *words[1:]]
+    if words[:1] == ["git"]:  # `git -C . push -f`: общие опции git до подкоманды
+        rest = words[1:]
+        while rest and rest[0].startswith("-"):
+            rest = rest[2:] if rest[0] in ("-C", "-c", "--git-dir", "--work-tree") else rest[1:]
+        words = ["git", *rest]
+    return words
+
+
+def _matches(rule_body: str, words: list[str]) -> bool:
+    """Сопоставление правила так, как его делает Claude Code: `*` — что угодно, `x:*` — `x` или `x …`
+    (граница слова: `ps:*` не пускает `psql`)."""
+    line = " ".join(words)
+    if rule_body.endswith(":*"):
+        head = rule_body[:-2]
+        return fnmatch.fnmatchcase(line, head) or fnmatch.fnmatchcase(line, head + " *")
+    return fnmatch.fnmatchcase(line, rule_body)
+
+
+def _destructive(words: list[str]) -> bool:
+    """То, что опасно в любой записи, а не только в той, что вписана в ask."""
+    prog, args = words[0], words[1:]
+    flags = [a for a in args if a.startswith("-")]
+    if prog == "rm":
+        return any(a in ("--recursive", "--force") or (not a.startswith("--") and set(a[1:]) & set("rRf"))
+                   for a in flags)
+    if prog == "find":
+        return any(a in ("-delete", "-exec", "-execdir", "-ok", "-okdir") for a in args)
+    if prog == "git" and args[:1] == ["push"]:
+        return any(a in ("-f", "--force", "--force-with-lease", "--mirror", "--delete", "-d") or a.startswith("+")
+                   or a.startswith("--force") for a in args[1:])
+    return prog in ("dd", "mkfs", "shred", "wipefs", "sudo", "pkexec", "su") or prog.startswith("mkfs.")
 
 
 def risky(tool: str, inp: dict, ask_rules: list[str]) -> bool:
     """True if a call matches one of the `ask` rules (destructive shell commands, publishing…)."""
     if tool != "Bash":
         return False
-    cmd = inp.get("command", "")
-    parts = _pieces(cmd)
-    for rule in ask_rules:
-        m = _RULE.match(rule)
-        if m and any(p.startswith(m.group(1)) or p.startswith("sudo " + m.group(1)) for p in parts):
-            return True
-    return bool(re.search(r"\brm\s+-[a-zA-Z]*[rf]", cmd))
+    commands, _ = _simple_commands(inp.get("command", ""))
+    bodies = [m.group(1) for r in ask_rules if (m := _RULE.match(r))]
+    return any(_destructive(c) or any(_matches(b, c) for b in bodies) for c in commands)
 
 
 def all_allowed(tool: str, inp: dict, allow_rules: list[str]) -> bool:
@@ -192,14 +294,13 @@ def all_allowed(tool: str, inp: dict, allow_rules: list[str]) -> bool:
     разрешённые — `cat /sys/... && echo ---` — и статический разбор сдаётся: «содержит подстановку
     команды», «содержит синтаксис (&), который нельзя разобрать», — и человека дёргают вопросом
     про `cat`. Здесь мы смотрим **каждый** кусок: разрешены все — вопроса нет; хоть один нет
-    (`sudo`, `rm`) — вопрос как обычно.
+    (`sudo`, `rm`) — вопрос как обычно. Запись в файл перенаправлением — всегда вопрос: `echo`
+    разрешён, а `echo x > ~/.bashrc` уже нет.
     """
     if tool != "Bash":
+        return tool in allow_rules
+    commands, writes = _simple_commands(inp.get("command", ""))
+    bodies = [m.group(1) for r in allow_rules if (m := _RULE.match(r))]
+    if writes or not commands or not bodies:
         return False
-    parts = _pieces(inp.get("command", ""))
-    if not parts:
-        return False
-    heads = [m.group(1) for r in allow_rules if (m := _RULE.match(r))]
-    if not heads:
-        return False
-    return all(any(p.startswith(h) for h in heads) for p in parts)
+    return all(any(_matches(b, c) for b in bodies) for c in commands)

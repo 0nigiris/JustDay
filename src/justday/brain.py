@@ -435,8 +435,9 @@ class Brain:
                                                     "продолжай без этого или спроси обычной репликой.")
             return PermissionResultAllow(updated_input={**inp, "answers": answers})
         hard = providers.risky(name, inp, self._ask_rules())  # an ask-rule (rm -rf, sudo…), not a classifier doubt
-        if not providers.is_claude(self.cfg) and not hard:
-            return PermissionResultAllow(updated_input=inp)  # no classifier: everything but the ask-rules runs
+        # Не-Claude мозгу классификатор не помогает, и раньше ему разрешалось всё, кроме списка ask, —
+        # а список обходился одним `env` впереди (Р-3). Теперь у него, как у осторожного человека:
+        # не разрешено явно — спроси.
         # Команда, собранная целиком из разрешённого, вопроса не стоит — даже если статический
         # разбор об неё споткнулся. Человека дёргали вопросом про `cat /sys/... && echo ---`:
         # «содержит синтаксис, который нельзя разобрать». Он просил этого не делать.
