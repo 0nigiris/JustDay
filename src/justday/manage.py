@@ -219,6 +219,7 @@ HOTKEYS: tuple[tuple[str, str, str], ...] = (
     ("menu", "Меню приложений", "Meta"),
     # Meta забираем у лаунчера Plasma (см. free_key / set_hotkeys). Meta+P — «pin».
     ("pin", "Закрепить в доке", "Meta+P"),
+    ("closewin", "Закрыть окно", "Meta+Q"),   # своя клавиша: KDE-шная «Window Close» на Meta+Q у него не срабатывала
     # Meta+1…9 — N-я программа слева направо (как Cmd+N на macOS). Забираем у
     # plasmashell «Activate Task Manager Entry N».
     ("dock1", "Док: слот 1", "Meta+1"),

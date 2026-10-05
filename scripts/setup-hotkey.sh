@@ -28,6 +28,7 @@ KEYS=(
   "load|нагрузка машины|tools load|"
   "menu|меню приложений|menu|Meta"
   "pin|закрепить в доке|dock pin|Meta+P"
+  "closewin|закрыть окно|windows close-active|Meta+Q"
   "dock1|док слот 1|dock go 1|Meta+1"
   "dock2|док слот 2|dock go 2|Meta+2"
   "dock3|док слот 3|dock go 3|Meta+3"

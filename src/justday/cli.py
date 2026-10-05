@@ -405,7 +405,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["list", "launch"])
     sp.add_argument("query", nargs="*")
     sp = sub.add_parser("windows", help="list/focus/close/minimize windows (KWin)")
-    sp.add_argument("action", choices=["list", "focus", "close", "minimize", "wake"])
+    sp.add_argument("action", choices=["list", "focus", "close", "close-active", "minimize", "wake"])
     sp.add_argument("query", nargs="*")
     sp = sub.add_parser("click", help="щёлкнуть в точке экрана (X11: xdotool; на Wayland щелчки идут через kwin-mcp)")
     sp.add_argument("x", type=int)
@@ -819,7 +819,7 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "windows":
         from . import desktop
 
-        _print(desktop.windows(a.action, " ".join(a.query)))
+        _print(desktop.windows(a.action.replace("-", "_"), " ".join(a.query)))
     elif a.cmd == "panel":
         from . import panel
         sys.exit(panel.main())

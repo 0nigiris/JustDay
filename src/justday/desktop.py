@@ -401,14 +401,14 @@ let n = 0;
 for (const w of workspace.windowList()) {
   if (!w.normalWindow) continue;
   const hay = (w.resourceClass + " " + w.resourceName + " " + w.caption).toLowerCase();
-  if (action === "active" && workspace.activeWindow !== w) continue;
+  if ((action === "active" || action === "close_active") && workspace.activeWindow !== w) continue;
   if (wid && String(w.internalId) !== wid) continue;
   if (q && !(action === "wake" ? squash(hay).includes(squash(q)) : hay.includes(q))) continue;
   // wake поднимает только свёрнутое. Программа, которая щелчком по значку сама спрятала окно,
   // не должна получить его обратно нашими руками — это был бы значок, который не умеет прятать.
   if (action === "wake" && !w.minimized) continue;
   n++;
-  if (action === "close") w.closeWindow();
+  if (action === "close" || action === "close_active") w.closeWindow();
   else if (action === "focus" || action === "wake") { w.minimized = false; workspace.activeWindow = w; }
   else if (action === "minimize") w.minimized = true;
   const g = w.frameGeometry;
