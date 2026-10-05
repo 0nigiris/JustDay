@@ -67,6 +67,13 @@ resume_within_hours = 12    # keep the conversation across restarts
 tool_search = "on"          # on = tool schemas load on demand (31k start context instead of 111k); auto | off
 context_window = 80000      # conversation ceiling: history is compacted there (0 = let Claude Code decide)
 
+# Тишина по расписанию: в это время ответы только на экране, вслух не говорит и по имени не будится (кнопка и текст работают). Окно через полночь — так же.
+# [[focus.schedule]]
+# name = "Школа"
+# days = "пн-пт"        # пн-пт | пн,ср,пт | каждый день
+# from = "08:30"
+# to = "15:00"
+
 # Сценарии: несколько привычных действий одной фразой, мимо модели.
 # [[scenes]]
 # name = "Работа"

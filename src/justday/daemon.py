@@ -40,6 +40,7 @@ from . import (
     fallback,
     fastpath,
     filesearch,
+    focus,
     glyphs,
     inbox,
     island,
@@ -317,12 +318,14 @@ class Daemon:
 
     # ---------------- speech output ----------------
     def silent(self) -> str:
-        """Why the answer is only shown, not spoken: "off", "game", or "" when the voice is on."""
+        """Why the answer is only shown, not spoken: "off", "game", "focus", or "" when the voice is on."""
         t = self.cfg["tts"]
         if t["engine"] == "none" or t.get("muted"):
             return "off"
         if t.get("mute_in_games", True) and desktop.running_game():
             return "game"
+        if focus.active(self.cfg.get("focus", {}).get("schedule", [])):
+            return "focus"
         return ""
 
     async def morning(self) -> str:
