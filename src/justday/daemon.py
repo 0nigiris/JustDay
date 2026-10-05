@@ -2586,11 +2586,21 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
         os._exit(0)  # executor threads (STT/TTS/mail calls) must not keep a restart waiting
 
 
+def log_file_handler(path: Path | None = None, max_bytes: int = 5 * 1024 * 1024) -> logging.Handler:
+    """Журнал демона с ротацией (Р-37): `justday.log` вырос до 11 МБ — whisper пишет строки на каждый прогон, —
+    а читать его целиком всё труднее. Прошлые части лежат рядом как `justday.log.1…3`; уже накопленный большой
+    файл при первой записи просто переименуется в `.1`, а не пропадёт."""
+    from logging.handlers import RotatingFileHandler
+
+    return RotatingFileHandler(path or config.STATE_DIR / "justday.log", maxBytes=max_bytes, backupCount=3,
+                               encoding="utf-8")
+
+
 def main() -> None:
     config.ensure_dirs()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s",
-        handlers=[logging.StreamHandler(), logging.FileHandler(config.STATE_DIR / "justday.log")],
+        handlers=[logging.StreamHandler(), log_file_handler()],
     )
     try:
         # numpy's OpenBLAS keeps a thread per core and wakes them all for every 80 ms of microphone audio:
