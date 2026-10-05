@@ -480,6 +480,11 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("plan", help="планы в Obsidian: add | list | done | open")
     sp.add_argument("action", nargs="?", choices=["add", "list", "done", "open"], default="list")
     sp.add_argument("text", nargs="*")
+    sp = sub.add_parser("promise", help="что он кому обещал: add «текст» [--to кому] [--due срок] | list [кому] | find слова | done номер")
+    sp.add_argument("action", nargs="?", choices=["add", "list", "find", "done"], default="list")
+    sp.add_argument("text", nargs="*")
+    sp.add_argument("--to", default="", help="кому обещано")
+    sp.add_argument("--due", default="", help="к какому сроку")
     sp = sub.add_parser("diary", help="страница дня в Obsidian: чем занимались, что закрыли, во что обошлось")
     sp.add_argument("day", nargs="?", default="", help="YYYY-MM-DD (по умолчанию сегодня)")
     sp.add_argument("--open", action="store_true", help="открыть её в Obsidian")
@@ -843,6 +848,18 @@ def main(argv: list[str] | None = None) -> None:
             _print({"ok": bool(link), "link": link})
         else:
             _print({"file": str(notes.plans_path()), "items": notes.items(only_open=bool(text != "all"))})
+    elif a.cmd == "promise":
+        from . import promises
+
+        text = " ".join(a.text)
+        if a.action == "add":
+            _print(promises.add(text, a.to, a.due, source="cli"))
+        elif a.action == "done":
+            _print(promises.done(text))
+        elif a.action == "find":
+            _print({"items": promises.find(text)})
+        else:
+            _print({"items": promises.open_items(text)})
     elif a.cmd == "diary":
         from . import notes
 
