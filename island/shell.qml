@@ -2050,14 +2050,12 @@ ShellRoot {
                 }
                 Item { implicitWidth: 6 }
                 IconButton { icon: "media-skip-backward"; size: 40; onClicked: JD.media("prev") }
-                Rectangle {
+                Pressable {
                     implicitWidth: 56; implicitHeight: 56; radius: 28
-                    color: ppHover.hovered ? Qt.lighter(pl.tint, 1.15) : pl.tint
-                    scale: ppTap.pressed ? JD.pressScaleSmall : 1
-                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                    pressScale: JD.pressScaleSmall
+                    color: hovered ? Qt.lighter(pl.tint, 1.15) : pl.tint
                     PlayGlyph { anchors.centerIn: parent; paused: !!pl.p.paused; size: 20; tint: "black" }
-                    HoverHandler { id: ppHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { id: ppTap; onTapped: { JD.media("toggle"); pl.optimistic({ pos: pl.pos, paused: !pl.p.paused }) } }
+                    onClicked: { JD.media("toggle"); pl.optimistic({ pos: pl.pos, paused: !pl.p.paused }) }
                 }
                 IconButton { icon: "media-skip-forward"; size: 40; onClicked: JD.media("next") }
                 Item { implicitWidth: 6 }
@@ -2838,18 +2836,17 @@ ShellRoot {
                 spacing: 10
                 Repeater {
                     model: cardCol.tiles ? cv.c.options : []
-                    Rectangle {
+                    Pressable {
                         required property var modelData
                         required property int index
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
                         implicitHeight: tileCol.implicitHeight + 24
                         radius: 16
-                        color: tHover.hovered ? JD.fill2 : JD.fill1
+                        pressScale: JD.pressScale
+                        color: hovered ? JD.fill2 : JD.fill1
                         border.width: index === 0 ? 1 : 0
                         border.color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.6)
-                        scale: tTap.pressed ? JD.pressScale : 1
-                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         ColumnLayout {
                             id: tileCol
@@ -2883,19 +2880,19 @@ ShellRoot {
                                 Layout.alignment: Qt.AlignHCenter
                             }
                         }
-                        HoverHandler { id: tHover; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { id: tTap; onTapped: JD.send({ cmd: "answer", value: modelData.label }) }
+                        onClicked: JD.send({ cmd: "answer", value: modelData.label })
                     }
                 }
             }
             Repeater {
                 model: cv.c.type === "question" && !cardCol.tiles ? (cv.c.options || []) : []
-                Rectangle {
+                Pressable {
                     required property var modelData
                     Layout.fillWidth: true
                     implicitHeight: optCol.implicitHeight + 16
                     radius: 12
-                    color: optHover.hovered ? JD.fill2 : JD.fill1
+                    pressScale: JD.pressScale
+                    color: hovered ? JD.fill2 : JD.fill1
                     ColumnLayout {
                         id: optCol
                         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
@@ -2903,8 +2900,7 @@ ShellRoot {
                         Label1 { text: modelData.label; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                         Label2 { visible: !!modelData.description; text: modelData.description || ""; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                     }
-                    HoverHandler { id: optHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: JD.send({ cmd: "answer", value: modelData.label }) }
+                    onClicked: JD.send({ cmd: "answer", value: modelData.label })
                 }
             }
             RowLayout {

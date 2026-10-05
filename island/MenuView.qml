@@ -20,13 +20,6 @@ import Quickshell
 Item {
     id: mv
 
-    // Меню — рабочая поверхность, а не украшение: на ней читают и целятся, поэтому карточка почти
-    // непрозрачная, а заливки кнопок плотнее островных. На чёрном острове 8% белого видно; на
-    // карточке поверх размытых обоев — нет, и кнопки пропадали.
-    readonly property color fill1: Qt.rgba(1, 1, 1, 0.10)
-    readonly property color fill2: Qt.rgba(1, 1, 1, 0.18)
-    readonly property color fill3: Qt.rgba(1, 1, 1, 0.26)
-
     readonly property var shown: JD.menuShown
     readonly property var user: JD.menuUser
     // Ничего не нашлось, а что-то напечатано — это не тупик, а вопрос ассистенту.
@@ -83,7 +76,7 @@ Item {
         implicitHeight: 30
         radius: 15
         pressScale: JD.pressScaleSmall
-        color: hovered ? mv.fill3 : "transparent"
+        color: hovered ? JD.menuFill3 : "transparent"
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         onHoveredChanged: mv.hintFor(hovered, dot.note)
         onClicked: picked()
@@ -138,7 +131,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
             radius: 20
-            color: field.activeFocus ? mv.fill2 : mv.fill1
+            color: field.activeFocus ? JD.menuFill2 : JD.menuFill1
             border.width: 1
             border.color: field.activeFocus ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
@@ -221,7 +214,7 @@ Item {
                     implicitWidth: on ? 34 + chipName.implicitWidth + 12 : 34
                     implicitHeight: 34
                     radius: 17
-                    color: on ? mv.fill3 : (chipHover.hovered ? mv.fill1 : "transparent")
+                    color: on ? JD.menuFill3 : (chipHover.hovered ? JD.menuFill1 : "transparent")
                     Behavior on implicitWidth { enabled: JD.animOn
                                                NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
@@ -320,7 +313,7 @@ Item {
                         anchors.fill: parent
                         anchors.margins: mv.spotlight ? 2 : 4
                         radius: mv.spotlight ? 10 : 12
-                        color: index === JD.menuPick ? mv.fill2 : (appTile.hovered ? mv.fill1 : "transparent")
+                        color: index === JD.menuPick ? JD.menuFill2 : (appTile.hovered ? JD.menuFill1 : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                         // Spotlight: строка значок+имя; полное меню: плитка.
@@ -575,7 +568,7 @@ Item {
                         implicitHeight: 30
                         radius: 15
                         pressScale: JD.pressScaleSmall
-                        color: asking ? JD.accentRed : (pow.hovered ? mv.fill3 : "transparent")
+                        color: asking ? JD.accentRed : (pow.hovered ? JD.menuFill3 : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         Icon {
                             anchors.centerIn: parent

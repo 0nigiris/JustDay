@@ -1354,6 +1354,11 @@ Singleton {
     // размытие под ней — только чтобы край карточки не выглядел вырезанным из картона. Док и лоток
     // — наоборот, накладки поверх работы, и там прозрачность на месте.
     readonly property color menuSurface: Qt.rgba(0.04, 0.04, 0.05, 0.93)
+    // Карточка меню почти непрозрачна, поэтому те же стеклянные заливки здесь слабее терялись бы;
+    // оттенки принадлежат общей палитре, но сохраняют нужную контрастность этой поверхности.
+    readonly property color menuFill1: Qt.rgba(1, 1, 1, 0.10)
+    readonly property color menuFill2: Qt.rgba(1, 1, 1, 0.18)
+    readonly property color menuFill3: Qt.rgba(1, 1, 1, 0.26)
     readonly property color fill1: Qt.rgba(1, 1, 1, 0.08)
     readonly property color fill2: Qt.rgba(1, 1, 1, 0.14)
     readonly property color accentBlue: "#0a84ff"
