@@ -43,10 +43,7 @@ Item {
         return /spotify|spotify-client|com\.spotify/.test(s)
     }
     // Branded / coloured tray glyphs — never ColorOverlay (even in forced light/clear).
-    function trayKeepColor(item) {
-        const s = [item.id, item.title, item.tooltipTitle, item.tooltipDescription, item.icon].map(x => String(x || "")).join(" ").toLowerCase()
-        return /discord|waywallen|steam|telegram|chrome|firefox|chromium|slack|signal|element|vesktop/.test(s)
-    }
+    function trayKeepColor(item) { return JD.trayKeepColor(item) }
     // probedKind: 0 keep colour, 2 near-black only (gray midtones left alone — MultiEffect washed them)
     function trayMode(item, probedKind) {
         const st = tv.iconStyle

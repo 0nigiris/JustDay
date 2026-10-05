@@ -875,6 +875,16 @@ ShellRoot {
                                 // без asynchronous: image://icon в фоновом потоке роняет KIconLoader (Icon.qml)
                                 scale: barTrayHit.pressed ? 0.88 : barTrayHit.containsMouse ? 1.15 : 1
                                 Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                                // Та же вуаль, что у значков дока и лотка (Icon.qml): цвета остаются, подтягивается яркость.
+                                readonly property string wash: JD.trayWash(barTray.modelData)
+                                layer.enabled: wash !== "none"
+                                layer.effect: MultiEffect {
+                                    colorization: barTrayIcon.wash === "mono" ? 0 : barTrayIcon.wash === "tinted" ? 0.42 : barTrayIcon.wash === "clear" ? 0.28 : 0.18
+                                    colorizationColor: barTrayIcon.wash === "tinted" ? (String(JD.trayCfg.icon_tint || "").trim() || "#7AC8FF")
+                                                       : barTrayIcon.wash === "clear" ? "#FFFFFF" : "#E8EEF6"
+                                    brightness: barTrayIcon.wash === "clear" ? 0.22 : barTrayIcon.wash === "light" ? 0.14 : barTrayIcon.wash === "tinted" ? 0.06 : 0
+                                    saturation: barTrayIcon.wash === "mono" ? 0 : barTrayIcon.wash === "tinted" ? 0.55 : barTrayIcon.wash === "clear" ? 0.75 : 0.9
+                                }
                             }
                             MouseArea {
                                 id: barTrayHit

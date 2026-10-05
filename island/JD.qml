@@ -716,6 +716,19 @@ Singleton {
         if (hiddenKey.length < 4 || name.length < 4) return false
         return name.indexOf(hiddenKey) === 0 || hiddenKey.indexOf(name) === 0
     }
+    // Фирменные цветные значки (мессенджеры, браузеры) под палитру не красим: пропадает узнаваемость.
+    function trayKeepColor(item) {
+        const s = [item.id, item.title, item.tooltipTitle, item.tooltipDescription, item.icon].map(x => String(x || "")).join(" ").toLowerCase()
+        return /discord|waywallen|steam|telegram|chrome|firefox|chromium|slack|signal|element|vesktop/.test(s)
+    }
+    // Какую вуаль из `tray.icon_style` надеть на значок трея на полосе. Лоток (TrayView) читает тот же
+    // ключ, а полоса раньше его не знала и рисовала чужие цвета как есть — на светлой палитре часть
+    // значков сливалась. `auto` — только лоток (он умеет смотреть пиксели), на полосе это «как есть».
+    function trayWash(item) {
+        const w = String(trayCfg.icon_style || "original").trim().toLowerCase()
+        if (["light", "clear", "tinted", "mono"].indexOf(w) < 0 || !item || trayKeepColor(item)) return "none"
+        return w
+    }
     function trayShows(item) {
         const names = trayNames(item)
         if (!names.length) return false
