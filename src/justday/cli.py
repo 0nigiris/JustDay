@@ -1745,30 +1745,9 @@ def _config_cmd(a) -> None:
         return
     if not a.key or a.value is None or "." not in a.key:
         sys.exit("usage: justday config set section.key value")
-    section, key = a.key.rsplit(".", 1)
-    old = cfg
-    for part in a.key.split("."):
-        old = old.get(part) if isinstance(old, dict) else None
-    value: object = a.value
-    if isinstance(old, bool):
-        value = a.value.lower() in ("1", "true", "yes", "on", "да")
-    elif isinstance(old, int):
-        value = int(a.value)
-    elif isinstance(old, float):
-        value = float(a.value)
-    elif isinstance(old, list):
-        value = [x.strip() for x in a.value.split(",") if x.strip()]
-    elif old is None:  # ключ, которого ещё нет в файле: число остаётся числом, а не строкой
-        if a.value.lower() in ("true", "false"):
-            value = a.value.lower() == "true"
-        elif re.fullmatch(r"-?\d+", a.value):
-            value = int(a.value)
-        elif re.fullmatch(r"-?\d+\.\d+", a.value):
-            value = float(a.value)
-    config.set_value(section, key, value)
-    if section == "island" and key == "show_osd":
-        from . import notifications as notif
-        notif.sync_plasma_osd(show_osd=bool(value))
+    from . import manage
+
+    value = manage.set_setting(a.key, a.value)
     control("reload_settings", timeout=5)
     print(f"{a.key} = {value}")
 

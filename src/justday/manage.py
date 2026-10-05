@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
@@ -440,6 +441,49 @@ def set_hotkeys(*args: str | None, **named: str | None) -> dict:
     _HOTKEYS_CACHE["at"] = 0.0
     return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(),
             "taken_from": taken, "live": live, **hotkeys()}
+
+
+_SET_LOCK = threading.Lock()   # два ползунка подряд — две записи в один файл: читать-менять-писать по очереди
+
+
+def set_setting(key: str, text: str):
+    """Записать одну настройку `section.key = text`, приведя текст к типу, который у неё уже есть.
+
+    Общая для `justday config set` и для команды сокета `config_set`: настройки из окна острова раньше шли
+    запуском процесса `justday` (Python с импортом пакета на каждый щелчок ползунка); теперь их принимает
+    демон. Возвращает записанное значение."""
+    if not re.fullmatch(r"[A-Za-z_][\w-]*(\.[A-Za-z_][\w-]*)+", key):   # ключ идёт строкой в TOML: без переводов строк и кавычек
+        raise ValueError(f"плохой ключ настройки: {key!r}")
+    with _SET_LOCK:
+        return _set_setting(key, text)
+
+
+def _set_setting(key: str, text: str):
+    section, name = key.rsplit(".", 1)
+    old = config.load()
+    for part in key.split("."):
+        old = old.get(part) if isinstance(old, dict) else None
+    value: object = text
+    if isinstance(old, bool):
+        value = text.lower() in ("1", "true", "yes", "on", "да")
+    elif isinstance(old, int):
+        value = int(text)
+    elif isinstance(old, float):
+        value = float(text)
+    elif isinstance(old, list):
+        value = [x.strip() for x in text.split(",") if x.strip()]
+    elif old is None:  # ключ, которого ещё нет в файле: число остаётся числом, а не строкой
+        if text.lower() in ("true", "false"):
+            value = text.lower() == "true"
+        elif re.fullmatch(r"-?\d+", text):
+            value = int(text)
+        elif re.fullmatch(r"-?\d+\.\d+", text):
+            value = float(text)
+    config.set_value(section, name, value)
+    if section == "island" and name == "show_osd":
+        from . import notifications as notif
+        notif.sync_plasma_osd(show_osd=bool(value))
+    return value
 
 
 def models() -> dict:

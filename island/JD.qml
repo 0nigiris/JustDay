@@ -312,7 +312,7 @@ Singleton {
     // громкость кадра запоминается, как и его размер; приглушение на время разговора идёт сверху
     property real videoVolume: island.video_volume === undefined ? 1 : Math.max(0, Math.min(1, island.video_volume))
     function setVideoVolume(v) { videoVolume = Math.max(0, Math.min(1, v)); volumeSave.restart() }
-    function saveVideoVolume() { Quickshell.execDetached(["justday", "config", "set", "island.video_volume", String(videoVolume.toFixed(2))]) }
+    function saveVideoVolume() { setConfig("island.video_volume", videoVolume.toFixed(2)) }
     // ползунок двигают пикселями, а в файл пишем один раз, когда его отпустили
     Timer { id: volumeSave; interval: 900; onTriggered: jd.saveVideoVolume() }
     property real videoRate: 1.0         // скорость: 0.5 … 2
@@ -326,7 +326,7 @@ Singleton {
     function videoPopin() { send({ cmd: "video_popin" }) }       // забрать ролик из отдельного окна
     function videoDrop(target) { send({ cmd: "video_drop", target: target }) }   // бросили файл или ссылку на остров
     // размер запоминается, когда уголок отпустили: не на каждый пиксель перетаскивания
-    function saveVideoWidth() { Quickshell.execDetached(["justday", "config", "set", "island.video_width", String(Math.round(videoWidth))]) }
+    function saveVideoWidth() { setConfig("island.video_width", Math.round(videoWidth)) }
     signal videoCommand(string action)  // pause / resume / toggle / restart from the daemon ("пауза" by voice)
     readonly property var mediaCfg: settings.media || ({})
     readonly property bool musicOn: !!player && (!!player.file || !!player.loading)
@@ -817,7 +817,7 @@ Singleton {
     function moveCat(place) {
         if (place === catPlace) return
         catPlaceNow = place
-        Quickshell.execDetached(["justday", "config", "set", "island.cat_place", place])
+        setConfig("island.cat_place", place)
     }
     property Item catTipAt: null          // над какой кошкой держат курсор — под ней подсказка
     // Кошку несут рукой (CatCarry в shell.qml): какую, где рука в координатах окна и над треем ли.
@@ -1007,8 +1007,8 @@ Singleton {
     readonly property real menuWidth: Math.max(520, island.menu_width || 760)
     readonly property real menuHeight: Math.max(360, island.menu_height || 620)
     function saveMenuSize(w, h) {
-        Quickshell.execDetached(["justday", "config", "set", "island.menu_width", String(Math.round(w))])
-        Quickshell.execDetached(["justday", "config", "set", "island.menu_height", String(Math.round(h))])
+        setConfig("island.menu_width", Math.round(w))
+        setConfig("island.menu_height", Math.round(h))
     }
 
     property var dockRect: null
@@ -1521,6 +1521,11 @@ Singleton {
     }
     function send(obj) { commandSocket.createObject(jd, { payload: JSON.stringify(obj) }) }
     function run(args) { Quickshell.execDetached(["justday"].concat(args)) }
+    // Настройка — сообщением демону, а не запуском `justday config set`: тот поднимал Python с импортом
+    // всего пакета на каждый щелчок и сдвиг ползунка. Список записывается через запятую, как в командной строке.
+    function setConfig(key, value) {
+        send({ cmd: "config_set", key: key, value: Array.isArray(value) ? value.join(",") : String(value) })
+    }
 
     function handle(m) {
         if (m.settings !== undefined) settings = m.settings

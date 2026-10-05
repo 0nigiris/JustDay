@@ -10,7 +10,7 @@ ColumnLayout {
     id: ct
     spacing: 12
 
-    function setting(key, value) { JD.run(["config", "set", key, String(value)]) }
+    function setting(key, value) { JD.setConfig(key, value) }
 
     component Tile: Pressable {
         id: tile

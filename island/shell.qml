@@ -3043,7 +3043,7 @@ ShellRoot {
             { cmd: "/install", title: JD.tr("Установить программу"), icon: "system-software-install", fill: JD.tr("Установи ") },
             { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
             { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: "audio-input-microphone",
-              run: () => JD.run(["config", "set", "audio.microphone", String(!JD.micOn)]) },
+              run: () => JD.setConfig("audio.microphone", !JD.micOn) },
             { cmd: "/emoji", title: JD.tr("Эмодзи"), icon: "smile", run: () => JD.openTools("emoji") },
             { cmd: "/clip", title: JD.tr("Буфер обмена"), icon: "clipboard", run: () => JD.openTools("clip") },
             { cmd: "/load", title: JD.tr("Нагрузка машины"), icon: "activity", run: () => JD.openTools("load") },
@@ -3344,7 +3344,7 @@ ShellRoot {
         implicitHeight: Math.min(col.implicitHeight + 40, 800)
         SystemClock { id: evClock; precision: SystemClock.Minutes }
 
-        function setting(key, value) { JD.run(["config", "set", key, String(value)]) }
+        function setting(key, value) { JD.setConfig(key, value) }
         function ask(text) { JD.expanded = false; JD.send({ cmd: "type", text: text }) }
         // Выключить голос можно двумя разными способами, и раньше плитка знала только один: она
         // трогала движок, а «молчи» её не касалось — нажатие на выключенной молчанием плитке

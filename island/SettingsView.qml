@@ -63,7 +63,7 @@ Item {
         for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]]
         o[parts[parts.length - 1]] = value
         d = Object.assign({}, d)  // notify bindings
-        Quickshell.execDetached(["justday", "config", "set", path, Array.isArray(value) ? value.join(",") : String(value)])
+        JD.setConfig(path, value)
         if (/^(brain|stt|wakeword|local_llm)\./.test(path)) restartNeeded = true
     }
     function notify(text) { toast = text; toastTimer.restart() }

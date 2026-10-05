@@ -26,6 +26,7 @@ from . import (
     inbox,
     island,
     launcher,
+    manage,
     mascot,
     media,
     notifications,
@@ -705,6 +706,18 @@ class CommandsMixin:
         if pending:
             self._approval.set_result((cmd == "approve" and (self._ask_choices or ["allow"])[0]) or "deny")
         return {"ok": pending, "error": None if pending else "nothing awaits approval"}
+
+    async def _cmd_config_set(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Одна настройка из окна острова — то же, что `justday config set`, без запуска процесса."""
+        # Мозг не должен менять настройки сам: через них снимается его же защита (права, поставщики).
+        if self._peer_is_ai(writer):
+            return {"ok": False, "error": "настройки меняет только человек: окном острова или командой в терминале"}
+        loop = asyncio.get_running_loop()
+        try:
+            value = await loop.run_in_executor(None, manage.set_setting, str(req.get("key", "")), str(req.get("value", "")))
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "value": value, "restart_needed": self.reload_settings()}
 
     async def _cmd_terminal_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Показать одно из заранее известных действий в окне терминала (обновление, журнал, голос)."""
