@@ -117,6 +117,27 @@ def detached(cmd: list[str]) -> list[str]:
 
 
 
+# Как позвать программу в окне терминала: у каждого эмулятора своя форма записи. Раньше QML звал `kitty --hold …`
+# прямо в пяти местах — без kitty кнопки «Обновить» и «Установить голос» молча не делали ничего.
+_TERMINALS = {"kitty": (), "konsole": ("-e",), "alacritty": ("-e",), "foot": (), "wezterm": ("start", "--"),
+              "xterm": ("-e",)}
+
+
+def terminal_command(cmd: list[str], hold: bool = True) -> list[str] | None:
+    """Команда, которая запустит `cmd` в окне установленного терминала; None, если терминала нет.
+
+    Выбирается `$TERMINAL`, если он нам знаком, иначе первый из известных. `hold` оставляет окно открытым после
+    конца программы — иначе вывод обновления исчезает раньше, чем его прочтёшь; ключи для этого у эмуляторов
+    разные, поэтому ждём Enter сами, обёрткой `sh`."""
+    own = os.path.basename(os.environ.get("TERMINAL", ""))
+    for name in ([own] if own in _TERMINALS else []) + list(_TERMINALS):
+        path = shutil.which(name)
+        if path:
+            inner = ["sh", "-c", '"$@"; printf "\\n[Enter — закрыть окно] "; read _', "sh", *cmd] if hold else cmd
+            return [path, *_TERMINALS[name], *inner]
+    return None
+
+
 def qdbus_bin() -> str:
     """Имя утилиты qdbus для Plasma 6.
 

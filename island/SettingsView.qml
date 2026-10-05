@@ -1756,8 +1756,7 @@ Item {
                     Btn {
                         text: JD.tr("Ввести ключ")
                         primary: !(win.d.voices && win.d.voices.eleven_key)
-                        onClicked: Quickshell.execDetached(["kitty", "--hold", "zsh", "-c",
-                            "echo 'Вставьте ключ ElevenLabs и нажмите Enter, затем Ctrl+D:'; justday voice key"])
+                        onClicked: JD.send({ cmd: "terminal_run", what: "voice_key" })
                     }
                 }
                 Row {
@@ -1770,13 +1769,13 @@ Item {
                     visible: vp.engine === "elevenlabs"
                     title: JD.tr("Какие голоса доступны")
                     subtitle: JD.tr("Список с вашего аккаунта, с идентификаторами")
-                    Btn { text: JD.tr("Показать"); onClicked: Quickshell.execDetached(["kitty", "--hold", "justday", "voice", "eleven"]) }
+                    Btn { text: JD.tr("Показать"); onClicked: JD.send({ cmd: "terminal_run", what: "voice_voices" }) }
                 }
                 Row {
                     visible: vp.engine === "qwen" && !vp.neuralInstalled
                     title: JD.tr("Нейроголос не установлен")
                     subtitle: JD.tr("Загрузка ~4 ГБ, нужна видеокарта NVIDIA")
-                    Btn { text: JD.tr("Установить"); primary: true; onClicked: Quickshell.execDetached(["kitty", "--hold", Quickshell.shellDir + "/../scripts/setup-voice.sh"]) }
+                    Btn { text: JD.tr("Установить"); primary: true; onClicked: JD.send({ cmd: "terminal_run", what: "setup_voice" }) }
                 }
                 Row {
                     visible: vp.engine === "qwen" && vp.neuralInstalled && !vp.neuralOk
@@ -2716,7 +2715,7 @@ Item {
                 Btn { text: dp.checking ? JD.tr("Проверяю…") : JD.tr("Проверить всё"); glyph: "activity"; busy: dp.checking; primary: true
                       onClicked: { dp.checking = true; win.run(["doctor", "--json"], v => { dp.checking = false; dp.results = Array.isArray(v) ? v : [] }) } }
                 Btn { glyph: "refresh-cw"; text: JD.tr("Перезапустить ассистента"); onClicked: { win.run(["restart"], () => win.reload()); win.notify(JD.tr("Перезапускаю…")) } }
-                Btn { glyph: "file-text"; text: JD.tr("Журнал"); onClicked: Quickshell.execDetached(["kitty", "--detach", "justday", "logs", "-f"]) }
+                Btn { glyph: "file-text"; text: JD.tr("Журнал"); onClicked: JD.send({ cmd: "terminal_run", what: "logs" }) }
             }
             Group {
                 visible: dp.results.length > 0

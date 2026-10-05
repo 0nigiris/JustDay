@@ -13,6 +13,7 @@ import json
 import logging
 import subprocess
 import time
+from pathlib import Path
 from typing import ClassVar
 
 from . import (
@@ -38,6 +39,19 @@ from .aio import spawn
 from .i18n import t
 
 log = logging.getLogger("justday.daemon")
+
+SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+
+# Что настройки и меню просят показать в окне терминала. Только эти пять и только по имени: команду целиком
+# из сокета брать нельзя — им пользуется и мозг, и «открой терминал» тогда обходило бы его запреты.
+# (имя, команда, держать окно после конца)
+TERMINAL_JOBS = {
+    "update": (["justday", "update"], True),
+    "voice_voices": (["justday", "voice", "eleven"], True),
+    "voice_key": (["sh", "-c", "echo 'Вставьте ключ ElevenLabs и нажмите Enter, затем Ctrl+D:'; justday voice key"], True),
+    "setup_voice": ([str(SCRIPTS / "setup-voice.sh")], True),
+    "logs": (["justday", "logs", "-f"], False),
+}
 
 
 class CommandsMixin:
@@ -691,6 +705,20 @@ class CommandsMixin:
         if pending:
             self._approval.set_result((cmd == "approve" and (self._ask_choices or ["allow"])[0]) or "deny")
         return {"ok": pending, "error": None if pending else "nothing awaits approval"}
+
+    async def _cmd_terminal_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Показать одно из заранее известных действий в окне терминала (обновление, журнал, голос)."""
+        if self._peer_is_ai(writer):
+            return {"ok": False, "error": "терминал открывает только человек: кнопкой в настройках"}
+        job = TERMINAL_JOBS.get(str(req.get("what", "")))
+        if not job:
+            return {"ok": False, "error": f"нет такого действия: {req.get('what')}"}
+        argv = desktop.terminal_command(*job)
+        if not argv:
+            return {"ok": False, "error": "не нашёл терминал: kitty, konsole, alacritty, foot, wezterm или xterm"}
+        subprocess.Popen(desktop.detached(argv), start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"ok": True}
 
     # «команда» → имя метода. Собирается из имён `_cmd_*` выше, чтобы список не приходилось вести руками.
     COMMANDS: ClassVar[dict[str, str]] = {k[5:]: k for k in list(locals()) if k.startswith("_cmd_")}
