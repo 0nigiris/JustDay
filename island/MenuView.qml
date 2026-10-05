@@ -315,14 +315,13 @@ Item {
                     required property int index
                     width: grid.cellWidth
                     height: grid.cellHeight
-                    Rectangle {
+                    Pressable {
+                        id: appTile
                         anchors.fill: parent
                         anchors.margins: mv.spotlight ? 2 : 4
                         radius: mv.spotlight ? 10 : 12
-                        color: index === JD.menuPick ? mv.fill2 : (tileHover.hovered ? mv.fill1 : "transparent")
+                        color: index === JD.menuPick ? mv.fill2 : (appTile.hovered ? mv.fill1 : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                        scale: tileTap.pressed ? JD.pressScale : 1
-                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                         // Spotlight: строка значок+имя; полное меню: плитка.
                         RowLayout {
@@ -411,20 +410,12 @@ Item {
                             font.pixelSize: 11
                             text: modelData.kind === "file" ? "файл" : "открыто"
                         }
-                        HoverHandler {
-                            id: tileHover
-                            cursorShape: Qt.PointingHandCursor
-                            onHoveredChanged: mv.hintFor(hovered, (modelData.sub ? modelData.name + "  ·  " + modelData.sub : modelData.name)
-                                + (modelData.kind === "window" ? "  ·  перейти к окну"
-                                   : modelData.kind === "file" ? "  ·  открыть"
-                                   : JD.isPinned(modelData) ? "  ·  правой кнопкой — открепить"
-                                   : "  ·  правой кнопкой — закрепить"))
-                        }
-                        TapHandler {
-                            id: tileTap
-                            gesturePolicy: TapHandler.ReleaseWithinBounds
-                            onTapped: JD.runFromMenu(modelData)
-                        }
+                        onHoveredChanged: mv.hintFor(hovered, (modelData.sub ? modelData.name + "  ·  " + modelData.sub : modelData.name)
+                            + (modelData.kind === "window" ? "  ·  перейти к окну"
+                               : modelData.kind === "file" ? "  ·  открыть"
+                               : JD.isPinned(modelData) ? "  ·  правой кнопкой — открепить"
+                               : "  ·  правой кнопкой — закрепить"))
+                        onClicked: JD.runFromMenu(modelData)
                         // Правой кнопкой — закрепить. Без меню на меню: одно действие, один щелчок.
                         TapHandler {
                             acceptedButtons: Qt.RightButton
