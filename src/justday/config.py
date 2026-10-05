@@ -649,7 +649,9 @@ def _merge(base: dict, over: dict) -> dict:
 def load() -> dict:
     # Копия, а не сами DEFAULTS: без config.toml выбор модели, громкость и язык голоса правили
     # умолчания всего процесса, а reload_settings сравнивал объект сам с собой и не видел ничего (Р-18).
-    cfg = copy.deepcopy(DEFAULTS)
+    # Копия нужна, только когда файла нет: иначе её тут же заменяет результат слияния (оно копирует само), а
+    # лишний deepcopy стоил около 0,8 мс из 1,3 — и load() зовут на каждую команду, не раз.
+    cfg = copy.deepcopy(DEFAULTS) if not CONFIG_FILE.exists() else {}
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open("rb") as f:

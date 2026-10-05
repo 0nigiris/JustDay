@@ -120,7 +120,7 @@ def measure() -> list[tuple[str, float | None, str]]:
     add("быстрый путь: разбор «врубай»", lambda: _once(lambda: media.parse("врубай"), 20))
 
     def apps_cold() -> float:
-        desktop._apps_cache = (0.0, [])
+        desktop._apps_cache = None
         return _once(desktop.list_apps)
     add("каталог программ, холодный", apps_cold)
     add("каталог программ, из кэша", lambda: _once(desktop.list_apps, 20))

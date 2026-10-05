@@ -13,6 +13,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import threading
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -40,11 +41,29 @@ def _app_dirs() -> list[Path]:
 _apps_cache: tuple[float, list[dict]] | None = None
 
 
+_apps_lock = threading.Lock()
+
+
 def list_apps() -> list[dict]:
-    global _apps_cache
+    """Каталог программ. Устарел (старше 30 с) — отдаём прежний сразу, а новый собираем в стороне: полный обход
+    всех .desktop стоит ~100 мс, и раз в полминуты эту цену платила бы самая обычная команда «открой …».
+    Первый раз (кэша нет) ждать приходится — отдавать пока нечего."""
     now = time.monotonic()
-    if _apps_cache is not None and now - _apps_cache[0] < 30:
-        return _apps_cache[1]
+    if _apps_cache is None:
+        return _scan_apps()
+    if now - _apps_cache[0] >= 30 and _apps_lock.acquire(blocking=False):
+        def refresh() -> None:
+            try:
+                _scan_apps()
+            finally:
+                _apps_lock.release()
+
+        threading.Thread(target=refresh, daemon=True, name="apps-scan").start()
+    return _apps_cache[1]
+
+
+def _scan_apps() -> list[dict]:
+    global _apps_cache
     apps: dict[str, dict] = {}
     for d in _app_dirs():
         for f in d.rglob("*.desktop"):
