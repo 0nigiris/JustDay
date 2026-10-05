@@ -1942,37 +1942,6 @@ ShellRoot {
                 GradientStop { position: 0.6; color: "transparent" }
             }
         }
-        // Свечение от обложки, как у «Ambient light for YouTube» (Р-47): обложка в 48 точек, растянутая на
-        // всю ширину, сама по себе размыта — шейдера с размытием нет, а значит и счёта за него каждый кадр.
-        // Маска даёт округлые верхние углы и затухание вниз; всё статично и пересчитывается раз на трек.
-        Image {
-            id: glowCover
-            visible: false
-            source: pl.p.thumb || ""
-            sourceSize: Qt.size(48, 48)
-            fillMode: Image.PreserveAspectCrop
-            smooth: true
-            asynchronous: true
-        }
-        Rectangle {
-            id: glowMask
-            visible: false
-            layer.enabled: true
-            anchors.fill: parent
-            radius: 30
-            gradient: Gradient {
-                GradientStop { position: 0; color: "white" }
-                GradientStop { position: 0.65; color: "transparent" }
-            }
-        }
-        MultiEffect {
-            anchors.fill: parent
-            source: glowCover
-            maskEnabled: true
-            maskSource: glowMask
-            opacity: glowCover.status === Image.Ready ? 0.42 : 0
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
-        }
         // колесо над плеером — громкость, как над любым плеером
         WheelHandler {
             onWheel: e => {
