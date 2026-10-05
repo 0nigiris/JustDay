@@ -413,6 +413,8 @@ DEFAULTS: dict = {
         # рисуем своего, кодом. Список: `justday mascots`.
         "mascot": "",
         "mascot_size": 100,     # насколько крупно показывать зверя, в процентах
+        # card — карточка, которую тянут за угол; launchpad — во весь экран: крупная сетка и плитки управления.
+        "menu_style": "card",
         "menu_width": 760,
         "menu_height": 620,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here

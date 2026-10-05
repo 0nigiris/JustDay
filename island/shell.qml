@@ -4659,6 +4659,24 @@ ShellRoot {
         Component.onCompleted: fitCard()
         onWidthChanged: fitCard()
         onHeightChanged: fitCard()
+        // Launchpad занимает всё, что не занято доком и полосой лотка: их они же и вырезают из
+        // перекрытия для щелчков, и накрывать их картинкой нельзя — под карточкой они пропали бы из
+        // виду, хотя нажимались бы. Каждая вырезка отодвигает карточку от того края, к которому
+        // прижата.
+        readonly property rect padRect: {
+            let l = 12, t = 12, r = width - 12, b = height - 12
+            for (const h of [dockHole, trayHole]) {
+                if (h.width <= 0 || h.height <= 0) continue
+                const gaps = [h.x, width - h.x - h.width, h.y, height - h.y - h.height]   // слева, справа, сверху, снизу
+                const nearest = gaps.indexOf(Math.min(...gaps))
+                if (nearest === 0) l = Math.max(l, h.x + h.width + 8)
+                else if (nearest === 1) r = Math.min(r, h.x - 8)
+                else if (nearest === 2) t = Math.max(t, h.y + h.height + 8)
+                else b = Math.min(b, h.y - 8)
+            }
+            return Qt.rect(l, t, Math.max(0, r - l), Math.max(0, b - t))
+        }
+
         Connections {
             target: JD
             function onMenuWidthChanged() { menuWin.fitCard() }
@@ -4674,9 +4692,11 @@ ShellRoot {
             // искать ещё нечего.
             readonly property real wantH: menuBody.item ? menuBody.item.implicitHeight : 86
             width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
+                                     : JD.menuLaunchpad ? menuWin.padRect.width
                                      : Math.min(menuWin.width - 24, menuWin.cardW)
             height: JD.menuSearchMode
                     ? Math.min(menuWin.height - 48, Math.max(86, Math.min(760, wantH)))
+                    : JD.menuLaunchpad ? menuWin.padRect.height
                     : Math.min(menuWin.height - 24, menuWin.cardH)
             Behavior on height {
                 enabled: JD.animOn && JD.menuSearchMode
@@ -4686,6 +4706,7 @@ ShellRoot {
             // Spotlight — по центру сверху, как macOS Spotlight, а не из дока.
             x: JD.menuSearchMode
                  ? (menuWin.width - width) / 2
+                 : JD.menuLaunchpad ? menuWin.padRect.x
                  : menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
                  : menuWin.side === "left" ? 12
@@ -4701,10 +4722,11 @@ ShellRoot {
                                              ? menuWin.anchor.gap + 10 : 12
             y: JD.menuSearchMode
                  ? Math.min(96, Math.max(24, Math.round(menuWin.height * 0.08)))
+                 : JD.menuLaunchpad ? menuWin.padRect.y
                  : menuWin.fromDock
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
-            radius: JD.menuSearchMode ? 24 : 22
+            radius: JD.menuSearchMode ? 24 : JD.menuLaunchpad ? 30 : 22
             // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
             // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
             // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
@@ -4715,6 +4737,7 @@ ShellRoot {
 
             // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.
             transformOrigin: JD.menuSearchMode ? Item.Top
+                : JD.menuLaunchpad ? Item.Center
                 : menuWin.atTop
                 ? (menuWin.side === "left" ? Item.TopLeft : menuWin.side === "right" ? Item.TopRight : Item.Top)
                 : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
@@ -4733,7 +4756,7 @@ ShellRoot {
             // карточку, а она стоит там, откуда её открыли, и стоять обязана.
             Item {
                 id: menuGrip
-                visible: !JD.menuSearchMode
+                visible: !JD.menuSearchMode && !JD.menuLaunchpad
                 readonly property bool atLeft: menuWin.side === "right"
                 readonly property bool atTop: !menuWin.atTop
                 width: 26

@@ -1105,6 +1105,14 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Вид меню приложений")
+                    subtitle: JD.tr("Карточка — компактная, размер тянется за угол. Launchpad — во весь экран: крупные значки и плитки управления справа")
+                    Choice {
+                        key: "island.menu_style"
+                        options: [{ value: "card", label: JD.tr("Карточка") }, { value: "launchpad", label: JD.tr("Launchpad") }]
+                    }
+                }
+                Row {
                     title: JD.tr("Монитор")
                     Choice {
                         key: "island.screen"

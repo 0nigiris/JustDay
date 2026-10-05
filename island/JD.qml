@@ -477,6 +477,9 @@ Singleton {
     property int menuSerial: 0            // растёт на каждое открытие: поле снова берёт фокус
     property string menuConfirm: ""       // выключение ждёт второго щелчка
     property bool menuSearchMode: false   // Alt+Space Spotlight: узкий поиск, не полное меню
+    // «Launchpad»: то же меню, но карточка во весь экран, значки крупнее и справа плитки управления.
+    // Выбирается `island.menu_style`; Spotlight от него не зависит.
+    readonly property bool menuLaunchpad: !menuSearchMode && (island.menu_style || "card") === "launchpad"
 
     readonly property var menuUser: menuCatalog.user || ({})
     readonly property var menuGroups: menuCatalog.groups || []

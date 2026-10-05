@@ -29,12 +29,18 @@ Item {
     // колонок — это пять в ряд и одна под ними, и выглядит это как недогруженный список; те же
     // шесть в три колонки — ровный блок, который видно целиком одним взглядом.
     readonly property bool spotlight: JD.menuSearchMode
+    // Launchpad: карточка во весь экран, значки крупнее, справа колонка плиток управления. Список,
+    // поиск и разделы те же — меняется только то, сколько места им дали.
+    readonly property bool pad: JD.menuLaunchpad
+    readonly property real controlsW: 280
     // Spotlight — одна колонка-список; полное меню — сетка плиток.
     readonly property int columns: spotlight ? 1
+                                 : pad ? Math.max(3, Math.floor((width - controlsW - 80) / padTile))
                                  : shown.length <= 4 ? Math.max(1, shown.length)
                                  : shown.length <= 9 ? 3
                                  : shown.length <= 16 ? 4 : 5
-    readonly property real tile: spotlight ? 52 : 104
+    readonly property real padTile: 150
+    readonly property real tile: spotlight ? 52 : pad ? padTile : 104
 
     // Размер меню больше не считается по содержимому — и это починка, а не упрощение. Раньше
     // высота карточки равнялась высоте сетки: шесть закреплённых программ и сто пятьдесят семь
@@ -120,6 +126,7 @@ Item {
         anchors.fill: parent
         anchors.margins: spotlight ? 14 : 20
         anchors.bottomMargin: spotlight ? 14 : 18
+        anchors.rightMargin: pad ? controlsW + 40 : (spotlight ? 14 : 20)
         spacing: spotlight ? 10 : 12
 
         // ───────────── поиск ─────────────
@@ -129,6 +136,8 @@ Item {
         // незачем — кольцо в два пикселя кричало на всё окно о том, что и без него очевидно.
         Rectangle {
             Layout.fillWidth: true
+            Layout.maximumWidth: mv.pad ? 560 : 100000
+            Layout.alignment: Qt.AlignHCenter
             Layout.preferredHeight: 40
             radius: 20
             color: field.activeFocus ? JD.menuFill2 : JD.menuFill1
@@ -266,7 +275,7 @@ Item {
                 // замысел; дыра с двух — как незаполненная форма.
                 readonly property real cell: mv.spotlight
                     ? parent.width
-                    : Math.min(Math.floor((parent.width - 6) / mv.columns), 140)
+                    : Math.min(Math.floor((parent.width - 6) / mv.columns), mv.pad ? 180 : 140)
                 width: mv.spotlight ? parent.width : cell * mv.columns
                 height: Math.min(parent.height, contentHeight)
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -371,14 +380,14 @@ Item {
                                 Layout.alignment: Qt.AlignHCenter
                                 name: modelData.icon
                                 fallback: "application-x-executable"
-                                implicitSize: 40
-                                renderSize: 96
+                                implicitSize: mv.pad ? 56 : 40
+                                renderSize: mv.pad ? 128 : 96
                                 theme: true
                             }
                             Text {
                                 Layout.fillWidth: true
                                 font.family: JD.fontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: mv.pad ? 13 : 12
                                 color: JD.text1
                                 horizontalAlignment: Text.AlignHCenter
                                 maximumLineCount: 2
@@ -583,5 +592,12 @@ Item {
                 }
             }
         }
+    }
+
+    // Плитки управления — только в Launchpad, в правом поле, которое сетке не отдано.
+    ControlTiles {
+        visible: mv.pad
+        anchors { top: parent.top; bottom: parent.bottom; right: parent.right; margins: 20 }
+        width: mv.controlsW
     }
 }
