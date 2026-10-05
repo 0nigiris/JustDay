@@ -19,14 +19,17 @@ Item {
     readonly property var all: JD.sessions || []
     readonly property var busy: all.filter(s => s && s.busy)
 
-    // Пока страница открыта — перечитываем. Две секунды: шаги у агента меняются не чаще.
+    // Пока страница открыта, демон присылает список сам — когда стенограммы изменились, а не по таймеру. Страница
+    // только подтверждает раз в полминуты, что ещё смотрит, и один раз говорит, что закрылась.
     Timer {
-        interval: 2000
+        interval: 30000
         repeat: true
         running: sv.visible
         triggeredOnStart: true
-        onTriggered: JD.sessionsRefresh()
+        onTriggered: JD.sessionsWatch(true)
     }
+    onVisibleChanged: if (!visible) JD.sessionsWatch(false)
+    Component.onDestruction: JD.sessionsWatch(false)
 
     ColumnLayout {
         anchors.fill: parent

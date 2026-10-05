@@ -25,7 +25,7 @@
 39 island/QrView.qml
 13 island/Ring.qml
 10 island/SelectableText.qml
-29 island/SessionsView.qml
+31 island/SessionsView.qml
 1234 island/SettingsView.qml
 1498 island/shell.qml
 47 island/SpotlightView.qml

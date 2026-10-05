@@ -707,6 +707,15 @@ class CommandsMixin:
             self._approval.set_result((cmd == "approve" and (self._ask_choices or ["allow"])[0]) or "deny")
         return {"ok": pending, "error": None if pending else "nothing awaits approval"}
 
+    async def _cmd_sessions_watch(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Страницу сессий открыли (on) или закрыли: присылать список, пока смотрят."""
+        if req.get("on", True):
+            self._sessions_until = time.monotonic() + 45      # QML подтверждает раз в 30 с
+            self._sessions_wake.set()
+        else:
+            self._sessions_until = 0.0
+        return {"ok": True}
+
     async def _cmd_config_set(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Одна настройка из окна острова — то же, что `justday config set`, без запуска процесса."""
         # Мозг не должен менять настройки сам: через них снимается его же защита (права, поставщики).

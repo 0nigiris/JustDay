@@ -156,6 +156,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
         self.load = sysload.Load()
         self.load_watchers = 0
         self._load_wake = asyncio.Event()   # зритель появился — `_load_loop` просыпается
+        self._sessions_until = 0.0          # страницу сессий смотрят до этого момента (monotonic); держит её QML
+        self._sessions_wake = asyncio.Event()
         self._clip_seen: dict = {}       # что видели в буфере на X11, где нет наблюдателя
         self._clip_procs: list = []      # запущенные wl-paste --watch
         self._spoken = 0
@@ -2263,6 +2265,37 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
                 log.debug("не смог прочитать нагрузку", exc_info=True)
             await asyncio.sleep(1.0)
 
+    SESSIONS_TICK = 1.0         # как часто смотреть, не изменились ли стенограммы (это только `stat`)
+    SESSIONS_HEARTBEAT = 10.0   # а список перечитывать в любом случае не реже: ушедшая сессия стенограмму не меняет
+
+    async def _sessions_loop(self) -> None:
+        """Список живых сессий — только пока страницу смотрят и только когда что-то изменилось (Р-45).
+
+        Раньше страница каждые две секунды просила список, и каждый раз запускался `claude agents --json`
+        и читались хвосты всех стенограмм. Теперь дёшево смотрим отпечаток стенограмм (`stat`), а дорогой
+        список собираем, когда он сменился или прошло `SESSIONS_HEARTBEAT`. Смотрят ли, решает QML: пока страница
+        открыта, раз в полминуты он подтверждает это (`sessions_watch`), а не считает +1/−1 — тогда упавший
+        островок не оставит демон «смотреть» навсегда."""
+        from . import sessions as sessions_mod
+
+        loop = asyncio.get_running_loop()
+        seen, at = None, 0.0
+        while True:
+            if time.monotonic() > self._sessions_until:
+                self._sessions_wake.clear()
+                await self._sessions_wake.wait()
+                seen = None                              # смотрели мимо: первое чтение — полное
+                continue
+            fingerprint = await loop.run_in_executor(None, sessions_mod.fingerprint)
+            if fingerprint != seen or time.monotonic() - at >= self.SESSIONS_HEARTBEAT:
+                try:
+                    got = await loop.run_in_executor(None, sessions_mod.live, self.cfg["brain"].get("claude_cli", "claude"))
+                    self.publish(sessions=got)
+                except Exception:
+                    log.debug("не смог прочитать сессии", exc_info=True)
+                seen, at = fingerprint, time.monotonic()
+            await asyncio.sleep(self.SESSIONS_TICK)
+
     async def _cpu_loop(self) -> None:
         """Одно число для кошки в доке: насколько занят процессор.
 
@@ -2508,6 +2541,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
         spawn(self._housekeeping())
         spawn(self._heartbeat())
         spawn(self._load_loop())
+        spawn(self._sessions_loop())
         spawn(self._clip_watch())
         spawn(self._file_index_loop())
         if shutil.which("dbus-monitor"):

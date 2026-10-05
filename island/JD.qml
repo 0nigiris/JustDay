@@ -433,6 +433,9 @@ Singleton {
     // История разговоров: что сказал человек и что ответили (страница «История» в панели).
     property var talk: []
     function sessionsRefresh() { send({ cmd: "sessions" }) }
+    // Список присылает демон, пока страница открыта и когда что-то изменилось; страница раз в полминуты
+    // подтверждает, что смотрит (демон ждёт сорок пять секунд), и один раз сообщает, что закрылась.
+    function sessionsWatch(on) { send({ cmd: "sessions_watch", on: on }) }
     function planDone(which) { send({ cmd: "plan_done", which: String(which) }); plansLater.restart() }
     function planAdd(text) {
         const s = String(text || "").trim()

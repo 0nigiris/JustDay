@@ -74,6 +74,21 @@ def _tail(path: Path) -> list[str]:
         return []
 
 
+def fingerprint() -> tuple[int, int]:
+    """(сколько стенограмм, когда менялась последняя). Дёшево: только `stat`, без чтения и без `claude agents`.
+
+    Сессия что-то сделала — стенограмма выросла, появилась новая — число изменилось. Пока отпечаток тот же,
+    перечитывать список незачем: так демон перестал каждые две секунды запускать `claude agents --json`."""
+    count = newest = 0
+    for path in (HOME / ".claude" / "projects").glob("*/*.jsonl"):
+        try:
+            newest = max(newest, path.stat().st_mtime_ns)
+        except OSError:
+            continue
+        count += 1
+    return count, newest
+
+
 def steps_of(session_id: str) -> list[dict]:
     """Последние шаги сессии, от старых к новым."""
     hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
