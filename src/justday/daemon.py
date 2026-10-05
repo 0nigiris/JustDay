@@ -138,6 +138,7 @@ class Daemon:
         self._listen_cancel: asyncio.Event | None = None
         self._listen_task: asyncio.Task | None = None
         self._speech_q: asyncio.Queue[str | None] = asyncio.Queue()
+        self._synth_ahead: dict[str, asyncio.Future] = {}  # фразы, которые уже синтезируются, пока играет предыдущая
         self._speech_gen = 0
         self._approval: asyncio.Future | None = None
         self._telegram_shell = None
@@ -429,11 +430,25 @@ class Daemon:
         for s in split_sentences(normalize(text, lang, tts_mod.latin_mode(self.tts.cfg),
                                            bool(self.tts.cfg.get("numbers", True)))):
             self._speech_q.put_nowait(s)
+            self._synth_in_advance(s)
 
     async def say(self, text: str, force: bool = False) -> None:
         await self._on_brain_text(text, force)
 
+    def _synth_in_advance(self, sentence: str) -> None:
+        """Голос, который синтезирует фразу целиком (Silero, espeak), начинает следующую, пока играет
+        предыдущая: раньше каждая ждала конца предыдущей и потом ещё 0,1–0,5 с собственного синтеза (Р-53).
+        Потоковые голоса (Qwen, ElevenLabs) не тронуты: они и так играют по мере генерации."""
+        engine = self.tts.cfg["engine"]
+        if engine in ("qwen", "elevenlabs", "none") or sentence in self._synth_ahead:
+            return
+        try:
+            self._synth_ahead[sentence] = asyncio.get_running_loop().run_in_executor(None, self.tts.synth, sentence)
+        except RuntimeError:  # цикла нет — синтезировать некому, воркер сделает сам
+            pass
+
     def stop_speaking(self) -> None:
+        self._synth_ahead.clear()  # не cancel: ждущий воркер получил бы CancelledError и умер бы вместе с голосом
         self._speech_gen += 1
         while not self._speech_q.empty():
             self._speech_q.get_nowait()
@@ -451,7 +466,8 @@ class Daemon:
                 if (engine in ("qwen", "elevenlabs") and time.monotonic() >= self._neural_cold_until
                         and await self._speak_stream(sentence, gen, "qwen")):
                     continue
-                pcm = await loop.run_in_executor(None, self.tts.synth, sentence)
+                ahead = self._synth_ahead.pop(sentence, None)
+                pcm = await (ahead or loop.run_in_executor(None, self.tts.synth, sentence))
                 if gen != self._speech_gen or not len(pcm):
                     continue
                 self.state = "speaking"

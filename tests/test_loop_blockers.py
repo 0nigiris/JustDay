@@ -89,3 +89,25 @@ def test_уведомление_не_держит_демон(monkeypatch) -> Non
         if t.name == "notify":
             t.join(2)
     assert d._notify_id == 7
+
+
+def test_следующая_фраза_синтезируется_пока_играет_предыдущая() -> None:
+    """Silero синтезировал фразу только когда дойдёт очередь: к каждой фразе прибавлялись 0,1–0,5 с (Р-53)."""
+    import asyncio
+
+    from justday import daemon as daemon_mod
+
+    d = daemon_mod.Daemon.__new__(daemon_mod.Daemon)
+    d._synth_ahead = {}
+    d.tts = type("T", (), {"cfg": {"engine": "silero"}, "synth": staticmethod(lambda s: len(s))})()
+
+    async def run():
+        d._synth_in_advance("привет")
+        d._synth_in_advance("привет")  # повторно не запускается
+        assert list(d._synth_ahead) == ["привет"]
+        assert await d._synth_ahead["привет"] == 6
+        d.tts.cfg["engine"] = "qwen"  # потоковый голос не трогаем
+        d._synth_in_advance("пока")
+        assert "пока" not in d._synth_ahead
+
+    asyncio.run(run())
