@@ -88,6 +88,9 @@ Item {
             sl.moved(v)
             sl.dragging = false
         }
+        // Потеря захвата — незавершённый жест: не коммитим seek и не оставляем живую громкость
+        // ждать старого таймера, а возвращаем отображение к последнему значению извне.
+        onCanceled: { throttle.stop(); throttle.pending = NaN; sl.dragging = false }
     }
     function step() {
         if (!live) return
