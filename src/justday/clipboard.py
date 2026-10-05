@@ -419,12 +419,20 @@ def text_of(which: str) -> dict:
 # ───────────────────────────── наблюдатель ─────────────────────────────
 
 
+# Текстовый наблюдатель отдаёт каждое копирование демону по трубе, записи разделены NUL (в скопированном
+# тексте его не бывает). Раньше на каждое копирование wl-paste запускал `justday clip store` — новый Python с
+# импортом всего пакета, 0,3–0,5 с процессора и десятки мегабайт на каждое Ctrl+C. `sh` стоит миллисекунду.
+WATCH_TEXT = ["wl-paste", "--type", "text", "--watch", "sh", "-c", "cat; printf '\\0'"]
+
+
 def watch_argv() -> list[list[str]]:
     """Чем следить за буфером в этом сеансе.
 
     На Wayland это `wl-paste --watch`: он сам запускает команду на каждое изменение и отдаёт ей
     содержимое на вход — ровно то, что нужно, и ровно так же работает cliphist. Отдельно текст и
     отдельно картинки: типы не смешиваются, иначе картинка пришла бы как мусорный текст.
+    Текст читает сам демон из трубы (`WATCH_TEXT`, `records`); картинки редки, и для них остаётся
+    `justday clip store --image`.
 
     На X11 постоянного наблюдателя нет: там демон опрашивает буфер сам, см. `poll_once`."""
     from . import face
@@ -432,10 +440,31 @@ def watch_argv() -> list[list[str]]:
     if face.session() != "wayland" or not shutil.which("wl-paste"):
         return []
     me = shutil.which("justday") or "justday"
-    return [
-        ["wl-paste", "--type", "text", "--watch", me, "clip", "store"],
-        ["wl-paste", "--type", "image/png", "--watch", me, "clip", "store", "--image"],
-    ]
+    return [WATCH_TEXT, ["wl-paste", "--type", "image/png", "--watch", me, "clip", "store", "--image"]]
+
+
+async def records(stream, limit: int = MAX_TEXT * 2):
+    """Копирования из трубы `WATCH_TEXT`: каждое — байты до NUL. Слишком длинное пропускается целиком, а не
+    копится в памяти демона: `store` всё равно отказал бы ему «слишком длинно»."""
+    buf, skipping = b"", False
+    while chunk := await stream.read(65536):
+        parts = (buf + chunk).split(b"\0")
+        buf = parts.pop()
+        for rec in parts:
+            if skipping:
+                skipping = False        # хвост уже выброшенного длинного копирования
+            elif rec:
+                yield rec
+        if len(buf) > limit:
+            buf, skipping = b"", True
+
+
+def store_watched(data: bytes, *, image: bool = False) -> dict:
+    """Запомнить то, что принёс наблюдатель. Перед этим спрашиваем сам буфер, не помечен ли он как
+    секрет: так просят менеджеры паролей."""
+    if not image and is_secret_hint():
+        return {"ok": False, "why": "помечено как секрет"}
+    return store(image=data) if image else store(data.decode("utf-8", errors="replace"))
 
 
 def poll_once(seen: dict) -> dict | None:

@@ -116,11 +116,13 @@ def _search(box: imaplib.IMAP4_SSL, gmail_query: str) -> list[bytes]:
     return data[0].split() if typ == "OK" and data and data[0] else []
 
 
-def fetch(query: str, limit: int = 10, folder: str = "INBOX") -> list[Letter]:
+def fetch(query: str, limit: int = 10, folder: str = "INBOX", after_uid: int = 0) -> list[Letter]:
+    """`after_uid` — не скачивать письма с номером не больше этого: проверка новой почты раз в три минуты
+    раньше заново вынимала пять уже виденных писем (BODY.PEEK по каждому), хотя нужны только новые."""
     box = _imap()
     try:
         box.select(folder if folder != "ALL" else _all_mail(box), readonly=True)  # readonly: nothing marked as read
-        uids = _search(box, query)[-limit:][::-1]
+        uids = [u for u in _search(box, query) if int(u) > after_uid][-limit:][::-1]
         out = []
         for uid in uids:
             _, data = box.uid("FETCH", uid, "(BODY.PEEK[]<0.150000>)")
@@ -379,8 +381,8 @@ class MailAssistant:
         m = config.load()["mail"]
         state = events.load_state()
         seen = int(state.get("mail_last_uid", 0))
-        letters = fetch(m["query"], limit=5)
-        fresh = [l for l in letters if int(l.uid) > seen]
+        letters = fetch(m["query"], limit=5, after_uid=seen)
+        fresh = letters                      # fetch уже отдал только то, что новее виденного
         if letters:
             events.save_state(mail_last_uid=max(int(l.uid) for l in letters))
         if not fresh or not seen:  # first run: just remember where we are

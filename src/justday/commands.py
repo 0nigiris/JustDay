@@ -666,6 +666,8 @@ class CommandsMixin:
     async def _cmd_load_watch(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Островок открыл монитор: присылать раз в секунду"""
         self.load_watchers = max(0, self.load_watchers + (1 if req.get("on", True) else -1))
+        if self.load_watchers > 0:
+            self._load_wake.set()
         return {"ok": True, "watching": self.load_watchers > 0}
 
     async def _cmd_reload_settings(self, req: dict, writer: asyncio.StreamWriter) -> dict:

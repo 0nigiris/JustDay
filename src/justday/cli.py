@@ -1501,11 +1501,7 @@ def _clip_cmd(action: str, which: str, *, search: str = "", image: bool = False,
     if action == "store":
         # Содержимое приходит на вход, как его отдаёт `wl-paste --watch`. Перед тем как запоминать,
         # спрашиваем сам буфер, не помечен ли он как секрет: так просят менеджеры паролей.
-        if not image and clipboard.is_secret_hint():
-            return 0
-        data = sys.stdin.buffer.read()
-        got = (clipboard.store(image=data) if image
-               else clipboard.store(data.decode("utf-8", errors="replace")))
+        got = clipboard.store_watched(sys.stdin.buffer.read(), image=image)
         return 0 if got.get("ok") or got.get("why") else 1
     if action == "wipe":
         print(f"забыто записей: {clipboard.wipe()}")

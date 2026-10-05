@@ -155,6 +155,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
         # тратит ничего.
         self.load = sysload.Load()
         self.load_watchers = 0
+        self._load_wake = asyncio.Event()   # зритель появился — `_load_loop` просыпается
         self._clip_seen: dict = {}       # что видели в буфере на X11, где нет наблюдателя
         self._clip_procs: list = []      # запущенные wl-paste --watch
         self._spoken = 0
@@ -2251,7 +2252,10 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
         обновляется дважды, и наружу идёт второй."""
         while True:
             if self.load_watchers <= 0:
-                await asyncio.sleep(1.0)
+                # Без зрителей — не просыпаться раз в секунду впустую: ждём, пока `load_watch` нас разбудит.
+                # Между проверкой и ожиданием нет await, поэтому разбудить «мимо» не может.
+                self._load_wake.clear()
+                await self._load_wake.wait()
                 continue
             try:
                 self.publish(load=await self.load_snapshot())
@@ -2330,11 +2334,17 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
         argv = clipboard.watch_argv()
         if argv:
             for cmd in argv:
+                piped = cmd is clipboard.WATCH_TEXT      # текст приходит по трубе, картинки — своим процессом
                 try:
-                    self._clip_procs.append(await asyncio.create_subprocess_exec(
-                        *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL))
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd, stdout=asyncio.subprocess.PIPE if piped else asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL)
                 except OSError as e:
                     log.warning("не удалось следить за буфером: %s", e)
+                    continue
+                self._clip_procs.append(proc)
+                if piped:
+                    spawn(self._clip_text_stream(proc))
             log.info("история буфера обмена: wl-paste, %d наблюдателя", len(self._clip_procs))
             return
         log.info("история буфера обмена: опрос xclip")
@@ -2345,6 +2355,15 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin):
                 await loop.run_in_executor(None, clipboard.poll_once, self._clip_seen)
             except Exception:
                 log.debug("опрос буфера не вышел", exc_info=True)
+
+    async def _clip_text_stream(self, proc) -> None:
+        """Каждое текстовое копирование приходит сюда по трубе; запоминается в потоке, чтобы не держать цикл."""
+        loop = asyncio.get_running_loop()
+        async for rec in clipboard.records(proc.stdout):
+            try:
+                await loop.run_in_executor(None, clipboard.store_watched, rec)
+            except Exception:
+                log.debug("не вышло запомнить копирование", exc_info=True)
 
     async def media_control(self, action: str, value=None) -> dict:
         """pause | resume | toggle | next | prev | restart | stop | seek SECONDS | volume 0-130 | color NAME | status"""
