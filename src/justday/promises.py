@@ -5,8 +5,10 @@
 сказали голосом или написали в письме: встречи никто не слушает, и без его отдельного «да» слушать нельзя."""
 from __future__ import annotations
 
+import fcntl
 import json
 import time
+from contextlib import contextmanager
 from datetime import datetime
 
 from . import config
@@ -28,6 +30,16 @@ def _all() -> list[dict]:
     return out
 
 
+@contextmanager
+def _locked():
+    """Цикл «прочитал → изменил → записал» целиком под замком: две одновременные команды (голос и CLI) иначе
+    брали один и тот же список, выдавали одинаковые номера, и вторая запись затирала первую."""
+    FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(FILE.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
 def _save(items: list[dict]) -> None:
     FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = FILE.with_suffix(".tmp")
@@ -40,6 +52,11 @@ def add(text: str, to: str = "", due: str = "", source: str = "voice") -> dict:
     text = text.strip()
     if not text:
         return {"ok": False, "error": "что именно обещано?"}
+    with _locked():
+        return _add(text, to, due, source)
+
+
+def _add(text: str, to: str, due: str, source: str) -> dict:
     items = _all()
     item = {"id": max((i["id"] for i in items), default=0) + 1, "text": text, "to": to.strip(), "due": due.strip(),
             "source": source, "made": datetime.now().isoformat(timespec="minutes"), "done": None}
@@ -60,6 +77,11 @@ def find(query: str) -> list[dict]:
 
 
 def done(ref: str) -> dict:
+    with _locked():
+        return _done(ref)
+
+
+def _done(ref: str) -> dict:
     """По номеру или по словам; если подходит несколько открытых — не угадывает."""
     items = _all()
     if ref.strip().isdigit():

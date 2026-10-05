@@ -63,3 +63,18 @@ def test_пустой_ответ_ютуба_переспрашивается(mon
     found = media.search("mili peach pit and cyanide")
     assert [e["id"] for e in found] == ["abc"]
     assert len(asked) == 2
+
+
+def test_упавшая_громкость_не_объявляется_выполненной(monkeypatch) -> None:
+    """wpctl/pactl вернули ошибку, а ассистент говорил «готово»: теперь фраза уходит мозгу, а не в историю успехов."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from justday import daemon, volume
+
+    monkeypatch.setattr(volume, "apply", lambda a: False)
+    said = []
+    fake = SimpleNamespace(say=lambda t: said.append(t))
+    levels = [volume.Action("stream", 50, "discord", (1,))]
+    assert asyncio.run(daemon.Daemon._set_volumes(fake, "громкость дискорд 50", levels)) is None
+    assert said == []

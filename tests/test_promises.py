@@ -38,3 +38,21 @@ def test_битая_строка_не_уносит_список(tmp_path, monkey
     f.write_text(f.read_text(encoding="utf-8") + "{обрыв\n", encoding="utf-8")
     assert len(promises.open_items()) == 1
     assert config.DATA_DIR  # модуль живёт в данных пользователя, а не в репозитории
+
+
+def test_параллельные_обещания_не_теряются_и_не_делят_номер(tmp_path) -> None:
+    """Голос и CLI писали одновременно: оба читали один список, брали один номер, и вторая запись затирала первую."""
+    import subprocess
+    import sys
+
+    f = tmp_path / "promises.jsonl"
+    code = ("import sys; from pathlib import Path; from justday import promises; promises.FILE = Path(sys.argv[1]); "
+            "[promises.add(f'дело {sys.argv[2]}-{k}') for k in range(15)]")
+    procs = [subprocess.Popen([sys.executable, "-c", code, str(f), str(n)]) for n in range(6)]
+    assert all(p.wait() == 0 for p in procs)
+    promises.FILE = f
+    try:
+        ids = [i["id"] for i in promises._all()]
+    finally:
+        promises.FILE = config.DATA_DIR / "promises.jsonl"
+    assert sorted(ids) == list(range(1, 91))

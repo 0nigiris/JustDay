@@ -760,14 +760,17 @@ class Daemon:
             return ""
         return None
 
-    async def _set_volumes(self, text: str, levels: list) -> str:
+    async def _set_volumes(self, text: str, levels: list) -> str | None:
         """«Discord 50, музыку 20»: все части сразу, один ответ на всё (Р-48)."""
         loop = asyncio.get_running_loop()
         for a in levels:
+            # Не вышло (wpctl/pactl упали) — не врём «готово»: фраза уходит мозгу, он скажет как есть.
             if a.kind == "music":
-                await self.media_control("volume", a.level)
+                ok = (await self.media_control("volume", a.level)).get("ok")
             else:
-                await loop.run_in_executor(None, volume.apply, a)
+                ok = await loop.run_in_executor(None, volume.apply, a)
+            if not ok:
+                return None
         said = volume.phrase(levels)
         events.emit("fast", text=text, desc=said)
         self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → громкость: {said}. Не повторяй.]")
