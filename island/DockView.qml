@@ -1254,6 +1254,12 @@ Item {
         // Compact window-title list (macOS/KDE style) when preview is on but thumbs unavailable.
         readonly property bool showsWinList: dv.preview && winListAdds && !showsThumbs
         readonly property bool expanded: showsThumbs || showsWinList
+        // Громкость программы прямо в подсказке (Р-49): тот же ручей, что у правой кнопки. Ползунок виден,
+        // только когда программа что-то играет, а колесо над подсказкой крутит громкость и без него.
+        readonly property var streams: dv.focused ? audio.streamsFor(dv.focused) : []
+        readonly property real volume: audio.volumeOf(streams)
+        readonly property bool muted: audio.mutedOf(streams)
+        readonly property real volH: expanded && streams.length ? 26 : 0
         readonly property int at: dv.focused ? dv.focused.i : -1
         // Ask for thumbs in the background; tip stays classic until a JPEG lands (or capture is marked broken).
         onWinsChanged: tip.requestThumbs()
@@ -1274,8 +1280,8 @@ Item {
                         showsThumbs ? Math.max(tipText.implicitWidth + 20, winRow.implicitWidth + 16)
                       : showsWinList ? Math.max(tipText.implicitWidth + 20, winList.implicitWidth + 20)
                       : tipText.implicitWidth + 20)
-        height: showsThumbs ? 28 + winRow.implicitHeight + 10
-              : showsWinList ? 28 + winList.implicitHeight + 8
+        height: showsThumbs ? 28 + winRow.implicitHeight + 10 + volH
+              : showsWinList ? 28 + winList.implicitHeight + 8 + volH
               : 26
         radius: expanded ? 14 : 13
         color: Qt.rgba(0, 0, 0, 0.9)
@@ -1421,6 +1427,59 @@ Item {
             font.pixelSize: 11
             color: JD.text3
             text: "и ещё " + (tip.wins.length - 5)
+        }
+        Item {
+            visible: tip.volH > 0
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 6 }
+            height: 18
+            Row {
+                anchors { left: parent.left; right: parent.right; leftMargin: 12; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                spacing: 8
+                Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: tip.muted ? "volume-x" : tip.volume > 0.5 ? "volume-2" : "volume-1"
+                    implicitSize: 14
+                    tint: tip.muted ? JD.text3 : JD.text1
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: audio.setMuted(tip.streams, !tip.muted) }
+                }
+                Rectangle {
+                    id: tipVolTrack
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 14 - 8 - 34 - 8
+                    height: 5
+                    radius: 2.5
+                    color: Qt.rgba(1, 1, 1, 0.18)
+                    Rectangle {
+                        height: parent.height
+                        radius: parent.radius
+                        width: parent.width * Math.max(0, Math.min(1, tip.volume))
+                        color: tip.muted ? JD.text3 : JD.accentBlue
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    DragHandler {
+                        target: null
+                        yAxis.enabled: false
+                        onCentroidChanged: if (active) audio.setVolume(tip.streams, centroid.position.x / tipVolTrack.width)
+                    }
+                    TapHandler {
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onSingleTapped: eventPoint => audio.setVolume(tip.streams, eventPoint.position.x / tipVolTrack.width)
+                    }
+                }
+                Label2 {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 34
+                    horizontalAlignment: Text.AlignRight
+                    font.pixelSize: 11
+                    color: JD.text3
+                    text: Math.round(Math.max(0, tip.volume) * 100) + "%"
+                }
+            }
+        }
+        WheelHandler {
+            enabled: tip.streams.length > 0
+            onWheel: e => audio.setVolume(tip.streams, Math.max(0, tip.volume) + (e.angleDelta.y > 0 ? 0.05 : -0.05))
         }
         // Pointer over the tip counts as still on the dock (do not leaveLane / autohide).
         HoverHandler {

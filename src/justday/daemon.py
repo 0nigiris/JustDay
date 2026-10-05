@@ -61,6 +61,7 @@ from . import (
     session,
     sysload,
     voiceprint,
+    volume,
     workers,
 )
 from . import brain as brain_mod
@@ -706,6 +707,8 @@ class Daemon:
             return await self.run_scene(scene)
         if (what := fastpath.session_switch(text)) is not None:
             return await self.session_switch(what)
+        if (levels := await asyncio.get_running_loop().run_in_executor(None, volume.plan, text)) is not None:
+            return await self._set_volumes(text, levels)
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         if (said := fastpath.small_talk(text)) is not None:
@@ -737,6 +740,20 @@ class Daemon:
         if self.cfg["mail"]["address"] and self.mail.wants(text) and (await self.handle_mail(text) or gen != self._cancel_gen):
             return ""
         return None
+
+    async def _set_volumes(self, text: str, levels: list) -> str:
+        """«Discord 50, музыку 20»: все части сразу, один ответ на всё (Р-48)."""
+        loop = asyncio.get_running_loop()
+        for a in levels:
+            if a.kind == "music":
+                await self.media_control("volume", a.level)
+            else:
+                await loop.run_in_executor(None, volume.apply, a)
+        said = volume.phrase(levels)
+        events.emit("fast", text=text, desc=said)
+        self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → громкость: {said}. Не повторяй.]")
+        await self.say(said)
+        return said
 
     async def handle_utterance(self, text: str, source: str = "voice") -> str | None:
         if self._approval and not self._approval.done():
@@ -2116,6 +2133,10 @@ class Daemon:
         kind, query = req
 
         async def go():
+            if kind == "music" and not media.is_url(query):
+                near = media.find_local(query, limit=1)
+                if not (near and near[0]["score"] >= 0.82):  # молча искать и молча не найти — как раз его жалоба
+                    await self.say(t("В фонотеке нет, ищу на ютубе."))
             r = await (self.play_library(shuffle=True) if kind == "library"
                        else self.play_music(query) if kind == "music"
                        else self.play_video(query, random=kind == "video_random"))

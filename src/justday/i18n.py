@@ -25,6 +25,7 @@ EN = {
     "Нужно подтверждение: {what}. Разрешить?": "Confirmation needed: {what}. Allow?",
     "{to}: «{text}». Отправить?": "{to}: “{text}”. Send it?",
     "{a} или {b}?": "{a} or {b}?",
+    "В фонотеке нет, ищу на ютубе.": "Not in your library, searching YouTube.",
     "Разрешить": "Allow",
     "Отклонить": "Deny",
     "JustDay просит подтверждение": "JustDay needs confirmation",

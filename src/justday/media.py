@@ -275,10 +275,17 @@ def _entry(e: dict) -> dict:
 
 
 def search(query: str, n: int = 8) -> list[dict]:
-    r = _ytdlp("--flat-playlist", "-J", f"ytsearch{n}:{query}", timeout=30)
-    if r.returncode:
-        raise RuntimeError((r.stderr.strip().splitlines() or ["YouTube search failed"])[-1])
-    return [_entry(e) for e in json.loads(r.stdout).get("entries") or [] if e.get("id")]
+    """Поиск YouTube через yt-dlp. Бывает, что на точную фразу он молча отдаёт ноль результатов («mili peach
+    pit and cyanide» — 0, а «mili peach pit» и та же фраза с «official» — по восемь): так он и «не находил» трек
+    (Р-56). Пустой ответ — повод переспросить чуть иначе, а не сдаться."""
+    for q in (query, f"{query} official", f"{query} audio"):
+        r = _ytdlp("--flat-playlist", "-J", f"ytsearch{n}:{q}", timeout=30)
+        if r.returncode:
+            raise RuntimeError((r.stderr.strip().splitlines() or ["YouTube search failed"])[-1])
+        found = [_entry(e) for e in json.loads(r.stdout).get("entries") or [] if e.get("id")]
+        if found:
+            return found
+    return []
 
 
 def info(url: str) -> dict:
