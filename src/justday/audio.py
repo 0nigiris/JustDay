@@ -135,7 +135,7 @@ class UtteranceRecorder:
     её в окружении нет вовсе, и демон должен запускаться — он просто никогда не начнёт запись."""
 
     def __init__(self, mic: Microphone, silence_s: float, no_speech_timeout_s: float, max_s: float,
-                 silence_long_s: float = 2.2, long_after_s: float = 5.0):
+                 silence_long_s: float = 2.2, long_after_s: float = 5.0, speculate_after_s: float = 0.0):
         self.mic = mic
         self._vad = None
         self.silence_s = silence_s
@@ -148,6 +148,11 @@ class UtteranceRecorder:
         # просьба. Поэтому после long_after_s речи порог паузы становится silence_long_s.
         self.silence_long_s = max(silence_s, silence_long_s)
         self.long_after_s = long_after_s
+        # Пауза, после которой начинаем распознавать, не дожидаясь конца просьбы (0 — не начинать). Распознавание
+        # занимает ~0,5 с, а конца ждать целую секунду тишины: если запустить его на середине ожидания, к
+        # решению «он закончил» текст уже готов. Если человек заговорил снова — готовое выбрасывается.
+        self.speculate_after_s = speculate_after_s
+        self.speculated: np.ndarray | None = None  # запись, отданная на раннее распознавание и ещё годная
 
     def patience(self, spoken_s: float) -> float:
         """Сколько тишины считать концом просьбы, если человек говорит уже spoken_s секунд."""
@@ -172,8 +177,14 @@ class UtteranceRecorder:
             self._vad = voice_activity_model()
         return self._vad
 
-    async def record(self, cancel: asyncio.Event, prefill=None) -> np.ndarray | None:
-        """`prefill()` → (mic seq, frame) pairs already heard (speech in progress, e.g. after the assistant's name)."""
+    async def record(self, cancel: asyncio.Event, prefill=None, speculate=None) -> np.ndarray | None:
+        """`prefill()` → (mic seq, frame) pairs already heard (speech in progress, e.g. after the assistant's name).
+
+        `speculate(pcm)` зовут, когда пауза дошла до `speculate_after_s`, а конец ещё не решён: пока что записанное
+        отдаётся на распознавание. Годится результат, только если к концу записи `self.speculated` не сброшен —
+        то есть человек после этого не заговорил. Короткая просьба только: после `long_after_s` речи пауза
+        в середине фразы обычна, и распознавать на каждой — выбрасывать почти всё."""
+        self.speculated = None
         loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue()
         cb = lambda f: loop.call_soon_threadsafe(q.put_nowait, (self.mic.seq, f))  # noqa: E731
@@ -217,6 +228,12 @@ class UtteranceRecorder:
                 frames.append(frame)
                 silence = silence + FRAME / RATE if p < 0.3 else 0.0
                 spoken = len(frames) * FRAME / RATE
+                if silence == 0.0:
+                    self.speculated = None  # заговорил снова: раннее распознавание неполное
+                elif (speculate and self.speculated is None and silence >= self.speculate_after_s > 0
+                      and spoken - silence < self.long_after_s and spoken - silence >= 0.4):
+                    self.speculated = np.concatenate(frames)
+                    speculate(self.speculated)
                 if silence >= self.patience(spoken - silence) or spoken >= self.hard_max_s:
                     break
             if not frames:

@@ -109,7 +109,8 @@ class Daemon:
         self.recorder = audio.UtteranceRecorder(self.mic, a["silence_seconds"], a["no_speech_timeout_seconds"],
                                                 a["max_utterance_seconds"],
                                                 a.get("silence_long_seconds", 2.2),
-                                                a.get("long_speech_seconds", 5.0))
+                                                a.get("long_speech_seconds", 5.0),
+                                                a.get("speculate_after_seconds", 0.45))
         self.stt = STT(self.cfg["stt"])
         self._wake_score = 0.0       # последний балл openWakeWord: по нему слух имён решает, будить ли Whisper
         self._name_gate: tuple[float, bool] = (0.0, True)
@@ -655,8 +656,14 @@ class Daemon:
         rec = self.recorder
         if followup:
             rec = audio.UtteranceRecorder(self.mic, rec.silence_s, self.cfg["audio"]["followup_seconds"], rec.max_s,
-                                          rec.silence_long_s, rec.long_after_s)
+                                          rec.silence_long_s, rec.long_after_s, rec.speculate_after_s)
         loop = asyncio.get_running_loop()
+        early: list[asyncio.Future] = []  # раннее распознавание: последнее запущенное, годится ли — решает rec.speculated
+
+        def speculate(pcm: np.ndarray) -> None:
+            fut = loop.run_in_executor(None, self.stt.transcribe, pcm)
+            fut.add_done_callback(lambda f: f.cancelled() or f.exception())  # брошенное не должно ругаться в журнал
+            early.append(fut)
 
         def level(frame: np.ndarray) -> None:
             rms = float(np.sqrt((frame.astype(np.float32) ** 2).mean())) / 32768.0
@@ -665,7 +672,7 @@ class Daemon:
 
         self.mic.subscribe(level)
         try:
-            pcm = await rec.record(self._listen_cancel, prefill)
+            pcm = await rec.record(self._listen_cancel, prefill, speculate)
         finally:
             self.mic.unsubscribe(level)
         self._last_mic_use = time.monotonic()
@@ -696,7 +703,15 @@ class Daemon:
                     return
         self.state = "transcribing"
         gen = self._cancel_gen
-        text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
+        text = None
+        if rec.speculated is not None and early:
+            try:
+                text = await early[-1]  # распознано, пока доходила пауза: человек после этого не заговорил
+                events.emit("heard_early")
+            except Exception as e:  # раннее не вышло (видеокарта, память) — обычный путь ещё впереди
+                log.info("раннее распознавание упало (%s): распознаю заново", type(e).__name__)
+        if text is None:
+            text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
         if gen != self._cancel_gen:  # cancelled while transcribing: forget what was said
             events.emit("listen_cancelled", text=text)
             return

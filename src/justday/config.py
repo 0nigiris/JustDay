@@ -146,6 +146,9 @@ DEFAULTS: dict = {
         "silence_seconds": 1.0,
         "silence_long_seconds": 2.2,
         "long_speech_seconds": 5.0,
+        # Через сколько тишины начинать распознавать, не дожидаясь конца просьбы (0 — выключить): текст готов
+        # к моменту, когда пауза дорастёт до silence_seconds. Только для коротких просьб.
+        "speculate_after_seconds": 0.45,
         "no_speech_timeout_seconds": 7,
         # After JustDay asks a question, listen again automatically for this long (0 = off).
         "followup_seconds": 6,
