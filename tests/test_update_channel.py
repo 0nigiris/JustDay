@@ -22,6 +22,7 @@ def test_install_on_main_is_told_to_move_to_stable(tmp_path, monkeypatch):
     _git(work, "commit", "-qam", "сырая правка в main")
     _git(work, "push", "-q", "origin", "HEAD:refs/heads/main")
     monkeypatch.setattr(config, "REPO_DIR", work)
+    monkeypatch.setattr(config, "load", lambda: {"updates": {"channel": "stable"}})   # не зависеть от настоящего конфига
     st = manage.update_status()
     assert st["branch"] == "stable" and st["on"] == "main"
     assert st["behind"] == 1 and "stable" in st["changes"][0]      # переезд на канал, сырые правки не тянутся
