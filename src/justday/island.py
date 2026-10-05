@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from datetime import datetime
 
 from . import config
@@ -81,10 +80,7 @@ def settings_snapshot(cfg: dict) -> dict:
 def _hotkeys() -> dict:
     from . import manage
 
-    try:
-        return manage.hotkeys()
-    except (OSError, subprocess.SubprocessError):
-        return {}
+    return manage.hotkeys_cached()
 
 
 # Text selected on screen is attached to a typed request; the list of recent requests shows what the

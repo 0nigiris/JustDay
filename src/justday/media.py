@@ -785,15 +785,18 @@ class MusicPlayer:
             return
         if await self.attach():
             return
-        subprocess.run(["systemctl", "--user", "stop", UNIT], capture_output=True, timeout=10)
+        # Оба запуска — в потоке: до десяти секунд ожидания в цикле событий — это замёрзший демон (Р-33).
+        await asyncio.to_thread(subprocess.run, ["systemctl", "--user", "stop", UNIT], capture_output=True, timeout=10)
         SOCK.unlink(missing_ok=True)
         args = ["mpv", "--idle=yes", "--no-video", "--no-terminal", "--audio-display=no", f"--input-ipc-server={SOCK}",
                 "--audio-client-name=JustDay", f"--volume={self.volume}", "--volume-max=130", "--gapless-audio=weak",
                 "--keep-open=no", "--prefetch-playlist=yes"]
         if os.environ.get("JUSTDAY_MPV_AO"):  # tests: JUSTDAY_MPV_AO=null plays silently
             args.append(f"--ao={os.environ['JUSTDAY_MPV_AO']}")
-        r = subprocess.run(["systemd-run", "--user", f"--unit={UNIT}", "--collect", "--quiet",
-                            "-p", "Description=JustDay music player", "--", *args], capture_output=True, text=True, timeout=10)
+        r = await asyncio.to_thread(
+            subprocess.run, ["systemd-run", "--user", f"--unit={UNIT}", "--collect", "--quiet",
+                             "-p", "Description=JustDay music player", "--", *args],
+            capture_output=True, text=True, timeout=10)
         if r.returncode:  # no systemd user session: a plain child process
             subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         for _ in range(50):

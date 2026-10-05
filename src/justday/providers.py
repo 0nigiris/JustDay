@@ -13,6 +13,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 # name → (base url, secret name or fixed token, description)
@@ -57,19 +58,42 @@ def _from_stick(name: str) -> str:
     return str(_portable.get(name) or "")
 
 
+_SECRETS: dict[str, tuple[float, str]] = {}
+SECRET_FOUND_TTL, SECRET_MISSING_TTL = 300.0, 30.0
+
+
 def secret_get(name: str) -> str:
+    """Ключ из связки. Раньше каждый вызов запускал `secret-tool` без таймаута прямо из цикла событий демона:
+    телеграм — на каждое сообщение, пустой календарь — каждые две секунды, а зависший KWallet замораживал
+    весь демон (Р-32). Теперь ответ живёт пять минут (чтобы сменённый из CLI ключ подхватился), «нет такого» —
+    полминуты (чтобы только что сохранённый нашёлся быстро), и ждём связку не дольше пяти секунд."""
     got = _from_stick(name)
     if got:
         return got
-    if not shutil.which("secret-tool"):
-        return ""
-    r = subprocess.run(["secret-tool", "lookup", *SECRET_ATTRS, "key", name], capture_output=True, text=True)
-    return r.stdout.strip()
+    hit = _SECRETS.get(name)
+    if hit and time.monotonic() < hit[0]:
+        return hit[1]
+    value = ""
+    if shutil.which("secret-tool"):
+        try:
+            r = subprocess.run(["secret-tool", "lookup", *SECRET_ATTRS, "key", name], capture_output=True,
+                               text=True, timeout=5)
+            value = r.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    _SECRETS[name] = (time.monotonic() + (SECRET_FOUND_TTL if value else SECRET_MISSING_TTL), value)
+    return value
+
+
+def secret_forget(name: str) -> None:
+    """Выбросить запомненный ответ: ключ только что сохранён или стёрт этим же процессом."""
+    _SECRETS.pop(name, None)
 
 
 def secret_set(name: str, value: str) -> None:
     subprocess.run(["secret-tool", "store", "--label", f"JustDay: {name}", *SECRET_ATTRS, "key", name],
-                   input=value, text=True, check=True)
+                   input=value, text=True, check=True, timeout=15)
+    secret_forget(name)
 
 
 def is_claude(cfg: dict) -> bool:

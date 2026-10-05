@@ -1804,6 +1804,14 @@ ShellRoot {
         property bool live: false       // report every step (volume), not only the release (seeking)
         property int thickness: 5       // the volume track is thinner: it is not the progress of anything
         signal seek(real frac)
+        // Ползунок громкости слал значение с каждым пикселем, и демон на каждое пересобирал настройки (Р-31):
+        // шаги реже чем раз в 50 мс не нужны, а последнее положение всё равно придёт — по таймеру или при отпускании.
+        property real pendingValue: -1
+        Timer {
+            id: liveThrottle
+            interval: 50
+            onTriggered: if (sb.pendingValue >= 0) { const v = sb.pendingValue; sb.pendingValue = -1; sb.seek(v) }
+        }
         implicitHeight: 16
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
@@ -1824,8 +1832,12 @@ ShellRoot {
             anchors.fill: parent
             function at(x) { return Math.max(0, Math.min(1, x / width)) }
             onPressed: m => sb.dragValue = at(m.x)
-            onPositionChanged: m => { if (pressed) { sb.dragValue = at(m.x); if (sb.live) sb.seek(sb.dragValue) } }
-            onReleased: { sb.seek(sb.dragValue); sb.dragValue = -1 }
+            onPositionChanged: m => {
+                if (!pressed) return
+                sb.dragValue = at(m.x)
+                if (sb.live) { sb.pendingValue = sb.dragValue; if (!liveThrottle.running) liveThrottle.start() }
+            }
+            onReleased: { liveThrottle.stop(); sb.pendingValue = -1; sb.seek(sb.dragValue); sb.dragValue = -1 }
         }
     }
 

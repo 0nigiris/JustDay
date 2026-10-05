@@ -177,6 +177,8 @@ class UtteranceRecorder:
         loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue()
         cb = lambda f: loop.call_soon_threadsafe(q.put_nowait, (self.mic.seq, f))  # noqa: E731
+        if self._vad is None:  # загрузка ONNX (и скачивание, если файла нет) — не в цикле событий (Р-33)
+            await asyncio.to_thread(lambda: self.vad)
         self.vad.reset_states()
         frames: list[np.ndarray] = []
         pre_roll: list[np.ndarray] = []

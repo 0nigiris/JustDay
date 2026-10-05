@@ -59,7 +59,8 @@ def setup(raw: str) -> dict:
 
 
 def forget() -> dict:
-    subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", "calendar"], check=False)
+    subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", "calendar"], check=False, timeout=10)
+    providers.secret_forget("calendar")
     _cache.clear()
     return {"ok": True}
 

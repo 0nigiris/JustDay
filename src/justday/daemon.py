@@ -19,6 +19,7 @@ import signal
 import socket
 import struct
 import subprocess
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -302,11 +303,15 @@ class Daemon:
             cmd += ["-r", str(self._notify_id)]
         if urgent:
             cmd += ["-u", "critical"]
-        try:
-            out = subprocess.run([*cmd, "JustDay", body[:300]], capture_output=True, text=True, timeout=5).stdout
-            self._notify_id = int(out.strip() or 0)
-        except Exception:
-            pass
+
+        def send() -> None:  # в потоке: уведомления шлют и из цикла событий, а `notify-send` может зависнуть (Р-33)
+            try:
+                out = subprocess.run([*cmd, "JustDay", body[:300]], capture_output=True, text=True, timeout=5).stdout
+                self._notify_id = int(out.strip() or 0)
+            except Exception:
+                pass
+
+        threading.Thread(target=send, daemon=True, name="notify").start()
 
     # ---------------- speech output ----------------
     def silent(self) -> str:
@@ -2761,7 +2766,7 @@ class Daemon:
             # window: видео в отдельном окне mpv — им телефон тоже управляет, но состояние
             # у окна спрашивают отдельно: оно живёт само по себе.
             return {"ok": True, "music": m.state(), "island_video": self.island_video,
-                    "window": media.window_state()}
+                    "window": await asyncio.to_thread(media.window_state)}  # сокет mpv, до секунды (Р-33)
         if action == "library":  # кнопка «Моя музыка» на телефоне: файлы уже на диске, модель тут не нужна
             return await self.play_library(shuffle=True)
         if action == "volume":  # works with nothing playing too: it is the level the next song starts at
@@ -3357,6 +3362,9 @@ class Daemon:
             log.warning("%s", parts.missing_note("speech"))
             self.notify(parts.missing_note("speech"), icon="audio-input-microphone")
         loop.run_in_executor(None, self.tts.load)
+        from . import manage
+
+        await loop.run_in_executor(None, manage.refresh_hotkeys)  # первый снимок настроек уже с клавишами
         await self.brain.start()
         if await self.music.attach():  # music that kept playing through a daemon restart
             log.info("music player reattached")

@@ -349,6 +349,31 @@ def hotkeys() -> dict:
     return out
 
 
+_HOTKEYS_CACHE: dict = {"value": {}, "at": 0.0, "busy": False}
+
+
+def refresh_hotkeys() -> dict:
+    """Прочитать клавиши заново (два десятка запусков kreadconfig6, 150–600 мс) и запомнить."""
+    try:
+        value = hotkeys()
+    except (OSError, subprocess.SubprocessError):
+        value = _HOTKEYS_CACHE["value"]
+    _HOTKEYS_CACHE.update(value=value, at=time.monotonic(), busy=False)
+    return value
+
+
+def hotkeys_cached(max_age: float = 120.0) -> dict:
+    """Клавиши из памяти — для снимка настроек, который уходит на каждый шаг ползунка громкости прямо в
+    цикле событий демона (Р-31). Протухшее обновляется в фоне, отвечаем тем, что есть; `set_hotkeys`
+    сбрасывает срок, потому что только оно меняет клавиши."""
+    c = _HOTKEYS_CACHE
+    if not c["busy"] and time.monotonic() - c["at"] > max_age:
+        c["busy"] = True
+        import threading
+        threading.Thread(target=refresh_hotkeys, daemon=True, name="hotkeys").start()
+    return c["value"]
+
+
 def hotkey_list() -> list[dict]:
     """Таблица для настроек: имя, подпись, что назначено, что было бы по умолчанию и — главное —
     держим ли мы эту клавишу на самом деле. Запись в файле ничего не значит, если её занял сосед."""
@@ -412,6 +437,7 @@ def set_hotkeys(*args: str | None, **named: str | None) -> dict:
             continue
         claim_key(key, component, f"JustDay: {label.lower()}")
         live[name] = key_is_ours(key, component)
+    _HOTKEYS_CACHE["at"] = 0.0
     return {"ok": p.returncode == 0, "output": (p.stdout + p.stderr).strip(),
             "taken_from": taken, "live": live, **hotkeys()}
 
