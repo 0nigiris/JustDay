@@ -473,6 +473,7 @@ Singleton {
     // Общего у них — цвета, значки, клавиши и демон; этого и хотелось.
     property bool menuOpen: false
     property var menuCatalog: ({})        // разделы, программы, закреплённое, кто за машиной
+    property string menuCatalogRaw: ""   // его же текстом: чтобы не пересобирать сетку тем же самым
     property string menuGroup: "fav"
     property string menuQuery: ""
     property var menuFound: []            // что нашёл поиск: программы, игры, открытые окна
@@ -1560,10 +1561,18 @@ Singleton {
             else closeMenu()
         }
         if (m.catalog !== undefined) {
-            menuCatalog = m.catalog
-            // Пустое «Избранное» в первый день выглядит поломкой, а не подсказкой: пока в нём ничего
-            // нет, меню открывается на всех программах и молча ждёт, когда что-нибудь закрепят.
-            if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
+            // Меню просит каталог при каждом открытии, и почти всегда приходит тот же самый. Подмена
+            // объекта пересобирала всю сетку (сто шестьдесят значков, каждый грузится в главном потоке),
+            // и именно этот кадр был самым долгим из всех при открытии: курсор ждал сетку, которая
+            // ничем не отличалась от уже стоящей.
+            const raw = JSON.stringify(m.catalog)
+            if (raw !== menuCatalogRaw) {
+                menuCatalogRaw = raw
+                menuCatalog = m.catalog
+                // Пустое «Избранное» в первый день выглядит поломкой, а не подсказкой: пока в нём ничего
+                // нет, меню открывается на всех программах и молча ждёт, когда что-нибудь закрепят.
+                if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
+            }
         }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.moved !== undefined || (trashWaiting && m.trash_full !== undefined && m.ok !== undefined)) {

@@ -4532,16 +4532,31 @@ ShellRoot {
         }
         onWantChanged: {
             if (want) {
+                // Сначала окно, потом содержимое. Окно на весь экран с исключительной клавиатурой —
+                // это и есть «курсор появился»: пока Loader собирал сетку в том же кадре, курсор ждал
+                // её, и в полноэкранной игре Пуск казался зависшим. Теперь пустое окно рисуется первым,
+                // а меню собирается кадром позже (запасной таймер — если кадр так и не придёт).
+                // Порядок важен: пока contentOn остался от прошлого открытия, `alive = true` сразу
+                // включил бы Loader.
+                contentOn = false
                 alive = true
+                menuContentArm.restart()
                 menuFadeOut.stop()
                 blurLive = false
                 menuBlurArm.restart()
             } else {
+                menuContentArm.stop()
                 menuFadeOut.restart()
                 menuBlurArm.stop()
                 blurLive = false
             }
         }
+        property bool contentOn: false
+        Connections {
+            target: menuCard.Window.window
+            enabled: menuWin.alive && !menuWin.contentOn
+        }
+        Timer { id: menuContentArm; interval: 100; onTriggered: menuWin.contentOn = menuWin.want }
         Timer { id: menuFadeOut; interval: JD.dur(JD.slideMs); onTriggered: menuWin.alive = false }
         Timer { id: menuBlurArm; interval: JD.dur(JD.slideMs) + 16; onTriggered: menuWin.blurLive = menuWin.want }
 
@@ -4799,7 +4814,7 @@ ShellRoot {
             Loader {
                 id: menuBody
                 anchors.fill: parent
-                active: menuWin.alive
+                active: menuWin.alive && menuWin.contentOn
                 sourceComponent: JD.menuSearchMode ? spotlightBody : menuBodyFull
             }
             Component { id: menuBodyFull; MenuView {} }
