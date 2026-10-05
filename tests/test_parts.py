@@ -178,21 +178,23 @@ def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
         "геометрию перестали замораживать в начале жеста"
 
 
-def test_jarvis_answered_that_there_was_nothing_to_grab_the_screen_with() -> None:
-    """«Нечем снять экран» — и ради снимка Джарвис перезапустил kwin, убив сессию."""
-    import inspect
-    import pathlib
-    import py_compile
+def test_jarvis_answered_that_there_was_nothing_to_grab_the_screen_with(monkeypatch) -> None:
+    """Когда снимка нет, Джарвис должен объяснить отказ, не лезть перезапускать KWin."""
+    import pytest
 
     from justday import cli, desktop
 
-    src = inspect.getsource(desktop.capture_screen)
-    assert "portal_shot.py" in src, "путь через портал пропал — снимать на KWin снова нечем"
-    assert "spectacle" not in src.lower().split('"""')[-1], "spectacle вернулся в снимки: он падает в KCrash"
-    helper = pathlib.Path(desktop.__file__).with_name("portal_shot.py")
-    assert helper.exists(), "помощник для портала пропал"
-    py_compile.compile(str(helper), doraise=True)
-    assert "capture_screen" in inspect.getsource(cli._capture), "у CLI снова свой список средств — разойдутся"
+    captured = []
+    monkeypatch.setattr(desktop, "capture_screen", lambda path: captured.append(path))
+    cli._capture("/tmp/justday-test.png")
+    assert captured == ["/tmp/justday-test.png"], "команда снимка не дошла до общего рабочего пути"
+
+    def unavailable(_path):
+        raise RuntimeError("no_safe_capture")
+
+    monkeypatch.setattr(desktop, "capture_screen", unavailable)
+    with pytest.raises(RuntimeError, match="нечем снять экран"):
+        cli._capture("/tmp/justday-test.png")
 
 
 def test_the_brain_restarted_the_window_manager_and_killed_the_session() -> None:
