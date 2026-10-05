@@ -105,9 +105,9 @@ def live(claude: str = "claude") -> list[dict]:
         # Без --all: нас занимает то, что работает сейчас. Законченные сессии остаются в
         # стенограммах и в `justday claude result`, а в живом списке им место ровно до тех пор,
         # пока они живы, — иначе через неделю там будут сотни строк из позапрошлого вторника.
-        raw = subprocess.run([claude, "agents", "--json"],
-                             capture_output=True, text=True, timeout=15).stdout
-        agents = json.loads(raw or "[]")
+        from . import workers
+
+        agents = workers.agents(include_done=False, claude=claude, timeout=15)
     except (OSError, subprocess.SubprocessError, ValueError):
         return []
 

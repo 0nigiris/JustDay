@@ -111,3 +111,13 @@ def test_следующая_фраза_синтезируется_пока_иг�
         assert "пока" not in d._synth_ahead
 
     asyncio.run(run())
+
+
+def test_список_сессий_спрашивается_в_одном_месте(monkeypatch) -> None:
+    """`claude agents --json` звали два модуля по-своему (Р-68): теперь `sessions.live` идёт через `workers.agents`."""
+    from justday import sessions, workers
+
+    asked = []
+    monkeypatch.setattr(workers, "agents", lambda **kw: asked.append(kw) or [])
+    assert sessions.live("claude") == []
+    assert asked == [{"include_done": False, "claude": "claude", "timeout": 15}]

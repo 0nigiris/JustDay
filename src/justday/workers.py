@@ -28,9 +28,11 @@ def _claude() -> str:
     return shutil.which(config.load()["brain"]["claude_cli"]) or "claude"
 
 
-def agents(include_done: bool = True) -> list[dict]:
-    cmd = [_claude(), "agents", "--json"] + (["--all"] if include_done else [])
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout
+def agents(include_done: bool = True, claude: str = "", timeout: float = 30) -> list[dict]:
+    """Сессии Claude Code (`claude agents --json`). Единственное место, где это спрашивают: `sessions.live`
+    тоже идёт сюда (Р-68)."""
+    cmd = [claude or _claude(), "agents", "--json"] + (["--all"] if include_done else [])
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
     try:
         return json.loads(out)
     except json.JSONDecodeError:

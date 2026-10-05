@@ -27,11 +27,9 @@ from pathlib import Path
 
 # id, подпись, значок, теряет ли несохранённое
 def _qdbus_bin() -> str:
-    import shutil
-    for name in ("qdbus-qt6", "qdbus6", "qdbus"):
-        if shutil.which(name):
-            return name
-    return ""
+    from .desktop import qdbus_bin  # одно место поиска qdbus на всё (Р-68)
+
+    return qdbus_bin()
 
 
 
