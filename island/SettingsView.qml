@@ -710,7 +710,7 @@ Item {
         property int decimals: 1
         property real fallback: NaN
         spacing: 10
-        Slider {
+        JSlider {
             id: sl
             implicitWidth: 200
             from: ss.from; to: ss.to; stepSize: ss.step
@@ -721,19 +721,13 @@ Item {
                     return isFinite(ss.fallback) ? ss.fallback : 0
                 return n
             }
-            onPressedChanged: if (!pressed) { win.set(ss.key, Number(value.toFixed(ss.decimals))); win.notify(JD.tr("Сохранено")) }
-            background: Rectangle {
-                x: sl.leftPadding; y: sl.topPadding + sl.availableHeight / 2 - height / 2
-                width: sl.availableWidth; height: 4; radius: 2; color: "#48484a"
-                Rectangle { width: sl.visualPosition * parent.width; height: parent.height; radius: 2; color: win.blue }
-            }
-            handle: Rectangle {
-                x: sl.leftPadding + sl.visualPosition * (sl.availableWidth - width)
-                y: sl.topPadding + sl.availableHeight / 2 - height / 2
-                width: 20; height: 20; radius: 10; color: "white"
-            }
+            thickness: 4
+            knob: true
+            tint: win.blue
+            rail: "#48484a"
+            onMoved: v => { win.set(ss.key, Number(v.toFixed(ss.decimals))); win.notify(JD.tr("Сохранено")) }
         }
-        Text { text: sl.value.toFixed(ss.decimals) + ss.unit; color: win.t2; font.family: win.font; font.pixelSize: 12; Layout.preferredWidth: 52 }
+        Text { text: sl.shown.toFixed(ss.decimals) + ss.unit; color: win.t2; font.family: win.font; font.pixelSize: 12; Layout.preferredWidth: 52 }
     }
 
     component Segmented: Rectangle {

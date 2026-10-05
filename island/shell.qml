@@ -1819,52 +1819,6 @@ ShellRoot {
         }
     }
 
-    // a thin progress line: click or drag to jump
-    component SeekBar: Item {
-        id: sb
-        property real value: 0          // 0…1
-        property color tint: JD.text1
-        property real dragValue: -1
-        property bool live: false       // report every step (volume), not only the release (seeking)
-        property int thickness: 5       // the volume track is thinner: it is not the progress of anything
-        signal seek(real frac)
-        // Ползунок громкости слал значение с каждым пикселем, и демон на каждое пересобирал настройки (Р-31):
-        // шаги реже чем раз в 50 мс не нужны, а последнее положение всё равно придёт — по таймеру или при отпускании.
-        property real pendingValue: -1
-        Timer {
-            id: liveThrottle
-            interval: 50
-            onTriggered: if (sb.pendingValue >= 0) { const v = sb.pendingValue; sb.pendingValue = -1; sb.seek(v) }
-        }
-        implicitHeight: 16
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width
-            height: sbHover.hovered || sb.dragValue >= 0 ? sb.thickness + 2 : sb.thickness
-            radius: height / 2
-            color: Qt.rgba(1, 1, 1, 0.16)
-            Behavior on height { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-            Rectangle {
-                width: parent.width * Math.max(0, Math.min(1, sb.dragValue >= 0 ? sb.dragValue : sb.value))
-                height: parent.height
-                radius: parent.radius
-                color: sb.tint
-            }
-        }
-        HoverHandler { id: sbHover; cursorShape: Qt.PointingHandCursor }
-        MouseArea {
-            anchors.fill: parent
-            function at(x) { return Math.max(0, Math.min(1, x / width)) }
-            onPressed: m => sb.dragValue = at(m.x)
-            onPositionChanged: m => {
-                if (!pressed) return
-                sb.dragValue = at(m.x)
-                if (sb.live) { sb.pendingValue = sb.dragValue; if (!liveThrottle.running) liveThrottle.start() }
-            }
-            onReleased: { liveThrottle.stop(); sb.pendingValue = -1; sb.seek(sb.dragValue); sb.dragValue = -1 }
-        }
-    }
-
     // the live activity: cover · title · bars (a click opens the player)
     component MusicView: View {
         id: mv
@@ -2074,12 +2028,12 @@ ShellRoot {
                              onClicked: { JD.playerOpen = false; JD.expanded = true } }
                 IconButton { icon: "go-up"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
             }
-            SeekBar {
+            JSlider {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
                 tint: pl.tint
                 value: pl.p.duration > 0 ? pl.pos / pl.p.duration : 0
-                onSeek: frac => { const to = frac * (pl.p.duration || 0); JD.media("seek", to); pl.optimistic({ pos: to }) }
+                onMoved: frac => { const to = frac * (pl.p.duration || 0); JD.media("seek", to); pl.optimistic({ pos: to }) }
             }
             RowLayout {
                 Layout.topMargin: -8
@@ -2132,13 +2086,13 @@ ShellRoot {
                                              pl.optimistic({ volume: was > 0 ? 0 : (pl.volumeWas || 70) }); pl.volumeWas = was } }
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
                 }
-                SeekBar {
+                JSlider {
                     Layout.fillWidth: true
                     live: true
                     thickness: 3
                     tint: Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.75)
                     value: (pl.p.volume || 0) / 100
-                    onSeek: frac => { const v = Math.round(frac * 100); JD.media("volume", v); pl.optimistic({ volume: v }) }
+                    onMoved: frac => { const v = Math.round(frac * 100); JD.media("volume", v); pl.optimistic({ volume: v }) }
                 }
                 Label2 {
                     text: Math.round(pl.p.volume || 0) + "%"
@@ -2404,11 +2358,11 @@ ShellRoot {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom
                               leftMargin: 20; rightMargin: 24; bottomMargin: 10 }
                     spacing: 2
-                    SeekBar {
+                    JSlider {
                         Layout.fillWidth: true
                         tint: JD.accentPink
                         value: player.duration > 0 ? player.position / player.duration : 0
-                        onSeek: frac => { player.position = frac * player.duration; vv.ended = false }
+                        onMoved: frac => { player.position = frac * player.duration; vv.ended = false }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -2430,14 +2384,14 @@ ShellRoot {
                             HoverHandler { cursorShape: Qt.PointingHandCursor }
                             TapHandler { onTapped: { JD.setVideoVolume(JD.videoVolume > 0 ? 0 : 1); JD.saveVideoVolume() } }
                         }
-                        SeekBar {
+                        JSlider {
                             visible: vctl.roomy
                             Layout.preferredWidth: 76
                             live: true
                             thickness: 3
                             tint: Qt.rgba(1, 1, 1, 0.8)
                             value: JD.videoVolume
-                            onSeek: frac => JD.setVideoVolume(frac)
+                            onMoved: frac => JD.setVideoVolume(frac)
                         }
                         // скорость: 0.5 … 2, по кругу
                         Rectangle {
@@ -3339,10 +3293,9 @@ ShellRoot {
         property string icon: "audio-volume-high"
         property string label: ""
         property color tint: JD.accentBlue
-        property real dragValue: -1
         signal moved(real v)
         signal muteToggled()
-        readonly property real shown: dragValue >= 0 ? dragValue : Math.max(0, Math.min(1, value))
+        readonly property real shown: vrTrack.shown
         Layout.fillWidth: true
         implicitHeight: 30
         RowLayout {
@@ -3355,44 +3308,16 @@ ShellRoot {
                 MouseArea { id: vrMute; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: vr.muteToggled() }
             }
             Label1 { text: vr.label; font.pixelSize: 13; font.weight: Font.Medium; Layout.preferredWidth: 86 }
-            Item {
+            JSlider {
                 id: vrTrack
                 Layout.fillWidth: true
                 implicitHeight: 30
-                readonly property bool active: vrHover.hovered || vr.dragValue >= 0
-                Rectangle {
-                    id: rail
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width
-                    height: vrTrack.active ? 8 : 6
-                    radius: height / 2
-                    color: JD.fill2
-                    Behavior on height { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                    Rectangle {
-                        width: rail.width * vr.shown
-                        height: parent.height
-                        radius: parent.radius
-                        color: vr.tint
-                        Behavior on width { enabled: JD.animOn && vr.dragValue < 0; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                    }
-                }
-                // the knob: where the level is, and something to take hold of
-                Rectangle {
-                    width: vrTrack.active ? 18 : 14; height: width; radius: width / 2
-                    x: Math.max(0, Math.min(vrTrack.width - width, vrTrack.width * vr.shown - width / 2))
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: "#f5f5f7"
-                    Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                    Behavior on x { enabled: JD.animOn && vr.dragValue < 0; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                }
-                HoverHandler { id: vrHover; cursorShape: Qt.PointingHandCursor }
-                MouseArea {
-                    anchors.fill: parent
-                    function at(x) { return Math.max(0, Math.min(1, x / width)) }
-                    onPressed: m => { vr.dragValue = at(m.x); vr.moved(vr.dragValue) }
-                    onPositionChanged: m => { if (pressed) { vr.dragValue = at(m.x); vr.moved(vr.dragValue) } }
-                    onReleased: { vr.moved(vr.dragValue); vr.dragValue = -1 }
-                }
+                knob: true
+                live: true
+                thickness: 6
+                tint: vr.tint
+                value: vr.value
+                onMoved: v => vr.moved(v)
             }
             Label2 {
                 text: Math.round(vr.shown * 100) + "%"
