@@ -348,27 +348,32 @@ def test_the_chosen_emoji_never_typed_itself_on_plasma(monkeypatch) -> None:
     assert [c[0] for c in ran] == ["wtype", "ydotool"], "порядок попыток изменился молча"
 
 
-def test_server_mode_left_the_room_glowing(monkeypatch) -> None:
+def test_server_mode_left_the_room_glowing(tmp_path, monkeypatch) -> None:
     """«Для человека выключен, для ассистента работает» — а клавиатура и мышь полыхали радугой.
 
     Тёмный экран при светящемся железе не даёт того, ради чего режим задуман: комната всё равно
     светится, ночью заметнее монитора. Гасим подсветку, а прежнюю картину возвращаем профилем
     OpenRGB — только он помнит режимы, скорости и цвета каждой зоны по отдельности.
     """
-    import inspect
-
     from justday import config, server
 
     assert config.DEFAULTS["session"]["server_mode"]["leds_off"] is True, \
         "гашение подсветки пропало из настроек режима сервера"
-    dark = inspect.getsource(server._dark)
-    assert "leds_off" in dark, "режим сервера снова оставляет железо светиться"
-    back = inspect.getsource(server.off)
-    assert "_leds(True)" in back, "подсветку гасим, а вернуть забыли"
-    leds = inspect.getsource(server._leds)
-    assert "--save-profile" in leds, "прежнюю картину не сохраняем — возвращать будет нечего"
-    assert leds.index("--save-profile") < leds.index('"--mode", "static"'), \
-        "сохранение идёт после гашения: сохранится уже погасшее"
+    monkeypatch.setattr(server, "STATE", tmp_path / "state.json")
+    monkeypatch.setattr(server, "_opts", lambda: {"leds_off": True, "screens_off": False,
+                                                    "mute": False, "pause_players": False,
+                                                    "own_desktop": False, "lock": False})
+    monkeypatch.setattr(server, "here", lambda: False)
+    monkeypatch.setattr(server, "_keep_awake", lambda _why: 0)
+    monkeypatch.setattr(server, "_watchdog_on", lambda _hours: True)
+    monkeypatch.setattr(server, "_watchdog_off", lambda: True)
+    calls = []
+    monkeypatch.setattr(server, "_leds", lambda on: calls.append(on) or True)
+
+    assert server.on("ночная работа")["ok"]
+    assert calls == [False], "режим сервера оставил подсветку включённой"
+    assert server.off()["leds_on"] is True
+    assert calls == [False, True], "подсветка погасла, но прежний режим не вернулся"
 
 
 def _island_glyph():

@@ -643,11 +643,6 @@ def test_a_big_tool_answer_used_to_kill_the_whole_night_work() -> None:
     умолчанию рвёт чтение на 64 КиБ («Separator is found, but chunk is longer than limit»), и
     работа валилась через четырнадцать секунд после запуска, не сделав ничего.
     """
-    import inspect
-
-    got = inspect.getsource(terminal._run)
-    assert "limit=" in got, "предел строки не задан — длинный ответ снова уронит работу"
-
     async def go() -> list[str]:
         seen: list[str] = []
         lines, _ = await terminal._run(
@@ -742,16 +737,41 @@ def test_a_pasted_prompt_was_torn_into_pieces_by_its_own_newlines(monkeypatch) -
     assert text.count("\n") == 2, "переводы строк внутри вставки пропали"
 
 
-def test_a_long_task_can_be_handed_over_as_a_file() -> None:
+def test_a_long_task_can_be_handed_over_as_a_file(tmp_path, monkeypatch) -> None:
     """Промпт на сто строк в командную строку не влезает: переводы строк съедает оболочка.
 
     Единственный надёжный способ отдать такую задачу на ночь — файлом или трубой.
     """
-    import inspect
+    task = "Работай по плану.\n" + "- длинный пункт\n" * 100
+    path = tmp_path / "задача.md"
+    path.write_text(task, encoding="utf-8")
+    got = []
 
-    src = inspect.getsource(terminal.run)
-    assert 'task.startswith("@")' in src, "задача файлом (@путь) пропала"
-    assert "isatty" in src, "задача из трубы пропала"
+    async def night(text, **_kwargs):
+        got.append(text)
+        return 0
+
+    monkeypatch.setattr(terminal, "night", night)
+    assert terminal.run([f"@{path}"], over_night=True) == 0
+    assert got == [task.strip()], "многострочная задача из файла дошла не целиком"
+
+
+def test_a_multiline_task_piped_into_night_work_kept_its_paragraphs(monkeypatch) -> None:
+    """Задача через pipe теряла абзацы, хотя командная строка не передавала ни одного аргумента."""
+    import io
+    import sys
+
+    task = "Шаг первый.\n\nШаг второй.\n"
+    got = []
+
+    async def night(text, **_kwargs):
+        got.append(text)
+        return 0
+
+    monkeypatch.setattr(terminal, "night", night)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(task))
+    assert terminal.run([], over_night=True) == 0
+    assert got == [task.strip()], "задача из pipe дошла не целиком"
 
 
 def test_a_whole_page_of_work_was_handed_to_the_weakest_model() -> None:

@@ -13,20 +13,51 @@ from justday import audio, calendar_lane
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_the_speak_button_was_turning_the_voice_off() -> None:
+def test_the_speak_button_was_turning_the_voice_off(monkeypatch) -> None:
     """Он нажимал «говорить», а Джарвис молчал — и сколько ни нажимай, ничего не менялось.
 
     Островок посылает `voice_mute` со словом `on`, означающим «пусть говорит». Демон это слово
     отрицал — выходило «молчи». Кнопка при этом сразу отрисовывалась включённой и через миг
     возвращалась обратно, так что со стороны это выглядело как «не нажимается».
     """
-    island = (ROOT / "island" / "JD.qml").read_text(encoding="utf-8")
-    assert 'send({ cmd: "voice_mute", on: !on })' in island, "островок стал посылать это иначе"
+    import asyncio
+    import json
+    import types
 
-    daemon = (ROOT / "src" / "justday" / "daemon.py").read_text(encoding="utf-8")
-    body = daemon.split('elif cmd == "voice_mute"', 1)[1][:600]
-    assert "set_voice(bool(" in body
-    assert "set_voice(not" not in body, "демон снова понимает «on» наоборот"
+    from justday import daemon, events
+
+    class Reader:
+        async def readline(self):
+            return b'{"cmd":"voice_mute","on":true}\n'
+
+    class Writer:
+        data = b""
+
+        def write(self, data):
+            self.data += data
+
+        async def drain(self):
+            pass
+
+        def close(self):
+            pass
+
+    d = daemon.Daemon.__new__(daemon.Daemon)
+    d.cfg = {"tts": {"muted": True}}
+    d._state = "idle"
+    d.brain = types.SimpleNamespace(busy=False, note=lambda _text: None)
+    d.publish = lambda **_message: None
+    spoken = []
+    d.say = lambda text: spoken.append(text) or asyncio.sleep(0)
+    writer = Writer()
+    monkeypatch.setattr(daemon.config, "set_value", lambda *_args: None)
+    monkeypatch.setattr(events, "emit", lambda *_args, **_kwargs: None)
+    asyncio.run(d._client(Reader(), writer))
+
+    reply = json.loads(writer.data)
+    assert d.cfg["tts"]["muted"] is False, "команда «говори» снова выключила голос"
+    assert reply["muted"] is False, "ответ островку сказал, что голос выключен"
+    assert spoken == ["голос включён"]
 
 
 def test_a_long_story_was_answered_with_the_calendar() -> None:
