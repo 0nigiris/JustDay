@@ -174,16 +174,29 @@ _LABEL_STRIP = re.compile(r"\b(на|через|в|к|at|in|for)?\s*\d+(?:[.,]\d+
                           r"\b(полчаса|полтора часа|полторы минуты|полминуты|часик|час|минуточку|минутку|минуту|секунду)\b", re.I)
 
 
+_POLITE = re.compile(r"\b(пожалуйста|пожалуй|будь добр\w*|please)\b", re.I)
+# «…потому что у меня собрание»: название — то, что после причины, а не вся фраза с вежливостью.
+_BECAUSE = re.compile(r"\b(потому,? что|то,? что|так как|поскольку|ведь|because|since)\s+", re.I)
+_MINE = re.compile(r"^(у меня|у нас|мне надо|мне нужно|мне|надо|нужно)\s+(будет\s+|сегодня\s+|скоро\s+)?", re.I)
+
+
 def _label(text: str) -> str:
     """What the reminder is about: everything that is not the command and not the time."""
-    rest = _LABEL_STRIP.sub(" ", text)
-    for _ in range(6):
-        stripped = _LABEL_CUT.sub("", rest.strip(), count=1)
-        if stripped == rest.strip():
+    rest = _POLITE.sub(" ", _LABEL_STRIP.sub(" ", text))
+    for _ in range(8):
+        # Запятая и пробелы в начале мешали срезать командные слова: после «поставь будильник» оставалось «, …».
+        lead = rest.strip(" ,.;:—-")
+        stripped = _LABEL_CUT.sub("", lead, count=1)
+        if stripped == lead:
+            rest = lead
             break
         rest = stripped
+    cause = _BECAUSE.search(rest)
+    if cause:
+        rest = _MINE.sub("", rest[cause.end():].strip())
     rest = re.sub(r"^\W*(что|чтобы|про|о|об|about|to|that)\b", "", rest.strip(), flags=re.I)
-    return re.sub(r"\s+", " ", rest).strip(" ,.;:—-")
+    rest = re.sub(r"\s+", " ", rest).strip(" ,.;:—-")
+    return rest[:1].upper() + rest[1:]
 
 
 def phrase(rec: dict) -> str:
