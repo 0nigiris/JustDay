@@ -73,7 +73,7 @@ Item {
 
     // Кнопка-кружок нижней полки. Своя, а не IconButton: тот берёт островные 8% белого, которых на
     // этой карточке не видно, и подписи у него нет — а безымянный кружок не нажимают.
-    component ToolDot: Rectangle {
+    component ToolDot: Pressable {
         id: dot
         property string icon: ""
         property string note: ""
@@ -82,13 +82,12 @@ Item {
         implicitWidth: 30
         implicitHeight: 30
         radius: 15
-        color: dotHover.hovered ? mv.fill3 : "transparent"
+        pressScale: JD.pressScaleSmall
+        color: hovered ? mv.fill3 : "transparent"
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-        scale: dotTap.pressed ? JD.pressScaleSmall : 1
-        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dotHover.hovered ? JD.text1 : dot.accent }
-        HoverHandler { id: dotHover; cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, dot.note) }
-        TapHandler { id: dotTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: dot.picked() }
+        onHoveredChanged: mv.hintFor(hovered, dot.note)
+        onClicked: picked()
+        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dot.hovered ? JD.text1 : dot.accent }
     }
 
     function move(step) {
