@@ -323,6 +323,10 @@ DEFAULTS: dict = {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off
         "hover_reveal": True,  # hover the top edge to show the island
         "show_weather": True,
+        "weather_peek": True,      # погода в полоске при наведении на верхний край
+        "weather_expanded": True,  # …и в раскрытом островке
+        "events_peek": True,
+        "events_expanded": True,
         "show_events": True,  # last answer / new mail / Claude status in the hover view
         # Что играет — показывать или нет, и где именно. Полоска (peek) и раскрытая карточка
         # нужны не всем одинаково: один хочет видеть трек всегда, другому он мешает в свёрнутом

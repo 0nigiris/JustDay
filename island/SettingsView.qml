@@ -1546,18 +1546,75 @@ Item {
         id: widgetsPage
         ColumnLayout {
             spacing: 6
-            PageTitle { title: JD.tr("Виджеты"); subtitle: JD.tr("Что показывать, когда вы наводите курсор на верхний край экрана") }
+            PageTitle { title: JD.tr("Что где показывать"); subtitle: JD.tr("Одна галочка — одно место. «Полоска» — то, что видно при наведении на верхний край; «Островок» — раскрытая карточка") }
+            // Галочка на пересечении «что» × «где». Раньше каждое включалось своим выключателем и не везде:
+            // трек можно было убрать из полоски, а погоду — только целиком. Пустая клетка значит «такого нет».
             Group {
-                Row { title: JD.tr("Погода"); subtitle: JD.tr("Open-Meteo, без ключей; в сеть уходит только название города"); Toggle { checked: win.get("island.show_weather") !== false; onToggled: v => win.set("island.show_weather", v) } }
-                Row { title: JD.tr("Город"); subtitle: JD.tr("Пусто — погода не запрашивается"); Field { key: "island.city"; placeholderText: JD.tr("Москва") } }
-                Row { title: JD.tr("Последние события"); subtitle: JD.tr("Последний ответ ассистента, работа Клода"); Toggle { checked: win.get("island.show_events") !== false; onToggled: v => win.set("island.show_events", v) } }
+                id: whereGroup
+                // cells: {ключ: [прочитать, записать]}; «погода» и «события» хранят отдельно полоску и карточку,
+                // а старый общий выключатель (show_weather/show_events) только включается обратно — иначе
+                // человек, выключивший его раньше, не смог бы вернуть погоду ни одной галочкой.
+                function legacy(master, v) { if (v && win.get(master) === false) win.set(master, true) }
+                readonly property var cells: ({
+                    "player.strip": [() => win.get("island.player_peek") !== false, v => win.set("island.player_peek", v)],
+                    "player.card": [() => win.get("island.player_expanded") !== false, v => win.set("island.player_expanded", v)],
+                    "weather.strip": [() => win.get("island.show_weather") !== false && win.get("island.weather_peek") !== false,
+                                      v => { whereGroup.legacy("island.show_weather", v); win.set("island.weather_peek", v) }],
+                    "weather.card": [() => win.get("island.show_weather") !== false && win.get("island.weather_expanded") !== false,
+                                     v => { whereGroup.legacy("island.show_weather", v); win.set("island.weather_expanded", v) }],
+                    "events.strip": [() => win.get("island.events_peek") !== false,
+                                     v => { whereGroup.legacy("island.show_events", v); win.set("island.events_peek", v) }],
+                    "events.card": [() => win.get("island.events_expanded") !== false, v => win.set("island.events_expanded", v)],
+                    // Кошка на полосе одна: у часов или среди значков лотка — отсюда эти две клетки не независимы.
+                    "cat.strip": [() => win.get("island.cat") === true && win.get("island.cat_place") !== "tray",
+                                  v => { win.set("island.cat_place", "clock"); win.set("island.cat", v) }],
+                    "cat.tray": [() => win.get("island.cat") === true && win.get("island.cat_place") === "tray",
+                                 v => { win.set("island.cat_place", "tray"); win.set("island.cat", v) }],
+                    "cat.dock": [() => win.get("dock.cat") !== false, v => win.set("dock.cat", v)],
+                    "clock.dock": [() => win.get("dock.clock") === true, v => win.set("dock.clock", v)]
+                })
+                readonly property var places: [["strip", "Полоска"], ["card", "Островок"], ["dock", "Док"], ["tray", "Лоток"]]
+                readonly property var things: [["player", "Плеер"], ["weather", "Погода"], ["events", "События"], ["cat", "Кошка"], ["clock", "Часы"]]
+                GridLayout {
+                    columns: 5
+                    columnSpacing: 0
+                    rowSpacing: 0
+                    Layout.fillWidth: true
+                    Layout.margins: 12
+                    Item { Layout.preferredHeight: 34; Layout.fillWidth: true }
+                    Repeater {
+                        model: whereGroup.places
+                        Text { text: JD.tr(modelData[1]); color: win.t2; font.family: win.font; font.pixelSize: 12; font.weight: Font.DemiBold
+                               horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+                    }
+                    Repeater {
+                        model: whereGroup.things.length * 5
+                        Item {
+                            id: cell
+                            readonly property int r: Math.floor(index / 5)
+                            readonly property int c: index % 5
+                            readonly property var def: c === 0 ? null : whereGroup.cells[whereGroup.things[r][0] + "." + whereGroup.places[c - 1][0]]
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            Layout.preferredHeight: 38
+                            Text {
+                                visible: cell.c === 0
+                                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                                text: JD.tr(whereGroup.things[cell.r][1]); color: win.t1; font.family: win.font; font.pixelSize: 13
+                            }
+                            Text { visible: cell.c > 0 && !cell.def; anchors.centerIn: parent; text: "—"; color: win.t2; opacity: 0.5; font.family: win.font; font.pixelSize: 13 }
+                            Toggle {
+                                visible: !!cell.def
+                                anchors.centerIn: parent
+                                checked: cell.def ? cell.def[0]() : false
+                                onToggled: v => cell.def[1](v)
+                            }
+                        }
+                    }
+                }
             }
-            // Плеер нужен не всем одинаково: одному трек нужен всегда, другому он мешает в
-            // свёрнутом виде и нужен только в раскрытом. Раньше выбора не было вовсе, а
-            // источником был жёстко вписанный Spotify — у всех остальных полоска пустовала.
             Group {
-                Row { title: JD.tr("Трек в полоске"); subtitle: JD.tr("Что играет — в свёрнутом виде, при наведении на верхний край"); Toggle { checked: win.get("island.player_peek") !== false; onToggled: v => win.set("island.player_peek", v) } }
-                Row { title: JD.tr("Плеер в раскрытом островке"); subtitle: JD.tr("Карточка с обложкой, перемоткой и громкостью"); Toggle { checked: win.get("island.player_expanded") !== false; onToggled: v => win.set("island.player_expanded", v) } }
+                Row { title: JD.tr("Город"); subtitle: JD.tr("Пусто — погода не запрашивается"); Field { key: "island.city"; placeholderText: JD.tr("Москва") } }
                 Row { title: JD.tr("Кого показывать первым"); subtitle: JD.tr("Через запятую. Если играет несколько сразу — покажем того, кто выше в списке"); Field { key: "island.player_prefer"; placeholderText: "spotify, youtube" } }
                 Row { title: JD.tr("Кого не показывать"); subtitle: JD.tr("Через запятую. Сюда просится браузер, если он играет рекламу в соседней вкладке"); Field { key: "island.player_ignore"; placeholderText: "firefox, chromium" } }
             }

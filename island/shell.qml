@@ -1359,8 +1359,8 @@ ShellRoot {
                 color: pv.fg
             }
             EqBars { visible: !!pv.spot; tint: JD.accentPink; playing: true }
-            Rectangle { visible: !!pv.event; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
-            Label2 { visible: !!pv.event; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : pv.fg2 }
+            Rectangle { visible: !!pv.event && JD.island.events_peek !== false; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
+            Label2 { visible: !!pv.event && JD.island.events_peek !== false; text: pv.event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap; Layout.maximumWidth: 260; color: JD.workers > 0 ? JD.accentPurple : pv.fg2 }
             // a running timer, the way the phone shows one: the number, not a logo
             Rectangle { visible: !!JD.runningTimer; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             RowLayout {
@@ -1393,9 +1393,9 @@ ShellRoot {
                 // Нажатие прямо здесь возвращает голос: пометка — она же и кнопка.
                 TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: JD.setMuted(false) }
             }
-            Rectangle { visible: !!JD.weather && JD.island.show_weather !== false; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
+            Rectangle { visible: !!JD.weather && JD.island.show_weather !== false && JD.island.weather_peek !== false; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             RowLayout {
-                visible: !!JD.weather && JD.island.show_weather !== false
+                visible: !!JD.weather && JD.island.show_weather !== false && JD.island.weather_peek !== false
                 spacing: 6
                 Image { source: JD.weather ? Quickshell.shellDir + "/icons/" + JD.weather.icon + ".svg" : ""; sourceSize: Qt.size(36, 36); Layout.preferredWidth: 18; Layout.preferredHeight: 18 }
                 Text { text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : ""; color: pv.fg; font.family: JD.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold }
@@ -1898,14 +1898,14 @@ ShellRoot {
                                                 : JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
                                                 : JD.runningJob ? JD.runningJob.title + " · " + JD.jobTime(JD.runningJob)
                                                 : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title : ""
-                visible: !!event
+                visible: !!event && (mv.busy || JD.island.events_expanded !== false)
                 text: event.replace(/\s+/g, " "); maximumLineCount: 1; wrapMode: Text.NoWrap
                 elide: Text.ElideRight
                 Layout.maximumWidth: 170
                 color: mv.busy ? JD.accentBlue : JD.workers > 0 ? JD.accentPurple : JD.text2
             }
             RowLayout {
-                visible: !!JD.weather && JD.island.show_weather !== false
+                visible: !!JD.weather && JD.island.show_weather !== false && JD.island.weather_expanded !== false
                 spacing: 5
                 Image { source: JD.weather ? Quickshell.shellDir + "/icons/" + JD.weather.icon + ".svg" : ""; sourceSize: Qt.size(32, 32); Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
                 Text { text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : ""; color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 13; font.weight: Font.DemiBold }
