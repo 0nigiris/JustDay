@@ -10,6 +10,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "barTray.js" as BarTray
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
@@ -194,6 +195,12 @@ ShellRoot {
         function trayRows(): string { return trayMenu.report() }
         function traySub(n: int): string { return trayMenu.poke(n) }
         function trayClose(): void { JD.closeTrayMenu() }
+        // Карточка под правым краем полосы без мыши ("" закрывает, tray — скрытые значки, bt, net) и
+        // что на полосе: сколько значков на виду и сколько ушло под шеврон.
+        function barPage(page: string): string {
+            barStatus.page = page
+            return JSON.stringify({ page: barStatus.page, shown: barStatus.trayCount, hidden: barStatus.trayHiddenCount })
+        }
     }
 
     // test backdrop (JUSTDAY_ISLAND_WALLPAPER=1 or a picture path): a "wallpaper" so the black island is visible in headless sessions
@@ -475,7 +482,7 @@ ShellRoot {
             item: win.modal ? backdrop
                 : (win.edgeReveal && island.mode === "hidden") ? revealPad
                 : island
-            Region { item: barStatus.page !== "" ? linkPop : null }
+            Region { item: barStatus.page === "tray" ? trayPop : barStatus.page !== "" ? linkPop : null }
         }
 
         MouseArea {
@@ -801,8 +808,14 @@ ShellRoot {
                 readonly property bool showLang: JD.barLang && JD.layoutShort !== ""
                 readonly property bool showBt: JD.barBt
                 readonly property bool showNet: JD.barNet
-                readonly property var trayItems: SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
-                visible: island.barDock && (showLang || showBt || showNet || trayItems.length > 0)
+                // Весь список трея, а не отфильтрованный: Repeater над свежим массивом пересобирал бы все
+                // значки при каждом событии (barTray.js). Лишние прячутся через visible.
+                readonly property int trayMax: Math.max(2, Math.min(16, (JD.island.bar_tray_max || 8)))
+                function trayShown(it) { return JD.trayShows(it) && it.status !== Status.Passive }
+                function inBar(it) { return BarTray.inBar(SystemTray.items.values, it, trayShown, trayMax) }
+                readonly property int trayHiddenCount: BarTray.overflow(SystemTray.items.values, trayShown, trayMax)
+                readonly property int trayCount: SystemTray.items.values.filter(i => !!i && inBar(i)).length
+                visible: island.barDock && (showLang || showBt || showNet || trayCount > 0 || trayHiddenCount > 0)
                 z: 4
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 10 }
                 width: statusRow.implicitWidth + 12
@@ -843,75 +856,35 @@ ShellRoot {
                             CatCarry { cat: trayCat }
                         }
                     }
+                    // Шеврон: скрытые, пассивные и не влезшие значки живут в карточке под ним.
+                    Rectangle {
+                        visible: barStatus.trayHiddenCount > 0
+                        implicitWidth: 24; implicitHeight: 26; radius: 13
+                        color: barStatus.page === "tray" || chevHit.containsMouse ? JD.fill2 : "transparent"
+                        Icon {
+                            anchors.centerIn: parent
+                            name: "chevron-down"
+                            implicitSize: 14
+                            opacity: 0.9
+                            rotation: barStatus.page === "tray" ? 180 : 0
+                            Behavior on rotation { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
+                        }
+                        MouseArea {
+                            id: chevHit
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: barStatus.page = barStatus.page === "tray" ? "" : "tray"
+                        }
+                    }
                     Repeater {
-                        model: barStatus.trayItems
-                        delegate: Item {
-                            id: barTray
-                            required property var modelData
-                            implicitWidth: JD.barTraySize + 10
-                            implicitHeight: JD.barTraySize + 10
-                            // Те же движения, что у лотка (TrayView): рамка под рукой, значок
-                            // подрастает, при нажатии проседает до 0.88. Раньше на полосе значки
-                            // не отвечали ничем, и было непонятно, попал ли курсор.
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: barTrayIcon.width * barTrayIcon.scale + 8
-                                height: width
-                                radius: Math.round(height * 0.3)
-                                color: "transparent"
-                                border.width: 1
-                                border.color: Qt.rgba(1, 1, 1, barTrayHit.pressed ? 0.34 : 0.22)
-                                opacity: barTrayHit.containsMouse && JD.trayCfg.hover_frame !== false ? 1 : 0
-                                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            }
-                            Image {
-                                id: barTrayIcon
-                                anchors.centerIn: parent
-                                width: JD.barTraySize
-                                height: JD.barTraySize
-                                sourceSize: Qt.size(JD.barTraySize * 2, JD.barTraySize * 2)
-                                source: barTray.modelData.icon || ""
-                                fillMode: Image.PreserveAspectFit
-                                // без asynchronous: image://icon в фоновом потоке роняет KIconLoader (Icon.qml)
-                                scale: barTrayHit.pressed ? JD.pressScaleSmall : barTrayHit.containsMouse ? 1.15 : 1
-                                Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                                // Та же вуаль, что у значков дока и лотка (Icon.qml): цвета остаются, подтягивается яркость.
-                                readonly property string wash: JD.trayWash(barTray.modelData)
-                                layer.enabled: wash !== "none"
-                                layer.effect: MultiEffect {
-                                    colorization: barTrayIcon.wash === "mono" ? 0 : barTrayIcon.wash === "tinted" ? 0.42 : barTrayIcon.wash === "clear" ? 0.28 : 0.18
-                                    colorizationColor: barTrayIcon.wash === "tinted" ? (String(JD.trayCfg.icon_tint || "").trim() || "#7AC8FF")
-                                                       : barTrayIcon.wash === "clear" ? "#FFFFFF" : "#E8EEF6"
-                                    brightness: barTrayIcon.wash === "clear" ? 0.22 : barTrayIcon.wash === "light" ? 0.14 : barTrayIcon.wash === "tinted" ? 0.06 : 0
-                                    saturation: barTrayIcon.wash === "mono" ? 0 : barTrayIcon.wash === "tinted" ? 0.55 : barTrayIcon.wash === "clear" ? 0.75 : 0.9
-                                }
-                            }
-                            MouseArea {
-                                id: barTrayHit
-                                anchors.fill: parent
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: mouse => {
-                                    const it = barTray.modelData
-                                    if (mouse.button === Qt.MiddleButton) { it.secondaryActivate(); return }
-                                    if (mouse.button === Qt.RightButton || (it.onlyMenu && it.hasMenu)) {
-                                        if (JD.trayMenu === it) { JD.closeTrayMenu(); return }
-                                        const p = barTray.mapToItem(null, barTray.width, barTray.height + 8)
-                                        JD.trayMenuFromBar = true
-                                        JD.openTrayMenu(it, p.x, p.y)
-                                        return
-                                    }
-                                    JD.closeTrayMenu()
-                                    it.activate()
-                                    JD.trayWake(it)
-                                }
-                                onWheel: wheel => barTray.modelData.scroll(wheel.angleDelta.y, false)
-                            }
+                        model: SystemTray.items
+                        delegate: BarTrayIcon {
+                            visible: barStatus.inBar(modelData)
                         }
                     }
                     Rectangle {
-                        visible: barStatus.trayItems.length > 0 && (barStatus.showLang || barStatus.showBt || barStatus.showNet)
+                        visible: barStatus.trayCount > 0 && (barStatus.showLang || barStatus.showBt || barStatus.showNet)
                         implicitWidth: 1
                         implicitHeight: 16
                         color: JD.fill2
@@ -1053,10 +1026,45 @@ ShellRoot {
             }
         }
 
+        // Скрытые значки трея: то, что убрано из полосы, но не выброшено.
+        Rectangle {
+            id: trayPop
+            visible: barStatus.page === "tray"
+            z: 6
+            width: Math.min(280, trayFlow.implicitWidth + 24)
+            height: trayFlow.implicitHeight + 24
+            radius: 18
+            color: JD.ink
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+            x: {
+                const p = barStatus.mapToItem(trayPop.parent, 0, 0)
+                return Math.max(8, Math.min(parent.width - width - 8, p.x + barStatus.width - width))
+            }
+            y: {
+                const p = barStatus.mapToItem(trayPop.parent, 0, 0)
+                return p.y + barStatus.height + 8
+            }
+            Flow {
+                id: trayFlow
+                x: 12
+                y: 12
+                width: 256
+                spacing: 4
+                Repeater {
+                    model: SystemTray.items
+                    delegate: BarTrayIcon {
+                        visible: !barStatus.inBar(modelData)
+                        onUsed: barStatus.page = ""
+                    }
+                }
+            }
+        }
+
         // Короткая карточка сети или Bluetooth под правым краем полосы.
         Rectangle {
             id: linkPop
-            visible: barStatus.page !== ""
+            visible: barStatus.page === "bt" || barStatus.page === "net"
             z: 6
             width: 280
             height: linkCol.implicitHeight + 28

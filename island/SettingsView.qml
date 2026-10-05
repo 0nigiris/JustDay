@@ -1176,6 +1176,12 @@ Item {
                 }
                 Row {
                     visible: win.get("island.style") === "bar"
+                    title: JD.tr("Значков трея на полосе")
+                    subtitle: JD.tr("Остальные, скрытые и неактивные уходят под стрелку рядом с ними")
+                    SSlider { key: "island.bar_tray_max"; from: 2; to: 16; step: 1; decimals: 0; unit: ""; fallback: 8 }
+                }
+                Row {
+                    visible: win.get("island.style") === "bar"
                     title: JD.tr("Язык")
                     subtitle: JD.tr("Две буквы справа на полосе. Нажатие переключает раскладку и не открывает островок")
                     Toggle { checked: win.get("island.bar_lang") !== false; onToggled: v => win.set("island.bar_lang", v) }
