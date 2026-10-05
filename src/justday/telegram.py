@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -293,3 +294,56 @@ def location(update: dict) -> tuple[float, float] | None:
             except (KeyError, TypeError, ValueError):
                 return None
     return None
+
+
+class PinGate:
+    """Второй фактор для бота (Р-9 ревизии): угнанный Telegram-аккаунт не должен давать мозг и оболочку.
+
+    Одной проверки `chat.id == владелец` мало: тот, кто залез в аккаунт, пишет из того же чата. Поэтому, если в
+    связке лежит `telegram_pin`, команды принимаются только после того, как PIN прислан сообщением, — и так
+    сутки; перезапуск демона запирает снова. Неверные попытки считаются только у сообщений, похожих на PIN
+    (цифры той же длины): человек, забывший про замок и написавший «включи музыку», себя не заблокирует,
+    а перебор шести цифр упирается в паузу: пять промахов — пятнадцать минут тишины.
+
+    Сам PIN не хранится нигде, кроме связки, и сравнивается за постоянное время."""
+
+    OPEN_S = 24 * 3600
+    MAX_MISSES = 5
+    LOCK_S = 15 * 60
+
+    def __init__(self, pin=lambda: providers.secret_get("telegram_pin"), clock=time.monotonic) -> None:
+        self._pin, self._clock = pin, clock
+        self.until = 0.0
+        self.misses = 0
+        self.locked_until = 0.0
+
+    def check(self, text: str) -> str:
+        """«open» — пропустить; «unlocked» — только что открыли (сообщение с PIN надо стереть); «denied» —
+        похоже на PIN, но неверный; «locked» — слишком много промахов; «need» — нужен PIN."""
+        import hmac
+
+        pin = (self._pin() or "").strip()
+        now = self._clock()
+        if not pin or now < self.until:
+            return "open"
+        if now < self.locked_until:
+            return "locked"
+        said = (text or "").strip()
+        if said and hmac.compare_digest(said.encode(), pin.encode()):
+            self.until, self.misses = now + self.OPEN_S, 0
+            return "unlocked"
+        if said.isdigit() and len(said) == len(pin):
+            self.misses += 1
+            if self.misses >= self.MAX_MISSES:
+                self.locked_until, self.misses = now + self.LOCK_S, 0
+                return "locked"
+            return "denied"
+        return "need"
+
+
+PIN_REPLY = {
+    "need": "Нужен PIN: пришлите его одним сообщением — открою на сутки.",
+    "unlocked": "Открыто на сутки.",
+    "denied": "Неверный PIN.",
+    "locked": "Слишком много попыток. Подождите пятнадцать минут.",
+}

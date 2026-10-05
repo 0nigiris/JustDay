@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import base64
 import contextlib
 import http.server
 import json
@@ -49,6 +50,11 @@ PREMIUM = ("900", "901", "902", "803", "806", "807", "905", "907")
 # Разговор «вы сегодня открыты?» дольше полутора минут не бывает. Потолок стоит затем, что
 # худший случай — это шестьдесят центов, а не незамеченный час в цикле.
 MAX_SECONDS = 90
+# Событие звонка — крошечный JSON. Тело больше этого — не от Telnyx; читать его до конца значит дать любому,
+# кто нашёл адрес туннеля, забивать память демона.
+MAX_BODY = 64 * 1024
+# Подпись Telnyx вместе с меткой времени; старше — повтор чужого перехваченного события.
+TOLERANCE_S = 300
 
 
 def key() -> str:
@@ -69,6 +75,9 @@ def ready() -> tuple[bool, str]:
         return False, "нет своего номера: justday config set phone.telnyx.from +1XXXXXXXXXX"
     if not s.get("app_id"):
         return False, "нет приложения Call Control: justday config set phone.telnyx.app_id XXXX"
+    if not s.get("public_key"):
+        return False, ("нет публичного ключа вебхуков: портал Telnyx → Keys & Credentials → Public Key, затем "
+                       "justday config set phone.telnyx.public_key КЛЮЧ (без него события звонка нечем проверить)")
     import shutil
     if not shutil.which("cloudflared"):
         return False, "нет cloudflared: sudo dnf install cloudflared (нужен для адреса событий)"
@@ -102,15 +111,47 @@ def check_number(to: str) -> str:
     return num
 
 
+def verify(public_key: str, signature: str, timestamp: str, body: bytes, now: float | None = None) -> bool:
+    """Подпись события Telnyx (Ed25519 по «метка|тело»). Любая неясность — «нет»: этот адрес виден всему интернету.
+
+    Без проверки любой, кто узнал адрес туннеля, подставлял свой `call_control_id` — а он уходит в запросы к
+    Telnyx с нашим ключом (Р-7 ревизии)."""
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+        if abs((time.time() if now is None else now) - int(timestamp)) > TOLERANCE_S:
+            return False
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key)).verify(
+            base64.b64decode(signature), timestamp.encode() + b"|" + body)
+        return True
+    except Exception:
+        return False
+
+
 class _Hook(http.server.BaseHTTPRequestHandler):
     """Слушает только 127.0.0.1. Наружу его выводит туннель, а не открытый интерфейс."""
 
     said: ClassVar[dict] = {}
+    public_key: ClassVar[str] = ""
+
+    def _refuse(self, code: int) -> None:
+        self.send_response(code)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_POST(self) -> None:          # имя с большой буквы задано базовым классом, не нами
-        length = int(self.headers.get("Content-Length") or 0)
         try:
-            event = json.loads(self.rfile.read(length).decode() or "{}")
+            length = int(self.headers.get("Content-Length") or "")
+        except ValueError:
+            return self._refuse(411)    # без длины тела не читаем: «до конца соединения» — это бесконечность
+        if not 0 <= length <= MAX_BODY:
+            return self._refuse(413)
+        raw = self.rfile.read(length)
+        if not verify(_Hook.public_key, self.headers.get("telnyx-signature-ed25519") or "",
+                      self.headers.get("telnyx-timestamp") or "", raw):
+            return self._refuse(403)
+        try:
+            event = json.loads(raw.decode() or "{}")
         except ValueError:
             event = {}
         self.send_response(200)
@@ -119,8 +160,9 @@ class _Hook(http.server.BaseHTTPRequestHandler):
         data = (event.get("data") or {}).get("payload") or {}
         kind = (event.get("data") or {}).get("event_type") or ""
         ccid = data.get("call_control_id") or ""
-        job = _Hook.said.get(ccid) or _Hook.said.get("*")
-        if not job or not ccid:
+        # Только звонок, который создали мы сами: чужой ccid не получит от нас ни одного запроса к Telnyx.
+        job = _Hook.said.get(ccid) if ccid else None
+        if not job:
             return
         if kind == "call.answered":
             job["answered"] = time.time()
@@ -190,7 +232,8 @@ def call(to: str, text: str, *, seconds: int = MAX_SECONDS) -> dict:
     tun = None
     job = {"text": text[:3000], "voice": s.get("voice", "female"),
            "language": s.get("language", "ru-RU"), "answered": 0.0, "done": False}
-    _Hook.said = {"*": job}
+    _Hook.said = {}
+    _Hook.public_key = str(s.get("public_key") or "")
     try:
         tun, url = _tunnel(port)
         _api("PATCH", f"/call_control_applications/{s['app_id']}",
@@ -198,7 +241,7 @@ def call(to: str, text: str, *, seconds: int = MAX_SECONDS) -> dict:
         got = _api("POST", "/calls", {"connection_id": str(s["app_id"]), "to": num,
                                       "from": s["from"], "timeout_secs": 30})
         ccid = got.get("call_control_id") or ""
-        _Hook.said = {ccid: job, "*": job}
+        _Hook.said = {ccid: job}
         limit = max(10, min(MAX_SECONDS, int(seconds)))
         deadline = time.monotonic() + limit + 35      # +35 на гудки до ответа
         while time.monotonic() < deadline and not job["done"]:

@@ -969,6 +969,7 @@ class Daemon:
 
         if not tg.ready():
             return
+        self._tg_gate = tg.PinGate()
         loop = asyncio.get_running_loop()
         offset = 0
         quiet = 0.0
@@ -992,6 +993,15 @@ class Daemon:
                     geo.remember(*where)    # координаты нужны наблюдателю; в мозг они не идут
                     continue
                 if not tg.owned(upd):
+                    continue
+                verdict = self._tg_gate.check(tg.mine(upd))
+                if verdict != "open":
+                    msg = upd.get("message") or {}
+                    with contextlib.suppress(Exception):
+                        if verdict in ("unlocked", "denied"):   # PIN не должен оставаться в переписке
+                            await loop.run_in_executor(None, tg.call, "deleteMessage",
+                                                       {"chat_id": tg.chat(), "message_id": msg.get("message_id")})
+                        await loop.run_in_executor(None, tg.send, tg.PIN_REPLY[verdict])
                     continue
                 if self._telegram_shell is None:
                     from .telegram_shell import TelegramShell

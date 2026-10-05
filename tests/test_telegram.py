@@ -173,3 +173,31 @@ def test_remote_ladder_keeps_opencode_but_only_through_the_permission_bridge(mon
     shell = telegram_shell.TelegramShell(SimpleNamespace())
     assert [r.engine for r in shell.work.rungs] == ["claude", "opencode"]
     assert shell.work.bridge is True and shell.work.skipped == []
+
+
+def test_a_hijacked_telegram_account_cannot_reach_the_brain_without_the_pin() -> None:
+    """Р-9: одной проверки «это чат владельца» мало — угнанный аккаунт пишет из того же чата."""
+    now = [1000.0]
+    gate = telegram.PinGate(pin=lambda: "482913", clock=lambda: now[0])
+    assert gate.check("/задача удалить всё") == "need" and gate.check("") == "need"
+    assert gate.check("включи музыку") == "need", "забывчивый владелец не должен получать счётчик промахов"
+    assert gate.check("482913") == "unlocked"
+    assert gate.check("/задача что-то") == "open"
+    now[0] += 24 * 3600 + 1
+    assert gate.check("/задача что-то") == "need", "через сутки замок закрылся обратно"
+
+
+def test_guessing_the_pin_runs_into_a_pause() -> None:
+    now = [0.0]
+    gate = telegram.PinGate(pin=lambda: "482913", clock=lambda: now[0])
+    for guess in ("000001", "000002", "000003", "000004"):
+        assert gate.check(guess) == "denied"
+    assert gate.check("000005") == "locked"
+    assert gate.check("482913") == "locked", "верный PIN принят посреди паузы — перебор не остановлен"
+    now[0] += telegram.PinGate.LOCK_S + 1
+    assert gate.check("482913") == "unlocked"
+
+
+def test_without_a_pin_in_the_keyring_the_bot_works_as_before() -> None:
+    gate = telegram.PinGate(pin=lambda: "")
+    assert gate.check("/задача x") == "open"

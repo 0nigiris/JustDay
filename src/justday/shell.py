@@ -184,7 +184,8 @@ def ensure() -> None:
     # Правила: общие для всех сессий и правила самого проекта.
     want = [str(RULES), "AGENTS.md"]
     conf["instructions"] = sorted(set([*(conf.get("instructions") or []), *want]))
-    SETTINGS.write_text(json.dumps(conf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # 0600: сюда копируются env и заголовки MCP-серверов, а в них бывают токены.
+    config.write_private(SETTINGS, json.dumps(conf, ensure_ascii=False, indent=2) + "\n")
 
 
 def logged_in() -> set[str]:

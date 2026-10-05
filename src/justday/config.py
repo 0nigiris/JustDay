@@ -85,6 +85,21 @@ def _mcp_secret(name: str) -> str:
     return ""
 
 
+def write_private(path, text: str) -> None:
+    """Записать файл так, чтобы он ни на миг не был читаем другим: временный файл создаётся сразу с 0600 и
+    подменяет настоящий. Прежнее «записать, потом chmod» оставляло окно, в котором чужой процесс мог прочесть
+    ключи; а `write_text` поверх существующего файла сохраняет его прежние, возможно открытые, права."""
+    path = Path(path)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def set_secret(name: str, value: str) -> None:
     """Put a key into the desktop keyring (or drop it when value is empty), and out of secrets.env."""
     _KEYRING_CACHE.pop(name, None)
@@ -104,7 +119,7 @@ def _drop_from_file(name: str) -> None:
         return
     keep = [ln for ln in lines if ln.partition("=")[0].strip() != name]
     if keep != lines:
-        SECRETS_FILE.write_text("".join(ln + "\n" for ln in keep), encoding="utf-8")
+        write_private(SECRETS_FILE, "".join(ln + "\n" for ln in keep))
 
 
 def migrate_secrets_file() -> list[str]:
@@ -521,7 +536,8 @@ DEFAULTS: dict = {
     # Настоящий звонок (`src/justday/telnyx.py`). Ключ живёт только в связке ключей под именем
     # telnyx — здесь его нет и быть не должно: конфиг уезжает в репозиторий, связка нет.
     # from — купленный номер, app_id — приложение Call Control из портала. Пусто — звонков нет.
-    "phone": {"telnyx": {"from": "", "app_id": "", "voice": "female", "language": "ru-RU"}},
+    "phone": {"telnyx": {"from": "", "app_id": "", "voice": "female", "language": "ru-RU",
+                         "public_key": ""}},   # публичный ключ вебхуков (не секрет): подпись событий звонка
     # Оболочка в терминале (`justday terminal`): один терминал, лестница движков.
     #
     # Порядок — это и есть приоритет: «сначала Клод, потом ChatGPT, потом что осталось». Ступень
