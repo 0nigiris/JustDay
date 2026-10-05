@@ -19,7 +19,6 @@ from . import (
 log = logging.getLogger("justday.daemon")
 
 
-
 class WatchersMixin:
     async def _watch_notifications(self) -> None:
         """Mirror desktop notifications onto the island (read-only eavesdrop; Plasma still shows and owns them).
