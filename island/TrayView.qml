@@ -302,6 +302,18 @@ Item {
 
     readonly property Rectangle blurItem: strip
 
+    // Тень полосы — готовая картинка по её размеру, а не `layer` с размытием: полоса меняет размер
+    // физикой каждый кадр, и слой с тенью пересоздавался и размывался на каждом из них (Р-43).
+    BorderImage {
+        source: Quickshell.shellDir + "/shadow.png"
+        border { left: 64; top: 64; right: 64; bottom: 64 }
+        x: strip.x - 48
+        y: strip.y - 48 + 3
+        width: strip.width + 96
+        height: strip.height + 96
+        opacity: 0.6
+    }
+
     Rectangle {
         id: strip
         anchors.fill: parent
@@ -313,13 +325,6 @@ Item {
         // как вторая, лишняя граница рядом с краем значков — а на светлых просто мусорит.
         // Форму ей задаёт заливка, а объём — блик сверху и тень под ней.
         border.width: 0
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowBlur: 0.9
-            shadowOpacity: 0.34
-            shadowVerticalOffset: 3
-        }
 
         // Блик по верхней кромке: он и отделяет полосу от обоев, и не превращается в рамку.
         Rectangle {

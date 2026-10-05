@@ -4645,28 +4645,18 @@ ShellRoot {
         }
 
         // Тень. Без неё карточка лежит на обоях, а не над ними, и никакая раскраска этого не
-        // заменит: «поверх» глаз читает по тени, а не по цвету. Рисуется по пустому прямоугольнику
-        // той же формы — саму карточку через эффект не пропустишь, она живая и принимает нажатия.
-        Rectangle {
-            id: menuShadowShape
-            visible: false
-            layer.enabled: true
-            x: menuCard.x
-            y: menuCard.y
-            width: menuCard.width
-            height: menuCard.height
-            radius: menuCard.radius
-            color: "#000000"
-        }
-        MultiEffect {
-            source: menuShadowShape
-            x: menuShadowShape.x
-            y: menuShadowShape.y + 8
-            width: menuShadowShape.width
-            height: menuShadowShape.height
-            blurEnabled: true
-            blur: 1.0
-            blurMax: 48
+        // заменит: «поверх» глаз читает по тени, а не по цвету. Это готовая размытая картинка,
+        // растянутая по размеру карточки (девять частей: углы не тянутся, середина тянется). Раньше тень
+        // была `MultiEffect` с размытием по источнику, у которого высота идёт `SpringAnimation`:
+        // текстура пересоздавалась и размывалась каждый кадр, на 165 Гц (Р-43). Картинка размером
+        // не интересуется. Внутренняя «карточка» в ней отступает на 48 точек от края, поэтому и рамка шире на 48.
+        BorderImage {
+            source: Quickshell.shellDir + "/shadow.png"
+            border { left: 64; top: 64; right: 64; bottom: 64 }
+            x: menuCard.x - 48
+            y: menuCard.y - 48 + 8
+            width: menuCard.width + 96
+            height: menuCard.height + 96
             opacity: (JD.menuOpen ? 0.5 : 0) * menuCard.opacity
             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160 } }
         }
