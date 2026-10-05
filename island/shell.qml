@@ -1958,12 +1958,46 @@ ShellRoot {
         onShownChanged: if (!shown) queueOpen = false
         function optimistic(change) { JD.player = Object.assign({}, JD.player, change); JD.playerAt = Date.now() }
         // the cover's colour glows through from the top
+        // Скругление то же, что у острова (30): подложка была прямоугольной, и её верхние углы торчали
+        // из-под дуги карточки (Р-46). `clip` у острова обрезает по прямоугольнику, а не по дуге.
         Rectangle {
             anchors.fill: parent
+            radius: 30
             gradient: Gradient {
                 GradientStop { position: 0; color: Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.26) }
                 GradientStop { position: 0.6; color: "transparent" }
             }
+        }
+        // Свечение от обложки, как у «Ambient light for YouTube» (Р-47): обложка в 48 точек, растянутая на
+        // всю ширину, сама по себе размыта — шейдера с размытием нет, а значит и счёта за него каждый кадр.
+        // Маска даёт округлые верхние углы и затухание вниз; всё статично и пересчитывается раз на трек.
+        Image {
+            id: glowCover
+            visible: false
+            source: pl.p.thumb || ""
+            sourceSize: Qt.size(48, 48)
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            asynchronous: true
+        }
+        Rectangle {
+            id: glowMask
+            visible: false
+            layer.enabled: true
+            anchors.fill: parent
+            radius: 30
+            gradient: Gradient {
+                GradientStop { position: 0; color: "white" }
+                GradientStop { position: 0.65; color: "transparent" }
+            }
+        }
+        MultiEffect {
+            anchors.fill: parent
+            source: glowCover
+            maskEnabled: true
+            maskSource: glowMask
+            opacity: glowCover.status === Image.Ready ? 0.42 : 0
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 600 } }
         }
         // колесо над плеером — громкость, как над любым плеером
         WheelHandler {
