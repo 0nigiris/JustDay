@@ -1155,7 +1155,13 @@ def main(argv: list[str] | None = None) -> None:
         if st["local_changes"]:
             sys.exit("в папке JustDay есть ваши изменения — обновление остановлено, чтобы их не потерять (git stash)")
         print(f"Обновляю: {st['behind']} изменений\n  " + "\n  ".join(st["changes"]))
-        if subprocess.run(["git", "-C", str(config.REPO_DIR), "pull", "--ff-only", "--quiet"]).returncode != 0:
+        git_run = lambda *g: subprocess.run(["git", "-C", str(config.REPO_DIR), *g]).returncode  # noqa: E731
+        ch = st["branch"]
+        if st.get("on") != ch:      # ставились из main, а канал другой: переезжаем на него целиком
+            ok = git_run("checkout", "--quiet", "-B", ch, f"origin/{ch}") == 0
+        else:
+            ok = git_run("pull", "--ff-only", "--quiet", "origin", ch) == 0
+        if not ok:
             sys.exit("git pull не удался")
         from . import parts
 
