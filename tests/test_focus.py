@@ -37,3 +37,14 @@ def test_ночное_окно_пятницы_кончается_в_суббот
 def test_битая_запись_не_включает_тишину_и_не_роняет() -> None:
     assert focus.active([{"name": "x", "from": "утро", "to": "вечер"}, {"from": "10:00"}], в("пн", "10:00")) == ""
     assert focus.active([], в("пн", "10:00")) == ""
+
+
+def test_чужой_пароль_флешки_всегда_честная_ошибка(monkeypatch) -> None:
+    """Расшифровка с чужим паролем в одном случае из 256 давала мусор с годным заполнением и падала не тем."""
+    import pytest
+
+    from justday import portable
+
+    monkeypatch.setattr(portable, "_openssl", lambda args, data, pw: b"\xff\xfe junk")
+    with pytest.raises(RuntimeError):
+        portable.unseal(b"x", "чужой")

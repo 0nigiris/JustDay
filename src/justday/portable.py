@@ -48,7 +48,12 @@ def seal(secrets: dict, passphrase: str) -> bytes:
 def unseal(blob: bytes, passphrase: str) -> dict:
     """Расшифровать ключи с флешки. Пароль неверный — честная ошибка, а не пустой словарь."""
     got = _openssl(["-d"], blob, passphrase)
-    return json.loads(got.decode("utf-8"))
+    try:
+        return json.loads(got.decode("utf-8"))
+    except ValueError as e:
+        # CBC с чужим паролем в одном случае из 256 «расшифровывается» мусором с годным заполнением: openssl
+        # молчит, а честная ошибка нужна и тут — тест на неверный пароль иногда падал именно так.
+        raise RuntimeError("неверный пароль флешки") from e
 
 
 SCRIPT = """#!/usr/bin/env bash
