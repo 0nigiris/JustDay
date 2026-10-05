@@ -155,8 +155,9 @@ def test_dangerous_terminal_action_waited_for_its_telegram_button(monkeypatch) -
     assert asyncio.run(run()) is True
 
 
-def test_remote_ladder_skipped_opencode_without_a_telegram_permission_bridge(monkeypatch) -> None:
-    """Запасная ступень с правом исполнять инструменты не должна обходить Telegram-подтверждение."""
+def test_remote_ladder_keeps_opencode_but_only_through_the_permission_bridge(monkeypatch) -> None:
+    """Запасная ступень с правом исполнять инструменты не должна обходить Telegram-подтверждение: она идёт
+    через мост (`ocbridge`), где опасный шаг ждёт кнопки, а не через `opencode run`, который не спрашивает."""
     from types import SimpleNamespace
 
     class Work:
@@ -165,9 +166,10 @@ def test_remote_ladder_skipped_opencode_without_a_telegram_permission_bridge(mon
             self.rungs = [SimpleNamespace(engine="claude"), SimpleNamespace(engine="opencode")]
             self.skipped = []
             self.step = 0
+            self.bridge = False
 
     monkeypatch.setattr(telegram_shell.terminal, "Work", Work)
     monkeypatch.setattr(telegram_shell.config, "load", lambda: {})
     shell = telegram_shell.TelegramShell(SimpleNamespace())
-    assert [r.engine for r in shell.work.rungs] == ["claude"]
-    assert [r.engine for r in shell.work.skipped] == ["opencode"]
+    assert [r.engine for r in shell.work.rungs] == ["claude", "opencode"]
+    assert shell.work.bridge is True and shell.work.skipped == []

@@ -30,7 +30,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import config, dispatch, fallback, shell
+from . import config, dispatch, fallback, ocbridge, shell
 
 CLAUDE, OPENCODE = "claude", "opencode"
 
@@ -367,6 +367,9 @@ async def ask_claude(rung: Rung, text: str, session: str, cfg: dict, on_text, on
 async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, on_tool) -> Said:
     """Ход на ступени ниже — через OpenCode: там живут ключи человека и местные модели."""
     cli = _opencode_cli()
+    opts = cfg.get("terminal") or {}
+    if opts.get("approve") and opts.get("bridge") and not opts.get("unattended"):
+        return await _opencode_bridged(cli, rung, text, session, cfg, on_text, on_tool, opts["approve"])
     cmd = [cli, "run", "--format", "json"]
     if rung.model:
         cmd += ["-m", rung.model]
@@ -399,6 +402,22 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
     if err.strip():
         got.error = err.strip()[:400]
     _limit_in(got, err)
+    return got
+
+
+async def _opencode_bridged(cli: str, rung: Rung, text: str, session: str, cfg: dict, on_text, on_tool,
+                            approve) -> Said:
+    """Ход OpenCode через его сервер: опасный шаг спрашивает человека (`ocbridge.py`), а не идёт молча."""
+    got = Said(session=session)
+    try:
+        r = await ocbridge.ask(cli, {**shell.env(), **_marks(cfg)}, rung.model, text, session, approve,
+                               on_text, on_tool)
+    except (ocbridge.Unsafe, OSError, RuntimeError, TimeoutError) as e:
+        got.error = f"мост OpenCode: {e}"[:400]
+        return got
+    got.session, got.text, got.tools, got.used, got.error = (
+        r["session"] or session, r["text"], r["tools"], r["used"], r["error"])
+    _limit_in(got)
     return got
 
 
@@ -568,6 +587,7 @@ class Work:
         self.why = ""                  # чем решили усилие на последней задаче — для строки состояния
         self.effort = ""               # и какое оно вышло
         self.approve = None            # async (что, почему) -> bool: окно, которое спросит человека днём
+        self.bridge = False            # ступени OpenCode идут через сервер, чтобы опасное спрашивалось (ocbridge.py)
         self.forced = ""               # модель, которую позвала слабая: на один ход её слово верх
         # Сессия помнится по ступени лестницы, а не по модели: мелочь, взятую облегчённой моделью,
         # следующий вопрос должен продолжать, а не начинать заново.
@@ -755,7 +775,8 @@ class Work:
             seat = str(self.now)                 # сессия принадлежит ступени, а не модели
             rung, self.effort, self.why = self.shape(task)
             on_pick(rung, self.effort, self.why)
-            turn = {**self.cfg, "terminal": {**self.opts, "effort": self.effort, "approve": self.approve}}
+            turn = {**self.cfg, "terminal": {**self.opts, "effort": self.effort, "approve": self.approve,
+                                       "bridge": self.bridge}}
             engine = self.engines[rung.engine]
             ask = text
             if not self.forced and self.opts.get("hand_up", True) and rung.engine == CLAUDE \

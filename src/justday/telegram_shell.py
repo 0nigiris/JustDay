@@ -16,13 +16,11 @@ class TelegramShell:
     def __init__(self, daemon) -> None:
         self.daemon = daemon
         self.work = terminal.Work(config.load())
-        # `opencode run` в нашей лестнице не отдаёт запросы разрешений вызывающей оболочке.
-        # Его обычный режим может выполнять инструменты без вопроса, поэтому на телефоне оставляем
-        # только Claude Code SDK, где опасный шаг действительно ждёт нажатия Telegram-кнопки.
-        blocked = [r for r in self.work.rungs if r.engine != terminal.CLAUDE]
-        self.work.rungs = [r for r in self.work.rungs if r.engine == terminal.CLAUDE]
-        self.work.skipped.extend(blocked)
-        self.work.step = 0
+        # Ступени OpenCode идут через его сервер (`ocbridge.py`): `opencode run` не отдаёт запрос разрешения,
+        # и на телефоне кнопка не появилась бы, а шаг выполнился бы сам. Через сервер каждый опасный шаг
+        # приходит той же кнопкой «Разрешить / Отклонить», что и у Claude Code. Если сервер не гарантирует
+        # вопроса, ступень отвечает отказом, а не выполняет молча (`ocbridge.Unsafe`).
+        self.work.bridge = True
         self.work.approve = self.approve
         self.queue: list[str] = []
         self.worker: asyncio.Task | None = None
@@ -60,7 +58,7 @@ class TelegramShell:
             return True
         if command in ("/модель", "/model"):
             if not self.work.rungs:
-                await self.reply("В удалённой оболочке нет доступной ступени Claude Code.")
+                await self.reply("В удалённой оболочке нет доступной ступени.")
                 return True
             if arg.strip():
                 self.work.now.model = arg.strip()
@@ -152,7 +150,7 @@ class TelegramShell:
         while self.queue:
             task = self.queue.pop(0)
             if not self.work.rungs:
-                await self.reply("Задача осталась без запуска: для удалённых разрешений нужна доступная ступень Claude Code.")
+                await self.reply("Задача осталась без запуска: нет ни одной ступени лестницы со входом.")
                 continue
             self.current = asyncio.create_task(self.work.send(task), name=task[:70])
             self._log(f"Начато: {task}")
