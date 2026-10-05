@@ -22,6 +22,7 @@ EN = {
     "субтитры": "subtitles",
     "Не получилось связаться с мозгом. Подробности в логе.": "Couldn't reach the brain. Details are in the log.",
     "Нужно подтверждение. Разрешить?": "Confirmation needed. Allow?",
+    "Нужно подтверждение: {what}. Разрешить?": "Confirmation needed: {what}. Allow?",
     "{to}: «{text}». Отправить?": "{to}: “{text}”. Send it?",
     "{a} или {b}?": "{a} or {b}?",
     "Разрешить": "Allow",

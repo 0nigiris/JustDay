@@ -81,6 +81,11 @@ ACK = re.compile(r"^\W*(?:(?:готово|окей|ок|хорошо|done|ok)\W+
 ACK_TAIL = re.compile(r"(включаю|ставлю|запускаю|показываю|ищу|сейчас будет|playing|now playing)\s*[.!…]*$", re.I)
 STOP_WORDS = re.compile(r"\b(стоп|хватит|отмена|отмени|отменяй|замолчи|заткнись|stop|cancel|never ?mind|shut up|be quiet)\b", re.I)
 YES = re.compile(r"\b(да|давай|разрешаю|разреши|подтверждаю|конечно|ок|окей|можно|делай|yes|yeah|sure|ok|okay|allow|go ahead|do it)\b", re.I)
+# Слова, из которых целиком состоит согласие. «Да, конечно» из телевизора всё равно пройдёт, но «да, и вообще
+# я считаю, что…» — нет: раньше хватало одного «да» где угодно во фразе (Р-4).
+YES_WORDS = frozenset({
+    "да", "давай", "разрешаю", "разреши", "подтверждаю", "конечно", "ок", "окей", "можно", "делай", "пожалуйста", "ну",
+    "yes", "yeah", "sure", "ok", "okay", "allow", "go", "ahead", "do", "it"})
 NO = re.compile(r"\b(нет|не надо|отмена|отклон\w*|запрещаю|стоп|no|nope|don'?t|deny|cancel)\b", re.I)
 
 
@@ -1410,8 +1415,12 @@ class Daemon:
             cn = re.sub(r"[^\w ]+", " ", c.lower().replace("ё", "е")).strip()
             if cn and (cn in norm or (len(norm) > 2 and norm in cn)):
                 return c
-        long = len(norm.split()) > 3  # "да, но добавь смайлик" is a correction, not a yes
+        words = norm.split()
+        long = len(words) > 3  # "да, но добавь смайлик" is a correction, not a yes
         yes, no = bool(YES.search(text)) and not NO.search(text), bool(NO.search(text))
+        if yes and not self._ask_choices and not self._ask_free:
+            # Разрешение на действие — только фраза целиком из согласия, а не «да» среди чужой речи.
+            yes = 0 < len(words) <= 4 and all(w in YES_WORDS for w in words)
         if not (self._ask_free and long):
             if yes:
                 return self._ask_choices[0] if self._ask_choices else "allow"
@@ -1432,7 +1441,12 @@ class Daemon:
         if not hard and time.monotonic() < self._preapproved_until:
             events.emit("approval_auto", desc=desc)  # the user already approved this in the draft card
             return True
-        return await self._ask(t("Нужно подтверждение. Разрешить?"), notify=(desc, reason)) == "allow"
+        if hard and desc:  # опасное называют вслух: «разрешить?» без слова о том, что именно, — слепое «да» (Р-4)
+            what = desc if len(desc) <= 140 else desc[:140].rsplit(" ", 1)[0] + "…"
+            speech = t("Нужно подтверждение: {what}. Разрешить?", what=what)
+        else:
+            speech = t("Нужно подтверждение. Разрешить?")
+        return await self._ask(speech, notify=(desc, reason)) == "allow"
 
     async def _answer_questions(self, questions: list[dict]) -> dict | None:
         """The brain's AskUserQuestion, shown as a card with the options as buttons; answered by click or voice."""
