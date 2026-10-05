@@ -4555,6 +4555,7 @@ ShellRoot {
         Connections {
             target: menuCard.Window.window
             enabled: menuWin.alive && !menuWin.contentOn
+            function onFrameSwapped() { menuWin.contentOn = menuWin.want }
         }
         Timer { id: menuContentArm; interval: 100; onTriggered: menuWin.contentOn = menuWin.want }
         Timer { id: menuFadeOut; interval: JD.dur(JD.slideMs); onTriggered: menuWin.alive = false }
