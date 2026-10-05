@@ -68,27 +68,39 @@ Item {
     }
     function notify(text) { toast = text; toastTimer.restart() }
 
+    // Что отдать тому, кто запустил команду: разобранный JSON, если команда его напечатала (даже с ненулевым
+    // кодом — так отвечают `calendar setup` и подобные: {"ok": false, "error": …}); иначе — отказ с текстом из
+    // stderr; иначе сырой текст. Раньше ответ отдавался, как только закрывался stdout, и процесс уничтожался,
+    // не дождавшись кода выхода, — причина отказа из stderr терялась, и окно говорило «ответ не похож на
+    // настройки» вместо настоящей беды.
+    function runResult(code, out, err) {
+        const text = String(out || "")
+        try {
+            const v = JSON.parse(text)
+            if (v !== null && typeof v === "object") return v
+        } catch (e) {}
+        if (code !== 0) return { __failed: true, code: code, why: String(err || "").slice(0, 200) }
+        return text
+    }
     Component {
         id: procComponent
         Process {
             id: p
             property var callback: null
+            property int code: -1
+            property bool exited: false
+            property bool outDone: false
+            property bool errDone: false
             running: true
-            stdout: StdioCollector {
-                onStreamFinished: {
-                    let value = text
-                    try { value = JSON.parse(text) } catch (e) {}
-                    if (p.callback) p.callback(value)
-                    p.destroy()
-                }
+            // Отвечаем, когда есть всё: код выхода и оба потока дочитаны.
+            function settle() {
+                if (!(exited && outDone && errDone)) return
+                if (callback) callback(win.runResult(code, pout.text, perr.text))
+                p.destroy()
             }
-            // Молчаливый отказ хуже ошибки: окно оставалось на «Загружаю настройки…» навсегда, и
-            // человеку оставалось гадать, сломалось оно или просто думает. Теперь причина видна.
-            stderr: StdioCollector { id: perr }
-            onExited: (code) => {
-                if (code !== 0 && p.callback) p.callback({ __failed: true, code: code,
-                                                           why: String(perr.text || "").slice(0, 200) })
-            }
+            stdout: StdioCollector { id: pout; onStreamFinished: { p.outDone = true; p.settle() } }
+            stderr: StdioCollector { id: perr; onStreamFinished: { p.errDone = true; p.settle() } }
+            onExited: (c) => { p.code = c; p.exited = true; p.settle() }
         }
     }
     function run(args, callback, env) {
