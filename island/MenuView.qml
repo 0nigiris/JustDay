@@ -576,34 +576,25 @@ Item {
                 // спрашивать не должны — иначе защита превращается в помеху.
                 Repeater {
                     model: JD.sessionActions
-                    delegate: Rectangle {
+                    delegate: Pressable {
                         id: pow
                         required property var modelData
                         readonly property bool asking: JD.menuConfirm === modelData.id
                         implicitWidth: 30
                         implicitHeight: 30
                         radius: 15
-                        color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : "transparent")
+                        pressScale: JD.pressScaleSmall
+                        color: asking ? JD.accentRed : (pow.hovered ? mv.fill3 : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                        scale: powTap.pressed ? JD.pressScaleSmall : 1
-                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         Icon {
                             anchors.centerIn: parent
                             name: pow.modelData.icon
                             implicitSize: 15
-                            tint: pow.asking || powHover.hovered ? JD.text1 : JD.text3
+                            tint: pow.asking || pow.hovered ? JD.text1 : JD.text3
                         }
-                        HoverHandler {
-                            id: powHover
-                            cursorShape: Qt.PointingHandCursor
-                            onHoveredChanged: mv.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
-                                                                                       : pow.modelData.name)
-                        }
-                        TapHandler {
-                            id: powTap
-                            gesturePolicy: TapHandler.ReleaseWithinBounds
-                            onTapped: JD.sessionDo(pow.modelData.id, pow.modelData.danger)
-                        }
+                        onHoveredChanged: mv.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
+                                                                                   : pow.modelData.name)
+                        onClicked: JD.sessionDo(pow.modelData.id, pow.modelData.danger)
                     }
                 }
             }
