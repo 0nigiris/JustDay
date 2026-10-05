@@ -3371,6 +3371,15 @@ class Daemon:
                 else:
                     self.publish(panel=which)
                     resp = {"ok": True, "panel": which}
+            elif cmd == "qr":  # код ссылкой или Wi-Fi для панели «QR»; пароль сети нигде не остаётся
+                from . import qr
+
+                try:
+                    text = (qr.wifi_payload(str(req["wifi"]), str(req.get("password", "")), hidden=bool(req.get("hidden")))
+                            if req.get("wifi") else str(req.get("text", "")))
+                    resp = {"ok": True, "qr": qr.matrix(text)}
+                except ValueError:
+                    resp = {"ok": True, "qr": []}   # пустое поле — не ошибка, а пустой экран
             elif cmd == "load":  # нагрузка машины одним взглядом
                 resp = {"ok": True, "load": await self.load_snapshot(), }
             elif cmd == "load_watch":  # островок открыл монитор: присылать раз в секунду

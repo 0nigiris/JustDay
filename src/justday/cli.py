@@ -631,6 +631,11 @@ def main(argv: list[str] | None = None) -> None:
                                     "тяжёлые программы")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--watch", action="store_true", help="обновлять на месте, пока не остановят")
+    sp = sub.add_parser("qr", help="QR-код в терминале: `justday qr https://…` · `justday qr --wifi ИМЯ` "
+                                   "(пароль спросит скрыто)")
+    sp.add_argument("text", nargs="*")
+    sp.add_argument("--wifi", metavar="ИМЯ_СЕТИ", help="код для подключения к Wi-Fi")
+    sp.add_argument("--hidden", action="store_true", help="сеть скрытая")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -741,6 +746,21 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_launch_cmd(" ".join(a.query), show=a.list))
     elif a.cmd == "load":
         sys.exit(_load_cmd(as_json=a.json, watch=a.watch))
+    elif a.cmd == "qr":
+        from . import qr
+
+        if a.wifi:
+            import getpass
+
+            # Пароль не в аргументах: их видно в `ps` всем на машине.
+            pw = getpass.getpass("Пароль сети (пусто — открытая): ") if sys.stdin.isatty() else ""
+            text = qr.wifi_payload(a.wifi, pw, hidden=a.hidden)
+        else:
+            text = " ".join(a.text)
+        try:
+            print(qr.ascii_art(qr.matrix(text)))
+        except ValueError:
+            sys.exit("justday qr: нечего кодировать — дайте ссылку или текст, либо --wifi ИМЯ")
     elif a.cmd == "memory":
         from .brain import BRAIN_DIR
 

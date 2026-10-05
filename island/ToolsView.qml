@@ -102,6 +102,7 @@ Item {
                             { id: "claude", name: "Клод", icon: "code" },
                             { id: "history", name: "История", icon: "message-circle" },
                             { id: "load", name: "Машина", icon: "activity" },
+                            { id: "qr", name: "QR", icon: "layout-grid" },
                         ]
                         delegate: Rectangle {
                             required property var modelData
@@ -574,6 +575,12 @@ Item {
         // ───────────── микшер ─────────────
         MixerView {
             visible: tv.page === "mixer"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
+        QrView {
+            visible: tv.page === "qr"
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
