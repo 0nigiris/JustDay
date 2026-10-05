@@ -31,6 +31,7 @@ from . import (
     audio,
     briefing,
     calendar_lane,
+    chitchat,
     clipboard,
     config,
     desktop,
@@ -731,6 +732,10 @@ class Daemon:
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         if (said := fastpath.small_talk(text)) is not None:
+            await self.say(said)
+            return said
+        if what := chitchat.kind(text):
+            said = await asyncio.get_running_loop().run_in_executor(None, chitchat.reply, what, text, self.cfg)
             await self.say(said)
             return said
         gen = self._cancel_gen
