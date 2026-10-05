@@ -578,7 +578,7 @@ Item {
         Glyph { anchors.centerIn: parent; name: ri.glyph; size: 15 }
     }
 
-    component Toggle: Rectangle {
+    component Toggle: Pressable {
         id: tg
         property bool checked: false
         signal toggled(bool value)
@@ -587,6 +587,7 @@ Item {
         width: implicitWidth
         height: implicitHeight
         radius: 13
+        pressScale: JD.pressScaleSmall
         color: checked ? "#30d158" : "#48484a"
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Rectangle {
@@ -596,27 +597,24 @@ Item {
             color: "white"
             Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         }
-        TapHandler { onTapped: tg.toggled(!tg.checked) }
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        onClicked: tg.toggled(!tg.checked)
     }
 
-    component Btn: Rectangle {
+    component Btn: Pressable {
         id: b
         property string text: ""
         property bool primary: false
         property bool danger: false
         property bool busy: false
         property string glyph: ""
-        signal clicked()
+        pressEnabled: enabled && !busy
         implicitWidth: Math.max(80, btnRow.implicitWidth + 26)
         implicitHeight: 30
         width: implicitWidth
         height: implicitHeight
         radius: 8
         opacity: enabled ? 1 : 0.45
-        color: primary ? (btnHover.hovered ? "#409cff" : win.blue) : danger ? (btnHover.hovered ? "#5a2a2a" : "#4a2323") : (btnHover.hovered ? "#4a4a4c" : win.field)
-        scale: btnTap.pressed ? JD.pressScale : 1
-        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+        color: primary ? (hovered ? "#409cff" : win.blue) : danger ? (hovered ? "#5a2a2a" : "#4a2323") : (hovered ? "#4a4a4c" : win.field)
         RowLayout {
             id: btnRow
             anchors.centerIn: parent
@@ -625,8 +623,7 @@ Item {
             Glyph { visible: !!b.glyph && !b.busy; name: b.glyph; size: 14 }
             Text { text: b.text; color: b.danger ? "#ff6961" : win.t1; font.family: win.font; font.pixelSize: 13; font.weight: Font.Medium }
         }
-        HoverHandler { id: btnHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { id: btnTap; enabled: b.enabled && !b.busy; onTapped: b.clicked() }
+        onClicked: b.clicked()
     }
 
     component Field: TextField {

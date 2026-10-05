@@ -289,16 +289,15 @@ Item {
                 required property int index
                 width: grid.cellWidth
                 height: grid.cellHeight
-                Rectangle {
+                Pressable {
                     anchors.centerIn: parent
                     width: 48
                     height: 48
                     radius: 12
-                    color: index === JD.toolsPick ? JD.fill2 : (cellHover.hovered ? JD.fill1 : "transparent")
+                    pressScale: JD.pressScaleSmall
+                    color: index === JD.toolsPick ? JD.fill2 : (hovered ? JD.fill1 : "transparent")
                     border.width: index === JD.toolsPick ? 1 : 0
                     border.color: JD.accentBlue
-                    scale: cellTap.pressed ? JD.pressScaleSmall : 1
-                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Text {
                         anchors.centerIn: parent
@@ -308,12 +307,7 @@ Item {
                         font.pixelSize: 27
                         text: modelData.c
                     }
-                    HoverHandler { id: cellHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler {
-                        id: cellTap
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: JD.useEmoji(modelData.c)
-                    }
+                    onClicked: JD.useEmoji(modelData.c)
                 }
             }
         }
