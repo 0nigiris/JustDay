@@ -5,9 +5,12 @@
 осталось не больше `observer.lead_minutes` (20), и один раз о каждой. Письма от незнакомых, события
 на весь день и уже начавшееся — не повод.
 
-Чего здесь нет нарочно. Звонка: он стоит денег, а деньги без его слова не тратятся. Вопроса «успеете
-ли», пока не известно, где он (ступень 4 плана). Канал наружу — уведомление, Telegram и голос, если он
-за компьютером; всё это бесплатно.
+Чего здесь нет нарочно. Звонка: он стоит денег, а деньги без его слова не тратятся. Канал наружу —
+уведомление, Telegram и голос, если он за компьютером; всё это бесплатно.
+
+«Успеете ли» (ступень 4): если он отдал боту живую геопозицию (`geo.py`), а у встречи есть место, срок
+напоминания растёт на дорогу — встреча в сорока минутах езды объявляется за пятьдесят, а не за двадцать,
+иначе сообщение приходило бы тогда, когда выезжать уже поздно. Без позиции всё как раньше.
 
 Календарь и доставка передаются снаружи, чтобы правило проверялось без сети и без живого бота.
 """
@@ -24,24 +27,31 @@ from . import config
 
 STATE = config.STATE_DIR / "observer.json"
 MAX_PER_TICK = 3       # три встречи подряд — это уже один разговор, а не три сообщения
+BUFFER_MIN = 10        # запас сверх дороги: собраться, найти вход
+LOOKAHEAD_MIN = 180    # дальше этого дорогу не считаем: до такой встречи ещё нечего подсказывать
 
 
 def key(item: dict) -> str:
     return f"{item['start']}|{item['title']}"
 
 
-def plan(items: list[dict], now: dt.datetime, sent: dict, lead_minutes: float) -> list[dict]:
-    """Какие из событий стоит объявить сейчас: ещё не начались, начнутся в пределах `lead_minutes`, о них не говорили."""
+def plan(items: list[dict], now: dt.datetime, sent: dict, lead_minutes: float,
+         drive: dict | None = None) -> list[dict]:
+    """Какие из событий стоит объявить сейчас: ещё не начались, начнутся в пределах `lead_minutes`, о них не говорили.
+
+    `drive` — {ключ события: минут езды до места}. Для такого события срок — дорога плюс запас, если он дольше."""
     out = []
     for e in items:
         if e.get("all_day"):
             continue
         start = dt.datetime.fromisoformat(e["start"])
         left = (start - now).total_seconds() / 60
-        if left <= 0 or left > lead_minutes or key(e) in sent:
+        road = (drive or {}).get(key(e))
+        reach = max(lead_minutes, road + BUFFER_MIN) if road is not None else lead_minutes
+        if left <= 0 or left > reach or key(e) in sent:
             continue
         out.append({"key": key(e), "title": e["title"], "start": start, "minutes": max(1, round(left)),
-                    "location": e.get("location", "")})
+                    "location": e.get("location", ""), "drive": None if road is None else max(1, round(road))})
     out.sort(key=lambda n: n["start"])
     return out[:MAX_PER_TICK]
 
@@ -50,7 +60,13 @@ def line(n: dict, address: str = "") -> str:
     """Одна фраза, как сказал бы человек: без «уведомление» и без «событие календаря»."""
     head = f"{address}, " if address else ""
     where = f" ({n['location']})" if n.get("location") else ""
-    return f"{head}«{n['title']}»{where} в {n['start'].strftime('%H:%M')} — через {n['minutes']} мин."
+    text = f"{head}«{n['title']}»{where} в {n['start'].strftime('%H:%M')} — через {n['minutes']} мин."
+    road = n.get("drive")
+    if road is None:
+        return text
+    if n["minutes"] < road:
+        return f"{text} Дорога займёт около {road} мин — не успеваете. Предупредить, чтобы перенесли?"
+    return f"{text} Дорога займёт около {road} мин — пора выходить."
 
 
 def load(path: Path = STATE) -> dict:
@@ -74,7 +90,7 @@ def save(sent: dict, path: Path = STATE) -> None:
 
 async def tick(fetch: Callable[[dt.datetime, dt.datetime], list[dict]],
                deliver: Callable[[str], Awaitable[None]], cfg: dict, now: dt.datetime | None = None,
-               path: Path = STATE) -> list[str]:
+               path: Path = STATE, travel: Callable[[str], float | None] | None = None) -> list[str]:
     """Один круг наблюдения. Возвращает сказанные фразы (для проверки и журнала)."""
     opts = cfg.get("observer") or {}
     if not opts.get("enabled", True):
@@ -84,8 +100,16 @@ async def tick(fetch: Callable[[dt.datetime, dt.datetime], list[dict]],
     sent = load(path)
     said = []
     # Календарь берётся по сети: из потока, а не из цикла событий демона (Р-33).
-    items = await asyncio.get_running_loop().run_in_executor(None, fetch, now, now + dt.timedelta(minutes=lead + 1))
-    for n in plan(items, now, sent, lead):
+    loop = asyncio.get_running_loop()
+    reach = LOOKAHEAD_MIN if travel and opts.get("travel", True) else lead + 1
+    items = await loop.run_in_executor(None, fetch, now, now + dt.timedelta(minutes=reach))
+    drive: dict = {}
+    if reach > lead + 1:
+        # Дорога считается по сети, и считать её для всего, что слышно в ближайшие три часа, незачем: нужны
+        # только события с местом, о которых ещё не говорили.
+        asks = {key(e): e["location"] for e in items if e.get("location") and not e.get("all_day") and key(e) not in sent}
+        drive = await loop.run_in_executor(None, lambda: {k: m for k, v in asks.items() if (m := travel(v)) is not None})
+    for n in plan(items, now, sent, lead, drive):
         text = line(n, str((cfg.get("user") or {}).get("address_as") or ""))
         sent[n["key"]] = time.time()      # сначала помечаем: сбой доставки не должен превратиться в спам раз в минуту
         save(sent, path)

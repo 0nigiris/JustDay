@@ -248,7 +248,7 @@ def updates(offset: int = 0, seconds: int = POLL_SECONDS) -> list[dict]:
     отдать, а пустой ответ приходит один раз в минуту вместо шестидесяти в минуту.
     """
     return call("getUpdates", {"offset": offset or None, "timeout": seconds,
-                               "allowed_updates": json.dumps(["message", "callback_query"])},
+                               "allowed_updates": json.dumps(["message", "edited_message", "callback_query"])},
                 timeout=seconds + 10)  # type: ignore[return-value]
 
 
@@ -276,3 +276,20 @@ def mine_callback(update: dict) -> dict | None:
     query = (update or {}).get("callback_query") or {}
     who = str(((query.get("message") or {}).get("chat") or {}).get("id") or "")
     return query if who and who == chat() else None
+
+
+def location(update: dict) -> tuple[float, float] | None:
+    """Координаты из сообщения владельца: разовая точка или очередное обновление живой геопозиции.
+
+    Живая геопозиция приходит как `edited_message` того же сообщения, поэтому смотрим оба. Чужие
+    координаты отбрасываются так же, как чужой текст: иначе кто угодно мог бы «перевезти» владельца."""
+    for key in ("message", "edited_message"):
+        msg = (update or {}).get(key) or {}
+        loc = msg.get("location")
+        who = str(((msg.get("chat") or {}).get("id")) or "")
+        if loc and who and who == chat():
+            try:
+                return float(loc["latitude"]), float(loc["longitude"])
+            except (KeyError, TypeError, ValueError):
+                return None
+    return None

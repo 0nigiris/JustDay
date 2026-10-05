@@ -42,6 +42,7 @@ from . import (
     fastpath,
     filesearch,
     focus,
+    geo,
     glyphs,
     inbox,
     island,
@@ -987,6 +988,9 @@ class Daemon:
                         with contextlib.suppress(Exception):
                             await self._telegram_shell.callback(upd)
                     continue
+                if (where := tg.location(upd)) is not None:
+                    geo.remember(*where)    # координаты нужны наблюдателю; в мозг они не идут
+                    continue
                 if not tg.owned(upd):
                     continue
                 if self._telegram_shell is None:
@@ -1806,7 +1810,7 @@ class Daemon:
     async def _observe(self) -> None:
         """Раз в минуту: пора ли Джарвису написать первым (observer.py)."""
         try:
-            await observer.tick(calendar_lane.between, self._nudge, self.cfg)
+            await observer.tick(calendar_lane.between, self._nudge, self.cfg, travel=geo.minutes_to if geo.here() else None)
         except Exception as e:
             log.info("наблюдатель: %s", type(e).__name__)
 

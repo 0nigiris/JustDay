@@ -579,7 +579,10 @@ DEFAULTS: dict = {
     # Наблюдатель (`observer.py`): Джарвис пишет первым, но только о встрече, до которой осталось не больше
     # lead_minutes, и один раз. Канал — уведомление, Telegram (бесплатно) и голос, если он за компьютером.
     # Звонка нет: он стоит денег. Нужен подключённый календарь (`justday calendar setup`).
-    "observer": {"enabled": True, "lead_minutes": 20, "telegram": True},
+    "observer": {"enabled": True, "lead_minutes": 20, "telegram": True,
+                 # «Успеете ли»: если он отдал боту живую геопозицию, срок напоминания растёт на дорогу. Адрес
+                 # встречи уходит в Nominatim, две точки — в OSRM (оба OpenStreetMap, без аккаунтов); false — не ходить.
+                 "travel": True},
     # Local model for private data (mail). Ollama listens on localhost only.
     "local_llm": {"url": "http://127.0.0.1:11434", "model": "qwen3.5:9b", "num_ctx": 16384,
                   "keep_alive": "10m",
