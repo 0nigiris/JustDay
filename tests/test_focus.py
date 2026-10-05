@@ -48,3 +48,10 @@ def test_чужой_пароль_флешки_всегда_честная_оши
     monkeypatch.setattr(portable, "_openssl", lambda args, data, pw: b"\xff\xfe junk")
     with pytest.raises(RuntimeError):
         portable.unseal(b"x", "чужой")
+
+
+def test_островку_говорят_какое_окно_тишины_и_когда_оно_кончится() -> None:
+    assert focus.current([ШКОЛА], в("пн", "10:00")) == {"name": "Школа", "until": "15:00"}
+    # ночное окно: до утра, а не до полуночи
+    assert focus.current([НОЧЬ], в("пн", "23:30")) == {"name": "Ночь", "until": "07:00"}
+    assert focus.current([ШКОЛА], в("сб", "10:00")) is None

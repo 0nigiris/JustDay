@@ -1923,6 +1923,16 @@ class Daemon:
             await asyncio.sleep(self.HEARTBEAT_EVERY)
             self.publish(ping=1, state=self.state)
 
+    def _focus_now(self) -> dict | None:
+        return focus.current(self.cfg.get("focus", {}).get("schedule", []))
+
+    def _publish_focus(self) -> None:
+        """Островку — какое окно тишины идёт, но только при смене: круг домашних дел короче минуты."""
+        cur = self._focus_now()
+        if cur != getattr(self, "_focus_sent", None):
+            self._focus_sent = cur
+            self.publish(focus=cur)
+
     async def _housekeeping(self) -> None:
         poll = self.cfg["workers"]["poll_seconds"]
         last_poll = last_mail = last_ping = last_weather = 0.0
@@ -1944,6 +1954,7 @@ class Daemon:
                         self.publish(update=self.update_info)
                     except Exception as e:
                         log.info("update check failed: %s", type(e).__name__)
+                self._publish_focus()
                 await self._reboot_maybe()
                 await self._welcome_back()
                 # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
@@ -2937,7 +2948,7 @@ class Daemon:
                          "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
                          "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
                          "reminders": self._reminders_state(), "jobs": self.jobs.state(),
-                         "dock": dock_hello or {}, "windows": self._windows}
+                         "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now()}
                 try:
                     writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
                     await writer.drain()

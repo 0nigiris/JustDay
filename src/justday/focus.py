@@ -43,8 +43,8 @@ def _minutes(hhmm) -> int | None:
         return None
 
 
-def active(schedule: list[dict], now: datetime | None = None) -> str:
-    """Название окна тишины, которое идёт сейчас, или «» — тишины нет."""
+def current(schedule: list[dict], now: datetime | None = None) -> dict | None:
+    """Окно тишины, которое идёт сейчас: {"name", "until"} («until» — «HH:MM» конца) или None."""
     now = now or datetime.now()
     minute = now.hour * 60 + now.minute
     for slot in schedule or []:
@@ -57,5 +57,11 @@ def active(schedule: list[dict], now: datetime | None = None) -> str:
         else:  # через полночь: вечерняя часть — в день начала, утренняя — в следующий
             on = (now.weekday() in days and minute >= start) or ((now.weekday() - 1) % 7 in days and minute < end)
         if on:
-            return str(slot.get("name") or "фокус")
-    return ""
+            return {"name": str(slot.get("name") or "фокус"), "until": f"{end // 60:02d}:{end % 60:02d}"}
+    return None
+
+
+def active(schedule: list[dict], now: datetime | None = None) -> str:
+    """Название окна тишины, которое идёт сейчас, или «» — тишины нет."""
+    cur = current(schedule, now)
+    return cur["name"] if cur else ""

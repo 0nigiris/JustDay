@@ -1403,6 +1403,23 @@ ShellRoot {
                 // Нажатие прямо здесь возвращает голос: пометка — она же и кнопка.
                 TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: JD.setMuted(false) }
             }
+            // Тишина по расписанию («Школа до 15:00»): без этой пометки молчание ассистента выглядит
+            // поломкой. Не кнопка — расписание правится в настройках, а не щелчком по пометке.
+            Rectangle { visible: !!JD.focusNow; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
+            Rectangle {
+                visible: !!JD.focusNow
+                implicitWidth: focusRow.implicitWidth + 16
+                implicitHeight: 22
+                radius: 11
+                color: JD.fill1
+                RowLayout {
+                    id: focusRow
+                    anchors.centerIn: parent
+                    spacing: 5
+                    Icon { name: "moon"; implicitSize: 13; tint: JD.accentPurple }
+                    Label2 { text: JD.focusNow ? JD.focusNow.name + JD.tr(" до ") + JD.focusNow.until : ""; color: JD.accentPurple; font.weight: Font.DemiBold }
+                }
+            }
             Rectangle { visible: !!JD.weather && JD.island.show_weather !== false && JD.island.weather_peek !== false; implicitWidth: 1; implicitHeight: 18; color: pv.hair }
             RowLayout {
                 visible: !!JD.weather && JD.island.show_weather !== false && JD.island.weather_peek !== false
