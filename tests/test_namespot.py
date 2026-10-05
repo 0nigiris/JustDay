@@ -61,3 +61,51 @@ class TestДовериеКРаспознанному:
         слова = [("джарвис", 0.5), ("стоп", 0.9)]
         assert self.сделать().believable("джарвис стоп", слова, no_speech=0.05)
         assert not self.сделать(min_prob=0.65).believable("джарвис стоп", слова, no_speech=0.05)
+
+
+class TestШпионНеГонитWhisperНаВсякуюРечь:
+    """Прогон Whisper на каждый всплеск речи в комнате (5–7 тыс. в сутки) держал его в видеопамяти вечно
+    (Р-30): шпион обязан будить его только там, где openWakeWord услышал что-то похожее на имя."""
+
+    class Голос:
+        level = 0.9
+
+        def predict(self, frame, frame_size=0) -> float:
+            return self.level
+
+        def reset_states(self) -> None:
+            pass
+
+    def прогон(self, monkeypatch, score: float, floor: float, active: bool = True) -> int:
+        import time
+
+        import numpy as np
+
+        from justday import audio
+
+        голос = self.Голос()
+        monkeypatch.setattr(audio, "voice_activity_model", lambda: голос)
+        calls: list[int] = []
+
+        def transcribe(clip):
+            calls.append(len(clip))
+            return "", [], 1.0
+
+        spotter = namespot.NameSpotter(transcribe, ["Джарвис"], lambda: 0, lambda *a: None, floor=lambda: floor)
+        frame = np.zeros(audio.FRAME, dtype=np.int16)
+        for _ in range(8):  # речь
+            spotter.feed(frame, active, score)
+        голос.level = 0.0
+        for _ in range(10):  # пауза — отрывок закончился
+            spotter.feed(frame, active, 0.0)
+        time.sleep(0.3)  # поток Whisper разбирает очередь
+        return len(calls)
+
+    def test_болтовня_без_намёка_на_имя_не_будит_whisper(self, monkeypatch) -> None:
+        assert self.прогон(monkeypatch, score=0.01, floor=0.05) == 0
+
+    def test_похожее_на_имя_доходит_до_whisper(self, monkeypatch) -> None:
+        assert self.прогон(monkeypatch, score=0.2, floor=0.05) == 1
+
+    def test_нулевая_планка_это_прежнее_поведение(self, monkeypatch) -> None:
+        assert self.прогон(monkeypatch, score=0.0, floor=0.0) == 1

@@ -106,6 +106,7 @@ class TTS:
         self.cfg = cfg
         self.rate = int(cfg["sample_rate"])
         self._model = None
+        self._remote_warned = False
         self._silero_gone = False   # выяснилось, что нейросетевого голоса в окружении нет
         self._lock = threading.Lock()
 
@@ -126,13 +127,22 @@ class TTS:
             self._model = torch.package.PackageImporter(str(path)).load_pickle("tts_models", "model")
         return self._model
 
+    def _silero_path(self):
+        return config.MODELS_DIR / self.cfg["silero_model_url"].rsplit("/", 1)[1]
+
     def load(self) -> None:
         if self.cfg["engine"] == "silero":
+            # Служба голоса держит torch у себя; демон только просит её подняться. Нет службы — как раньше.
+            if self.path_exists() and self.nudge("warm", engine="silero", model=str(self._silero_path())):
+                return
             try:
                 self._silero()
             except ImportError:   # часть «voice» не установлена — говорить будет espeak-ng
                 log.warning("нейросетевой голос не установлен, отвечаю голосом espeak-ng "
                             "(доставить: justday parts add voice)")
+
+    def path_exists(self) -> bool:
+        return self._silero_path().exists()
 
     NEURAL_RATE = 24000
     SOCKET = config.RUNTIME_DIR / "justday-voice.sock"
@@ -172,7 +182,7 @@ class TTS:
             return 0.92
         return 1.0
 
-    def nudge(self, cmd: str) -> bool:
+    def nudge(self, cmd: str, **extra) -> bool:
         """Одна строка голосовому сервису без ожидания ответа: `warm` или `sleep`.
 
         Нужна, чтобы прятать возврат модели. Сервис отпускает видеопамять, когда долго молчат, и
@@ -186,10 +196,39 @@ class TTS:
             with socket_mod.socket(socket_mod.AF_UNIX) as sock:
                 sock.settimeout(1.5)
                 sock.connect(str(self.SOCKET))
-                sock.sendall((json.dumps({"cmd": cmd}) + "\n").encode())
+                sock.sendall((json.dumps({"cmd": cmd, **extra}) + "\n").encode())
             return True
         except OSError:
             return False
+
+    def silero_remote(self, sentence: str) -> np.ndarray:
+        """Silero в службе голоса (процессор, а не демон). OSError — службы нет или она не ответила."""
+        import json
+        import socket as socket_mod
+        import struct
+
+        if not self.path_exists():  # модель ещё не скачана: качает демон, это его дело
+            raise OSError("no silero model file yet")
+        req = {"cmd": "silero", "text": sentence, "speaker": self.cfg["speaker"], "rate": self.rate,
+               "model": str(self._silero_path())}
+        with socket_mod.socket(socket_mod.AF_UNIX) as sock:
+            sock.settimeout(20)  # первая фраза будит службу: torch и модель поднимаются секунд пять
+            sock.connect(str(self.SOCKET))
+            sock.sendall((json.dumps(req, ensure_ascii=False) + "\n").encode())
+            f = sock.makefile("rb")
+            parts = []
+            while True:
+                head = f.read(4)
+                if len(head) < 4:
+                    raise OSError("voice service closed the stream")
+                (size,) = struct.unpack("<I", head)
+                if size == 0:
+                    break
+                data = f.read(size)
+                if len(data) < size:
+                    raise OSError("voice service closed the stream")
+                parts.append(data)
+        return np.frombuffer(b"".join(parts), dtype="<i2").astype(np.int16)
 
     async def stream(self, sentence: str):
         """Neural voice (justday-voice service): yields int16 PCM bytes at NEURAL_RATE as they are generated.
@@ -273,11 +312,20 @@ class TTS:
         lang = self.cfg.get("lang", "ru")
         if engine == "silero" and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
             try:
-                with self._lock:
-                    wave = self._silero().apply_tts(
-                        text=sentence, speaker=self.cfg["speaker"], sample_rate=self.rate, put_accent=True, put_yo=True
-                    )
-                return timestretch((wave.numpy() * 32767).astype(np.int16), self.speed, self.rate)
+                try:
+                    pcm = self.silero_remote(sentence)
+                except OSError as e:  # службы нет — торч поднимется здесь, как до Р-35
+                    if not self._remote_warned:
+                        self._remote_warned = True
+                        log.info("silero не в службе голоса (%s) — говорю из демона", e)
+                    pcm = None
+                if pcm is None:
+                    with self._lock:
+                        wave = self._silero().apply_tts(
+                            text=sentence, speaker=self.cfg["speaker"], sample_rate=self.rate, put_accent=True,
+                            put_yo=True)
+                    pcm = (wave.numpy() * 32767).astype(np.int16)
+                return timestretch(pcm, self.speed, self.rate)
             except ImportError:   # часть «voice» не установлена: спрашивать об этом каждую фразу незачем
                 self._silero_gone = True
                 log.warning("нейросетевого голоса нет, говорю espeak-ng (justday parts add voice)")

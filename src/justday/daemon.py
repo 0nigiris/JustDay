@@ -102,6 +102,8 @@ class Daemon:
                                                 a.get("silence_long_seconds", 2.2),
                                                 a.get("long_speech_seconds", 5.0))
         self.stt = STT(self.cfg["stt"])
+        self._wake_score = 0.0       # последний балл openWakeWord: по нему слух имён решает, будить ли Whisper
+        self._name_gate: tuple[float, bool] = (0.0, True)
         self._gave_up_vram = False   # видеопамять уже отдана игре
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
@@ -229,13 +231,15 @@ class Daemon:
         """
         if value == "listening":
             self.stt.warm()
-        if value not in ("listening", "thinking") or self.silent() or self.cfg["tts"]["engine"] != "qwen":
+        engine = self.cfg["tts"]["engine"]
+        if value not in ("listening", "thinking") or self.silent() or engine not in ("qwen", "silero"):
             return
         try:   # состояние меняется и до запуска цикла — тогда греть попросту некуда и незачем
             # `to_thread`, а не `run_in_executor`: тот отдаёт Future, а задачу делают из корутины.
             # Из-за этого прогрев падал TypeError прямо в присваивании состояния — и с ним падал
             # весь заход в прослушивание. Со стороны это выглядело так: Джарвис перестал слышать.
-            spawn(asyncio.to_thread(self.tts.nudge, "warm"))
+            extra = {"engine": "silero", "model": str(self.tts._silero_path())} if engine == "silero" else {}
+            spawn(asyncio.to_thread(self.tts.nudge, "warm", **extra))
         except RuntimeError:
             pass
 
@@ -1480,6 +1484,14 @@ class Daemon:
             base = min(0.95, base + 0.15)
         return base
 
+    def _name_spotting_allowed(self) -> bool:
+        """В игре и при выключенном голосе Whisper имён не слушает: он занимал бы видеопамять игры (Р-30).
+        Кадры идут каждые 80 мс, а `silent()` обходит /proc — поэтому ответ живёт две секунды."""
+        now = time.monotonic()
+        if now - self._name_gate[0] > 2.0:
+            self._name_gate = (now, not self.silent())
+        return self._name_gate[1]
+
     def _name_min_prob(self) -> float:
         """Та же строгость, что и у слова пробуждения, но для имени, услышанного в речи."""
         loud = bool(self.island_video) or bool(self._player_state and not self._player_state.get("paused"))
@@ -1511,8 +1523,9 @@ class Daemon:
 
         def on_frame(frame: np.ndarray) -> None:
             if self.state == "listening" or time.monotonic() < self._wake_cooldown:
+                self._wake_score = 0.0
                 return
-            score = max(self._wake.predict(frame).values())
+            score = self._wake_score = float(max(self._wake.predict(frame).values()))
             if score >= self._wake_threshold():
                 self._wake_cooldown = time.monotonic() + 2.5
                 self._wake.reset()
@@ -1537,9 +1550,11 @@ class Daemon:
                 loop.call_soon_threadsafe(self._wake_by_name, prefill, lambda: prefill and prefill())
 
             spotter = namespot.NameSpotter(self.stt.transcribe_head, names, lambda: self.mic.seq, on_name,
-                                           min_prob=self._name_min_prob)
+                                           min_prob=self._name_min_prob,
+                                           floor=lambda: float(self.cfg["wakeword"].get("name_candidate", 0.0)))
             self.mic.subscribe(lambda f: spotter.feed(
-                f, self.state in ("idle", "thinking") and time.monotonic() > max(self._quiet_until, self._wake_cooldown)))
+                f, self.state in ("idle", "thinking") and time.monotonic() > max(self._quiet_until, self._wake_cooldown)
+                and self._name_spotting_allowed(), self._wake_score))
         self.mic.start()
 
     async def _watch_notifications(self) -> None:

@@ -199,8 +199,11 @@ DEFAULTS: dict = {
     # wake_names: which names wake it (empty = the assistant name only)
     # threshold_while_playing: пока из колонок идёт звук, микрофон слышит и его —
     # «Джарвис», сказанный в ролике, будил ассистента наравне с хозяином.
+    # name_candidate: имя в речи ищет Whisper, но только в отрывке, где openWakeWord хоть раз дал этот балл;
+    # иначе он гонялся на всякую речь в комнате и не отпускал видеопамять (Р-30). 0 = на любую речь.
+    # Если «Джарвис» перестал будить — смотри в журнале «name heard … (openWakeWord N)» и опусти планку.
     "wakeword": {"enabled": False, "names": True, "wake_names": [], "model": "hey_jarvis",
-                 "threshold": 0.5, "threshold_while_playing": 0.7},
+                 "threshold": 0.5, "threshold_while_playing": 0.7, "name_candidate": 0.05},
     "brain": {
         # claude | ollama | openrouter | deepseek | custom — see `justday model list`
         "provider": "claude",

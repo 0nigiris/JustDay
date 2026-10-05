@@ -6,6 +6,8 @@ Runs in its own virtualenv (CUDA PyTorch) and serves the daemon over a user-only
      {"cmd": "voices"}                                           → JSON line
      {"cmd": "design", "name": "...", "description": "...", "sample": "..."}  → JSON line (creates a voice)
      {"cmd": "clone", "name": "...", "audio": "/path.wav", "text": "transcript"} → JSON line
+     {"cmd": "silero", "text": "...", "speaker": "eugene", "rate": 48000, "model": "/path/v5_5_ru.pt"}
+                                                                 → PCM frame(s) at `rate`, on the CPU (Р-35)
   PCM frame: 4-byte little-endian length + int16 mono samples at 24 kHz; a zero length ends the stream.
 
 A voice is a folder <voices>/<id>/ with ref.wav (10–20 s of speech), ref.txt (its transcript) and voice.json.
@@ -50,6 +52,8 @@ RATE = 24000
 
 lock = threading.Lock()
 model = None
+silero_lock = threading.Lock()
+silero = None               # Silero на процессоре; раньше жил в демоне и держал там сотни мегабайт torch (Р-35)
 last_use = time.time()      # когда голосом пользовались в последний раз
 busy = 0                    # сколько просьб выполняется прямо сейчас
 _from_socket = (os.environ.get("LISTEN_PID") == str(os.getpid())
@@ -240,6 +244,28 @@ def say(conn: socket.socket, text: str, voice: str, instruct: str = "") -> None:
     conn.sendall(struct.pack("<I", 0))
 
 
+def load_silero(path: str):
+    global silero
+    with silero_lock:
+        if silero is None:
+            torch.set_num_threads(4)
+            silero = torch.package.PackageImporter(path).load_pickle("tts_models", "model")
+            log("silero ready")
+    return silero
+
+
+def say_silero(conn: socket.socket, text: str, speaker: str, rate: int, path: str) -> None:
+    """Одна фраза Silero целиком (она и так готова за 0,1–0,5 с): демон сам растягивает под темп."""
+    global last_use
+    last_use = time.time()
+    m = load_silero(path)
+    with silero_lock:
+        wave = m.apply_tts(text=text, speaker=speaker, sample_rate=rate, put_accent=True, put_yo=True)
+    data = to_pcm16(wave.numpy())
+    conn.sendall(struct.pack("<I", len(data)) + data + struct.pack("<I", 0))
+    last_use = time.time()
+
+
 def save_voice(name: str, wav: np.ndarray, sr: int, text: str, meta: dict) -> dict:
     vid = re.sub(r"[^a-z0-9а-яё_-]+", "-", name.lower()).strip("-") or f"voice-{int(time.time())}"
     d = VOICES / vid
@@ -294,6 +320,15 @@ def handle(conn: socket.socket) -> None:
                 finally:
                     busy -= 1
                 return
+            if cmd == "silero":
+                try:
+                    say_silero(conn, req["text"], req.get("speaker", "eugene"), int(req.get("rate") or 48000),
+                               req["model"])
+                except Exception as e:  # закрытое соединение клиент понимает как «службы нет» и говорит сам
+                    log("silero failed:", str(e))
+                finally:
+                    busy -= 1
+                return
             if cmd == "voices":
                 resp = {"ok": True, "voices": voice_list()}
             elif cmd == "design":
@@ -307,6 +342,10 @@ def handle(conn: socket.socket) -> None:
                 if ok:
                     shutil.rmtree(d)
                 resp = {"ok": ok}
+            elif cmd == "warm" and req.get("engine") == "silero":
+                if silero is None:
+                    threading.Thread(target=load_silero, args=(req["model"],), daemon=True).start()
+                resp = {"ok": True, "loaded": silero is not None}
             elif cmd == "warm":   # поднять модель заранее, пока ассистент думает над ответом
                 if model is None:
                     threading.Thread(target=warm, daemon=True).start()

@@ -74,7 +74,7 @@ class NameSpotter:
     def __init__(self, transcribe: Callable[[np.ndarray], tuple[str, list[tuple[str, float]], float]],
                  names: list[str], seq: Callable[[], int],
                  on_wake: Callable[[np.ndarray, bool, Callable[[], list[tuple[int, np.ndarray]]]], None],
-                 min_prob: Callable[[], float] | None = None):
+                 min_prob: Callable[[], float] | None = None, floor: Callable[[], float] | None = None):
         from .audio import voice_activity_model
 
         self.vad = voice_activity_model()
@@ -86,6 +86,11 @@ class NameSpotter:
         # но когда из колонок идёт звук, в микрофон попадает и он: имя, произнесённое
         # в ролике, звучит для Whisper так же, как сказанное в комнате.
         self.min_prob = min_prob or (lambda: MIN_NAME_PROB)
+        # Планка openWakeWord, ниже которой отрывок даже не уходит к Whisper. Прогон Whisper на каждый
+        # всплеск речи в комнате (5–7 тыс. в сутки) держал его в видеопамяти вечно (Р-30); 0 = как раньше.
+        self.floor = floor or (lambda: 0.0)
+        self._pre_scores: list[float] = []
+        self._peak = 0.0
         self._pre: list[np.ndarray] = []
         self._clip: list[np.ndarray] | None = None
         self._silence = 0.0
@@ -97,11 +102,12 @@ class NameSpotter:
         threading.Thread(target=self._worker, daemon=True, name="namespot").start()
 
     def reset(self) -> None:
-        self._pre, self._clip, self._silence = [], None, 0.0
+        self._pre, self._pre_scores, self._clip, self._silence = [], [], None, 0.0
         self.vad.reset_states()
 
-    def feed(self, frame: np.ndarray, active: bool) -> None:
-        """`active` = JustDay may be woken now (not listening, not speaking)."""
+    def feed(self, frame: np.ndarray, active: bool, score: float = 1.0) -> None:
+        """`active` = JustDay may be woken now (not listening, not speaking). `score` = how much the frame
+        sounded like the wake word to openWakeWord: a phrase that never did is not worth a Whisper run."""
         p = float(self.vad.predict(frame, frame_size=640))
         with self._lock:
             if self._pending:
@@ -117,19 +123,23 @@ class NameSpotter:
                 return
         if self._clip is None:
             self._pre = ([*self._pre, frame])[-4:]
+            self._pre_scores = ([*self._pre_scores, score])[-4:]
             if p > 0.5:
-                self._clip, self._silence = list(self._pre), 0.0
+                self._clip, self._silence, self._peak = list(self._pre), 0.0, max(self._pre_scores)
             return
         self._clip.append(frame)
+        self._peak = max(self._peak, score)
         self._silence = self._silence + audio.FRAME / audio.RATE if p < 0.3 else 0.0
         long_enough = len(self._clip) * audio.FRAME >= HEAD_S * audio.RATE
         if long_enough or self._silence >= END_SILENCE_S:
             clip, still_talking = np.concatenate(self._clip), self._silence < END_SILENCE_S
             self._clip = None
+            if self._peak < self.floor():
+                return
             with self._lock:
                 self._pending, self._tail = True, []
             try:
-                self._jobs.put_nowait((clip, still_talking))
+                self._jobs.put_nowait((clip, still_talking, self._peak))
             except queue.Full:
                 with self._lock:
                     self._pending = False
@@ -153,7 +163,7 @@ class NameSpotter:
 
     def _worker(self) -> None:
         while True:
-            clip, still_talking = self._jobs.get()
+            clip, still_talking, peak = self._jobs.get()
             try:
                 text, words, no_speech = self.transcribe(clip)
             except Exception:
@@ -164,7 +174,7 @@ class NameSpotter:
                 log.info("name ignored (unsure): %r %s no_speech=%.2f", text, words[:3], no_speech)
                 hit = False
             if hit:
-                log.info("name heard: %r", text)
+                log.info("name heard: %r (openWakeWord %.2f)", text, peak)
                 # "Джарвис…" with speech going on → keep it; "Джарвис." + pause → a normal listen with a beep
                 self.on_wake(clip, bool(rest) or still_talking, self._take_tail)
             else:
