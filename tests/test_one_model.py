@@ -47,3 +47,33 @@ def test_each_turn_reconnected_the_brain_twice(tmp_path, monkeypatch):
 
     asyncio.run(three_turns())
     assert reconnects == ["haiku"]
+
+
+def test_the_persona_cost_nine_thousand_tokens_every_turn(tmp_path, monkeypatch):
+    """PERSONA была 18,8 тыс. знаков (≈9 тыс. токенов в каждом ходе), а для «который час» нужны имя,
+    характер, правила озвучки и безопасность. Подробные рецепты уехали в навык assistant (Р-23)."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+
+    async def nobody(*a):
+        return False
+
+    cfg = config.load()
+    cfg["brain"]["model"] = "haiku"
+    prompt = brain_mod.Brain(cfg, on_text=nobody, approver=nobody, asker=nobody)._options(None).system_prompt["append"]
+    assert len(prompt) < 10000
+    for rule in ("confirm-message", "kwin_wayland", "gio trash", "НУЖНА", "justday job start", "assistant"):
+        assert rule in prompt, rule
+    skill = config.REPO_DIR / "plugin" / "skills" / "assistant" / "SKILL.md"
+    assert "justday contacts find" in skill.read_text(encoding="utf-8")
+
+
+def test_every_turn_after_a_pause_paid_for_the_whole_long_history(tmp_path, monkeypatch):
+    """Голосовая сессия сжималась только на 200 тыс.: после пятиминутной паузы ход заново платил
+    запись истории — медиана 124 тыс. токенов на ход (Р-25)."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+
+    async def nobody(*a):
+        return False
+
+    env = brain_mod.Brain(config.load(), on_text=nobody, approver=nobody, asker=nobody)._options(None).env
+    assert int(env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"]) <= 80000
