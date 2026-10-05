@@ -1754,6 +1754,13 @@ class Daemon:
         self.publish(windows=got)
         return True
 
+    def _last_active_app(self) -> str:
+        """Класс окна, где человек печатал: терминалу вставка нужна другим сочетанием (glyphs.is_terminal)."""
+        for w in self._windows or []:
+            if isinstance(w, dict) and w.get("id") == self._last_active_id:
+                return str(w.get("app") or "")
+        return ""
+
     def _focus_back(self) -> bool:
         """Дождаться, пока окно, где человек печатал, снова станет активным (из потока, не из цикла).
 
@@ -3169,7 +3176,8 @@ class Daemon:
                 resp = {"ok": True, "emoji": found, "groups": glyphs.load()["groups"]}
             elif cmd == "emoji_use":  # выбрали символ: в буфер и в то окно, где курсор
                 def _use() -> dict:
-                    return glyphs.use(req.get("char", ""), paste=req.get("paste", True), ready=self._focus_back)
+                    return glyphs.use(req.get("char", ""), paste=req.get("paste", True), ready=self._focus_back,
+                                      app=self._last_active_app())
                 resp = await asyncio.get_running_loop().run_in_executor(None, _use)
             elif cmd == "apps":  # лаунчер: программы, игры, открытые окна
                 found = await asyncio.get_running_loop().run_in_executor(
@@ -3331,7 +3339,7 @@ class Daemon:
             elif cmd == "clip_use":
                 resp = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: clipboard.put_back(str(req.get("which", "")), paste=req.get("paste", True),
-                                                     ready=self._focus_back))
+                                                     ready=self._focus_back, app=self._last_active_app()))
             elif cmd == "clip_forget":
                 resp = {"ok": clipboard.forget(str(req.get("which", "")))}
             elif cmd == "clip_wipe":

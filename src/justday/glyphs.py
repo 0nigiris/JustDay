@@ -247,8 +247,18 @@ def type_out(text: str) -> tuple[bool, str]:
     return False, last
 
 
-def paste_chord() -> tuple[bool, str]:
-    """Вставить из буфера: Ctrl+V в то окно, где курсор (как ⌘V на macOS).
+# Терминалы не вставляют по Ctrl+V: там это управляющий символ (^V), вставка — Ctrl+Shift+V.
+TERMINALS = ("kitty", "konsole", "alacritty", "foot", "wezterm")
+
+
+def is_terminal(app: str) -> bool:
+    """`app` — resourceClass окна; у foot он бывает «foot» и «footclient», у wezterm — «org.wezfurlong.wezterm»."""
+    app = (app or "").lower()
+    return any(t in app for t in TERMINALS)
+
+
+def paste_chord(terminal: bool = False) -> tuple[bool, str]:
+    """Вставить из буфера: Ctrl+V в то окно, где курсор (как ⌘V на macOS); в терминал — Ctrl+Shift+V.
 
     Нужно для длинного и многострочного текста: набирать его посимвольно через
     type_out нельзя — редактор получит Enter на каждый перевод строки.
@@ -257,14 +267,19 @@ def paste_chord() -> tuple[bool, str]:
     """
     from . import face
 
+    name = "ctrl-shift-v" if terminal else "ctrl-v"
     tries: list[tuple[str, list[str]]] = []
     if face.session() == "wayland":
         if shutil.which("wtype"):
-            tries.append(("wtype-ctrl-v", ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]))
+            mods = ["-M", "ctrl"] + (["-M", "shift"] if terminal else [])
+            unmods = (["-m", "shift"] if terminal else []) + ["-m", "ctrl"]
+            tries.append((f"wtype-{name}", ["wtype", *mods, "-k", "v", *unmods]))
         if shutil.which("ydotool") and _ydotool_ready():
-            tries.append(("ydotool-ctrl-v", ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]))
+            # 29 — Ctrl, 42 — Shift, 47 — V (коды evdev)
+            down, up = (["29:1", "42:1"], ["42:0", "29:0"]) if terminal else (["29:1"], ["29:0"])
+            tries.append((f"ydotool-{name}", ["ydotool", "key", *down, "47:1", "47:0", *up]))
     elif face.session() == "x11" and shutil.which("xdotool"):
-        tries.append(("xdotool-ctrl-v", ["xdotool", "key", "--clearmodifiers", "ctrl+v"]))
+        tries.append((f"xdotool-{name}", ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v" if terminal else "ctrl+v"]))
     if not tries:
         return False, ""
     env = {**os.environ, "YDOTOOL_SOCKET": _ydotool_socket()}
@@ -280,7 +295,7 @@ def paste_chord() -> tuple[bool, str]:
     return False, last
 
 
-def use(ch: str, *, paste: bool = True, ready=None) -> dict:
+def use(ch: str, *, paste: bool = True, ready=None, app: str = "") -> dict:
     """Выбрали символ: запомнить, положить в буфер и напечатать, если есть чем.
 
     Печатаем, а не только кладём в буфер: человек выбирает эмодзи, стоя курсором в строке, и
@@ -289,7 +304,8 @@ def use(ch: str, *, paste: bool = True, ready=None) -> dict:
     `ready` — «окно, куда печатали, снова слушает клавиатуру»: демон знает это по событиям KWin и
     отвечает за десятки миллисекунд. Без него (командная строка) ждём вслепую PASTE_DELAY: фиксированная
     пауза в полсекунды была заметна глазом, а событие приходит почти сразу. Вернул False — окна нет,
-    Ctrl+V ушёл бы в никуда, и символ остаётся в буфере.
+    Ctrl+V ушёл бы в никуда, и символ остаётся в буфере. `app` — класс окна, куда вставляем: терминалу
+    нужен Ctrl+Shift+V.
     """
     remember(ch)
     before = _clipboard_text() if paste and not ch.isascii() else None
@@ -304,7 +320,7 @@ def use(ch: str, *, paste: bool = True, ready=None) -> dict:
         # ydotool type знает только клавиши латиницы: эмодзи он «печатает» с кодом 0 и ничего не
         # вставляет, поэтому символ вне ASCII вставляем Ctrl+V из буфера, куда он уже лёг.
         if copied and not ch.isascii():
-            typed, how = paste_chord()
+            typed, how = paste_chord(is_terminal(app))
             if typed and before is not None:
                 # Окну нужен миг, чтобы забрать вставку; потом возвращаем то, что человек копировал
                 # сам, — на Windows выбранный эмодзи буфер не занимает.

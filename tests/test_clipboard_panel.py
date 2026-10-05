@@ -63,7 +63,7 @@ def test_put_back_uses_paste_chord_for_multiline(state_dir, monkeypatch):
     iid = clipboard.items()[0]["id"]
     monkeypatch.setattr(glyphs, "to_clipboard", lambda text: True)
     monkeypatch.setattr(glyphs, "type_out", lambda text: (_ for _ in ()).throw(AssertionError("must not type")))
-    monkeypatch.setattr(glyphs, "paste_chord", lambda: (True, "test-ctrl-v"))
+    monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (True, "test-ctrl-v"))
     monkeypatch.setattr(glyphs, "PASTE_DELAY", 0)
     got = clipboard.put_back(iid, paste=True)
     assert got["ok"] and got.get("pasted") is True
@@ -78,6 +78,6 @@ def test_russian_text_from_the_clipboard_panel_was_pasted_not_typed(state_dir, m
     iid = clipboard.items()[0]["id"]
     monkeypatch.setattr(glyphs, "to_clipboard", lambda text: True)
     monkeypatch.setattr(glyphs, "type_out", lambda text: (_ for _ in ()).throw(AssertionError("must not type")))
-    monkeypatch.setattr(glyphs, "paste_chord", lambda: (True, "test-ctrl-v"))
+    monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (True, "test-ctrl-v"))
     got = clipboard.put_back(iid, paste=True, ready=lambda: True)
     assert got["pasted"] is True and not got["typed"]

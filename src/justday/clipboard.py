@@ -280,7 +280,7 @@ def wipe() -> int:
     return count
 
 
-def put_back(which: str, *, paste: bool = True, ready=None) -> dict:
+def put_back(which: str, *, paste: bool = True, ready=None, app: str = "") -> dict:
     """Запись — снова в буфер обмена и сразу в то окно, где курсор (как ⌘V на macOS).
 
     Короткий однострочный текст печатаем напрямую; длинный / многострочный / картинку —
@@ -307,7 +307,7 @@ def put_back(which: str, *, paste: bool = True, ready=None) -> dict:
         pasted = False
         how = ""
         if paste and ok and settle():
-            pasted, how = glyphs.paste_chord()
+            pasted, how = glyphs.paste_chord(glyphs.is_terminal(app))
         return {"ok": ok, "kind": "image", "pasted": pasted, "how": how,
                 "note": "" if pasted else ("картинка в буфере — вставьте Ctrl+V" if ok
                                            else "нечем положить картинку в буфер"),
@@ -323,7 +323,7 @@ def put_back(which: str, *, paste: bool = True, ready=None) -> dict:
         if len(text) <= 400 and "\n" not in text and text.isascii():
             typed, how = glyphs.type_out(text)
         if not typed:
-            pasted, how = glyphs.paste_chord()
+            pasted, how = glyphs.paste_chord(glyphs.is_terminal(app))
     return {"ok": copied or typed or pasted, "kind": "text", "typed": typed, "pasted": pasted,
             "how": how,
             "note": "" if (typed or pasted) else ("в буфере обмена — вставьте Ctrl+V" if copied
