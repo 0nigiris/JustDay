@@ -4,8 +4,10 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
+import types
 from pathlib import Path
 
 from justday import audio, calendar_lane
@@ -181,20 +183,12 @@ def test_an_ordinary_request_was_swallowed_by_the_mail_lane() -> None:
         "короткая просьба написать письмо — это всё-таки почта"
 
 
-def test_the_voice_that_did_not_fit_on_the_card_used_to_leave_jarvis_silent() -> None:
+def test_the_voice_that_did_not_fit_on_the_card_used_to_leave_jarvis_silent(monkeypatch) -> None:
     """Голос грузился, пока судья ещё держал шесть гигабайт: CUDA out of memory — и Джарвис молчал.
 
     Теперь при нехватке памяти голос просит Ollama отпустить модели и пробует снова; если и после
     этого не вышло — говорит человеку словами, что мешает.
     """
-    import ast
-    import types
-    from pathlib import Path
-
-    src = (Path(__file__).resolve().parent.parent / "voice" / "server.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ("_free_ollama", "load_base")]
-
     class OOM(Exception):
         pass
 
@@ -209,23 +203,27 @@ def test_the_voice_that_did_not_fit_on_the_card_used_to_leave_jarvis_silent() ->
             return types.SimpleNamespace(warmup=lambda **_k: None)
 
     torch = types.SimpleNamespace(cuda=types.SimpleNamespace(OutOfMemoryError=OOM, empty_cache=lambda: None))
-    ns = {"torch": torch, "gc": __import__("gc"), "json": __import__("json"), "os": __import__("os"),
-          "time": types.SimpleNamespace(time=lambda: 0.0, sleep=lambda _s: None),
-          "log": lambda *_a: None, "BASE_MODEL": "m", "model": None}
-    exec(compile(ast.Module(funcs, []), "voice", "exec"), ns)
-    ns["_free_ollama"] = lambda: freed.append(1) or 1
-    sys.modules["faster_qwen3_tts"] = types.SimpleNamespace(FasterQwen3TTS=Fake)
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setitem(sys.modules, "numpy", types.ModuleType("numpy"))
+    monkeypatch.setitem(sys.modules, "soundfile", types.ModuleType("soundfile"))
+    monkeypatch.setitem(sys.modules, "faster_qwen3_tts", types.SimpleNamespace(FasterQwen3TTS=Fake))
+    path = Path(__file__).resolve().parent.parent / "voice" / "server.py"
+    spec = importlib.util.spec_from_file_location("justday_voice_under_test", path)
+    assert spec and spec.loader
+    service = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "justday_voice_under_test", service)
+    spec.loader.exec_module(service)
+    service.time = types.SimpleNamespace(time=lambda: 0.0, sleep=lambda _s: None)
+    service._free_ollama = lambda: freed.append(1) or 1
+    service.log = lambda *_args: None
+    assert service.load_base() is not None
+    assert len(attempts) == 3 and len(freed) == 2, "голос не просил освободить память между попытками"
+    attempts.clear()
+    service.model = None
+    Fake.from_pretrained = staticmethod(lambda _n: (_ for _ in ()).throw(OOM()))
     try:
-        assert ns["load_base"]() is not None
-        assert len(attempts) == 3 and len(freed) == 2, "голос не просил освободить память между попытками"
-        attempts.clear()
-        ns["model"] = None
-        Fake.from_pretrained = staticmethod(lambda _n: (_ for _ in ()).throw(OOM()))
-        try:
-            ns["load_base"]()
-        except RuntimeError as e:
-            assert "видеопамяти" in str(e)
-        else:
-            raise AssertionError("после трёх неудач человеку должны сказать словами")
-    finally:
-        del sys.modules["faster_qwen3_tts"]
+        service.load_base()
+    except RuntimeError as e:
+        assert "видеопамяти" in str(e)
+    else:
+        raise AssertionError("после трёх неудач человеку должны сказать словами")

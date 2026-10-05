@@ -74,14 +74,36 @@ def test_the_tray_icon_could_not_bring_back_a_minimized_window() -> None:
       вернуть его нашими руками — значит отнять у значка право прятать.
     """
     import json
+    import shutil
+    import subprocess
+
+    import pytest
 
     from justday import desktop
 
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("нет node, чтобы выполнить действие значка на подставном окне")
     js = desktop._KWIN_JS % {"query": json.dumps("telegramdesktop"), "action": json.dumps("wake"),
                              "tag": json.dumps("T "), "wid": json.dumps("")}
-    assert "squash" in js, "имена сравниваются буква в букву — значок своего окна не найдёт"
-    assert 'action === "wake" && !w.minimized' in js, \
-        "wake хватает любое окно: программа больше не может спрятать себя щелчком по значку"
+    harness = """
+const events = [];
+const win = { normalWindow: true, resourceClass: "org.telegram.desktop", resourceName: "org.telegram.desktop",
+              caption: "Telegram", internalId: 7, minimized: false, fullScreen: false, pid: 1,
+              frameGeometry: {x: 0, y: 0, width: 800, height: 600} };
+const other = { normalWindow: true, minimized: false };
+const workspace = { windowList: () => [win], activeWindow: other };
+const log = { warn: line => events.push(line) };
+const run = new Function("workspace", "console", CODE);
+run(workspace, log);
+const visibleUntouched = !win.minimized && workspace.activeWindow === other;
+win.minimized = true;
+run(workspace, log);
+process.stdout.write(JSON.stringify({visibleUntouched, restored: !win.minimized && workspace.activeWindow === win}));
+""".replace("CODE", json.dumps(js))
+    got = json.loads(subprocess.run([node, "-e", harness], capture_output=True, text=True, check=True).stdout)
+    assert got == {"visibleUntouched": True, "restored": True}, \
+        "значок не разбудил свёрнутое окно или отменил право Telegram спрятаться"
 
 
 def test_the_dock_tip_printed_the_app_name_twice() -> None:
