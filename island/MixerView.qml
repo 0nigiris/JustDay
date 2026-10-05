@@ -87,7 +87,7 @@ Item {
         implicitHeight: strong ? 66 : 54
         radius: 14
         color: laneHover.hovered ? JD.fill1 : Qt.rgba(1, 1, 1, 0.04)
-        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 130 } }
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         HoverHandler { id: laneHover }
 
         function setVolume(v) {
@@ -107,7 +107,7 @@ Item {
                 implicitHeight: implicitWidth
                 radius: width / 2
                 color: lane.silent ? Qt.rgba(1, 0.27, 0.23, 0.22) : JD.fill1
-                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 130 } }
+                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 Icon {
                     anchors.centerIn: parent
                     name: lane.silent ? "volume-x" : (lane.glyph || lane.own)
@@ -166,7 +166,7 @@ Item {
                         radius: parent.radius
                         width: parent.width * Math.max(0, Math.min(1, lane.value))
                         color: lane.silent ? JD.text3 : lane.tint
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 130 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     }
                     // Громче ста процентов — другим цветом: это уже усиление, и звучит оно
                     // соответственно. Молча дорисовывать полоску дальше было бы нечестно.

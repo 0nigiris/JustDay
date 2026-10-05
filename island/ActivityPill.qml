@@ -130,7 +130,7 @@ Item {
                     color: ap.tintOf(modelData.tint)
                     opacity: modelData.stale ? 0.4 : 0.85
                     scale: 1
-                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160 } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
             }
         }
@@ -145,6 +145,6 @@ Item {
         border.width: 1
         border.color: ap.failed ? Qt.rgba(1, 0.27, 0.23, 0.45)
                     : ap.done ? Qt.rgba(0.19, 0.82, 0.35, 0.40) : "transparent"
-        Behavior on border.color { enabled: JD.animOn; ColorAnimation { duration: 220 } }
+        Behavior on border.color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
     }
 }

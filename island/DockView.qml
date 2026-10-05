@@ -857,7 +857,7 @@ Item {
                     readonly property real draw: dv.icon * slot.k
                         * ((slot.e.t === "app" || dockChrome) ? 1.08 : 1)
                         * (drop.containsDrag ? 1.14 : 1)
-                        * (slotTap.pressed ? 0.9 : 1)
+                        * (slotTap.pressed ? JD.pressScaleSmall : 1)
                     width: draw
                     height: draw
                     // Коробка размером со значок программы, по центру ряда. Всё, что ниже ростом,
@@ -969,7 +969,7 @@ Item {
                             radius: Math.round(dv.icon * 0.28)
                             color: JD.trayOn ? Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.22)
                                              : Qt.rgba(1, 1, 1, 0.10)
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 140 } }
+                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             Icon {
                                 anchors.centerIn: parent
                                 name: "layout-grid"
@@ -1033,9 +1033,9 @@ Item {
                     // Появляется и исчезает, а не мигает: окно закрыли — отметка уходит, уменьшаясь.
                     opacity: !slot.running ? 0 : dv.mark === "glow" ? 0.28 : 1
                     scale: slot.running ? 1 : 0.7
-                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 150 } }
-                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
-                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: Easing.OutBack } }
                 }
 
                 // Отскок при запуске: программа открывается не мгновенно, и без него неясно,
@@ -1300,7 +1300,7 @@ Item {
         opacity: want ? 1 : 0
         visible: opacity > 0.01
         // Opacity fade only — no Behavior on x/y/width/height/scale (those caused the wild leave slide).
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
+        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Label1 {
             id: tipText
             anchors { top: parent.top; topMargin: 5; horizontalCenter: parent.horizontalCenter }
@@ -1571,7 +1571,7 @@ Item {
                     anchors.margins: 3
                     radius: 10
                     color: cellHover.hovered ? JD.fill1 : "transparent"
-                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 110 } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
                 Column {
                     anchors.centerIn: parent
@@ -1740,7 +1740,7 @@ Item {
                         anchors.fill: parent
                         color: ctxRow.asking ? Qt.rgba(1, 0.27, 0.23, 0.18)
                              : rowHover.hovered ? JD.fill1 : "transparent"
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 110 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     }
                     Row {
                         visible: !ctxRow.sep
@@ -1775,7 +1775,7 @@ Item {
                         radius: 11
                         color: killHover.hovered ? Qt.rgba(1, 0.27, 0.23, 0.30) : "transparent"
                         opacity: rowHover.hovered || killHover.hovered ? 1 : 0
-                        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 110 } }
+                        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         Icon {
                             anchors.centerIn: parent
                             name: "x"

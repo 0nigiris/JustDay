@@ -50,7 +50,7 @@ Item {
                 x: pg.unknown ? runner.at * (parent.width + width) - width : 0
                 Behavior on width { enabled: !pg.unknown && JD.animOn
                                     NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
-                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 200 } }
+                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
             }
         }
     }

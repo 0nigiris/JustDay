@@ -83,9 +83,9 @@ Item {
         implicitHeight: 30
         radius: 15
         color: dotHover.hovered ? mv.fill3 : "transparent"
-        Behavior on color { ColorAnimation { duration: 120 } }
-        scale: dotTap.pressed ? 0.9 : 1
-        Behavior on scale { NumberAnimation { duration: 110 } }
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+        scale: dotTap.pressed ? JD.pressScaleSmall : 1
+        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dotHover.hovered ? JD.text1 : dot.accent }
         HoverHandler { id: dotHover; cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, dot.note) }
         TapHandler { id: dotTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: dot.picked() }
@@ -142,8 +142,8 @@ Item {
             color: field.activeFocus ? mv.fill2 : mv.fill1
             border.width: 1
             border.color: field.activeFocus ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
-            Behavior on color { ColorAnimation { duration: 140 } }
-            Behavior on border.color { ColorAnimation { duration: 140 } }
+            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+            Behavior on border.color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 14
@@ -212,7 +212,7 @@ Item {
             Layout.preferredHeight: visible ? 34 : 0
             spacing: 6
             opacity: JD.menuSearching ? 0.3 : 1
-            Behavior on opacity { NumberAnimation { duration: 160 } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
             Repeater {
                 model: JD.menuGroups
@@ -225,7 +225,7 @@ Item {
                     color: on ? mv.fill3 : (chipHover.hovered ? mv.fill1 : "transparent")
                     Behavior on implicitWidth { enabled: JD.animOn
                                                NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
-                    Behavior on color { ColorAnimation { duration: 130 } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
                         x: 9
@@ -321,9 +321,9 @@ Item {
                         anchors.margins: mv.spotlight ? 2 : 4
                         radius: mv.spotlight ? 10 : 12
                         color: index === JD.menuPick ? mv.fill2 : (tileHover.hovered ? mv.fill1 : "transparent")
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                        scale: tileTap.pressed ? 0.94 : 1
-                        Behavior on scale { NumberAnimation { duration: 110 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                        scale: tileTap.pressed ? JD.pressScale : 1
+                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                         // Spotlight: строка значок+имя; полное меню: плитка.
                         RowLayout {
@@ -543,7 +543,7 @@ Item {
                     text: mv.askingName ? mv.askingName + "  ·  нажмите ещё раз"
                                         : (mv.hint || (mv.user.name ? mv.user.name + (mv.user.host ? "  ·  " + mv.user.host : "") : ""))
                     opacity: (mv.askingName || mv.hint) ? 1 : 0.55
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
 
                 // Режим сервера прямо из меню: «включил и лёг спать» не должно начинаться с
@@ -585,9 +585,9 @@ Item {
                         implicitHeight: 30
                         radius: 15
                         color: asking ? JD.accentRed : (powHover.hovered ? mv.fill3 : "transparent")
-                        Behavior on color { ColorAnimation { duration: 140 } }
-                        scale: powTap.pressed ? 0.9 : 1
-                        Behavior on scale { NumberAnimation { duration: 110 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                        scale: powTap.pressed ? JD.pressScaleSmall : 1
+                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         Icon {
                             anchors.centerIn: parent
                             name: pow.modelData.icon

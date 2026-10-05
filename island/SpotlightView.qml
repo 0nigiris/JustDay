@@ -91,7 +91,7 @@ Item {
                     tint: JD.text1
                     opacity: 0.58
                     scale: field.activeFocus ? 1.04 : 1
-                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
 
                 TextInput {
@@ -220,9 +220,9 @@ Item {
                     radius: 14
                     color: line.on ? Qt.rgba(1, 1, 1, 0.10)
                          : hover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
-                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 110 } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     scale: line.on ? 1.015 : 1
-                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                     RowLayout {
                         anchors.fill: parent

@@ -375,7 +375,7 @@ Item {
                     height: width
                     radius: width * 0.3
                     color: layoutHover.hovered ? JD.fill2 : JD.fill1
-                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 120 } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
                 Text {
                     anchors.centerIn: parent
@@ -444,9 +444,9 @@ Item {
                         color: "transparent"
                         border.width: 1
                         border.color: Qt.rgba(1, 1, 1, slotTap.pressed ? 0.34 : 0.22)
-                        Behavior on border.color { enabled: JD.animOn; ColorAnimation { duration: 120 } }
+                        Behavior on border.color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         opacity: slotHover.hovered ? 1 : 0
-                        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
+                        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     }
 
                     Item {
@@ -455,7 +455,7 @@ Item {
                         width: tv.icon
                         height: tv.icon
                         z: 1
-                        scale: slot.g.k * (slotTap.pressed ? 0.88 : 1)
+                        scale: slot.g.k * (slotTap.pressed ? JD.pressScaleSmall : 1)
                         transformOrigin: tv.atRight ? Item.Right : Item.Left
                         // Smooth scale without fighting the physics tick (no Behavior on
                         // the spring-driven k — only press feedback is animated).
@@ -664,7 +664,7 @@ Item {
         color: Qt.rgba(0, 0, 0, 0.88)
         border.width: 0
         opacity: visible ? 1 : 0
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 110 } }
+        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         layer.enabled: true
         layer.effect: MultiEffect {
             shadowEnabled: true

@@ -27,7 +27,7 @@ Item {
             implicitWidth: 4
             radius: 2
             color: Qt.rgba(1, 1, 1, bar.pressed ? 0.34 : 0.16)
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         }
     }
     implicitWidth: 940
@@ -274,7 +274,7 @@ Item {
                         color: caption ? "transparent"
                              : selected ? Qt.rgba(1, 1, 1, 0.1)
                              : (navHover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 180 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                         Text {
                             visible: parent.caption
                             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -438,8 +438,8 @@ Item {
                 anchors.bottomMargin: win.toast ? 22 : 6
                 visible: opacity > 0.01
                 opacity: win.toast ? 1 : 0
-                Behavior on anchors.bottomMargin { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 180 } }
+                Behavior on anchors.bottomMargin { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 implicitWidth: toastText.implicitWidth + 36
                 implicitHeight: 38
                 radius: 19
@@ -569,17 +569,13 @@ Item {
         }
     }
 
-    component RoundIcon: Rectangle {
+    component RoundIcon: Pressable {
         id: ri
         property string glyph: ""
-        signal clicked()
         width: 30; height: 30; radius: 15
-        color: riHover.hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
-        scale: riTap.pressed ? 0.9 : 1
-        Behavior on scale { NumberAnimation { duration: 100 } }
+        pressScale: JD.pressScaleSmall
+        color: hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
         Glyph { anchors.centerIn: parent; name: ri.glyph; size: 15 }
-        HoverHandler { id: riHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { id: riTap; onTapped: ri.clicked() }
     }
 
     component Toggle: Rectangle {
@@ -592,13 +588,13 @@ Item {
         height: implicitHeight
         radius: 13
         color: checked ? "#30d158" : "#48484a"
-        Behavior on color { ColorAnimation { duration: 160 } }
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Rectangle {
             width: 22; height: 22; radius: 11
             y: 2
             x: tg.checked ? 20 : 2
             color: "white"
-            Behavior on x { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         }
         TapHandler { onTapped: tg.toggled(!tg.checked) }
         HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -619,8 +615,8 @@ Item {
         radius: 8
         opacity: enabled ? 1 : 0.45
         color: primary ? (btnHover.hovered ? "#409cff" : win.blue) : danger ? (btnHover.hovered ? "#5a2a2a" : "#4a2323") : (btnHover.hovered ? "#4a4a4c" : win.field)
-        scale: btnTap.pressed ? 0.97 : 1
-        Behavior on scale { NumberAnimation { duration: 100 } }
+        scale: btnTap.pressed ? JD.pressScale : 1
+        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         RowLayout {
             id: btnRow
             anchors.centerIn: parent
@@ -763,7 +759,7 @@ Item {
                     implicitHeight: 26
                     radius: 6
                     color: seg.current === modelData.value ? "#636366" : "transparent"
-                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Text { id: segText; anchors.centerIn: parent; text: modelData.label; color: win.t1; font.family: win.font; font.pixelSize: 13 }
                     TapHandler { onTapped: seg.picked(modelData.value) }
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -969,7 +965,7 @@ Item {
                         color: chosen ? Qt.rgba(10 / 255, 132 / 255, 1, 0.16) : (presetHover.hovered ? "#262628" : win.card)
                         border.width: chosen ? 2 : 0
                         border.color: win.blue
-                        Behavior on color { ColorAnimation { duration: 140 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         RowLayout {
                             anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
                             spacing: 12
@@ -1974,7 +1970,7 @@ Item {
                             Rectangle {
                                 width: parent.width * (vpGroup.step + (vpGroup.heard.startsWith("✓") ? 1 : 0)) / Math.max(1, vpGroup.steps.length)
                                 height: 4; radius: 2; color: win.blue
-                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                             }
                         }
                         Text {
@@ -2547,7 +2543,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredWidth: memp.width
                             implicitHeight: visible ? 230 : 0
-                            Behavior on implicitHeight { enabled: JD.animOn; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                            Behavior on implicitHeight { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                             Rectangle {
                                 anchors { fill: parent; leftMargin: 16; rightMargin: 14; bottomMargin: 48 }
                                 radius: 8

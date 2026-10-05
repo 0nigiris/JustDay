@@ -172,8 +172,8 @@ Item {
             transformOrigin: Item.TopLeft
             scale: sh.visible ? 1 : 0.94
             opacity: sh.visible ? 1 : 0
-            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.dur(140); easing.type: Easing.OutCubic } }
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(120) } }
+            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.dur(140); easing.type: JD.easeOut } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(120); easing.type: JD.easeOut } }
 
             Flickable {
                 anchors.fill: parent

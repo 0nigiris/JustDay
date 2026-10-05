@@ -99,8 +99,8 @@ Item {
         const d = (vertical ? (at - c.y) : (at - c.x)) / (me.size * 4)
         return Math.max(-1, Math.min(1, d))
     }
-    Behavior on gazeX { enabled: JD.animOn; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
-    Behavior on gazeY { enabled: JD.animOn; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+    Behavior on gazeX { enabled: JD.animOn; NumberAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
+    Behavior on gazeY { enabled: JD.animOn; NumberAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
     onWantXChanged: gazeX = wantX
     onWantYChanged: gazeY = wantY
     Component.onCompleted: { gazeX = wantX; gazeY = wantY }

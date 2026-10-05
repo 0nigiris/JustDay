@@ -26,7 +26,7 @@ Item {
         radius: width / 2
         color: ring.tint
         opacity: 0.9
-        Behavior on width { enabled: ring.visible; NumberAnimation { duration: 90 } }
+        Behavior on width { enabled: JD.animOn && ring.visible; NumberAnimation { duration: 90 } }
         SequentialAnimation on opacity {
             running: ring.visible && JD.dstate === "speaking"
             loops: Animation.Infinite
@@ -47,7 +47,7 @@ Item {
                 radiusX: ring.size / 2 - 1.5; radiusY: radiusX
                 startAngle: 0
                 sweepAngle: ring.spinning ? 250 : 360
-                Behavior on sweepAngle { enabled: ring.visible; NumberAnimation { duration: 300 } }
+                Behavior on sweepAngle { enabled: JD.animOn && ring.visible; NumberAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
             }
         }
         RotationAnimation on rotation {

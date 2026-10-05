@@ -311,7 +311,7 @@ ShellRoot {
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.08)
             opacity: osdWin.show ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: JD.dur(140); easing.type: Easing.OutCubic } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(140); easing.type: JD.easeOut } }
 
             Column {
                 id: osdInner
@@ -357,7 +357,7 @@ ShellRoot {
                             height: parent.height
                             radius: 3
                             color: JD.osdKind === "brightness" ? JD.accentOrange : JD.accentBlue
-                            Behavior on width { NumberAnimation { duration: JD.dur(120); easing.type: Easing.OutCubic } }
+                            Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.dur(120); easing.type: JD.easeOut } }
                         }
                     }
                 }
@@ -835,8 +835,8 @@ ShellRoot {
                             awake: true
                             sleepBelow: JD.dockCfg.cat_sleep_below || 0
                             opacity: JD.catFrom === trayCat ? 0.3 : 1
-                            scale: trayCatTap.pressed ? 0.88 : trayCatHover.hovered ? 1.15 : 1
-                            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                            scale: trayCatTap.pressed ? JD.pressScaleSmall : trayCatHover.hovered ? 1.15 : 1
+                            Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             HoverHandler { id: trayCatHover; cursorShape: Qt.PointingHandCursor
                                            onHoveredChanged: JD.catTipAt = hovered ? trayCat : (JD.catTipAt === trayCat ? null : JD.catTipAt) }
                             TapHandler { id: trayCatTap; onTapped: JD.openTools("load") }
@@ -862,7 +862,7 @@ ShellRoot {
                                 border.width: 1
                                 border.color: Qt.rgba(1, 1, 1, barTrayHit.pressed ? 0.34 : 0.22)
                                 opacity: barTrayHit.containsMouse && JD.trayCfg.hover_frame !== false ? 1 : 0
-                                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 120 } }
+                                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             }
                             Image {
                                 id: barTrayIcon
@@ -873,8 +873,8 @@ ShellRoot {
                                 source: barTray.modelData.icon || ""
                                 fillMode: Image.PreserveAspectFit
                                 // без asynchronous: image://icon в фоновом потоке роняет KIconLoader (Icon.qml)
-                                scale: barTrayHit.pressed ? 0.88 : barTrayHit.containsMouse ? 1.15 : 1
-                                Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                                scale: barTrayHit.pressed ? JD.pressScaleSmall : barTrayHit.containsMouse ? 1.15 : 1
+                                Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                                 // Та же вуаль, что у значков дока и лотка (Icon.qml): цвета остаются, подтягивается яркость.
                                 readonly property string wash: JD.trayWash(barTray.modelData)
                                 layer.enabled: wash !== "none"
@@ -1017,7 +1017,7 @@ ShellRoot {
             z: 7
             visible: opacity > 0.01
             opacity: at !== null && JD.catFrom === null ? 1 : 0
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
             width: catTipText.implicitWidth + 22
             height: 28
             radius: 14
@@ -1293,7 +1293,7 @@ ShellRoot {
         implicitHeight: JD.islandStyle === "bar" ? JD.barHeight : 44
         property real squeeze: 1
         property real hoverScale: JD.islandStyle === "bar" && (midHover.hovered || island.mode === "expanded" || island.mode === "settings" || island.mode === "tools") ? 1.08 : 1
-        Behavior on hoverScale { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        Behavior on hoverScale { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
         // Вниз и вверх одинаково. Повторный клик начинает цикл заново, а не ставит его в очередь.
         function bump() { pulse.restart() }
         SequentialAnimation {
@@ -1559,18 +1559,15 @@ ShellRoot {
     }
 
     // a small round button that takes the click for itself (the rest of the notification opens the app)
-    component RoundKey: Rectangle {
+    component RoundKey: Pressable {
         id: rk
         property string icon: ""
-        signal clicked()
         implicitWidth: 28
         implicitHeight: 28
         radius: 14
-        color: rkArea.containsMouse ? JD.fill2 : JD.fill1
-        scale: rkArea.pressed ? 0.9 : 1
-        Behavior on scale { NumberAnimation { duration: 120 } }
+        pressScale: JD.pressScaleSmall
+        color: hovered ? JD.fill2 : JD.fill1
         Icon { anchors.centerIn: parent; name: rk.icon; implicitSize: 14 }
-        MouseArea { id: rkArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: rk.clicked() }
     }
 
     // a desktop notification: ⌄ unfolds the whole text, ✕ lets it go, a tap anywhere else opens the app
@@ -1756,7 +1753,7 @@ ShellRoot {
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             opacity: status === Image.Ready ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: JD.dur(260) } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(260); easing.type: JD.easeOut } }
         }
     }
 
@@ -1784,7 +1781,7 @@ ShellRoot {
                     anchors.verticalCenter: parent.verticalCenter
                     height: eq.playing ? 4 + 13 * Math.abs(Math.sin(eq.t * (3.1 + index * 1.7) + index * 1.9) * Math.sin(eq.t * (1.3 + index * 0.6) + index))
                                        : 3 + (index % 2)
-                    Behavior on height { enabled: !eq.playing && JD.animOn; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                    Behavior on height { enabled: !eq.playing && JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 }
             }
         }
@@ -1846,7 +1843,7 @@ ShellRoot {
             height: sbHover.hovered || sb.dragValue >= 0 ? sb.thickness + 2 : sb.thickness
             radius: height / 2
             color: Qt.rgba(1, 1, 1, 0.16)
-            Behavior on height { NumberAnimation { duration: 120 } }
+            Behavior on height { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
             Rectangle {
                 width: parent.width * Math.max(0, Math.min(1, sb.dragValue >= 0 ? sb.dragValue : sb.value))
                 height: parent.height
@@ -1873,7 +1870,7 @@ ShellRoot {
         id: mv
         readonly property var p: JD.player || ({})
         property color tint: JD.artTint(p.color)
-        Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
+        Behavior on tint { enabled: JD.animOn; ColorAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
         readonly property bool loading: !!p.loading
         // Он думает прямо сейчас, а островок занят музыкой: сказать об этом строкой на ней же.
         readonly property bool busy: JD.dstate === "thinking" || JD.dstate === "speaking"
@@ -1942,20 +1939,18 @@ ShellRoot {
     }
 
     // a round toggle for shuffle / repeat: lit in the cover's colour when on
-    component ModeButton: Rectangle {
+    component ModeButton: Pressable {
         id: mb
         property string icon: ""
         property bool on: false
         property color tint: JD.accentPink
         property string badge: ""
-        signal clicked()
         implicitWidth: 36
         implicitHeight: 36
         radius: 18
-        color: on ? Qt.rgba(tint.r, tint.g, tint.b, 0.28) : (mbHover.hovered ? JD.fill2 : "transparent")
-        scale: mbTap.pressed ? 0.9 : 1
-        Behavior on color { ColorAnimation { duration: 160 } }
-        Behavior on scale { NumberAnimation { duration: 120 } }
+        pressScale: JD.pressScaleSmall
+        color: on ? Qt.rgba(tint.r, tint.g, tint.b, 0.28) : (hovered ? JD.fill2 : "transparent")
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Icon { anchors.centerIn: parent; name: mb.icon; implicitSize: 18; opacity: mb.on ? 1 : 0.55 }
         Rectangle {
             visible: !!mb.badge
@@ -1964,8 +1959,6 @@ ShellRoot {
             color: mb.tint
             Text { anchors.centerIn: parent; text: mb.badge; color: "black"; font.family: JD.fontFamily; font.pixelSize: 9; font.weight: Font.Bold }
         }
-        HoverHandler { id: mbHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { id: mbTap; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: mb.clicked() }
     }
 
     // the big player: cover, title, progress, shuffle · prev · play · next · repeat, the queue
@@ -1973,7 +1966,7 @@ ShellRoot {
         id: pl
         readonly property var p: JD.player || ({})
         property color tint: JD.artTint(p.color)
-        Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
+        Behavior on tint { enabled: JD.animOn; ColorAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
         property real now: Date.now()
         property bool queueOpen: false
         property int volumeWas: 0      // where the mute button came from
@@ -2024,7 +2017,7 @@ ShellRoot {
             maskEnabled: true
             maskSource: glowMask
             opacity: glowCover.status === Image.Ready ? 0.42 : 0
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 600 } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
         }
         // колесо над плеером — громкость, как над любым плеером
         WheelHandler {
@@ -2044,15 +2037,15 @@ ShellRoot {
                 Layout.preferredHeight: JD.artOpen ? plCol.width : 0
                 visible: Layout.preferredHeight > 1
                 clip: true
-                Behavior on Layout.preferredHeight { NumberAnimation { duration: JD.dur(JD.slideMs); easing.type: Easing.OutCubic } }
+                Behavior on Layout.preferredHeight { enabled: JD.animOn; NumberAnimation { duration: JD.dur(JD.slideMs); easing.type: JD.easeOut } }
                 Art {
                     width: plCol.width; height: plCol.width
                     size: plCol.width
                     tint: pl.tint; src: pl.p.thumb || ""
                     opacity: JD.artOpen ? 1 : 0
                     scale: JD.artOpen ? 1 : 0.92
-                    Behavior on opacity { NumberAnimation { duration: JD.dur(240) } }
-                    Behavior on scale { NumberAnimation { duration: JD.dur(JD.slideMs); easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(240); easing.type: JD.easeOut } }
+                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.dur(JD.slideMs); easing.type: JD.easeOut } }
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: JD.artOpen = false }
@@ -2106,8 +2099,8 @@ ShellRoot {
                 Rectangle {
                     implicitWidth: 56; implicitHeight: 56; radius: 28
                     color: ppHover.hovered ? Qt.lighter(pl.tint, 1.15) : pl.tint
-                    scale: ppTap.pressed ? 0.92 : 1
-                    Behavior on scale { NumberAnimation { duration: 120 } }
+                    scale: ppTap.pressed ? JD.pressScaleSmall : 1
+                    Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     PlayGlyph { anchors.centerIn: parent; paused: !!pl.p.paused; size: 20; tint: "black" }
                     HoverHandler { id: ppHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { id: ppTap; onTapped: { JD.media("toggle"); pl.optimistic({ pos: pl.pos, paused: !pl.p.paused }) } }
@@ -2342,7 +2335,7 @@ ShellRoot {
                     implicitHeight: 5; radius: 2.5
                     color: Qt.rgba(1, 1, 1, 0.18)
                     Rectangle { width: parent.width * (vv.v.progress || 0); height: parent.height; radius: 2.5; color: JD.text1
-                                Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } } }
+                                Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } } }
                 }
                 Label2 { text: JD.tr("Загружаю видео…") + " " + Math.round((vv.v.progress || 0) * 100) + "%"; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
             }
@@ -2365,7 +2358,7 @@ ShellRoot {
                 anchors { left: parent.left; right: parent.right; top: parent.top }
                 height: 84
                 opacity: vv.chrome ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 gradient: Gradient {
                     GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.82) }
                     GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.45) }
@@ -2400,7 +2393,7 @@ ShellRoot {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 height: 96
                 opacity: vv.chrome && !vv.busyLine ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 gradient: Gradient {
                     GradientStop { position: 0; color: "transparent" }
                     GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.55) }
@@ -2495,7 +2488,7 @@ ShellRoot {
                 color: Qt.rgba(0, 0, 0, 0.7)
                 opacity: volumeHint.running || JD.videoResizing ? 1 : 0
                 visible: opacity > 0.01
-                Behavior on opacity { NumberAnimation { duration: 180 } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 Label2 {
                     id: sizeLabel
                     anchors.centerIn: parent
@@ -2514,7 +2507,7 @@ ShellRoot {
                 width: 30; height: 30
                 opacity: vv.chrome || JD.videoResizing ? 0.85 : 0
                 visible: opacity > 0.01
-                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 Repeater {   // три косые чёрточки у самого угла, как у любого окна, которое можно тянуть
                     model: 3
                     Rectangle {
@@ -2554,7 +2547,7 @@ ShellRoot {
                 color: Qt.rgba(0, 0, 0, 0.72)
                 opacity: vv.busyLine ? 1 : 0
                 visible: opacity > 0.01
-                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 RowLayout {
                     id: capRow
                     anchors.centerIn: parent
@@ -2687,7 +2680,7 @@ ShellRoot {
                 implicitHeight: 34
                 radius: 17
                 color: replyHover.hovered ? JD.fill2 : JD.fill1
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 RowLayout {
                     anchors { fill: parent; leftMargin: 14; rightMargin: 12 }
                     Label2 { text: JD.tr("Ответить…"); color: JD.text3; Layout.fillWidth: true }
@@ -2796,7 +2789,7 @@ ShellRoot {
                     // (sourceSize.height stays 0 when only the width is requested — the implicit size is the real one)
                     onStatusChanged: if (status === Image.Ready && implicitWidth > 0) previewBox.ratio = implicitHeight / implicitWidth
                     opacity: status === Image.Ready ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: JD.dur(220); easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(220); easing.type: JD.easeOut } }
                 }
                 Rectangle {
                     visible: cv.c.kind === "video" || cv.c.type === "question"
@@ -2901,9 +2894,9 @@ ShellRoot {
                         color: tHover.hovered ? JD.fill2 : JD.fill1
                         border.width: index === 0 ? 1 : 0
                         border.color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.6)
-                        scale: tTap.pressed ? 0.96 : 1
-                        Behavior on scale { NumberAnimation { duration: 120 } }
-                        Behavior on color { ColorAnimation { duration: 120 } }
+                        scale: tTap.pressed ? JD.pressScale : 1
+                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         ColumnLayout {
                             id: tileCol
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
@@ -3019,8 +3012,8 @@ ShellRoot {
                     radius: 12
                     clip: true
                     color: rowHover.hovered && !open ? JD.fill2 : JD.fill1
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on implicitHeight { NumberAnimation { duration: JD.dur(200); easing.type: Easing.OutCubic } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                    Behavior on implicitHeight { enabled: JD.animOn; NumberAnimation { duration: JD.dur(200); easing.type: JD.easeOut } }
                     ColumnLayout {
                         id: letterCol
                         anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 9; leftMargin: 12; rightMargin: 12 }
@@ -3050,7 +3043,7 @@ ShellRoot {
                             Icon {
                                 name: "chevron-down"; implicitSize: 14; tint: JD.text3
                                 rotation: letterRow.open ? 180 : 0
-                                Behavior on rotation { NumberAnimation { duration: JD.dur(200); easing.type: Easing.OutCubic } }
+                                Behavior on rotation { enabled: JD.animOn; NumberAnimation { duration: JD.dur(200); easing.type: JD.easeOut } }
                             }
                         }
                         Label2 {
@@ -3208,7 +3201,7 @@ ShellRoot {
                     Layout.alignment: Qt.AlignTop
                     implicitWidth: 30; implicitHeight: 30; radius: 15
                     color: field.text.trim() ? JD.accentBlue : JD.fill1
-                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Icon { anchors.centerIn: parent; name: "go-up"; implicitSize: 16 }
                     TapHandler { onTapped: JD.submit(field.text) }
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -3286,7 +3279,7 @@ ShellRoot {
 
     // ───────────── expanded control center ─────────────
     // a control-center toggle: a round icon that lights up, the name and its state
-    component Tile: Rectangle {
+    component Tile: Pressable {
         id: tile
         property string icon: ""
         property string title: ""
@@ -3295,21 +3288,20 @@ ShellRoot {
         property bool on: false
         property color tint: JD.accentBlue
         signal toggled()
+        onClicked: toggled()
         Layout.fillWidth: true
         Layout.preferredWidth: 1
         implicitHeight: 62
         radius: 18
-        color: tileHover.hovered ? JD.fill2 : JD.fill1
-        scale: tileTap.pressed ? 0.96 : 1
-        Behavior on color { ColorAnimation { duration: 160 } }
-        Behavior on scale { NumberAnimation { duration: 120 } }
+        color: hovered ? JD.fill2 : JD.fill1
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         RowLayout {
             anchors { fill: parent; leftMargin: 11; rightMargin: 10 }
             spacing: 10
             Rectangle {
                 implicitWidth: 38; implicitHeight: 38; radius: 19
                 color: tile.on ? tile.tint : JD.fill2
-                Behavior on color { ColorAnimation { duration: 200 } }
+                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                 Icon { anchors.centerIn: parent; name: tile.icon; implicitSize: 18 }
             }
             ColumnLayout {
@@ -3319,23 +3311,18 @@ ShellRoot {
                 Label2 { text: tile.on ? tile.onText : tile.offText; font.pixelSize: 11; color: tile.on ? JD.text2 : JD.text3; Layout.fillWidth: true }
             }
         }
-        HoverHandler { id: tileHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { id: tileTap; onTapped: tile.toggled() }
     }
 
-    component Chip: Rectangle {
+    component Chip: Pressable {
         id: chip
         property string icon: ""
         property string label: ""
         property color tint: JD.fill1
-        signal clicked()
         implicitWidth: chipRow.implicitWidth + 24
         implicitHeight: 34
         radius: 17
-        color: chipHover.hovered ? Qt.lighter(tint === JD.fill1 ? "#262628" : tint, 1.2) : tint
-        scale: chipTap.pressed ? 0.95 : 1
-        Behavior on scale { NumberAnimation { duration: 120 } }
-        Behavior on color { ColorAnimation { duration: 120 } }
+        color: hovered ? Qt.lighter(tint === JD.fill1 ? "#262628" : tint, 1.2) : tint
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         RowLayout {
             id: chipRow
             anchors.centerIn: parent
@@ -3343,8 +3330,6 @@ ShellRoot {
             Icon { visible: !!chip.icon; name: chip.icon; implicitSize: 15 }
             Label1 { text: chip.label; font.pixelSize: 12; font.weight: Font.Medium }
         }
-        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { id: chipTap; onTapped: chip.clicked() }
     }
 
     // one row of the sound card: icon (a tap mutes) · name · a track to drag or click · the level
@@ -3382,13 +3367,13 @@ ShellRoot {
                     height: vrTrack.active ? 8 : 6
                     radius: height / 2
                     color: JD.fill2
-                    Behavior on height { NumberAnimation { duration: 120 } }
+                    Behavior on height { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Rectangle {
                         width: rail.width * vr.shown
                         height: parent.height
                         radius: parent.radius
                         color: vr.tint
-                        Behavior on width { enabled: vr.dragValue < 0; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        Behavior on width { enabled: JD.animOn && vr.dragValue < 0; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     }
                 }
                 // the knob: where the level is, and something to take hold of
@@ -3397,8 +3382,8 @@ ShellRoot {
                     x: Math.max(0, Math.min(vrTrack.width - width, vrTrack.width * vr.shown - width / 2))
                     anchors.verticalCenter: parent.verticalCenter
                     color: "#f5f5f7"
-                    Behavior on width { NumberAnimation { duration: 120 } }
-                    Behavior on x { enabled: vr.dragValue < 0; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                    Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                    Behavior on x { enabled: JD.animOn && vr.dragValue < 0; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
                 HoverHandler { id: vrHover; cursorShape: Qt.PointingHandCursor }
                 MouseArea {
@@ -3544,7 +3529,7 @@ ShellRoot {
                 implicitHeight: 46
                 radius: 23
                 color: askHover.hovered ? JD.fill2 : JD.fill1
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 RowLayout {
                     anchors { fill: parent; leftMargin: 16; rightMargin: 6 }
                     spacing: 8
@@ -3571,7 +3556,7 @@ ShellRoot {
                     readonly property bool any: own || !!ev.player
                     readonly property var p: JD.player || ({})
                     property color tint: own ? JD.artTint(p.color) : JD.accentPink
-                    Behavior on tint { ColorAnimation { duration: 450; easing.type: Easing.OutCubic } }
+                    Behavior on tint { enabled: JD.animOn; ColorAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1.15
                     implicitHeight: 136 + (seek.visible ? 22 : 0)
@@ -3631,7 +3616,7 @@ ShellRoot {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: parent.width; height: seekHit.containsMouse || seek.dragAt >= 0 ? 6 : 4; radius: height / 2
                                     color: JD.fill2
-                                    Behavior on height { NumberAnimation { duration: 120 } }
+                                    Behavior on height { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                                     Rectangle { width: parent.width * seek.frac; height: parent.height; radius: parent.radius; color: np.tint }
                                 }
                                 MouseArea {
@@ -3902,7 +3887,7 @@ ShellRoot {
                         implicitHeight: 40
                         radius: 12
                         color: current ? JD.text1 : (segHover.hovered ? JD.fill2 : JD.fill1)
-                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                         ColumnLayout {
                             anchors.centerIn: parent
                             spacing: -1
@@ -4381,7 +4366,7 @@ ShellRoot {
                         return rest + (trayWin.shown ? 0 : away)
                     }
                     opacity: 1
-                    Behavior on x { enabled: JD.animOn; NumberAnimation { duration: trayReveal.slideMs; easing.type: Easing.OutCubic } }
+                    Behavior on x { enabled: JD.animOn; NumberAnimation { duration: trayReveal.slideMs; easing.type: JD.easeOut } }
                     // Pin to restLength, then offset so magnify grows symmetrically.
                     // Do NOT Behavior-animate y: that lagged physics and made the strip jitter.
                     y: {
@@ -4719,7 +4704,7 @@ ShellRoot {
             width: menuCard.width + 96
             height: menuCard.height + 96
             opacity: (JD.menuOpen ? 0.5 : 0) * menuCard.opacity
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160 } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         }
 
         // Размер меню задаёт человек, углом карточки. Раньше его задавало содержимое — и лента
@@ -4814,7 +4799,7 @@ ShellRoot {
                 : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
             opacity: JD.menuOpen ? 1 : 0
             scale: JD.menuOpen ? 1 : 0.94
-            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
             Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
 
             // Щелчок по самой карточке её не закрывает — только мимо.
@@ -4839,7 +4824,7 @@ ShellRoot {
                     anchors.fill: parent
                     anchors.margins: 5
                     opacity: gripHover.hovered ? 0.8 : menuCardBody.containsMouse ? 0.45 : 0.28
-                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 140 } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     onPaint: {
                         const ctx = getContext("2d")
                         ctx.reset()

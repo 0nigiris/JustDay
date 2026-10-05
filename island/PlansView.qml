@@ -32,7 +32,7 @@ Item {
             color: field.activeFocus ? JD.fill2 : JD.fill1
             border.width: 1
             border.color: field.activeFocus ? Qt.rgba(1, 1, 1, 0.22) : "transparent"
-            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 140 } }
+            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
             RowLayout {
                 anchors { fill: parent; leftMargin: 14; rightMargin: 12 }
@@ -103,7 +103,7 @@ Item {
                         implicitHeight: Math.max(40, line.implicitHeight + 18)
                         radius: 12
                         color: rowHover.hovered ? JD.fill1 : Qt.rgba(1, 1, 1, 0.04)
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 120 } }
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         HoverHandler { id: rowHover }
 
                         RowLayout {
@@ -120,7 +120,7 @@ Item {
                                 color: row.finished ? JD.accentGreen : "transparent"
                                 border.width: row.finished ? 0 : 1.5
                                 border.color: markHover.hovered ? JD.accentGreen : JD.text3
-                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 140 } }
+                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                                 Icon {
                                     anchors.centerIn: parent
                                     visible: row.finished
