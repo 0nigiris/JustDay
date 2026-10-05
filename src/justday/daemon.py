@@ -985,12 +985,14 @@ class Daemon:
             for upd in got or []:
                 offset = max(offset, int(upd.get("update_id", 0)) + 1)
                 if upd.get("callback_query"):
-                    if self._telegram_shell:
+                    # Кнопка «Разрешить» — это тоже команда: пока замок PIN закрыт, она недействительна.
+                    if self._telegram_shell and self._tg_gate.is_open():
                         with contextlib.suppress(Exception):
                             await self._telegram_shell.callback(upd)
                     continue
                 if (where := tg.location(upd)) is not None:
-                    geo.remember(*where)    # координаты нужны наблюдателю; в мозг они не идут
+                    if self._tg_gate.is_open():     # чужая рука с угнанным аккаунтом не «перевозит» владельца
+                        geo.remember(*where)        # координаты нужны наблюдателю; в мозг они не идут
                     continue
                 if not tg.owned(upd):
                     continue

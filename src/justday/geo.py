@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -28,8 +29,10 @@ UA = "JustDay/1.0 (personal assistant; contact: owner)"   # правило Nomin
 def remember(lat: float, lon: float, now: float | None = None, path: Path = STATE) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"lat": lat, "lon": lon, "at": now or time.time()}), encoding="utf-8")
-        path.chmod(0o600)
+        # Сразу с правами 0600: write_text, а потом chmod оставляли окно, где координаты читал любой.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(json.dumps({"lat": lat, "lon": lon, "at": now or time.time()}))
     except OSError:
         pass
 

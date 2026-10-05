@@ -317,6 +317,10 @@ class PinGate:
         self.misses = 0
         self.locked_until = 0.0
 
+    def is_open(self) -> bool:
+        """Открыт ли замок прямо сейчас — для кнопок и геопозиции, у которых PIN прислать нечем."""
+        return not (self._pin() or "").strip() or self._clock() < self.until
+
     def check(self, text: str) -> str:
         """«open» — пропустить; «unlocked» — только что открыли (сообщение с PIN надо стереть); «denied» —
         похоже на PIN, но неверный; «locked» — слишком много промахов; «need» — нужен PIN."""
