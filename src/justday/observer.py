@@ -69,6 +69,15 @@ def line(n: dict, address: str = "") -> str:
     return f"{text} Дорога займёт около {road} мин — пора выходить."
 
 
+def nudges(day: str = "") -> list[dict]:
+    """Что наблюдатель сказал первым за день: время и текст. Мерка из пункта 20 — «ни одного лишнего»; чтобы её
+    применить, надо видеть, что именно он сказал, а не только число."""
+    from . import events
+
+    day = day or dt.date.today().isoformat()
+    return [{"at": str(e.get("ts", ""))[11:16], "text": e.get("text", "")} for e in events.read(day) if e.get("kind") == "nudge"]
+
+
 def load(path: Path = STATE) -> dict:
     try:
         got = json.loads(path.read_text(encoding="utf-8"))

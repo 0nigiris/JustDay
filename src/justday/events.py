@@ -31,7 +31,9 @@ def emit(kind: str, **data: Any) -> None:
             fn(kind, data)
         except Exception:
             log.exception("event listener failed")
-    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "kind": kind, **data}
+    # `ts` — для глаз, с точностью до секунды; `t` — для замеров: от конца фразы до `heard` и до первого `say`
+    # по журналу с секундами не посчитать (пункт 16 плана: «не измерено»).
+    rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "t": round(time.time(), 3), "kind": kind, **data}
     config.STATE_DIR.mkdir(parents=True, exist_ok=True)
     # В журнале всё сказанное вслух и начало аргументов инструментов (в том числе набранное `act type`): читать его
     # должен один человек. Создаём сразу с 0600, а уже лежащий открытый файл подтягиваем один раз за процесс.

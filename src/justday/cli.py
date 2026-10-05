@@ -485,6 +485,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("text", nargs="*")
     sp.add_argument("--to", default="", help="кому обещано")
     sp.add_argument("--due", default="", help="к какому сроку")
+    sp = sub.add_parser("nudges", help="что ассистент сказал первым за день (по делу ли): justday nudges [YYYY-MM-DD]")
+    sp.add_argument("day", nargs="?", default="")
     sp = sub.add_parser("diary", help="страница дня в Obsidian: чем занимались, что закрыли, во что обошлось")
     sp.add_argument("day", nargs="?", default="", help="YYYY-MM-DD (по умолчанию сегодня)")
     sp.add_argument("--open", action="store_true", help="открыть её в Obsidian")
@@ -880,6 +882,11 @@ def main(argv: list[str] | None = None) -> None:
             _print({"items": promises.find(text)})
         else:
             _print({"items": promises.open_items(text)})
+    elif a.cmd == "nudges":
+        from . import observer
+
+        got = observer.nudges(a.day)
+        print("\n".join(f"{n['at']}  {n['text']}" for n in got) or "первым он сегодня ничего не говорил")
     elif a.cmd == "diary":
         from . import notes
 
