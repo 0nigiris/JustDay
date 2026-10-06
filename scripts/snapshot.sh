@@ -22,7 +22,8 @@ mkdir -p "$store"
 fingerprint() {
     { git -C "$root" rev-parse HEAD 2>/dev/null || echo none
       git -C "$root" status --porcelain=v1 -z --untracked-files=all
-      git -C "$root" ls-files -c -o --exclude-standard -z | xargs -0 -r stat -c '%n %s %Y'
+      # stat идёт из корня: ls-files печатает пути от корня, а хук зовут из любой папки (cd src/…)
+      git -C "$root" ls-files -c -o --exclude-standard -z | (cd "$root" && xargs -0 -r stat -c '%n %s %Y')
     } | sha256sum | cut -c1-16
 }
 

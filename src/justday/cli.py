@@ -504,6 +504,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("recent", help="recently used files and Claude Code projects")
     sp.add_argument("--hours", type=float, default=48)
+    sp = sub.add_parser("history", help="what played lately: «включи то, что я слушал»")
+    sp.add_argument("-n", type=int, default=10)
     sp = sub.add_parser("claude", help="Claude Code worker sessions")
     sp.add_argument("action", choices=["start", "send", "result", "list", "stop", "open", "wait"])
     sp.add_argument("args", nargs="*")
@@ -943,6 +945,13 @@ def main(argv: list[str] | None = None) -> None:
         if window:
             print(f"потолок разговора: {n(window)} токенов, дальше история сжимается")
         print("разговор с нуля — «начни заново»: короткий контекст стоит в разы дешевле длинного")
+    elif a.cmd == "history":
+        from . import media
+
+        # «играло» пишется при каждом запуске трека: фонотека и есть журнал, отдельного не заводим
+        for i, r in enumerate(media.library()[: a.n], 1):
+            when = time.strftime("%d.%m %H:%M", time.localtime(r.get("played", 0)))
+            print(f"{i}. {when} — {r.get('artist') + ' — ' if r.get('artist') else ''}{r['title']}")
     elif a.cmd == "recent":
         from . import desktop
 
