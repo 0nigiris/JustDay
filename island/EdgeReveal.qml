@@ -69,22 +69,14 @@ Item {
     }
 
     function wants(point, zoneSize) {
-        const zone = Math.max(2, zoneSize === undefined || zoneSize === null ? revealZone : zoneSize)
         const flick = Math.max(0, flickSpeed)
         if (flick <= 0)
             return true
-        if (edge === "bottom" || edge === "top") {
-            const v = point.velocity.y
-            if (edge === "top" ? v < -flick : v > flick)
-                return true
-            const at = point.position.y
-            return edge === "top" ? at <= 3 : at >= zone - 3
-        }
-        const v = point.velocity.x
-        if (edge === "left" ? v < -flick : v > flick)
-            return true
-        const at = point.position.x
-        return edge === "left" ? at <= 3 : at >= zone - 3
+        // Только рывок. Раньше «курсор уже в крайних 3 точках» тоже вызывал полосу — и она выскакивала
+        // от любого касания низа экрана, а потом приходилось ждать, пока спрячется.
+        if (edge === "bottom" || edge === "top")
+            return edge === "top" ? point.velocity.y < -flick : point.velocity.y > flick
+        return edge === "left" ? point.velocity.x < -flick : point.velocity.x > flick
     }
 
     function onEdgePoint(point, zoneSize) {

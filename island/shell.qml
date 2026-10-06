@@ -3967,7 +3967,9 @@ ShellRoot {
 
                 Item {
                     id: edge
-                    width: parent.width
+                    // Только под самим доком (с запасом): раньше любой участок нижнего края звал его.
+                    x: Math.max(0, dock.x - 40)
+                    width: Math.min(parent.width - x, dock.width + 80)
                     height: dockReveal.revealZone
                     y: dockHost.atTop ? 0 : parent.height - height
                     HoverHandler {
@@ -4211,7 +4213,7 @@ ShellRoot {
                     edgeOnly: true
                     hideDelay: 1800
                     revealZone: Math.max(2, Math.min(200, JD.trayCfg.reveal_zone === undefined ? 28 : JD.trayCfg.reveal_zone))
-                    flickSpeed: 0
+                    flickSpeed: Math.max(0, JD.trayCfg.reveal_flick === undefined ? 900 : JD.trayCfg.reveal_flick)
                 }
                 readonly property bool shown: trayReveal.shown
 
@@ -4222,7 +4224,6 @@ ShellRoot {
                     x: trayWin.atRight ? parent.width - width : 0
                     HoverHandler {
                         onPointChanged: if (trayReveal.needHide) trayReveal.onEdgePoint(point, trayEdge.width)
-                        onHoveredChanged: if (hovered && trayReveal.needHide) trayReveal.onEdgeEntered()
                     }
                 }
                 HoverHandler {
