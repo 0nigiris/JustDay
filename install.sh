@@ -293,7 +293,11 @@ if [[ -z "$WANT" ]]; then                       # ни флага, ни пере
         esac
       done
       PICK_OUT=()
-      for ((i = 0; i < n; i++)); do [[ ${PICK_ON[$i]} == 1 ]] && PICK_OUT+=("${PICK_KEY[$i]}"); done
+      # if, а не `[[ ]] && …`: у последней строки цикла код выхода 1, когда последний пункт не
+      # отмечен (на машине без NVIDIA — это «ускорение»), и `set -e` молча завершал весь установщик.
+      for ((i = 0; i < n; i++)); do
+        if [[ ${PICK_ON[$i]} == 1 ]]; then PICK_OUT+=("${PICK_KEY[$i]}"); fi
+      done
     }
 
     printf '\n  %s%s%s\n\n' "$B" "$(t 'Что установить' 'What to install')" "$N"
