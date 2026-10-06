@@ -12,7 +12,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
-from . import config, providers
+from . import config, kde, providers
 
 SERVICES = ["justday.service", "justday-island.service", "justday-voice.service", "justday-ollama.service"]
 VOICES = [
@@ -194,8 +194,11 @@ def audio_devices() -> dict:
 def _shortcut(desktop_id: str) -> list[str]:
     """Active keys of a desktop-file shortcut. kglobalshortcutsrc holds only keys changed in System Settings;
     keys equal to the desktop file's X-KDE-Shortcuts defaults are not written there, so fall back to the file."""
-    raw = subprocess.run(["kreadconfig6", "--file", "kglobalshortcutsrc", "--group", "services", "--group",
-                          desktop_id, "--key", "_launch"], capture_output=True, text=True).stdout.strip()
+    try:
+        raw = subprocess.run([kde.KREAD, "--file", "kglobalshortcutsrc", "--group", "services", "--group",
+                              desktop_id, "--key", "_launch"], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        raw = ""
     if raw and raw != "none":
         return [k for k in raw.split("\t") if k and k != "none"]
     f = Path.home() / ".local/share/applications" / desktop_id

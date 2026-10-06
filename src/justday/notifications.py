@@ -9,7 +9,7 @@ import re
 import subprocess
 from datetime import datetime, timedelta
 
-from . import desktop
+from . import desktop, kde
 
 log = logging.getLogger("justday.daemon")
 
@@ -119,13 +119,13 @@ def system_popups(on: bool | None = None) -> dict:
         until = datetime.now() + timedelta(days=365 * QUIET_YEARS)
         value = until.strftime("%Y,%-m,%-d,%-H,%-M,%-S.000")
     try:
-        subprocess.run(["kwriteconfig6", "--file", "plasmanotifyrc", "--group", "DoNotDisturb",
+        subprocess.run([kde.KWRITE, "--file", "plasmanotifyrc", "--group", "DoNotDisturb",
                         "--key", "Until", value], capture_output=True, timeout=5, check=False)
         # «Не беспокоить» у плазмы пропускает срочные уведомления — и это не прихоть, а задумка:
         # запись экрана и разговор по видеосвязи человек обязан видеть всегда. Но «сохранено в
         # Screencast_…webm» срочным считается тоже, и синяя плашка выскакивает поверх всего. Здесь
         # мы отключаем именно это послабление, а не сами уведомления: история цела, остров слышит.
-        subprocess.run(["kwriteconfig6", "--file", "plasmanotifyrc", "--group", "Notifications",
+        subprocess.run([kde.KWRITE, "--file", "plasmanotifyrc", "--group", "Notifications",
                         "--key", "CriticalInDndMode", "false" if not on else "true"],
                        capture_output=True, timeout=5, check=False)
     except (OSError, subprocess.SubprocessError) as e:
@@ -144,7 +144,7 @@ def app_popups(app: str, on: bool) -> dict:
     if not ident:
         return {"ok": False, "error": "нечего прятать: пустое имя программы"}
     try:
-        subprocess.run(["kwriteconfig6", "--file", "plasmanotifyrc",
+        subprocess.run([kde.KWRITE, "--file", "plasmanotifyrc",
                         "--group", "Applications", "--group", ident,
                         "--key", "ShowPopups", "true" if on else "false"],
                        capture_output=True, timeout=5, check=False)
@@ -155,7 +155,7 @@ def app_popups(app: str, on: bool) -> dict:
 
 def _quiet_now() -> bool:
     try:
-        raw = subprocess.run(["kreadconfig6", "--file", "plasmanotifyrc", "--group", "DoNotDisturb",
+        raw = subprocess.run([kde.KREAD, "--file", "plasmanotifyrc", "--group", "DoNotDisturb",
                               "--key", "Until"], capture_output=True, text=True, timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return False
@@ -193,13 +193,19 @@ _PLASMA_VOLUME_OSD_KEYS = (
 
 
 def _kwrite(file: str, group: str, key: str, value: str) -> None:
-    subprocess.run(["kwriteconfig6", "--file", file, "--group", group, "--key", key, value],
-                   capture_output=True, timeout=5, check=False)
+    try:
+        subprocess.run([kde.KWRITE, "--file", file, "--group", group, "--key", key, value],
+                       capture_output=True, timeout=5, check=False)
+    except OSError:
+        pass
 
 
 def _kread(file: str, group: str, key: str) -> str:
-    return subprocess.run(["kreadconfig6", "--file", file, "--group", group, "--key", key],
-                          capture_output=True, text=True, timeout=5).stdout.strip()
+    try:
+        return subprocess.run([kde.KREAD, "--file", file, "--group", group, "--key", key],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except OSError:
+        return ""
 
 
 def plasma_osd(on: bool | None = None) -> dict:

@@ -17,7 +17,7 @@ import pathlib
 import re
 import subprocess
 
-from . import config, desktop, launcher
+from . import config, desktop, kde, launcher
 
 PIN_FILE = config.STATE_DIR / "dock.json"
 CATALOG_FILE = config.STATE_DIR / "dock-catalog.json"
@@ -214,7 +214,7 @@ def icon_theme() -> str:
     спрашиваем саму плазму, и только если её утилиты нет — читаем файлы руками.
     """
     try:
-        got = subprocess.run(["kreadconfig6", "--file", "kdeglobals", "--group", "Icons", "--key", "Theme"],
+        got = subprocess.run([kde.KREAD, "--file", "kdeglobals", "--group", "Icons", "--key", "Theme"],
                              capture_output=True, text=True, timeout=5).stdout.strip()
         if got:
             return got
