@@ -774,6 +774,9 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         if re.match(r"^верни (удален\w+|только что удален\w+) (трек|песню|музыку)$", fastpath._clean(text)):
             name = await asyncio.to_thread(media.untrash_last)
             return t("Вернул: {name}", name=name) if name else t("Возвращать нечего.")
+        if re.match(r"^(открой |покажи )?(микшер|регулятор(ы)? звука|громкость программ)$", fastpath._clean(text)):
+            self.publish(panel="mixer")  # «включи звук» сюда не попадает: это не микшер, а громкость
+            return ""
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         if (said := fastpath.small_talk(text)) is not None:

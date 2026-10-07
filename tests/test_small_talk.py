@@ -47,3 +47,14 @@ def test_the_brain_was_not_asked_what_time_it_is(tmp_path, monkeypatch):
     monkeypatch.setattr(d.brain, "ask", brain_ask)
     got = asyncio.run(d.handle_local("который час"))
     assert got and got.startswith("Сейчас") and said == [got]
+
+
+def test_open_mixer_by_voice_did_not_go_to_the_brain(tmp_path, monkeypatch):
+    """Сказал «открой микшер» — слова без слэша не знал никто, и вопрос уходил мозгу (Р2-48)."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(events, "emit", lambda *a, **k: None)
+    d = daemon.Daemon()
+    shown = []
+    monkeypatch.setattr(d, "publish", lambda **k: shown.append(k))
+    assert asyncio.run(d.handle_local("Открой микшер.")) == ""
+    assert {"panel": "mixer"} in shown
