@@ -559,7 +559,7 @@ Item {
                 ToolDot {
                     icon: "sliders-horizontal"
                     note: "Настройки системы (KDE)"
-                    onPicked: { JD.closeMenu(); Quickshell.execDetached(["systemsettings"]) }
+                    onPicked: { JD.closeMenu(); JD.systemSettings("") }
                 }
 
                 // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она

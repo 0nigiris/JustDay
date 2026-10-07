@@ -1140,7 +1140,7 @@ ShellRoot {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            Quickshell.execDetached(["systemsettings", barStatus.page === "bt" ? "kcm_bluetooth" : "kcm_networkmanagement"])
+                            JD.systemSettings(barStatus.page === "bt" ? "kcm_bluetooth" : "kcm_networkmanagement")
                             barStatus.page = ""
                         }
                     }

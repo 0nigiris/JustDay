@@ -322,6 +322,12 @@ Singleton {
             "--method org.freedesktop.FileManager1.ShowItems \"['file://$2']\" '' >/dev/null 2>&1 || xdg-open \"$(dirname \"$1\")\"",
             "sh", path, encodeURI(path)])
     }
+    // Системные настройки есть не у всех (не KDE): без программы честно говорим об этом, а не молчим (Р2-15).
+    function systemSettings(page) {
+        Quickshell.execDetached(["sh", "-c",
+            "command -v systemsettings >/dev/null && exec systemsettings \"$@\" || notify-send 'JustDay' 'Системные настройки не найдены на этом компьютере'",
+            "sh"].concat(page ? [page] : []))
+    }
     function libRefresh() { send({ cmd: "music_library", sort: libSort }) }
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
     onPlayerOpenChanged: if (!playerOpen) { artOpen = false; playerPage = "now" }
