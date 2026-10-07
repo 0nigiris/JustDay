@@ -777,6 +777,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         if re.match(r"^(открой |покажи )?(микшер|регулятор(ы)? звука|громкость программ)$", fastpath._clean(text)):
             self.publish(panel="mixer")  # «включи звук» сюда не попадает: это не микшер, а громкость
             return ""
+        if re.match(r"^(включи|поставь|запусти|играй) (это )?(из буфера|что (я )?скопировал\w*|ссылку из буфера)$", fastpath._clean(text)):
+            return await self._play_from_clipboard()
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         if (said := fastpath.small_talk(text)) is not None:
@@ -1783,6 +1785,16 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             except Exception:
                 log.debug("не смог прочитать нагрузку", exc_info=True)
             await asyncio.sleep(1.0)
+
+    async def _play_from_clipboard(self) -> str:
+        """«Включи из буфера»: читаем буфер только по этой просьбе и берём из него одну ссылку YouTube — остальное не трогаем."""
+        got = await asyncio.to_thread(subprocess.run, ["wl-paste", "--no-newline", "--type", "text"],
+                                      capture_output=True, text=True, timeout=3)
+        link = (got.stdout or "").strip()[:500] if got.returncode == 0 else ""
+        if not media.parse_youtube(link):
+            return t("В буфере нет ссылки на YouTube.")
+        spawn(self.play_music(link))
+        return ""
 
     def _game_slowdown(self) -> float:
         """Фоновые опросы в игре реже в десять раз: кадры игры дороже наших цифр (Р2-46)."""

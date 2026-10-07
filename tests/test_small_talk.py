@@ -67,3 +67,36 @@ def test_background_polls_slow_down_in_a_game(tmp_path, monkeypatch):
     assert d._game_slowdown() == 1.0
     d._game_seen = "Dota 2"
     assert d._game_slowdown() == 10.0
+
+
+def test_play_from_clipboard_takes_only_a_youtube_link(tmp_path, monkeypatch):
+    """«Включи из буфера» при чужом тексте в буфере (пароль, заметка) не должно искать его на YouTube (Р2-33)."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(events, "emit", lambda *a, **k: None)
+    d = daemon.Daemon()
+    clip = {"v": "hunter2"}
+
+    class R:
+        returncode = 0
+
+        @property
+        def stdout(self):
+            return clip["v"]
+
+    monkeypatch.setattr(daemon.subprocess, "run", lambda *a, **k: R())
+    played = []
+
+    async def play(q, **k):
+        played.append(q)
+
+    monkeypatch.setattr(d, "play_music", play)
+
+    async def go():
+        a = await d.handle_local("включи из буфера")
+        clip["v"] = "https://youtu.be/dQw4w9WgXcQ"
+        b = await d.handle_local("включи из буфера")
+        await asyncio.sleep(0.05)
+        return a, b
+
+    a, b = asyncio.run(go())
+    assert "нет ссылки" in a and b == "" and played == ["https://youtu.be/dQw4w9WgXcQ"]
