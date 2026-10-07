@@ -1784,6 +1784,10 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 log.debug("не смог прочитать нагрузку", exc_info=True)
             await asyncio.sleep(1.0)
 
+    def _game_slowdown(self) -> float:
+        """Фоновые опросы в игре реже в десять раз: кадры игры дороже наших цифр (Р2-46)."""
+        return 10.0 if getattr(self, "_game_seen", None) else 1.0
+
     SESSIONS_TICK = 1.0         # как часто смотреть, не изменились ли стенограммы (это только `stat`)
     SESSIONS_HEARTBEAT = 10.0   # а список перечитывать в любом случае не реже: ушедшая сессия стенограмму не меняет
 
@@ -1813,7 +1817,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 except Exception:
                     log.debug("не смог прочитать сессии", exc_info=True)
                 seen, at = fingerprint, time.monotonic()
-            await asyncio.sleep(self.SESSIONS_TICK)
+            await asyncio.sleep(self.SESSIONS_TICK * Daemon._game_slowdown(self))
 
     async def _cpu_loop(self) -> None:
         """Одно число для кошки в доке: насколько занят процессор.
@@ -1828,7 +1832,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         meter.cpu()                      # первый взгляд сравнивать не с чем
         last, last_mem = -1.0, -1.0
         while True:
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(2.0 * Daemon._game_slowdown(self))
             try:
                 pct = meter.cpu()["percent"]
                 mem = sysload.memory()["percent"]

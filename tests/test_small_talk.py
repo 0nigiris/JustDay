@@ -58,3 +58,12 @@ def test_open_mixer_by_voice_did_not_go_to_the_brain(tmp_path, monkeypatch):
     monkeypatch.setattr(d, "publish", lambda **k: shown.append(k))
     assert asyncio.run(d.handle_local("Открой микшер.")) == ""
     assert {"panel": "mixer"} in shown
+
+
+def test_background_polls_slow_down_in_a_game(tmp_path, monkeypatch):
+    """Опросы сессий и процессора шли с той же частотой в игре, отнимая у неё кадры (Р2-46)."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    d = daemon.Daemon()
+    assert d._game_slowdown() == 1.0
+    d._game_seen = "Dota 2"
+    assert d._game_slowdown() == 10.0
