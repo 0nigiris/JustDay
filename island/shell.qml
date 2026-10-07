@@ -1571,7 +1571,13 @@ ShellRoot {
                 Icon { anchors.centerIn: parent; name: JD.flashIcon; fallback: "dialog-ok"; implicitSize: 16 }
             }
             Label1 { text: JD.flashText; TextSwap on text {} Layout.maximumWidth: 520 }
-            Text { font.family: JD.fontFamily; text: JD.flashColor === JD.accentRed ? "" : "✓"; color: JD.accentGreen; font.pixelSize: 15; font.weight: Font.Bold }
+            Text { visible: !JD.flashAct; font.family: JD.fontFamily; text: JD.flashColor === JD.accentRed ? "" : "✓"; color: JD.accentGreen; font.pixelSize: 15; font.weight: Font.Bold }
+            Label1 {
+                visible: !!JD.flashAct
+                text: JD.flashAct ? JD.flashAct[0] : ""
+                color: JD.accentBlue
+                TapHandler { onTapped: { Quickshell.execDetached(JD.flashAct[1]); JD.flashText = ""; JD.flashAct = null } }
+            }
         }
     }
 

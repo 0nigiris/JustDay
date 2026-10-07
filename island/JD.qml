@@ -248,6 +248,7 @@ Singleton {
     property string approvalText: ""
     property string approvalReason: ""
     property string flashText: ""
+    property var flashAct: null         // [подпись, команда]: кнопка в тосте (Р2-45 «Показать»)
     property string flashIcon: ""
     property color flashColor: accentGreen
 
@@ -1579,7 +1580,8 @@ Singleton {
         if (m.game !== undefined) game = m.game || ""
         if (m.crash !== undefined) {
             crashCount = m.crash.count || 0
-            if (m.crash.new > 0) flash(tr("Островок перезапустился после сбоя. Отчёт сохранён"), "circle-alert", accentOrange)
+            if (m.crash.new > 0) flash(tr("Островок перезапустился после сбоя. Отчёт сохранён"), "circle-alert", accentOrange,
+                                     [tr("Показать"), ["xdg-open", Quickshell.env("HOME") + "/.local/state/justday/crashes"]])
         }
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
         if (m.followup !== undefined) followup = m.followup
@@ -1794,13 +1796,15 @@ Singleton {
         }
     }
 
-    function flash(textValue, iconName, color) {
+    function flash(textValue, iconName, color, act) {
+        flashAct = act || null
+        flashTimer.interval = act ? 7000 : 2200
         flashText = textValue
         flashIcon = iconName || ""
         flashColor = color
         flashTimer.restart()
     }
-    Timer { id: flashTimer; interval: 2200; onTriggered: jd.flashText = "" }
+    Timer { id: flashTimer; interval: 2200; onTriggered: { jd.flashText = ""; jd.flashAct = null } }
     property bool _pendingEmptyWindows: false
     Timer {
         id: emptyWinGrace
