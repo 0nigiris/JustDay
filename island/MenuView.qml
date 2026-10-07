@@ -519,6 +519,7 @@ Item {
                 anchors.fill: parent
                 anchors.topMargin: 6
                 spacing: 4
+                ToolDot { icon: "volume-2"; note: "Звук"; onPicked: { JD.closeMenu(); JD.openTools("mixer") } }
                 ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
                 ToolDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
                 ToolDot { icon: "gauge"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }

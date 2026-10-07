@@ -855,7 +855,7 @@ class MusicPlayer:
         await asyncio.to_thread(subprocess.run, ["systemctl", "--user", "stop", UNIT], capture_output=True, timeout=10)
         SOCK.unlink(missing_ok=True)
         args = ["mpv", "--idle=yes", "--no-video", "--no-terminal", "--audio-display=no", f"--input-ipc-server={SOCK}",
-                "--audio-client-name=JustDay", f"--volume={self.volume}", "--volume-max=130", "--gapless-audio=weak",
+                "--audio-client-name=JustDay", f"--volume={self.volume}", "--volume-max=200", "--gapless-audio=weak",
                 "--keep-open=no", "--prefetch-playlist=yes"]
         if config.load().get("media", {}).get("normalize"):  # тихие треки поднимаются без хрипа (Р2-48)
             args.append("--af=dynaudnorm=f=250:g=15")
@@ -1097,7 +1097,7 @@ class MusicPlayer:
         self._changed(force=True)
 
     async def set_volume(self, value: int) -> None:
-        self.volume = max(0, min(130, int(value)))
+        self.volume = max(0, min(200, int(value)))
         if not self._ducked:
             await self.command("set_property", "volume", self.volume)
         self._changed()
