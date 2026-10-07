@@ -2780,6 +2780,7 @@ Item {
             Group {
                 Layout.topMargin: 10
                 Row { title: "Claude Code"; subtitle: win.d.about ? win.d.about.claude : "" }
+                Row { title: JD.tr("Отчёты о сбоях"); subtitle: JD.crashCount > 0 ? String(JD.crashCount) : JD.tr("нет"); Btn { visible: JD.crashCount > 0; text: JD.tr("Собрать архив"); onClicked: Quickshell.execDetached(["justday", "report"]) } }
                 Row { title: JD.tr("Файл настроек"); subtitle: win.d.about ? win.d.about.config : ""; Btn { text: JD.tr("Открыть"); onClicked: Quickshell.execDetached(["xdg-open", win.d.about.config]) } }
                 Row { title: JD.tr("Руководство"); subtitle: JD.tr("Как всё устроено, модели, приватность, решение проблем"); Btn { glyph: "file-text"; text: JD.tr("Открыть"); onClicked: JD.openManual() } }
                 Row { title: JD.tr("Лицензия"); subtitle: JD.tr("GNU GPL v3 · © 2026 0nigiris · иконки Lucide (ISC)") }

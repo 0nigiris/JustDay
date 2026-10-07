@@ -39,3 +39,23 @@ def test_report_leaves_out_what_the_person_said(tmp_path, monkeypatch):
     with tarfile.open(out) as tar:
         body = tar.extractfile("1.log").read().decode()
     assert "Traceback" in body and "1234" not in body
+
+
+def test_toast_only_for_a_crash_that_happened_since_the_last_one_shown(tmp_path, monkeypatch):
+    """Беда: после каждого обновления островок кричал про сбой недельной давности."""
+    import os
+    import time
+
+    from justday import config, crashlog, events
+    monkeypatch.setattr(config, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(config, "STATE_FILE", tmp_path / "state.json")  # иначе тест писал бы в настоящий state.json
+    monkeypatch.setattr(crashlog, "DIR", tmp_path / "c")
+    crashlog.DIR.mkdir()
+    old = crashlog.DIR / "old.log"
+    old.write_text("x")
+    os.utime(old, (time.time() - 9999,) * 2)
+    assert crashlog.unseen() == 0           # первый показ: старое не новость
+    (crashlog.DIR / "new.log").write_text("y")
+    assert crashlog.unseen() == 1
+    assert crashlog.unseen() == 0           # сказали один раз
+    assert events.load_state()["crash_seen_at"]

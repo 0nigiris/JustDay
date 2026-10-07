@@ -79,3 +79,14 @@ def report() -> Path | None:
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
     return out
+
+
+def unseen() -> int:
+    """Сколько отчётов появилось с тех пор, как островок в последний раз о них говорил (метка — в state.json).
+    Первый запуск после обновления молчит: старые отчёты не «новый сбой»."""
+    from . import events
+
+    newest = max((p.stat().st_mtime for p in DIR.glob("*.log")), default=0.0) if DIR.is_dir() else 0.0
+    seen = events.load_state().get("crash_seen_at")
+    events.save_state(crash_seen_at=max(newest, seen or time.time()))
+    return sum(1 for p in DIR.glob("*.log") if p.stat().st_mtime > seen) if seen and DIR.is_dir() else 0

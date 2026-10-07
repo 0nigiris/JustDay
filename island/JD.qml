@@ -302,6 +302,7 @@ Singleton {
     property var libTracks: []          // медиатека: приходит от демона по music_library
     property string libSort: "recent"
     // Чат (Р2-42): окно ChatWindow.qml; ответы приходят строками подписки kind:"chat", в динамик не идут
+    property int crashCount: 0          // сохранённых отчётов о сбоях (Р2-45)
     property bool chatOpen: false
     property var chatList: []
     property string chatCurrent: ""
@@ -1562,6 +1563,10 @@ Singleton {
         if (m.update !== undefined) update = m.update
         if (m.next_event !== undefined) nextEvent = m.next_event
         if (m.game !== undefined) game = m.game || ""
+        if (m.crash !== undefined) {
+            crashCount = m.crash.count || 0
+            if (m.crash.new > 0) flash(tr("Островок перезапустился после сбоя. Отчёт сохранён"), "circle-alert", accentOrange)
+        }
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
         if (m.followup !== undefined) followup = m.followup
         if (m.player !== undefined) {

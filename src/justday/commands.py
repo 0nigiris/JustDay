@@ -20,6 +20,7 @@ from . import (
     chats,
     clipboard,
     config,
+    crashlog,
     desktop,
     dock,
     events,
@@ -95,7 +96,8 @@ class CommandsMixin:
                  "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
                  "reminders": self._reminders_state(), "jobs": self.jobs.state(),
                  "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now(),
-                 "game": getattr(self, "_game_seen", "") or ""}
+                 "game": getattr(self, "_game_seen", "") or "",
+                 "crash": {"count": crashlog.count(), "new": crashlog.unseen()}}
         try:
             writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
             await writer.drain()
