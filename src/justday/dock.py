@@ -671,6 +671,13 @@ def folder_items(path: str) -> dict:
             "items": out[:FOLDER_MAX], "more": max(0, len(out) - FOLDER_MAX)}
 
 
+def _steam_icon(appid: str, theme: str = "") -> str:
+    """Значок игры Steam, который Steam сам кладёт в hicolor при создании ярлыка; нет его — общий
+    значок «игра», а не чужой, подобранный по догадке."""
+    name = f"steam_icon_{appid}"
+    return name if find_icon(name, theme) else "applications-games"
+
+
 def catalog() -> dict:
     """Всё, что доку нужно от этой половины, одним куском.
 
@@ -682,9 +689,12 @@ def catalog() -> dict:
                                "strong": match_keys(a), "weak": match_keys(a, weak=True),
                                "name": a.get("name_ru") or a.get("name") or a["id"],
                                "icon": a.get("icon", "")} for a in apps}
+    theme = icon_theme()
+    game_list = desktop.list_games()
     games = {f"game:{g['id']}": {"kind": "game", "id": str(g["id"]), "strong": [], "weak": [],
-                                 "name": g["name"], "icon": "applications-games"}
-             for g in desktop.list_games()}
+                                 "name": g["name"],
+                                 "icon": _steam_icon(str(g["id"]), theme) if g["source"].startswith("steam") else "applications-games"}
+             for g in game_list}
     # Папки-стопки: ключ dir:<путь>, имя — имя папки. Проверять существование здесь обязательно:
     # папку могли удалить или отмонтировать, и значок, ведущий в никуда, хуже отсутствующего.
     folders = {}
@@ -708,6 +718,14 @@ def catalog() -> dict:
             for k in row[field]:
                 match.setdefault(k, short)
 
+    # Окна игр Steam приходят с классом steam_app_<appid> и без .desktop: раньше они подписывались сырым
+    # классом и получали чужой значок. Имя и значок берём у самой игры; ключ — тот же, что у закреплённой.
+    for g in game_list:
+        if g["source"].startswith("steam"):
+            gk = f"game:{g['id']}"
+            match.setdefault(f"steam_app_{g['id']}", {"kind": "game", "id": str(g["id"]), "name": g["name"],
+                                                      "icon": games[gk]["icon"], "key": gk})
+
     # Soft aliases: octium gets Octo Browser's name/icon, but keeps its own match key
     # so DockView can still split profile windows into separate slots.
     for child, parent in ALIAS_CLASSES.items():
@@ -720,7 +738,6 @@ def catalog() -> dict:
         soft["separate"] = child in SEPARATE_INSTANCES
         match.setdefault(child, soft)
 
-    theme = icon_theme()
     launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
     want = pinned()
     items = []
