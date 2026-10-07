@@ -2776,7 +2776,7 @@ ShellRoot {
                 visible: cv.c.type === "media" && !cv.c.failed
                 Layout.alignment: Qt.AlignRight
                 spacing: 10
-                PillButton { label: JD.tr("Показать в папке"); onClicked: { Quickshell.execDetached(["dolphin", "--select", cv.c.file]); JD.card = null } }
+                PillButton { label: JD.tr("Показать в папке"); onClicked: { JD.showInFolder(cv.c.file); JD.card = null } }
                 PillButton { visible: cv.c.kind === "image"; label: JD.tr("Копировать")
                              onClicked: { Quickshell.execDetached(["sh", "-c", 'wl-copy < "$1"', "sh", cv.c.file]); JD.flash(JD.tr("Скопировано"), "edit-copy", JD.accentGreen); JD.card = null } }
                 PillButton { label: JD.tr("Открыть"); tint: JD.accentPurple; labelColor: "white"

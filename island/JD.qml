@@ -314,6 +314,14 @@ Singleton {
     function chatNew() { _chatWantNew = true; send({ cmd: "chat_new" }) }
     function chatSend(text) { if (chatCurrent && text.trim()) send({ cmd: "chat_send", id: chatCurrent, text: text }) }
     function chatDelete(id) { send({ cmd: "chat_delete", id: id }); if (id === chatCurrent) { chatCurrent = ""; chatMessages = [] }; chatRefresh() }
+    // «Показать в папке» через D-Bus: сработает с любым файловым менеджером, а не только с Dolphin (Р2-15).
+    // Нет службы — просто открываем папку.
+    function showInFolder(path) {
+        Quickshell.execDetached(["sh", "-c",
+            "gdbus call --session --dest org.freedesktop.FileManager1 --object-path /org/freedesktop/FileManager1 " +
+            "--method org.freedesktop.FileManager1.ShowItems \"['file://$2']\" '' >/dev/null 2>&1 || xdg-open \"$(dirname \"$1\")\"",
+            "sh", path, encodeURI(path)])
+    }
     function libRefresh() { send({ cmd: "music_library", sort: libSort }) }
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
     onPlayerOpenChanged: if (!playerOpen) { artOpen = false; playerPage = "now" }
