@@ -92,7 +92,8 @@ class CommandsMixin:
                  "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
                  "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
                  "reminders": self._reminders_state(), "jobs": self.jobs.state(),
-                 "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now()}
+                 "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now(),
+                 "game": getattr(self, "_game_seen", "") or ""}
         try:
             writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
             await writer.drain()

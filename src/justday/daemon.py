@@ -1524,7 +1524,11 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                     self.publish(weather=self.weather)
                 # Игра началась — видеопамять её. Голос и так молчит в играх (tts.mute_in_games), но
                 # молчащая модель занимала столько же, сколько говорящая.
-                in_game = bool(self.cfg["tts"].get("mute_in_games", True)) and bool(desktop.running_game())
+                game = desktop.running_game()
+                if game != getattr(self, "_game_seen", None):
+                    self._game_seen = game
+                    self.publish(game=game)    # оболочка в играх не анимирует (JD.gameMode)
+                in_game = bool(self.cfg["tts"].get("mute_in_games", True)) and bool(game)
                 if in_game and not self._gave_up_vram:
                     self._gave_up_vram = True
                     self.stt.unload()

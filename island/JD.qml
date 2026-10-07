@@ -1164,7 +1164,12 @@ Singleton {
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off
     readonly property var island: settings.island || ({})
     readonly property string animStyle: island.animations || "spring"
-    readonly property bool animOn: animStyle !== "off"
+    // Игровой режим (Р2-46): игра на весь экран — оболочка не анимирует ничего. Все Behavior и
+    // таймеры уже гасятся через animOn, так что одно условие снимает с видеокарты и процессора
+    // всё, что оболочка делала бы поверх игры.
+    property string game: ""          // имя запущенной игры от демона, "" — нет
+    readonly property bool gameMode: game !== "" && fullscreen
+    readonly property bool animOn: animStyle !== "off" && !gameMode
     readonly property real springK: animStyle === "smooth" ? 7.5 : 4.2
     readonly property real springDamping: animStyle === "smooth" ? 1.0 : 0.36
     // Fixed-duration OutCubic reads clean at high Hz; soft springs sample like ~60 fps.
@@ -1538,6 +1543,7 @@ Singleton {
         if (m.weather !== undefined) weather = m.weather
         if (m.update !== undefined) update = m.update
         if (m.next_event !== undefined) nextEvent = m.next_event
+        if (m.game !== undefined) game = m.game || ""
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)
         if (m.followup !== undefined) followup = m.followup
         if (m.player !== undefined) {
