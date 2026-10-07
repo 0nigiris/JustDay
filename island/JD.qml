@@ -95,6 +95,8 @@ Singleton {
         _notifDedupeAt = now
         liveNotification = live || null
         _cacheNotifActions(live)
+        // Р2-38: в полноэкранной игре уведомление не выскакивает — оно ждёт в истории.
+        if (gameMode) return
         notification = n
         notifExpanded = false
         notifTimer.restart()
@@ -1733,10 +1735,8 @@ Singleton {
         case "error": flash(m.detail, "dialog-error", accentRed); break
         case "notification":
             if (island.show_notifications === false) break
-            notification = m.notification
-            notifExpanded = false
+            if (!gameMode) { notification = m.notification; notifExpanded = false; notifTimer.restart() }
             notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
-            notifTimer.restart()
             break
         case "compose": openCompose(m.text, m.context); break
         case "video_cmd": videoCommand(m.action); break
