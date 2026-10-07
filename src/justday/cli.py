@@ -364,6 +364,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("text", nargs="*")
     sp.add_argument("--no-selection", action="store_true")
     sub.add_parser("new-session", help="forget the current conversation (memory is kept)")
+    sub.add_parser("report", help="собрать отчёты о сбоях в один архив без личного (чтобы отправить разработчику)")
     sp = sub.add_parser("crashlog", help="save a crash report after a failed service (systemd ExecStopPost)")
     sp.add_argument("service")
     sp = sub.add_parser("logs", help="show recent events")
@@ -675,6 +676,11 @@ def main(argv: list[str] | None = None) -> None:
         _print(control("status"))
     elif a.cmd == "new-session":
         _print(control("new_session", timeout=120))
+    elif a.cmd == "report":
+        from . import crashlog
+
+        out = crashlog.report()
+        print(out if out else "отчётов о сбоях нет")
     elif a.cmd == "crashlog":
         from . import crashlog
 

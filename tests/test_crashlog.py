@@ -24,3 +24,18 @@ def test_only_the_last_reports_are_kept(tmp_path, monkeypatch):
 def test_home_directory_is_scrubbed_from_reports(monkeypatch):
     from pathlib import Path
     assert str(Path.home()) not in crashlog.scrub(f"{Path.home()}/x.py")
+
+
+def test_report_leaves_out_what_the_person_said(tmp_path, monkeypatch):
+    """Беда: отчёт уходит чужому, а в журнале службы лежат его просьбы и домашний путь."""
+    import tarfile
+
+    from justday import config, crashlog
+    monkeypatch.setattr(crashlog, "DIR", tmp_path / "c")
+    monkeypatch.setattr(config, "STATE_DIR", tmp_path)
+    crashlog.DIR.mkdir()
+    (crashlog.DIR / "1.log").write_text('Traceback\nheard text="пароль 1234"\nпуть /home/x\n', encoding="utf-8")
+    out = crashlog.report()
+    with tarfile.open(out) as tar:
+        body = tar.extractfile("1.log").read().decode()
+    assert "Traceback" in body and "1234" not in body
