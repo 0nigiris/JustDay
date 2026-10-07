@@ -103,3 +103,16 @@ def test_untrash_returns_the_last_deleted_track(monkeypatch):
     assert media.untrash_last() == "x"
     assert moved == [["trash:///x.mp3", "/m/x.mp3"]]
     assert media.untrash_last() is None
+
+
+def test_play_latency_pairs_heard_with_next_play(tmp_path, monkeypatch):
+    """Не было способа узнать, сколько секунд человек ждёт музыку после фразы (Р2-34: цель ≤ 1,5 с)."""
+    import json
+
+    from justday import config, events
+    f = tmp_path / "e.jsonl"
+    f.write_text("\n".join(json.dumps(r) for r in [
+        {"kind": "heard", "t": 100.0, "text": "включи музыку"}, {"kind": "media_play", "t": 101.2},
+        {"kind": "media_play", "t": 500.0}, {"kind": "heard", "t": 600.0}]) + "\n")
+    monkeypatch.setattr(config, "EVENTS_FILE", f)
+    assert events.play_latency().strip().startswith("1.2 с")

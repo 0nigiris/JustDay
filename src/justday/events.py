@@ -93,3 +93,24 @@ def save_state(**updates: Any) -> dict:
             f.write(json.dumps(state, ensure_ascii=False, indent=2))
         os.replace(tmp, config.STATE_FILE)
     return state
+
+
+def play_latency(limit: int = 10, window: float = 30.0) -> str:
+    """От `heard` до ближайшего `media_play` — цель Р2-34 ≤ 1,5 с. Строки по последним фразам с музыкой."""
+    rows: list[dict] = []
+    try:
+        for line in config.EVENTS_FILE.read_text(encoding="utf-8").splitlines()[-5000:]:
+            with contextlib.suppress(ValueError):
+                rows.append(json.loads(line))
+    except OSError:
+        return ""
+    out, heard = [], None
+    for r in rows:
+        if "t" not in r:
+            continue
+        if r.get("kind") == "heard":
+            heard = r
+        elif r.get("kind") == "media_play" and heard and 0 <= r.get("t", 0) - heard.get("t", 0) <= window:
+            out.append(f"{r['t'] - heard['t']:5.1f} с  «{heard.get('text', '')[:50]}»")
+            heard = None
+    return "\n".join(out[-limit:])
