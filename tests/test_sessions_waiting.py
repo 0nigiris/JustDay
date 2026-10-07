@@ -27,3 +27,10 @@ def test_вопрос_без_ответа_это_ожидание(tmp_path, monk
 def test_отвеченный_вопрос_не_ожидание(tmp_path, monkeypatch):
     _log(tmp_path, monkeypatch, _use("b", "AskUserQuestion"), _res("b"), _use("c", "Bash"))
     assert sessions.asking("s1") == ""
+
+
+def test_модель_берётся_из_последнего_ответа(tmp_path, monkeypatch):
+    """В списке сессий не было видно, на какой модели идёт каждая, а лимит у семейств разный (Р2-39)."""
+    row = lambda m: json.dumps({"message": {"model": m, "content": []}})  # noqa: E731
+    _log(tmp_path, monkeypatch, row("claude-opus-5-5"), row("claude-sonnet-5-5"))
+    assert sessions.model_of("s1") == "sonnet"

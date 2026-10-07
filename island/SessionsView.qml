@@ -123,6 +123,12 @@ Item {
                                         NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
                                     }
                                 }
+                                // Цвет — семейство модели: на каком уровне лимита сидит сессия, видно без слов
+                                Rectangle {
+                                    visible: !!card.modelData.model
+                                    implicitWidth: 6; implicitHeight: 6; radius: 3
+                                    color: ({ opus: "#c084fc", sonnet: "#60a5fa", haiku: "#4ade80", fable: "#fbbf24" })[card.modelData.model] || JD.text3
+                                }
                                 Label1 {
                                     text: card.modelData.name || card.modelData.short
                                     font.pixelSize: 13

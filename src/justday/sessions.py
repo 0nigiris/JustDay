@@ -139,6 +139,24 @@ def asking(session_id: str) -> str:
     return next((n for n in reversed(pending.values()) if n in ASKING_TOOLS), "")
 
 
+def model_of(session_id: str) -> str:
+    """opus | sonnet | haiku | "" — по последнему ответу ассистента в хвосте стенограммы."""
+    hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
+    if not hits:
+        return ""
+    for line in reversed(_tail(max(hits, key=lambda p: p.stat().st_mtime))):
+        if '"model"' not in line:
+            continue
+        try:
+            name = str((json.loads(line).get("message") or {}).get("model", "")).lower()
+        except ValueError:
+            continue
+        for fam in ("opus", "sonnet", "haiku", "fable"):
+            if fam in name:
+                return fam
+    return ""
+
+
 def live(claude: str = "claude") -> list[dict]:
     """Все сессии Claude Code на этой машине и чем каждая занята.
 
@@ -174,6 +192,7 @@ def live(claude: str = "claude") -> list[dict]:
             "busy": a.get("status") == "busy" and not waits,
             "waiting": bool(waits),
             "pid": a.get("pid"),
+            "model": model_of(sid),
             "minutes": round((now - started) / 60, 1) if started else 0,
             "now": steps[-1] if steps else None,
             "steps": steps,
