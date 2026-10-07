@@ -110,6 +110,35 @@ def steps_of(session_id: str) -> list[dict]:
     return out[-MAX_STEPS:]
 
 
+ASKING_TOOLS = ("AskUserQuestion", "ExitPlanMode")
+
+
+def asking(session_id: str) -> str:
+    """Название вопроса, на который сессия ждёт ответа, или "".
+
+    Сессия, которая молча стоит с вопросом, в списке горела «работает»: вызов AskUserQuestion без
+    tool_result после него — это не работа, а ожидание человека."""
+    hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
+    if not hits:
+        return ""
+    pending: dict[str, str] = {}
+    for line in _tail(max(hits, key=lambda p: p.stat().st_mtime)):
+        if '"tool_use' not in line:
+            continue
+        try:
+            content = (json.loads(line).get("message") or {}).get("content")
+        except ValueError:
+            continue
+        for c in content if isinstance(content, list) else []:
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "tool_use":
+                pending[str(c.get("id", ""))] = str(c.get("name", ""))
+            elif c.get("type") == "tool_result":
+                pending.pop(str(c.get("tool_use_id", "")), None)
+    return next((n for n in reversed(pending.values()) if n in ASKING_TOOLS), "")
+
+
 def live(claude: str = "claude") -> list[dict]:
     """Все сессии Claude Code на этой машине и чем каждая занята.
 
@@ -133,6 +162,7 @@ def live(claude: str = "claude") -> list[dict]:
         if not sid:
             continue
         steps = steps_of(sid)
+        waits = asking(sid)
         started = float(a.get("startedAt") or 0) / 1000
         out.append({
             "id": sid,
@@ -141,12 +171,13 @@ def live(claude: str = "claude") -> list[dict]:
             "cwd": str(a.get("cwd") or ""),
             "where": os.path.basename(str(a.get("cwd") or "")) or "/",
             "status": a.get("status") or "",
-            "busy": a.get("status") == "busy",
+            "busy": a.get("status") == "busy" and not waits,
+            "waiting": bool(waits),
             "pid": a.get("pid"),
             "minutes": round((now - started) / 60, 1) if started else 0,
             "now": steps[-1] if steps else None,
             "steps": steps,
         })
-    # Занятые первыми: про них и спрашивают. Внутри — кто дольше работает, тот выше.
-    out.sort(key=lambda s: (not s["busy"], -s["minutes"]))
+    # Ждущие человека первыми, потом занятые: про них и спрашивают. Внутри — кто дольше работает, тот выше.
+    out.sort(key=lambda s: (not s["waiting"], not s["busy"], -s["minutes"]))
     return out
