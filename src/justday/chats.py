@@ -95,3 +95,13 @@ def delete(chat_id: str) -> bool:
     ok = p.exists()
     p.unlink(missing_ok=True)
     return ok
+
+
+MODELS = ("", "haiku", "sonnet", "opus")
+
+
+def cfg_with_model(cfg: dict, model: str) -> dict:
+    """Конфиг мозга с моделью этого чата. Подписка у всех чатов одна, поэтому по умолчанию — модель голоса, а не сильнейшая."""
+    if not model or model not in MODELS:
+        return cfg
+    return {**cfg, "brain": {**cfg["brain"], "model": model}}

@@ -314,11 +314,13 @@ Singleton {
     property bool chatOpen: false
     property var chatList: []
     property string chatCurrent: ""
+    property string chatModel: ""        // модель этого чата: "" — как у голоса (Р2-42)
     property var chatMessages: []
     property bool chatBusy: false
     property bool _chatWantNew: false
     function chatRefresh() { send({ cmd: "chat_list" }) }
     function chatOpenOne(id) { chatCurrent = id; chatMessages = []; send({ cmd: "chat_get", id: id }) }
+    function chatSetModel(model) { if (chatCurrent) { chatModel = model; send({ cmd: "chat_model", id: chatCurrent, model: model }) } }
     function chatNew() { _chatWantNew = true; send({ cmd: "chat_new" }) }
     function chatSend(text) { if (chatCurrent && text.trim()) send({ cmd: "chat_send", id: chatCurrent, text: text }) }
     function chatDelete(id) { send({ cmd: "chat_delete", id: id }); if (id === chatCurrent) { chatCurrent = ""; chatMessages = [] }; chatRefresh() }
@@ -1628,7 +1630,7 @@ Singleton {
         }
         if (m.tracks !== undefined) libTracks = m.tracks || []
         if (m.chats !== undefined) chatList = m.chats || []
-        if (m.messages !== undefined && m.kind === undefined) chatMessages = m.messages || []
+        if (m.messages !== undefined && m.kind === undefined) { chatMessages = m.messages || []; chatModel = m.model || "" }
         if (m.id !== undefined && _chatWantNew) { _chatWantNew = false; chatOpenOne(m.id); chatRefresh() }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.moved !== undefined || (trashWaiting && m.trash_full !== undefined && m.ok !== undefined)) {

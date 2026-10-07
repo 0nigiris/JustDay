@@ -370,7 +370,19 @@ class CommandsMixin:
         return {"ok": True, "id": await asyncio.to_thread(chats.create)}
 
     async def _cmd_chat_get(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        return {"ok": True, "messages": await asyncio.to_thread(chats.messages, str(req.get("id", "")))}
+        cid = str(req.get("id", ""))
+        return {"ok": True, "messages": await asyncio.to_thread(chats.messages, cid),
+                "model": await asyncio.to_thread(lambda: chats.meta(cid).get("model", ""))}
+
+    async def _cmd_chat_model(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Модель для одного чата («» — как у голоса). Живой мозг чата закрываем: новый поднимется уже с ней."""
+        cid, model = str(req.get("id", "")), str(req.get("model", ""))
+        if model not in chats.MODELS:
+            return {"ok": False, "error": "model"}
+        await asyncio.to_thread(chats.set_meta, cid, model=model)
+        if brain := self._chat_brains.pop(cid, None):
+            await brain.stop()
+        return {"ok": True}
 
     async def _cmd_chat_delete(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         cid = str(req.get("id", ""))
@@ -407,7 +419,7 @@ class CommandsMixin:
         if brain is None:
             async def on_text(reply: str, cid: str = cid) -> None:
                 self.chat_say(cid, "assistant", reply)
-            brain = Brain(self.cfg, on_text=on_text, approver=self._approve, asker=self._answer_questions,
+            brain = Brain(chats.cfg_with_model(self.cfg, chats.meta(cid).get("model", "")), on_text=on_text, approver=self._approve, asker=self._answer_questions,
                           persist=False, chat=True, resume_id=chats.meta(cid).get("session"))
             self._chat_brains[cid] = brain
         self.publish(kind="chat_busy", chat=cid, busy=True)

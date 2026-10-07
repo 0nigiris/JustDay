@@ -46,3 +46,12 @@ def test_chat_reply_is_never_spoken():
     finally:
         events.emit = orig
     assert got == ["Вот **список**"] and "say" not in emitted
+
+
+def test_chat_model_overrides_voice_model_only_when_chosen():
+    """Хотел спросить в чате посильнее, а мозг чата всегда шёл на модели голоса (Р2-42)."""
+    cfg = {"brain": {"model": "haiku", "effort": "low"}}
+    assert chats.cfg_with_model(cfg, "") is cfg
+    assert chats.cfg_with_model(cfg, "gpt-5")["brain"]["model"] == "haiku"
+    got = chats.cfg_with_model(cfg, "opus")
+    assert got["brain"] == {"model": "opus", "effort": "low"} and cfg["brain"]["model"] == "haiku"

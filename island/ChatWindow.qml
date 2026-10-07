@@ -133,6 +133,23 @@ FloatingWindow {
                 Layout.leftMargin: 20
                 text: JD.tr("Печатает…"); color: JD.text3; font.family: JD.fontFamily; font.pixelSize: 12
             }
+            // Модель этого чата: подписка одна на всё, поэтому по умолчанию — как у голоса, сильнее — по выбору
+            Row {
+                visible: !!JD.chatCurrent
+                Layout.leftMargin: 14; spacing: 6
+                Repeater {
+                    model: [["", JD.tr("Как у голоса")], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]]
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool on: JD.chatModel === modelData[0]
+                        height: 24; width: chipLbl.implicitWidth + 18; radius: 12
+                        color: on ? JD.accentBlue : JD.fill1
+                        Text { id: chipLbl; anchors.centerIn: parent; text: parent.modelData[1]; font.family: JD.fontFamily; font.pixelSize: 12
+                               color: parent.on ? "#ffffff" : JD.text2 }
+                        TapHandler { onTapped: JD.chatSetModel(parent.modelData[0]) }
+                    }
+                }
+            }
             // Enter — отправить, Shift+Enter — перенос
             Rectangle {
                 Layout.fillWidth: true; Layout.margins: 12
