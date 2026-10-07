@@ -174,7 +174,7 @@ class WatchersMixin:
         def back() -> bool:
             return any(w.get("id") == want and w.get("active") for w in self._windows or [] if isinstance(w, dict))
 
-        time.sleep(0.04)  # событие о смене фокуса идёт чуть позже щелчка
+        time.sleep(0.015)  # событие о смене фокуса идёт чуть позже щелчка; цикл ниже ждёт остальное
         for step in range(30):
             if back():
                 return True

@@ -15,13 +15,18 @@
 """
 from __future__ import annotations
 
+import functools
 import json
+import logging
 import os
 import shutil
 import subprocess
+import threading
 import time
 
 from . import config
+
+log = logging.getLogger("justday.glyphs")
 
 DATA = config.REPO_DIR / "data" / "emoji.json"
 RECENT_FILE = config.STATE_DIR / "emoji-recent.json"
@@ -208,6 +213,14 @@ def _ydotool_ready() -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=1)
+def _kwin() -> bool:
+    """Мы на KWin? Спросить один раз: там `wtype` бессилен, и каждая попытка стоила лишнего запуска
+    процесса перед тем, как дело делал ydotool."""
+    here = (os.environ.get("XDG_CURRENT_DESKTOP", "") + os.environ.get("XDG_SESSION_DESKTOP", "")).lower()
+    return "kde" in here or "plasma" in here or bool(os.environ.get("KDE_SESSION_VERSION"))
+
+
 def type_out(text: str) -> tuple[bool, str]:
     """Напечатать символ в то окно, где курсор.
 
@@ -226,7 +239,7 @@ def type_out(text: str) -> tuple[bool, str]:
 
     tries: list[tuple[str, list[str]]] = []
     if face.session() == "wayland":
-        if shutil.which("wtype"):
+        if shutil.which("wtype") and not _kwin():
             tries.append(("wtype", ["wtype", "--", text]))
         if shutil.which("ydotool") and _ydotool_ready():
             tries.append(("ydotool", ["ydotool", "type", "--", text]))
@@ -270,7 +283,7 @@ def paste_chord(terminal: bool = False) -> tuple[bool, str]:
     name = "ctrl-shift-v" if terminal else "ctrl-v"
     tries: list[tuple[str, list[str]]] = []
     if face.session() == "wayland":
-        if shutil.which("wtype"):
+        if shutil.which("wtype") and not _kwin():
             mods = ["-M", "ctrl"] + (["-M", "shift"] if terminal else [])
             unmods = (["-m", "shift"] if terminal else []) + ["-m", "ctrl"]
             tries.append((f"wtype-{name}", ["wtype", *mods, "-k", "v", *unmods]))
@@ -307,8 +320,9 @@ def use(ch: str, *, paste: bool = True, ready=None, app: str = "") -> dict:
     Ctrl+V ушёл бы в никуда, и символ остаётся в буфере. `app` — класс окна, куда вставляем: терминалу
     нужен Ctrl+Shift+V.
     """
+    t0 = time.monotonic()
     remember(ch)
-    before = _clipboard_text() if paste and not ch.isascii() else None
+    before = _clipboard_text() if paste else None
     copied = to_clipboard(ch)
     typed, how = (False, "")
     if paste:
@@ -317,20 +331,39 @@ def use(ch: str, *, paste: bool = True, ready=None, app: str = "") -> dict:
         elif not ready():
             paste = False
     if paste:
-        # ydotool type знает только клавиши латиницы: эмодзи он «печатает» с кодом 0 и ничего не
-        # вставляет, поэтому символ вне ASCII вставляем Ctrl+V из буфера, куда он уже лёг.
-        if copied and not ch.isascii():
+        # Всегда аккорд из буфера: `ydotool type` знает только латиницу, а посимвольная печать
+        # медленнее. Печать — запасной путь, когда буфера нет или аккорд не прошёл.
+        if copied:
             typed, how = paste_chord(is_terminal(app))
-            if typed and before is not None:
-                # Окну нужен миг, чтобы забрать вставку; потом возвращаем то, что человек копировал
-                # сам, — на Windows выбранный эмодзи буфер не занимает.
-                time.sleep(0.2)
-                to_clipboard(before)
-        else:
+        if not typed and ch.isascii():
             typed, how = type_out(ch)
-    return {"ok": copied or typed, "char": ch, "typed": typed, "copied": copied, "how": how,
+        if typed:
+            restore_later(before, ch)
+    ms = round((time.monotonic() - t0) * 1000)
+    log.info("paste_ms=%d how=%s", ms, how or "-")
+    return {"ok": copied or typed, "char": ch, "typed": typed, "copied": copied, "how": how, "paste_ms": ms,
             "note": "" if typed else ("в буфере обмена — вставьте Ctrl+V" if copied
                                       else "нечем ни вставить, ни положить в буфер")}
+
+
+RESTORE_AFTER = 0.5
+
+
+def restore_later(before: str | None, ours: str) -> None:
+    """Вернуть буфер, который человек копировал сам: на Windows выбранный эмодзи его не занимает.
+
+    Не сразу и не в том же потоке: окну нужен миг забрать вставку, а ответ островку не должен ждать.
+    Если за это время в буфере уже не наш текст, человек успел скопировать своё — его не затираем."""
+    if before is None:
+        return
+
+    def back() -> None:
+        if _clipboard_text() == ours:
+            to_clipboard(before)
+
+    t = threading.Timer(RESTORE_AFTER, back)
+    t.daemon = True
+    t.start()
 
 
 def note_for(ch: str) -> str:

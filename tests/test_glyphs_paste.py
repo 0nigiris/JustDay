@@ -1,4 +1,6 @@
 """Эмодзи не вставлялся сам: ydotool type печатает только латиницу, а с эмодзи молча отвечает «успех»."""
+import time
+
 from justday import glyphs
 
 
@@ -13,7 +15,8 @@ def test_emoji_was_pasted_from_the_clipboard_not_typed_key_by_key(monkeypatch):
     assert calls == ["chord"] and got["typed"] and got["how"] == "ydotool-ctrl-v"
 
 
-def test_plain_ascii_still_typed_directly(monkeypatch):
+def test_plain_ascii_pasted_by_chord_too_typing_is_only_the_fallback(monkeypatch):
+    """Посимвольная печать медленнее аккорда: человек ждал вставки. Аккорд всегда, печать — если он не прошёл."""
     calls = []
     monkeypatch.setattr(glyphs, "remember", lambda ch: None)
     monkeypatch.setattr(glyphs, "to_clipboard", lambda ch: True)
@@ -21,7 +24,11 @@ def test_plain_ascii_still_typed_directly(monkeypatch):
     monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (calls.append("chord") or True, "x"))
     monkeypatch.setattr(glyphs, "type_out", lambda ch: (calls.append("type") or True, "ydotool"))
     glyphs.use("a")
-    assert calls == ["type"]
+    assert calls == ["chord"]
+    monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (calls.append("chord") or False, "x"))
+    calls.clear()
+    glyphs.use("a")
+    assert calls == ["chord", "type"]
 
 
 def test_what_the_person_copied_came_back_after_the_emoji_was_pasted(monkeypatch):
@@ -31,10 +38,50 @@ def test_what_the_person_copied_came_back_after_the_emoji_was_pasted(monkeypatch
     monkeypatch.setattr(glyphs, "_clipboard_text", lambda: board["v"])
     monkeypatch.setattr(glyphs, "to_clipboard", lambda s: board.update(v=s) or True)
     monkeypatch.setattr(glyphs, "PASTE_DELAY", 0)
-    monkeypatch.setattr(glyphs.time, "sleep", lambda s: None)
     monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (True, "ydotool-ctrl-v"))
+    monkeypatch.setattr(glyphs, "RESTORE_AFTER", 0.01)
     glyphs.use("😀")
+    for _ in range(100):
+        if board["v"] == "мой скопированный текст":
+            break
+        time.sleep(0.02)
     assert board["v"] == "мой скопированный текст"
+
+
+def test_what_the_person_copied_meanwhile_was_not_overwritten(monkeypatch):
+    """Возврат старого буфера идёт через полсекунды; если человек за это время скопировал своё, его текст не затираем."""
+    board = {"v": "старое"}
+    monkeypatch.setattr(glyphs, "remember", lambda ch: None)
+    monkeypatch.setattr(glyphs, "_clipboard_text", lambda: board["v"])
+    monkeypatch.setattr(glyphs, "to_clipboard", lambda s: board.update(v=s) or True)
+    monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (board.update(v="новое, моё") or True, "x"))
+    monkeypatch.setattr(glyphs, "RESTORE_AFTER", 0.01)
+    glyphs.use("😀", ready=lambda: True)
+    time.sleep(0.15)
+    assert board["v"] == "новое, моё"
+
+
+def test_wtype_was_not_called_on_kwin(monkeypatch):
+    """На KWin wtype всегда отвечает «нет виртуальной клавиатуры»; лишний запуск процесса перед ydotool тянул вставку."""
+    from justday import face
+    ran = []
+    monkeypatch.setattr(glyphs, "_kwin", lambda: True)
+    monkeypatch.setattr(face, "session", lambda: "wayland")
+    monkeypatch.setattr(glyphs.shutil, "which", lambda n: n)
+    monkeypatch.setattr(glyphs, "_ydotool_ready", lambda: True)
+    monkeypatch.setattr(glyphs.subprocess, "run",
+                        lambda cmd, **kw: ran.append(cmd[0]) or type("P", (), {"returncode": 0})())
+    glyphs.paste_chord()
+    glyphs.type_out("a")
+    assert ran == ["ydotool", "ydotool"]
+
+
+def test_use_reports_paste_ms(monkeypatch):
+    monkeypatch.setattr(glyphs, "remember", lambda ch: None)
+    monkeypatch.setattr(glyphs, "_clipboard_text", lambda: None)
+    monkeypatch.setattr(glyphs, "to_clipboard", lambda ch: True)
+    monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (True, "x"))
+    assert isinstance(glyphs.use("😀", ready=lambda: True)["paste_ms"], int)
 
 
 def test_emoji_waited_for_the_window_not_for_a_fixed_pause(monkeypatch):

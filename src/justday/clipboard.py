@@ -313,18 +313,24 @@ def put_back(which: str, *, paste: bool = True, ready=None, app: str = "") -> di
                                            else "нечем положить картинку в буфер"),
                 "session": face.session()}
     text = str(item.get("text", ""))
+    t0 = time.monotonic()
+    before = glyphs._clipboard_text() if paste else None
     copied = glyphs.to_clipboard(text)
     typed = False
     pasted = False
     how = ""
     if paste and copied and settle():
-        # Печатаем только короткое, в одну строку и латиницей: иначе Enter на каждый \n ломает правку, а
-        # `ydotool type` кириллицу и эмодзи «печатает» кодом 0 — молча, с ответом «успех» (см. glyphs.use).
-        if len(text) <= 400 and "\n" not in text and text.isascii():
+        # Всегда аккорд: печать идёт посимвольно (медленнее), а Enter на каждый \n ломает правку.
+        # Печатаем лишь запасным путём и только короткую латиницу: `ydotool type` кириллицу и эмодзи
+        # «печатает» кодом 0 — молча, с ответом «успех» (см. glyphs.use).
+        pasted, how = glyphs.paste_chord(glyphs.is_terminal(app))
+        if not pasted and len(text) <= 400 and "\n" not in text and text.isascii():
             typed, how = glyphs.type_out(text)
-        if not typed:
-            pasted, how = glyphs.paste_chord(glyphs.is_terminal(app))
+        if pasted or typed:
+            glyphs.restore_later(before, text)
+    ms = round((time.monotonic() - t0) * 1000)
     return {"ok": copied or typed or pasted, "kind": "text", "typed": typed, "pasted": pasted,
+            "paste_ms": ms,
             "how": how,
             "note": "" if (typed or pasted) else ("в буфере обмена — вставьте Ctrl+V" if copied
                                                   else "нечем положить в буфер"),

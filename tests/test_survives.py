@@ -110,7 +110,11 @@ def test_one_bad_round_did_not_stop_housekeeping_and_the_ping_went_on(live, monk
 
     async def go():
         hk, hb = asyncio.ensure_future(live._housekeeping()), asyncio.ensure_future(live._heartbeat())
-        await asyncio.sleep(0.5)
+        # Ждём условие, а не время: под нагрузкой (рядом гоняют модель) 0,5 с не хватало
+        for _ in range(100):
+            if len(rounds) >= 3 and len(pings) >= 3:
+                break
+            await asyncio.sleep(0.05)
         hk.cancel()
         hb.cancel()
 

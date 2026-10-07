@@ -354,6 +354,7 @@ def test_the_chosen_emoji_never_typed_itself_on_plasma(monkeypatch) -> None:
     monkeypatch.setattr(face, "session", lambda: "wayland")
     monkeypatch.setattr(glyphs.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(glyphs, "_ydotool_ready", lambda: True)
+    monkeypatch.setattr(glyphs, "_kwin", lambda: False)   # на KWin wtype не зовут вовсе (test_glyphs_paste)
     ran: list[list[str]] = []
 
     class Done:
