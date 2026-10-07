@@ -1752,6 +1752,7 @@ Singleton {
             if (m.chat === chatCurrent) chatMessages = chatMessages.concat([m.message])
             chatRefresh()
             break
+        case "chat_open": chatOpen = true; break
         case "chat_busy": if (m.chat === chatCurrent) chatBusy = !!m.busy; break
         case "notification":
             if (island.show_notifications === false) break

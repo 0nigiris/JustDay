@@ -26,6 +26,7 @@ KEYS=(
   "clip|буфер обмена|tools clip|Meta+V"
   "emoji|эмодзи|tools emoji|Meta+."
   "load|нагрузка машины|tools load|"
+  "chat|чат с ассистентом|chat|"
   "menu|меню приложений|menu|Meta"
   "pin|закрепить в доке|dock pin|Meta+P"
   "closewin|закрыть окно|windows close-active|Meta+Q"

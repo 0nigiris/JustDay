@@ -353,6 +353,10 @@ class CommandsMixin:
         return {"ok": await asyncio.to_thread(media.trash_track, str(req.get("file", "")))}
 
     # ---------- чат (Р2-42): ответы пишутся в файл и в окно, в динамик не идут никогда ----------
+    async def _cmd_chat_open(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        self.publish(kind="chat_open")
+        return {"ok": True}
+
     async def _cmd_chat_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "chats": await asyncio.to_thread(chats.listing, str(req.get("query", "")))}
 

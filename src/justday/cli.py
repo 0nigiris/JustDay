@@ -359,6 +359,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("status")
     sub.add_parser("approve", help="allow the action JustDay is asking about")
     sub.add_parser("deny", help="deny the action JustDay is asking about")
+    sub.add_parser("chat", help="открыть окно чата с ассистентом (ответы в нём не озвучиваются)")
     sp = sub.add_parser("compose", help="keyboard shortcut: open the island's text field (takes the selected text along)")
     sp.add_argument("text", nargs="*")
     sp.add_argument("--no-selection", action="store_true")
@@ -666,6 +667,8 @@ def main(argv: list[str] | None = None) -> None:
         _print(control("say", timeout=120, text=" ".join(a.text)))
     elif a.cmd in ("approve", "deny"):
         _print(control(a.cmd))
+    elif a.cmd == "chat":
+        control("chat_open")
     elif a.cmd == "compose":
         _print(control("compose", text=" ".join(a.text), context={} if a.no_selection else _screen_context()))
     elif a.cmd == "status":
