@@ -113,7 +113,7 @@ def test_play_latency_pairs_heard_with_next_play(tmp_path, monkeypatch):
     f = tmp_path / "e.jsonl"
     f.write_text("\n".join(json.dumps(r) for r in [
         {"kind": "heard", "t": 100.0, "text": "включи музыку"}, {"kind": "media_play", "t": 101.2},
-        {"kind": "media_play", "t": 500.0}, {"kind": "heard", "t": 600.0}]) + "\n")
+        {"kind": "media_play", "t": 500.0}, {"kind": "heard", "t": 600.0}, {"kind": "first_audio", "t": 600.8}]) + "\n")
     monkeypatch.setattr(config, "EVENTS_FILE", f)
     got = events.play_latency().splitlines()
     assert got[0].strip().startswith("1.2 с") and got[1].strip().startswith("0.8 с")
