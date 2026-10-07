@@ -166,7 +166,7 @@ def live_music(text: str) -> tuple[str, str] | None:
     t = _say(text)
     if not t or len(t) > 120 or _NOT_MUSIC.search(t) or _ASKING.match(t):
         return None
-    if re.fullmatch(_V_BARE, t):
+    if re.fullmatch(_V_BARE, t) or re.fullmatch(rf"(?:{_V_ANY}) {_ANY_TAIL}", t):
         return "library", ""
     # «можно музычку», «хочу послушать музыку», «музыку давай», «какую-нибудь песню»
     u = re.sub(r"^(?:а |можно |хочу |хотим |хочется |я хочу |неплохо бы )+(?:послушать )?", "", t)
