@@ -95,6 +95,17 @@ FloatingWindow {
                         height: body.implicitHeight + 16
                         radius: 14
                         color: mine ? JD.accentBlue : "#2c2c2e"
+                        HoverHandler { id: bubbleHover }
+                        // копирует сообщение целиком: с кодом внутри это чаще всего и нужно
+                        Rectangle {
+                            visible: bubbleHover.hovered && !mine
+                            anchors { right: parent.right; top: parent.top; margins: 6 }
+                            width: cp.implicitWidth + 14; height: 22; radius: 11; color: JD.fill2
+                            Text { id: cp; anchors.centerIn: parent; text: copied.running ? JD.tr("Скопировано") : JD.tr("Копировать")
+                                   color: JD.text1; font.pixelSize: 11 }
+                            Timer { id: copied; interval: 1200 }
+                            TapHandler { onTapped: { Quickshell.execDetached(["wl-copy", modelData.text]); copied.restart() } }
+                        }
                         TextEdit {
                             id: body
                             anchors { left: parent.left; top: parent.top; margins: 12; topMargin: 8 }

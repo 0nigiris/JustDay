@@ -3065,6 +3065,7 @@ ShellRoot {
             { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
             { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: "audio-input-microphone",
               run: () => JD.setConfig("audio.microphone", !JD.micOn) },
+            { cmd: "/chat", title: JD.tr("Чат с ассистентом (без голоса)"), icon: "message-circle", run: () => { JD.chatOpen = true } },
             { cmd: "/mixer", title: JD.tr("Звук и микшер"), icon: "volume-2", run: () => JD.openTools("mixer") },
             { cmd: "/emoji", title: JD.tr("Эмодзи"), icon: "smile", run: () => JD.openTools("emoji") },
             { cmd: "/clip", title: JD.tr("Буфер обмена"), icon: "clipboard", run: () => JD.openTools("clip") },
