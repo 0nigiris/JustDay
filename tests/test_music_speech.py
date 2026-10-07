@@ -58,7 +58,7 @@ def test_empty_library_never_breaks_anything(monkeypatch):
     monkeypatch.setattr(media, "library", lambda kind="music": [])
     monkeypatch.setattr(media, "_is_app", lambda q: False)
     assert media.parse("включи") is None
-    assert media.parse("включи музыку") is None
+    assert media.parse("включи музыку") == ("music", "музыка подборка")  # Р2-34: не к мозгу на полминуты
     assert media.parse("Пошлая Молли") is None
     assert media.live_music("поставь Nirvana") == ("music", "nirvana")
 
