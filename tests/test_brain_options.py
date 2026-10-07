@@ -62,3 +62,37 @@ class TestЧеловечныеПодписи:
     def test_длинная_строка_обрезается_одной_строкой(self) -> None:
         got = brain.one_line("а\nб\nв" + "г" * 200)
         assert "\n" not in got and got.endswith("…") and len(got) <= 90
+
+
+class TestДумаетБесконечно:
+    """7 октября: голос жил в одном разговоре весь день, история дорастала до окна, и Claude Code
+    перед ответом молча сжимал её по 40 секунд — «говорю, а он думает бесконечно и не отвечает»."""
+
+    @staticmethod
+    def _мозг(**brain_cfg):
+        async def _nop(*a, **k):
+            return None
+        cfg = {"brain": {"context_window": 80_000, "fresh_after_minutes": 20, **brain_cfg}}
+        return brain.Brain(cfg, _nop, _nop, _nop)
+
+    def test_разросшаяся_история_начинается_заново(self) -> None:
+        м = self._мозг()
+        м._last_active, м._context = brain.time.monotonic(), 70_000
+        assert м.stale()
+
+    def test_после_паузы_заново(self) -> None:
+        м = self._мозг()
+        м._last_active, м._context = brain.time.monotonic() - 21 * 60, 5_000
+        assert м.stale()
+
+    def test_живой_короткий_разговор_продолжается(self) -> None:
+        """Иначе «а теперь потише» после «включи музыку» потеряло бы, о чём речь."""
+        м = self._мозг()
+        м._last_active, м._context = brain.time.monotonic() - 60, 20_000
+        assert not м.stale()
+
+    def test_первый_ход_и_выключенный_порог(self) -> None:
+        assert not self._мозг().stale()
+        м = self._мозг(fresh_after_minutes=0)
+        м._last_active, м._context = 1.0, 79_000
+        assert not м.stale()

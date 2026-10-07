@@ -286,6 +286,11 @@ DEFAULTS: dict = {
         "context_window": 80000,
         # Resume the previous conversation if it was active within this many hours.
         "resume_within_hours": 12,
+        # Голос жил в одном разговоре с утра до ночи: история дорастала до context_window, и
+        # Claude Code перед ответом молча сжимал её по 40 секунд — «думает бесконечно и не
+        # отвечает» (7 октября). Поэтому после паузы или при разросшейся истории начинаем заново:
+        # голосу нужно последнее, долгое хранит память, а не разговор. 0 = не начинать заново.
+        "fresh_after_minutes": 20,
         "claude_cli": "claude",
     },
     "workers": {

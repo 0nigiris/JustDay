@@ -172,6 +172,8 @@ class Brain:
         self._notes: list[str] = []
         self._pending: list[str] = []   # text of the current step; spoken only if it turns out to be final
         self._turn_started = 0.0
+        self._last_active = 0.0         # monotonic конца последнего хода
+        self._context = 0               # сколько токенов история весила в последнем шаге
         self.cancelled = False
         self._spoke_in_turn = False
 
@@ -237,6 +239,8 @@ class Brain:
         state = events.load_state()
         resume = None
         within = self.cfg["brain"]["resume_within_hours"] * 3600
+        if fresh := self.cfg["brain"].get("fresh_after_minutes", 20):
+            within = min(within, fresh * 60)  # тот же порог, что в stale(): после перезапуска тоже
         if self.persist and state.get("brain_session_id") and time.time() - state.get("brain_last_active", 0) < within:
             resume = state["brain_session_id"]
         try:
@@ -323,6 +327,10 @@ class Brain:
                 events.emit("brain_restart", reason="client not running")
                 await self.stop()
                 await self.start()
+            elif self.persist and self.stale():
+                events.emit("brain_fresh", context=self._context,
+                            idle_s=round(time.monotonic() - self._last_active))
+                await self.new_session()
             events.emit("request", source=source, text=text, **({} if self.persist else {"lane": "side"}))
             self.request = text
             self._turn_done.clear()
@@ -332,6 +340,17 @@ class Brain:
             if self._error:
                 raise BrainError(self._error)
             return self._last_text
+
+    def stale(self) -> bool:
+        """Пора начать заново, пока Claude Code не сел сжимать историю посреди ответа:
+        после паузы или когда история подошла к трём четвертям окна (сжатие — у самого окна)."""
+        b = self.cfg["brain"]
+        minutes = b.get("fresh_after_minutes", 20)
+        if not minutes or not self._last_active:
+            return False
+        window = b.get("context_window") or 0
+        return (time.monotonic() - self._last_active > minutes * 60
+                or bool(window and self._context > window * 0.75))
 
     def _begin_turn(self) -> None:
         self.cancelled = False
@@ -428,6 +447,10 @@ class Brain:
             if self.persist:
                 events.save_state(brain_session_id=msg.session_id, brain_last_active=time.time())
             u = msg.usage or {}
+            # Шаги хода перечитывают историю целиком, поэтому вес истории — сумма, делённая на шаги.
+            self._context = (u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+                             + u.get("cache_read_input_tokens", 0)) // max(msg.num_turns or 1, 1)
+            self._last_active = time.monotonic()
             # in_tokens: весь контекст, прочитанный за ход (он складывается по шагам — каждый шаг
             # перечитывает разговор целиком). Главный счётчик расхода; разбивка по дням в `justday tokens`.
             events.emit("turn_done", session=msg.session_id, turns=msg.num_turns, ms=msg.duration_ms,
