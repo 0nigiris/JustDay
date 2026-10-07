@@ -38,11 +38,57 @@ def _norm(s: str) -> str:
     return re.sub(r"[^\w ]+", " ", s).strip()
 
 
+_RU2LAT = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+                   ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t",
+                    "u", "f", "h", "ts", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"]))
+_LAT2RU = (("sch", "щ"), ("sh", "ш"), ("ch", "ч"), ("zh", "ж"), ("ts", "ц"), ("ya", "я"), ("yu", "ю"), ("j", "дж"),
+           ("w", "в"), ("x", "кс"), ("q", "к"), ("a", "а"), ("b", "б"), ("c", "к"), ("d", "д"), ("e", "е"), ("f", "ф"),
+           ("g", "г"), ("h", "х"), ("i", "и"), ("k", "к"), ("l", "л"), ("m", "м"), ("n", "н"), ("o", "о"), ("p", "п"),
+           ("r", "р"), ("s", "с"), ("t", "т"), ("u", "у"), ("v", "в"), ("y", "й"), ("z", "з"))
+# что Whisper путает на слух: звонкие/глухие и е/э
+_SWAPS = ("бп", "вф", "гк", "дт", "жш", "зс", "еэ", "ие")
+
+
+def _lat_to_ru(s: str) -> str:
+    out, i = "", 0
+    while i < len(s):
+        for lat, ru in _LAT2RU:
+            if s.startswith(lat, i):
+                out, i = out + ru, i + len(lat)
+                break
+        else:
+            out, i = out + s[i], i + 1
+    return out
+
+
+def generated(name: str) -> set[str]:
+    """Написания имени, которые Whisper мог выдать, — из самого имени, а не из словаря под «Джарвиса».
+
+    Беда: сменил имя на «Пятница» — не просыпался, потому что варианты были только у двух имён."""
+    base = _norm(name)
+    words = base.split()
+    if words and words[0] in FILLERS:  # «hey jarvis»: «hey» снимается при разборе фразы, имя — то, что после
+        base = " ".join(words[1:])
+    forms = {base}
+    if re.search(r"[a-z]", base):
+        forms.add(_lat_to_ru(base))
+    if re.search(r"[а-я]", base):
+        forms.add("".join(_RU2LAT.get(c, c) for c in base))
+    for f in list(forms):
+        for a, b in _SWAPS:
+            for x, y in ((a, b), (b, a)):
+                for i, c in enumerate(f):
+                    if c == x:
+                        forms.add(f[:i] + y + f[i + 1:])
+    return {f for f in forms if f}
+
+
 def spellings(names: list[str]) -> list[str]:
     out: set[str] = set()
     for n in names:
         key = _norm(n).replace(" ", "")
         out.add(_norm(n))
+        out |= generated(n)
         out.update(SPELLINGS.get(key, []))
     return sorted((s for s in out if s), key=len, reverse=True)
 
