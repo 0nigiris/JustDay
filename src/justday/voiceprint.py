@@ -111,12 +111,17 @@ def rms_frames(pcm: np.ndarray, frame: int = 480) -> np.ndarray:
 
 
 def trim_silence(pcm: np.ndarray) -> np.ndarray:
+    """Только голос: тишина и по краям, и посередине. Раньше срезались одни края — длинная пауза внутри фразы
+    оставалась в записи, разбавляла отпечаток, и хозяину отвечало «голос не узнан» (оценки 0,12–0,29 при пороге 0,35)."""
     r = rms_frames(pcm)
     if not len(r):
         return pcm
     thr = max(0.01, np.percentile(r, 20) * 3)
-    idx = np.where(r > thr)[0]
-    return pcm[idx[0] * 480:(idx[-1] + 1) * 480] if len(idx) else pcm
+    voiced = r > thr
+    if not voiced.any():
+        return pcm
+    keep = voiced | np.r_[voiced[1:], False] | np.r_[False, voiced[:-1]]  # кадр с каждой стороны: слова не рубятся
+    return np.concatenate([pcm[i * 480:(i + 1) * 480] for i in np.where(keep)[0]])
 
 
 def save_wav(path: Path, pcm: np.ndarray) -> None:

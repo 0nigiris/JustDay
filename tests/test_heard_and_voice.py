@@ -236,3 +236,15 @@ def test_phrase_cut_on_a_preposition_is_not_finished():
     assert fastpath.unfinished("включи музыку, и")
     assert not fastpath.unfinished("поставь таймер на пять минут")
     assert not fastpath.unfinished("да")
+
+
+def test_long_pause_inside_a_phrase_is_cut_out_before_the_voice_check():
+    """Беда: пауза посреди фразы оставалась в записи, и хозяину отвечало «голос не узнан»."""
+    import numpy as np
+
+    from justday import voiceprint
+    rng = np.random.default_rng(0)
+    speech = (rng.normal(0, 4000, 16000)).astype(np.int16)
+    quiet = np.zeros(16000 * 3, dtype=np.int16)
+    out = voiceprint.trim_silence(np.concatenate([speech, quiet, speech]))
+    assert len(out) < 16000 * 2.2
