@@ -16,6 +16,7 @@ from __future__ import annotations
 import gc
 import json
 import os
+import re
 import socket
 import struct
 import threading
@@ -78,18 +79,32 @@ def ref_audio(voice: str) -> str | None:
     return None
 
 
-def say(conn: socket.socket, text: str, voice: str) -> None:
+PAUSE = np.zeros(int(RATE * 0.35), dtype="<i2").tobytes()  # тишина между предложениями
+KNOBS = ("exaggeration", "cfg_weight", "temperature")         # можно подобрать на слух, см. ПЕРЕДАЧА.md
+
+
+def sentences(text: str) -> list[str]:
+    """Chatterbox не держит паузу на точке: «…музыку. Кстати…» он читает одним духом. Поэтому
+    каждое предложение — отдельный проход, а паузу ставим сами. Заодно первое предложение
+    звучит раньше, чем готов весь ответ."""
+    return [p for p in re.split(r"(?<=[.!?…])\s+", text.strip()) if re.search(r"\w", p)]
+
+
+def say(conn: socket.socket, text: str, voice: str, knobs: dict) -> None:
     global last_use
     last_use = time.time()
     with lock:
         m = load()
-        wav = m.generate(text, language_id="ru", audio_prompt_path=ref_audio(voice)).squeeze(0).cpu().numpy()
-    if m.sr != RATE:
-        wav = np.interp(np.linspace(0, len(wav), int(len(wav) * RATE / m.sr), endpoint=False),
-                        np.arange(len(wav)), wav)
-    data = (np.clip(wav, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+        for i, part in enumerate(sentences(text)):
+            wav = m.generate(part, language_id="ru", audio_prompt_path=ref_audio(voice), **knobs)
+            wav = wav.squeeze(0).cpu().numpy()
+            if m.sr != RATE:
+                wav = np.interp(np.linspace(0, len(wav), int(len(wav) * RATE / m.sr), endpoint=False),
+                                np.arange(len(wav)), wav)
+            data = (PAUSE if i else b"") + (np.clip(wav, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+            conn.sendall(struct.pack("<I", len(data)) + data)
     last_use = time.time()
-    conn.sendall(struct.pack("<I", len(data)) + data + struct.pack("<I", 0))
+    conn.sendall(struct.pack("<I", 0))
 
 
 def handle(conn: socket.socket) -> None:
@@ -99,7 +114,7 @@ def handle(conn: socket.socket) -> None:
             cmd = req.get("cmd")
             if cmd == "say":
                 try:
-                    say(conn, req["text"], req.get("voice", ""))
+                    say(conn, req["text"], req.get("voice", ""), {k: float(req[k]) for k in KNOBS if k in req})
                 except Exception as e:  # закрытое соединение демон понимает как «голоса нет» и говорит Silero
                     log("say failed:", repr(e))
                     # Нехватка видеопамяти посреди загрузки оставляла полмодели в памяти навсегда —
