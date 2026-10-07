@@ -587,7 +587,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("hotkey", help="глобальные сочетания: get показывает все, "
                                       "set --clip Meta+V --apps 'Alt+Space' меняет названные "
                                       "(пустая строка снимает клавишу, остальные не трогаются)")
-    sp.add_argument("action", choices=["get", "set"])
+    sp.add_argument("action", choices=["get", "set", "restore"])
     sp.add_argument("--extra", default=None, help="вторая клавиша «говорить» (кнопка мыши, F19)")
     for _name, _label, _default in manage_hotkeys():
         sp.add_argument(f"--{_name}", default=None, dest=f"key_{_name}",
@@ -1138,7 +1138,9 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "hotkey":
         from . import manage
 
-        if a.action == "get":
+        if a.action == "restore":
+            print("Возвращено:", ", ".join(manage.restore_shortcuts()) or "ничего (резервной записи нет)")
+        elif a.action == "get":
             for row in manage.hotkey_list():
                 mark = "✔" if row["live"] else ("·" if not row["key"] else "✘")
                 taken = f"  ← занято: {', '.join(row['taken_by'])}" if row["taken_by"] else ""

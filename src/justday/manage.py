@@ -314,6 +314,43 @@ def shortcut_owners(code: int) -> list[tuple]:
     return list(got[0]) if got and isinstance(got[0], list) else []
 
 
+SHORTCUT_BACKUP = config.DATA_DIR / "backup" / "shortcuts.json"
+
+
+def _remember_shortcut(component: str, action: str, comp_friendly: str, friendly: str, keys: list) -> None:
+    """Записать, что было у соседа ДО того, как мы отобрали клавишу (Р2-44): без этого удаление
+    оставляло Meta и Alt+Space пустыми — ни меню Plasma, ни KRunner. Пишем только первое «было»:
+    второй запуск установщика увидел бы уже обеднённый список и затёр бы правду."""
+    try:
+        saved = json.loads(SHORTCUT_BACKUP.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved = {}
+    key = f"{component}/{action}"
+    if key in saved:
+        return
+    saved[key] = {"component": component, "action": action, "comp_friendly": comp_friendly,
+                  "friendly": friendly, "keys": [int(k) for k in keys]}
+    SHORTCUT_BACKUP.parent.mkdir(parents=True, exist_ok=True)
+    SHORTCUT_BACKUP.write_text(json.dumps(saved, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def restore_shortcuts() -> list[str]:
+    """Вернуть соседям клавиши, которые мы у них забирали. Нет записи (ставили до этой версии) — ничего
+    не угадываем: наши собственные сочетания снимает `setup-hotkey.sh --remove`, чужих не трогаем."""
+    try:
+        saved = json.loads(SHORTCUT_BACKUP.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    back = []
+    for row in saved.values():
+        keys = "@ai [" + ", ".join(str(k) for k in row["keys"]) + "]"
+        _accel("setShortcut", f"['{row['component']}','{row['action']}','{row['comp_friendly']}','{row['friendly']}']",
+               keys, "4")
+        back.append(row["friendly"] or row["component"])
+    SHORTCUT_BACKUP.unlink(missing_ok=True)
+    return back
+
+
 def free_key(combo: str, keep: str) -> list[str]:
     """Отобрать клавишу у всех, кроме `keep`. Возвращает, у кого отобрали."""
     code = key_code(combo)
@@ -325,6 +362,7 @@ def free_key(combo: str, keep: str) -> list[str]:
         if component == keep:
             continue
         rest = [k for k in owner[6] if k != code]
+        _remember_shortcut(component, action, comp_friendly, friendly, owner[6])
         # Убираем одну клавишу, остальные оставляем: у KRunner их три, и Alt+F2 должен остаться.
         #
         # Порядок в actionId — [составляющая, действие, её подпись, его подпись], и он не
