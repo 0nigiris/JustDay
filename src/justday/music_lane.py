@@ -202,6 +202,26 @@ class MusicMixin:
             return local
         return await self._ask_which_song([{**local, "channel": local.get("artist", ""), "mine": True}, *outside], query)
 
+    async def _ask_whole_list(self, yt: dict) -> bool:
+        """Ссылка из микса или плейлиста: «только эту песню» (по умолчанию) или весь список?
+
+        Кнопками в островке; тишина, игра и любой сбой означают «только эту» — безопаснее, чем
+        запустить бесконечный микс, которого человек не просил."""
+        if self.silent():
+            return False
+        what = t("микс") if "mix" in yt["kind"] else t("плейлист")
+        one, whole = t("Только эту песню"), t("Весь {what}", what=what)
+        self.publish(kind="card", card={"type": "question", "header": t("Ссылка из списка"),
+                                        "question": t("В ссылке песня и {what}", what=what),
+                                        "options": [{"label": one, "icon": "media-playback-start", "description": ""},
+                                                    {"label": whole, "icon": "view-media-playlist",
+                                                     "description": t("первые 50") if "mix" in yt["kind"] else ""}]})
+        try:
+            ans = await self._ask(t("Только эту песню или весь {what}?", what=what), choices=[one, whole], free_text=True)
+        finally:
+            self.publish(kind="card_close")
+        return ans == whole or (isinstance(ans, str) and ans.lower().startswith(("весь", "всё", "все")))
+
     async def play_music(self, query: str, count: int = 1, mode: str = "replace", playlist: bool = False,
                          shuffle: bool = False) -> dict:
         """Find the song on YouTube, download its audio, play it. `count` > 1: the rest follow in the background."""
@@ -264,10 +284,15 @@ class MusicMixin:
                     events.emit("media_play", title=first["title"], file=first.get("file", ""), source="choice")
                     return {"ok": True, "title": first["title"], "artist": first.get("artist", ""),
                             "done": t("играет {what}", what=first["title"])}
+            yt = media.parse_youtube(query) if media.is_url(query) else None
+            if yt and yt["video"] and yt["list"] and not playlist:
+                playlist = await self._ask_whole_list(yt)
+                if not playlist:  # «только эту»: список из ссылки выкидываем, иначе yt-dlp всё равно потянет его
+                    query = f"https://www.youtube.com/watch?v={yt['video']}"
             self.music.set_loading({"title": query, "progress": 0})
             source = ""
             if playlist or (media.is_url(query) and "list=" in query):  # an album / playlist / "best of"
-                source, entries = await loop.run_in_executor(None, media.playlist, query)
+                source, entries = await loop.run_in_executor(None, media.playlist, query, 50 if yt and "mix" in yt["kind"] else 100)
             else:
                 entries = await loop.run_in_executor(None, media.find, query, "music", max(1, min(25, count)))
                 if count > 1:

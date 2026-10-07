@@ -271,6 +271,35 @@ def is_url(q: str) -> bool:
     return bool(re.match(r"^https?://", q.strip()))
 
 
+def parse_youtube(url: str) -> dict | None:
+    """{video, list, kind} ссылки на YouTube; kind: track | playlist | mix | track_in_playlist | track_in_mix.
+
+    Микс (`list=RD…` или `start_radio`) у YouTube бесконечный, а ссылка из него несёт и песню, и
+    список — человек обычно хотел одну песню, поэтому разница видна вызывающему (Р2-33)."""
+    from urllib.parse import parse_qs, urlparse
+
+    u = urlparse(url.strip())
+    host = (u.hostname or "").lower().removeprefix("www.").removeprefix("m.")
+    if host not in ("youtube.com", "music.youtube.com", "youtu.be"):
+        return None
+    q = parse_qs(u.query)
+    video = (u.path.strip("/") or "") if host == "youtu.be" else q.get("v", [""])[0]
+    if host != "youtu.be" and u.path.startswith(("/shorts/", "/live/", "/embed/")):
+        video = u.path.split("/")[2] if u.path.count("/") >= 2 else ""
+    video = video.split("/")[0]
+    lst = q.get("list", [""])[0]
+    mix = lst.startswith("RD") or q.get("start_radio", [""])[0] == "1"
+    if not video and not lst:
+        return None
+    if not lst:
+        kind = "track"
+    elif not video:
+        kind = "mix" if mix else "playlist"
+    else:
+        kind = "track_in_mix" if mix else "track_in_playlist"
+    return {"video": video, "list": lst, "kind": kind}
+
+
 def _entry(e: dict) -> dict:
     vid = e.get("id") or ""
     return {"id": vid, "title": e.get("title") or "", "channel": e.get("channel") or e.get("uploader") or "",

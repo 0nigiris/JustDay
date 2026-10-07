@@ -23,3 +23,20 @@ def test_медиатека_берёт_название_из_индекса_и_�
     assert [r["title"] for r in media.library_view("title")] == ["Арбуз", "Яблоко"]
     assert media.library_view("artist")[0]["artist"] == "Кино"
     assert media.library_view()[0]["size"] in (1, 2)
+
+
+def test_ссылка_из_микса_отличается_от_плейлиста_и_одной_песни():
+    """Из микса вставляли ссылку «хочу одну песню» — и запускался бесконечный список."""
+    pf = media.parse_youtube
+    kinds = {
+        "https://www.youtube.com/watch?v=abc123&t=42s": ("abc123", "", "track"),
+        "https://youtu.be/abc123?si=xx": ("abc123", "", "track"),
+        "https://www.youtube.com/shorts/abc123": ("abc123", "", "track"),
+        "https://music.youtube.com/watch?v=abc123": ("abc123", "", "track"),
+        "https://www.youtube.com/watch?v=abc123&list=RDabc123&start_radio=1": ("abc123", "RDabc123", "track_in_mix"),
+        "https://www.youtube.com/playlist?list=PLxyz": ("", "PLxyz", "playlist"),
+        "https://www.youtube.com/watch?v=abc123&list=PLxyz": ("abc123", "PLxyz", "track_in_playlist"),
+    }
+    for url, (v, lst, kind) in kinds.items():
+        assert pf(url) == {"video": v, "list": lst, "kind": kind}, url
+    assert pf("https://example.com/watch?v=1") is None
