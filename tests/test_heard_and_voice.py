@@ -227,3 +227,12 @@ def test_the_voice_that_did_not_fit_on_the_card_used_to_leave_jarvis_silent(monk
         assert "видеопамяти" in str(e)
     else:
         raise AssertionError("после трёх неудач человеку должны сказать словами")
+
+
+def test_phrase_cut_on_a_preposition_is_not_finished():
+    """Беда: «поставь таймер на…» — пауза на секунду, и уходил огрызок. Фраза на «на»/«и» не закончена, «да» — закончена."""
+    from justday import fastpath
+    assert fastpath.unfinished("поставь таймер на")
+    assert fastpath.unfinished("включи музыку, и")
+    assert not fastpath.unfinished("поставь таймер на пять минут")
+    assert not fastpath.unfinished("да")

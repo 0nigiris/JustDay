@@ -653,7 +653,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 self.state = "thinking" if self.brain.busy else "idle"
             await self.earcon("error")
 
-    async def _listen_body(self, followup: bool, prefill=None) -> None:
+    async def _listen_body(self, followup: bool, prefill=None, carry: str = "") -> None:
         self.mic.start()
         self._last_mic_use = time.monotonic()
         self.publish(followup=followup)  # остров: продолжение разговора не гасит ответ на экране
@@ -693,6 +693,10 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             return
         if pcm is None or len(pcm) < audio.RATE * 0.3:
             events.emit("listen_empty", source=self._activation)
+            if carry:  # договаривать никто не стал: уходит то, что есть
+                self.state = after
+                await self.handle_utterance(carry)
+                return
             # Разбудили и никто не заговорил — скорее всего, показалось. Следующие
             # полминуты слово пробуждения слушаем строже: ложные срабатывания идут
             # сериями (звук из колонок, чужой голос в ролике), а настоящий зов после
@@ -729,8 +733,18 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         if self._activation == "wake" and self._names:
             text = namespot.strip_name(text, self._names)
         events.emit("heard", text=text, seconds=round(len(pcm) / audio.RATE, 1))
+        if carry and text:
+            text = f"{carry} {text}"   # продолжение: одна просьба из двух кусков
         if not text:
+            if carry:
+                await self.handle_utterance(carry)
+                return
             await self.earcon("error")
+            return
+        if not carry and fastpath.unfinished(text):
+            # «поставь таймер на…» — пауза пришла раньше конца мысли: слушаем ещё раз и склеиваем
+            events.emit("heard_unfinished", text=text)
+            await self._listen_body(True, None, carry=text)
             return
         await self.handle_utterance(text)
 
