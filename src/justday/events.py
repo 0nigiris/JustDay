@@ -96,7 +96,7 @@ def save_state(**updates: Any) -> dict:
 
 
 def play_latency(limit: int = 10, window: float = 30.0) -> str:
-    """От `heard` до ближайшего `media_play` — цель Р2-34 ≤ 1,5 с. Строки по последним фразам с музыкой."""
+    """От `heard` до ближайшего `media_play` (Р2-34, цель ≤ 1,5 с) или `first_audio` (Р2-35, цель ≤ 1 с на коротких командах)."""
     rows: list[dict] = []
     try:
         for line in config.EVENTS_FILE.read_text(encoding="utf-8").splitlines()[-5000:]:
@@ -110,7 +110,7 @@ def play_latency(limit: int = 10, window: float = 30.0) -> str:
             continue
         if r.get("kind") == "heard":
             heard = r
-        elif r.get("kind") == "media_play" and heard and 0 <= r.get("t", 0) - heard.get("t", 0) <= window:
-            out.append(f"{r['t'] - heard['t']:5.1f} с  «{heard.get('text', '')[:50]}»")
+        elif r.get("kind") in ("media_play", "first_audio") and heard and 0 <= r.get("t", 0) - heard.get("t", 0) <= window:
+            out.append(f"{r['t'] - heard['t']:5.1f} с  {'музыка' if r['kind'] == 'media_play' else 'голос '}  «{heard.get('text', '')[:50]}»")
             heard = None
     return "\n".join(out[-limit:])

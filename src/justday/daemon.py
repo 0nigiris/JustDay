@@ -201,6 +201,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             if self._state == "speaking":
                 self._quiet_until = time.monotonic() + 0.8
             self._state = value
+            if value == "speaking":
+                events.emit("first_audio")  # `justday latency` меряет от heard до него (Р2-35)
             self.publish(state=value)
             self._warm_models(value)
             if self.music.alive and self.cfg["media"]["duck"]:  # music steps back while we talk

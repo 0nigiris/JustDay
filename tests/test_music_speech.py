@@ -115,4 +115,5 @@ def test_play_latency_pairs_heard_with_next_play(tmp_path, monkeypatch):
         {"kind": "heard", "t": 100.0, "text": "включи музыку"}, {"kind": "media_play", "t": 101.2},
         {"kind": "media_play", "t": 500.0}, {"kind": "heard", "t": 600.0}]) + "\n")
     monkeypatch.setattr(config, "EVENTS_FILE", f)
-    assert events.play_latency().strip().startswith("1.2 с")
+    got = events.play_latency().splitlines()
+    assert got[0].strip().startswith("1.2 с") and got[1].strip().startswith("0.8 с")
