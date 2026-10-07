@@ -1985,6 +1985,28 @@ ShellRoot {
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: JD.artOpen = false }
             }
+            // Главное меню — вторая страница той же карточки: значок-сетка никто не находил (Р2-30).
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                implicitWidth: pageRow.implicitWidth + 4; implicitHeight: 28
+                radius: 14; color: Qt.rgba(1, 1, 1, 0.08)
+                Row {
+                    id: pageRow
+                    anchors.centerIn: parent; spacing: 2
+                    Repeater {
+                        model: [{ l: JD.tr("Сейчас играет"), cur: true }, { l: JD.tr("Островок"), cur: false }]
+                        Rectangle {
+                            required property var modelData
+                            width: pageText.implicitWidth + 24; height: 24; radius: 12
+                            color: modelData.cur ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                            Text { id: pageText; anchors.centerIn: parent; text: modelData.l; font.pixelSize: 12
+                                   color: modelData.cur ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7) }
+                            TapHandler { enabled: !modelData.cur; onTapped: { JD.playerOpen = false; JD.expanded = true } }
+                            HoverHandler { cursorShape: modelData.cur ? Qt.ArrowCursor : Qt.PointingHandCursor }
+                        }
+                    }
+                }
+            }
             RowLayout {
                 spacing: 14
                 Art {
@@ -2005,8 +2027,6 @@ ShellRoot {
                     Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 18; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
                     Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
                 }
-                IconButton { icon: "view-grid"; size: 26; Layout.alignment: Qt.AlignTop
-                             onClicked: { JD.playerOpen = false; JD.expanded = true } }
                 IconButton { icon: "go-up"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
             }
             JSlider {
