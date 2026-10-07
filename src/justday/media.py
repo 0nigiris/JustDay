@@ -565,6 +565,30 @@ def library(kind: str = "music") -> list[dict]:
     return sorted(out, key=lambda r: -r.get("played", 0))
 
 
+def library_view(sort: str = "recent") -> list[dict]:
+    """Медиатека для страницы в плеере: только то, что нужно строке списка (Р2-32)."""
+    rows = []
+    for rec in library():
+        f = Path(rec["file"])
+        try:
+            st = f.stat()
+        except OSError:
+            continue
+        rows.append({"file": str(f), "title": rec.get("title") or f.stem, "artist": rec.get("artist", ""),
+                     "duration": rec.get("duration", 0), "thumb": rec.get("thumb", ""), "size": st.st_size,
+                     "added": st.st_mtime})
+    key = {"title": lambda r: r["title"].lower(), "artist": lambda r: (r["artist"] or "я").lower()}.get(sort)
+    return sorted(rows, key=key) if key else sorted(rows, key=lambda r: -r["added"])
+
+
+def trash_track(path: str) -> bool:
+    """В корзину, а не `rm`: «верни» должно работать. Только файлы из папки музыки — путь приходит от острова."""
+    p = Path(path).expanduser().resolve()
+    if not p.is_file() or music_dir().resolve() not in p.parents:
+        return False
+    return subprocess.run(["gio", "trash", str(p)], capture_output=True, timeout=20).returncode == 0
+
+
 def find_local(query: str, kind: str = "music", limit: int = 5) -> list[dict]:
     """Downloaded tracks matching a spoken name, best first, each with a `score`.
 

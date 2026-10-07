@@ -341,6 +341,15 @@ class CommandsMixin:
         """Player buttons and `justday player ACTION`"""
         return await self.media_control(req.get("action", "status"), req.get("value"))
 
+    async def _cmd_music_library(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Страница «Медиатека» в плеере"""
+        rows = await asyncio.to_thread(media.library_view, str(req.get("sort", "recent")))
+        return {"ok": True, "tracks": rows}
+
+    async def _cmd_music_trash(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """«Удалить» в строке медиатеки: файл уходит в корзину"""
+        return {"ok": await asyncio.to_thread(media.trash_track, str(req.get("file", "")))}
+
     async def _cmd_reminder_set(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """`justday timer 10m` and the island's own buttons"""
         at = float(req.get("at") or 0) or time.time() + float(req.get("seconds") or 0)

@@ -296,8 +296,12 @@ Singleton {
     property var player: null           // {title, artist, thumb, color, pos, duration, paused, index, count, next, volume, loading}
     property real playerAt: Date.now()  // when `pos` was reported: the island counts on by itself between updates
     property bool playerOpen: false     // the big player (a click on the music pill)
+    property string playerPage: "now"   // страница плеера: "now" | "library" (Р2-32)
+    property var libTracks: []          // медиатека: приходит от демона по music_library
+    property string libSort: "recent"
+    function libRefresh() { send({ cmd: "music_library", sort: libSort }) }
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
-    onPlayerOpenChanged: if (!playerOpen) artOpen = false
+    onPlayerOpenChanged: if (!playerOpen) { artOpen = false; playerPage = "now" }
     property var video: null            // {title, channel, thumb, file, progress} — a video playing inside the island
     // ширина кадра в точках: её тянут за уголок, а запомненная лежит в island.video_width
     property real videoWidth: videoFit(island.video_width || 640)
@@ -1580,6 +1584,7 @@ Singleton {
                 if (menuGroup === "fav" && menuPinned.length === 0) menuGroup = "all"
             }
         }
+        if (m.tracks !== undefined) libTracks = m.tracks || []
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.moved !== undefined || (trashWaiting && m.trash_full !== undefined && m.ok !== undefined)) {
             trashWaiting = false

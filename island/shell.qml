@@ -458,7 +458,7 @@ ShellRoot {
         // окно под панелью осталось в фокусе, как у Win+. на Windows, — но тогда ни стрелки, ни Enter, ни
         // ввод в поиск до панели не доходили (Shortcut без фокуса не срабатывает). Фокус окну, где печатали,
         // возвращает демон перед вставкой (Daemon._focus_back).
-        WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" ? WlrKeyboardFocus.Exclusive
+        WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" || (island.mode === "player" && JD.playerPage === "library") ? WlrKeyboardFocus.Exclusive
                                    : island.mode === "settings" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         // Р2-31: плеер, видео и expanded клавиатуру не берут. Раньше у них стоял OnDemand, и щелчок по
         // громкости в игре отдавал островку клавиатуру — игра переставала слышать клавиши. Поля ввода
@@ -1965,6 +1965,43 @@ ShellRoot {
             id: plCol
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
             spacing: 10
+            // Главное меню — вторая страница той же карточки: значок-сетка никто не находил (Р2-30).
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                implicitWidth: pageRow.implicitWidth + 4; implicitHeight: 28
+                radius: 14; color: Qt.rgba(1, 1, 1, 0.08)
+                Row {
+                    id: pageRow
+                    anchors.centerIn: parent; spacing: 2
+                    Repeater {
+                        model: [{ l: JD.tr("Сейчас играет"), cur: JD.playerPage === "now", page: "now" },
+                                { l: JD.tr("Медиатека"), cur: JD.playerPage === "library", page: "library" },
+                                { l: JD.tr("Островок"), cur: false, page: "" }]
+                        Rectangle {
+                            required property var modelData
+                            width: pageText.implicitWidth + 24; height: 24; radius: 12
+                            color: modelData.cur ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                            Text { id: pageText; anchors.centerIn: parent; text: modelData.l; font.pixelSize: 12
+                                   color: modelData.cur ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7) }
+                            TapHandler { enabled: !modelData.cur; onTapped: {
+                                if (modelData.page) { JD.playerPage = modelData.page; if (modelData.page === "library") JD.libRefresh() }
+                                else { JD.playerOpen = false; JD.expanded = true }
+                            } }
+                            HoverHandler { cursorShape: modelData.cur ? Qt.ArrowCursor : Qt.PointingHandCursor }
+                        }
+                    }
+                }
+            }
+            MusicLibrary {
+                visible: JD.playerPage === "library"
+                Layout.fillWidth: true
+                tint: pl.tint
+            }
+            ColumnLayout {
+                id: nowPage
+                visible: JD.playerPage !== "library"
+                Layout.fillWidth: true
+                spacing: 10
             // the cover, large: a tap on the small one opens it, a tap on it puts it back
             Item {
                 Layout.fillWidth: true
@@ -1984,28 +2021,6 @@ ShellRoot {
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: JD.artOpen = false }
-            }
-            // Главное меню — вторая страница той же карточки: значок-сетка никто не находил (Р2-30).
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                implicitWidth: pageRow.implicitWidth + 4; implicitHeight: 28
-                radius: 14; color: Qt.rgba(1, 1, 1, 0.08)
-                Row {
-                    id: pageRow
-                    anchors.centerIn: parent; spacing: 2
-                    Repeater {
-                        model: [{ l: JD.tr("Сейчас играет"), cur: true }, { l: JD.tr("Островок"), cur: false }]
-                        Rectangle {
-                            required property var modelData
-                            width: pageText.implicitWidth + 24; height: 24; radius: 12
-                            color: modelData.cur ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
-                            Text { id: pageText; anchors.centerIn: parent; text: modelData.l; font.pixelSize: 12
-                                   color: modelData.cur ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7) }
-                            TapHandler { enabled: !modelData.cur; onTapped: { JD.playerOpen = false; JD.expanded = true } }
-                            HoverHandler { cursorShape: modelData.cur ? Qt.ArrowCursor : Qt.PointingHandCursor }
-                        }
-                    }
-                }
             }
             RowLayout {
                 spacing: 14
@@ -2121,7 +2136,6 @@ ShellRoot {
                     TapHandler { onTapped: if ((pl.p.count || 0) > 1) pl.queueOpen = !pl.queueOpen }
                 }
                 Item { Layout.fillWidth: true }
-                IconButton { icon: "document-open-folder"; size: 30; onClicked: { Quickshell.execDetached(["dolphin", "--select", pl.p.file]); JD.closeAll() } }
                 IconButton { icon: "media-playback-stop"; size: 30; onClicked: { JD.media("stop"); JD.playerOpen = false } }
             }
             // the queue: tap a song to play it
@@ -2158,6 +2172,7 @@ ShellRoot {
                     HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: JD.media("jump", modelData.i) }
                 }
+            }
             }
         }
     }
@@ -3614,7 +3629,7 @@ ShellRoot {
                                              if (JD.videoLast && JD.videoLast.in_window) JD.videoPopin(); else JD.videoResume() }
                             }
                             Chip { icon: "document-open-folder"; label: JD.tr("Моя музыка")
-                                   onClicked: { JD.expanded = false; JD.send({ cmd: "media_play", query: "~/Music/JustDay/YouTube", mode: "replace", shuffle: true }) } }
+                                   onClicked: { JD.expanded = false; JD.playerPage = "library"; JD.libRefresh(); JD.playerOpen = true } }
                         }
                     }
                 }
