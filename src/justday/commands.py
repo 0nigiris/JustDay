@@ -826,6 +826,28 @@ class CommandsMixin:
             return {"ok": False, "error": str(e)}
         return {"ok": True, "value": value, "restart_needed": self.reload_settings()}
 
+    async def _cmd_wake_check(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Кнопка «Проверить» у имени: 4 секунды слушаем и говорим, что услышали и то ли это имя."""
+        if not self.cfg["wakeword"]["enabled"] or not self.cfg["audio"].get("microphone", True):
+            return {"ok": False, "error": "включи слово пробуждения и микрофон"}
+        spawn(self._wake_check())
+        return {"ok": True}
+
+    async def _wake_check(self) -> None:
+        import numpy as np
+
+        from . import namespot
+        frames: list = []
+        cb = lambda f: frames.append(np.array(f, copy=True))  # noqa: E731
+        self.mic.subscribe(cb)
+        await asyncio.sleep(4)
+        self.mic.unsubscribe(cb)
+        text = ""
+        if frames:
+            text = (await asyncio.to_thread(self.stt.transcribe_head, np.concatenate(frames)))[0]
+        variants = self._spotter.variants if self._spotter else namespot.spellings(self._wake_names(self.cfg))
+        self.publish(kind="wake_check", heard=text, matched=bool(text) and namespot.split_name(text, variants)[0])
+
     async def _cmd_terminal_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Показать одно из заранее известных действий в окне терминала (обновление, журнал, голос)."""
         if self._peer_is_ai(writer):

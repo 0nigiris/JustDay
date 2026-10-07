@@ -119,3 +119,12 @@ def test_смена_имени_просыпается_на_новое_и_не_н
         assert namespot.split_name(сказано, namespot.spellings([имя]))[0], (имя, сказано)
     нов = namespot.spellings(["Пятница"])
     assert not namespot.split_name("джарвис включи свет", нов)[0]
+
+
+def test_wake_names_come_from_settings_not_only_assistant_name():
+    """Сменил «Как меня звать» на «Пятница» — будил по-старому, пока не перезапустишь (Р2-36)."""
+    from justday.daemon import Daemon
+    cfg = {"wakeword": {"wake_names": ["Пятница", "Friday"]}, "user": {"assistant_name": "Джарвис"}}
+    assert Daemon._wake_names(cfg) == ["Пятница", "Friday"]
+    cfg["wakeword"]["wake_names"] = []
+    assert Daemon._wake_names(cfg) == ["Джарвис"]

@@ -145,6 +145,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         self._notify_id = 0
         self._wake = None
         self._wake_cooldown = 0.0
+        self._spotter = None  # детектор имени; пока нет микрофона — None
         self._names: list[str] = []  # spellings of the assistant's names, for trimming them off a woken phrase
         self._quiet_until = 0.0  # the assistant's own voice may still echo in the room
         self._event_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -1108,6 +1109,16 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 self.cfg[key] = value
         self.cfg["brain"].update(live)
 
+    @staticmethod
+    def _wake_names(cfg: dict) -> list[str]:
+        """Имена, на которые просыпаемся: свои из настроек, а если пусто — имя ассистента."""
+        return [n for n in (cfg["wakeword"].get("wake_names") or [cfg["user"]["assistant_name"]]) if n]
+
+    def _apply_names(self, cfg: dict) -> None:
+        u = cfg["user"]
+        self._names = namespot.spellings([n for n in [u["assistant_name"], *u.get("assistant_aliases", [])] if n])
+        self._spotter.variants = namespot.spellings(self._wake_names(cfg))
+
     def reload_settings(self) -> list[str]:
         """Apply config changes without a restart where possible; returns the sections that still need one."""
         new = config.load()
@@ -1143,11 +1154,18 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 {k: old["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")}):
             spawn(self._reconnect_brain())
         self.stt.vocabulary = island.vocabulary(new)
-        restart += [s for s in ("brain", "stt", "wakeword", "local_llm") if new[s] != old[s]]
+        # Имя будится без перезапуска (ниже): wake_names не повод пересобирать детектор
+        sans = lambda c: {k: v for k, v in c["wakeword"].items() if k != "wake_names"}  # noqa: E731
+        restart += [s for s in ("brain", "stt", "local_llm") if new[s] != old[s]]
+        if sans(new) != sans(old):
+            restart.append("wakeword")
         if new["user"].get("language") != old["user"].get("language"):
             restart.append("language")
-        names = lambda c: (c["user"]["assistant_name"], c["user"].get("assistant_aliases"))  # noqa: E731
-        if self._names and names(new) != names(old):  # the name spotter was built with the old names
+        names = lambda c: (c["user"]["assistant_name"], c["user"].get("assistant_aliases"),  # noqa: E731
+                           c["wakeword"].get("wake_names"))
+        if self._spotter and names(new) != names(old):  # новое имя подхватывается на лету, без перезапуска
+            self._apply_names(new)
+        elif self._names and names(new) != names(old):
             restart.append("wakeword")
         # Plasma system OSD ↔ island.show_osd (and popups island mode via sync call sites).
         if (new["island"].get("show_osd", True) != old["island"].get("show_osd", True)
@@ -1376,7 +1394,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         if w.get("names", True):
             u = self.cfg["user"]
             # only the main name wakes it («Джарвис»); the other names are for talking, not for waking
-            names = [n for n in (w.get("wake_names") or [u["assistant_name"]]) if n]
+            names = self._wake_names(self.cfg)
             self._names = namespot.spellings([n for n in [u["assistant_name"], *u.get("assistant_aliases", [])] if n])
 
             def on_name(clip, continuing, take_tail) -> None:  # Whisper thread
@@ -1392,6 +1410,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             spotter = namespot.NameSpotter(self.stt.transcribe_head, names, lambda: self.mic.seq, on_name,
                                            min_prob=self._name_min_prob,
                                            floor=lambda: float(self.cfg["wakeword"].get("name_candidate", 0.0)))
+            self._spotter = spotter
             self.mic.subscribe(lambda f: spotter.feed(
                 f, self.state in ("idle", "thinking") and time.monotonic() > max(self._quiet_until, self._wake_cooldown)
                 and self._name_spotting_allowed(), self._wake_score))

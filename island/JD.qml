@@ -1772,6 +1772,7 @@ Singleton {
             chatRefresh()
             break
         case "chat_open": chatOpen = true; break
+        case "wake_check": flash(m.matched ? tr("Услышал имя: «") + m.heard + "»" : (m.heard ? tr("Не то имя, услышал: «") + m.heard + "»" : tr("Ничего не услышал")), m.matched ? "check" : "mic", m.matched ? accentGreen : accentOrange); break
         case "chat_busy": if (m.chat === chatCurrent) chatBusy = !!m.busy; break
         case "notification":
             if (island.show_notifications === false) break
