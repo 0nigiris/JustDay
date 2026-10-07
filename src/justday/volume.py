@@ -19,7 +19,7 @@ PART = re.compile(r"^(?:(?:сделай|поставь|установи|выст
 MUSIC = re.compile(r"^(?:музык\w*|песн\w*|трек\w*|плеер\w*|music|player)$")
 SYSTEM = re.compile(r"^(?:систем\w*|общ\w+|весь звук|всё|все|компьютер\w*|звук|system|master|overall)$")
 NOT_A_TARGET = {"на", "до", "в", "во", "to", "at"}
-MAX_LEVEL = 130  # выше ста — как у плеера: усиление
+MAX_LEVEL = 150  # выше ста — усиление; у программ потолок 150 (дальше PipeWire хрипит), у плеера 130
 
 
 @dataclass
@@ -89,14 +89,14 @@ def plan(text: str, inputs: list[dict] | None = None) -> list[Action] | None:
         else (inputs or [])
     for target, level in pending:
         if MUSIC.match(target):
-            actions.append(Action("music", level, "музыка"))
+            actions.append(Action("music", min(level, 130), "музыка"))
         elif SYSTEM.match(target):
             actions.append(Action("system", min(level, 100), "звук"))
         else:
             hits, _ = streams_for(target, inputs)
             if not hits:
                 return None
-            actions.append(Action("stream", min(level, 100), target, tuple(hits)))
+            actions.append(Action("stream", level, target, tuple(hits)))
     if len(actions) == 1 and actions[0].kind == "system":
         return None  # «громкость на 40» — старый быстрый путь, он молча делает то же самое
     return actions

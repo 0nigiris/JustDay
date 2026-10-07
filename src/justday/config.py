@@ -639,7 +639,7 @@ DEFAULTS: dict = {
     # video_where_strict: keep the chosen place even when the request names another one
     # ("включи в островке" is honoured by default, whatever video_where says)
     "media": {"video_where": "ask", "video_where_strict": False, "volume": 70, "duck": True, "show_player": True,
-              "color": "theme", "color_web": True},
+              "color": "theme", "color_web": True, "normalize": False},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},
 }

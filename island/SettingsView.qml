@@ -2100,6 +2100,11 @@ Item {
                     Toggle { checked: win.get("media.duck") !== false; onToggled: v => win.set("media.duck", v) }
                 }
                 Row {
+                    title: JD.tr("Выравнивать громкость")
+                    subtitle: JD.tr("Тихие треки поднимаются без хрипа; вступает со следующим запуском плеера")
+                    Toggle { checked: !!win.get("media.normalize"); onToggled: v => win.set("media.normalize", v) }
+                }
+                Row {
                     title: JD.tr("Цвет трека")
                     subtitle: ({ theme: JD.tr("Цвет обложки, а если она ничего не говорит — цвет того, о чём музыка: тема персонажа, палитра игры. Название трека уходит модели"),
                                  cover: JD.tr("Главный цвет обложки, без вопросов к модели") })[win.get("media.color") || "theme"]

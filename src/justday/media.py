@@ -857,6 +857,8 @@ class MusicPlayer:
         args = ["mpv", "--idle=yes", "--no-video", "--no-terminal", "--audio-display=no", f"--input-ipc-server={SOCK}",
                 "--audio-client-name=JustDay", f"--volume={self.volume}", "--volume-max=130", "--gapless-audio=weak",
                 "--keep-open=no", "--prefetch-playlist=yes"]
+        if config.load().get("media", {}).get("normalize"):  # тихие треки поднимаются без хрипа (Р2-48)
+            args.append("--af=dynaudnorm=f=250:g=15")
         if os.environ.get("JUSTDAY_MPV_AO"):  # tests: JUSTDAY_MPV_AO=null plays silently
             args.append(f"--ao={os.environ['JUSTDAY_MPV_AO']}")
         r = await asyncio.to_thread(

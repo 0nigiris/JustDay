@@ -78,3 +78,9 @@ def test_упавшая_громкость_не_объявляется_выпо�
     levels = [volume.Action("stream", 50, "discord", (1,))]
     assert asyncio.run(daemon.Daemon._set_volumes(fake, "громкость дискорд 50", levels)) is None
     assert said == []
+
+
+def test_просил_130_а_ставилось_100() -> None:
+    """«Громкость Discord 130» срезалось до 100: тихую программу нельзя было усилить (Р2-48)."""
+    assert виды("громкость Discord 130") == [("stream", 130)]
+    assert виды("громкость Discord 150 и музыка 200") is None  # выше потолка — не наше дело, уходит мозгу
