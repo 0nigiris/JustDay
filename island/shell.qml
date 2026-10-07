@@ -3092,7 +3092,7 @@ ShellRoot {
             { cmd: "/music", title: JD.tr("Сделать музыку"), icon: "audio-x-generic", fill: JD.tr("Сделай трек: ") },
             { cmd: "/install", title: JD.tr("Установить программу"), icon: "system-software-install", fill: JD.tr("Установи ") },
             { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
-            { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: "audio-input-microphone",
+            { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: JD.micOn ? "mic-off" : "mic",
               run: () => JD.setConfig("audio.microphone", !JD.micOn) },
             { cmd: "/chat", title: JD.tr("Чат с ассистентом (без голоса)"), icon: "message-circle", run: () => { JD.chatOpen = true } },
             { cmd: "/mixer", title: JD.tr("Звук и микшер"), icon: "volume-2", run: () => JD.openTools("mixer") },
@@ -3675,7 +3675,7 @@ ShellRoot {
                     columns: 2
                     rowSpacing: 12
                     columnSpacing: 12
-                    Tile { icon: "audio-input-microphone"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
+                    Tile { icon: JD.micOn ? "mic" : "mic-off"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
                            on: JD.micOn; tint: JD.accentCyan; onToggled: ev.setting("audio.microphone", !JD.micOn) }
                     Tile { icon: "audio-speakers"; title: JD.tr("Голос")
                            onText: JD.tr("отвечает вслух")

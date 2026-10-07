@@ -65,7 +65,7 @@ ColumnLayout {
         rowSpacing: 10
         columnSpacing: 10
         Tile {
-            icon: "audio-input-microphone"; title: "Микрофон"; onText: "голос и текст"; offText: "только текст"
+            icon: JD.micOn ? "mic" : "mic-off"; title: "Микрофон"; onText: "голос и текст"; offText: "только текст"
             on: JD.micOn; tint: JD.accentCyan
             onToggled: ct.setting("audio.microphone", !JD.micOn)
         }
