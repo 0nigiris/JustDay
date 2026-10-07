@@ -459,7 +459,10 @@ ShellRoot {
         // ввод в поиск до панели не доходили (Shortcut без фокуса не срабатывает). Фокус окну, где печатали,
         // возвращает демон перед вставкой (Daemon._focus_back).
         WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" ? WlrKeyboardFocus.Exclusive
-                                   : big || island.mode === "video" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+                                   : island.mode === "settings" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        // Р2-31: плеер, видео и expanded клавиатуру не берут. Раньше у них стоял OnDemand, и щелчок по
+        // громкости в игре отдавал островку клавиатуру — игра переставала слышать клавиши. Поля ввода
+        // есть только в настройках (OnDemand), в compose и в инструментах (Exclusive).
         // окно шире самого острова: видео растягивают почти во весь экран, а щелчки всё равно
         // проходят везде, кроме него самого — маска ниже отвечает за это
         // Сплошная полоса — это строка на всю ширину монитора, а не окно по ширине видео.
