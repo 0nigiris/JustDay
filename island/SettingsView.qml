@@ -2803,6 +2803,7 @@ Item {
                         Btn { visible: !!(updGroup.st && updGroup.st.behind); text: JD.tr("Обновить"); primary: true; onClicked: JD.runUpdate() }
                     }
                 }
+                Row { title: JD.tr("Получать бета-версии"); subtitle: JD.tr("Самое новое сразу, но могут быть недоделки. Выключено — только проверенное"); Toggle { checked: win.get("updates.channel") === "main"; onToggled: v => { win.set("updates.channel", v ? "main" : "stable"); updGroup.st = null } } }
                 Row { title: JD.tr("Проверять автоматически"); subtitle: JD.tr("Раз в 6 часов; на острове появится кнопка"); Toggle { checked: win.get("updates.check") !== false; onToggled: v => win.set("updates.check", v) } }
             }
         }
