@@ -13,6 +13,8 @@ Environment=PYTHONUNBUFFERED=1
 # — не данными, а пустотой между ними. Двух хватает: демон почти всё время ждёт, а не считает.
 Environment=MALLOC_ARENA_MAX=2
 Restart=on-failure
+# Упал — сохранить журнал и версии (justday crashlog), а не перезапускаться молча.
+ExecStopPost=-@JUSTDAY@ crashlog justday.service
 RestartSec=5
 TimeoutStopSec=15
 # Programs and games the assistant starts must outlive a daemon restart: only the daemon itself is stopped

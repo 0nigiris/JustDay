@@ -12,6 +12,8 @@ Environment=QS_DISABLE_FILE_WATCHER=1
 Environment=QS_NO_RELOAD_POPUP=1
 ExecStart=@JUSTDAY@ ui
 Restart=on-failure
+# Упал — сохранить журнал и версии (justday crashlog), а не перезапускаться молча.
+ExecStopPost=-@JUSTDAY@ crashlog justday-ui.service
 RestartSec=3
 
 [Install]
