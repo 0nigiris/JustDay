@@ -132,7 +132,7 @@ class TTS:
         return config.MODELS_DIR / self.cfg["silero_model_url"].rsplit("/", 1)[1]
 
     def load(self) -> None:
-        if self.cfg["engine"] in ("silero", "chatterbox"):  # у Chatterbox Silero — запасной
+        if self.cfg["engine"] in ("silero", "chatterbox", "elevenlabs"):  # у них Silero — запасной
             # Служба голоса держит torch у себя; демон только просит её подняться. Нет службы — как раньше.
             if self.path_exists() and self.nudge("warm", engine="silero", model=str(self._silero_path())):
                 return
@@ -343,9 +343,9 @@ class TTS:
         """Return int16 PCM at self.rate for one already-normalized sentence."""
         engine = self.cfg["engine"]
         lang = self.cfg.get("lang", "ru")
-        # Chatterbox сам по себе фразу целиком не синтезирует — сюда он попадает, когда занята
-        # видеокарта или служба недоступна, и тогда говорит Silero.
-        if engine in ("silero", "chatterbox") and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
+        # Chatterbox и ElevenLabs сюда попадают, только когда сами не смогли (занята видеокарта,
+        # кончились кредиты) — и тогда говорит Silero.
+        if engine in ("silero", "chatterbox", "elevenlabs") and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
             try:
                 try:
                     pcm = self.silero_remote(sentence)

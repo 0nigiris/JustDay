@@ -462,9 +462,13 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             gen = self._speech_gen
             try:
                 engine = self.tts.cfg["engine"]
-                if engine == "elevenlabs" and await self._speak_stream(sentence, gen, "elevenlabs"):
+                # Отказ ElevenLabs (кончились кредиты, голос не для бесплатного тарифа) — сразу Silero.
+                # Раньше запасным был Qwen: 3,4 ГБ видеопамяти и полминуты холодного старта на
+                # каждый такой отказ. И не стучаться к нему каждой фразой, пока не остынет.
+                if (engine == "elevenlabs" and time.monotonic() >= self._neural_cold_until
+                        and await self._speak_stream(sentence, gen, "elevenlabs")):
                     continue
-                if (engine in ("qwen", "elevenlabs") and time.monotonic() >= self._neural_cold_until
+                if (engine == "qwen" and time.monotonic() >= self._neural_cold_until
                         and await self._speak_stream(sentence, gen, "qwen")):
                     continue
                 if (engine == "chatterbox" and time.monotonic() >= self._neural_cold_until and not self._gpu_taken()
