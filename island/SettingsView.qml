@@ -1718,11 +1718,12 @@ Item {
                 Row {
                     title: JD.tr("Движок голоса")
                     subtitle: vp.engine === "qwen" ? JD.tr("Нейросетевой: Qwen3-TTS на вашей видеокарте")
+                            : vp.engine === "chatterbox" ? JD.tr("Chatterbox: живее Silero; когда видеокарта занята, говорит Silero")
                             : vp.engine === "elevenlabs" ? JD.tr("ElevenLabs: лучший голос, но текст ответов уходит на их серверы")
                             : vp.engine === "silero" ? JD.tr("Silero: быстрый, звучит роботизированно") : JD.tr("Без голоса, только остров")
                     Segmented {
-                        options: [{ value: "qwen", label: JD.tr("Нейросетевой") }, { value: "elevenlabs", label: "ElevenLabs" },
-                                  { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
+                        options: [{ value: "qwen", label: JD.tr("Нейросетевой") }, { value: "chatterbox", label: "Chatterbox" },
+                                  { value: "elevenlabs", label: "ElevenLabs" }, { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
                         current: vp.engine
                         onPicked: v => { win.set("tts.engine", v); vp.engine = v }
                     }

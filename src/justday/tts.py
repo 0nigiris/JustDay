@@ -5,6 +5,7 @@ import logging
 import re
 import subprocess
 import threading
+import time
 import urllib.request
 
 import numpy as np
@@ -131,7 +132,7 @@ class TTS:
         return config.MODELS_DIR / self.cfg["silero_model_url"].rsplit("/", 1)[1]
 
     def load(self) -> None:
-        if self.cfg["engine"] == "silero":
+        if self.cfg["engine"] in ("silero", "chatterbox"):  # у Chatterbox Silero — запасной
             # Служба голоса держит torch у себя; демон только просит её подняться. Нет службы — как раньше.
             if self.path_exists() and self.nudge("warm", engine="silero", model=str(self._silero_path())):
                 return
@@ -146,6 +147,32 @@ class TTS:
 
     NEURAL_RATE = 24000
     SOCKET = config.RUNTIME_DIR / "justday-voice.sock"
+    CHATTERBOX_SOCKET = config.RUNTIME_DIR / "justday-chatterbox.sock"
+
+    def neural_socket(self):
+        """Куда идут `say`, `warm`, `sleep`: у Chatterbox своя служба (свой torch), у Qwen — своя."""
+        return self.CHATTERBOX_SOCKET if self.cfg["engine"] == "chatterbox" else self.SOCKET
+
+    _gpu_seen = (0.0, 0)
+
+    def gpu_busy(self) -> bool:
+        """Видеокарта занята чем-то кроме нас — тогда Chatterbox не зовём, говорит Silero на процессоре.
+
+        Chatterbox считает фразу на видеокарте целиком, ~1 с на секунду речи. Когда карту делит игра
+        или монтаж, он ждёт своей очереди — и человек слышит паузы по пять секунд, а игра ловит
+        рывки. Silero на процессоре видеокарты не касается вовсе.
+        """
+        now = time.monotonic()
+        at, load = self._gpu_seen
+        if now - at > 2:  # nvidia-smi стоит ~50 мс, а фразы идут подряд
+            try:
+                out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                                     capture_output=True, text=True, timeout=2).stdout
+                load = max((int(x) for x in out.split() if x.isdigit()), default=0)
+            except (OSError, subprocess.TimeoutExpired):
+                load = 0  # не NVIDIA или драйвера нет — мерить нечем, не мешаем
+            self._gpu_seen = (now, load)
+        return load >= int(self.cfg.get("gpu_busy_percent", 50) or 101)
 
     def instruct(self) -> str:
         """Манера речи словами — то, что модель понимает сама.
@@ -195,7 +222,8 @@ class TTS:
         try:
             with socket_mod.socket(socket_mod.AF_UNIX) as sock:
                 sock.settimeout(1.5)
-                sock.connect(str(self.SOCKET))
+                # Silero живёт в службе Qwen, даже когда основной голос — Chatterbox
+                sock.connect(str(self.SOCKET if extra.get("engine") == "silero" else self.neural_socket()))
                 sock.sendall((json.dumps({"cmd": cmd, **extra}) + "\n").encode())
             return True
         except OSError:
@@ -237,7 +265,7 @@ class TTS:
         import json
         import struct
 
-        reader, writer = await asyncio.open_unix_connection(str(self.SOCKET))
+        reader, writer = await asyncio.open_unix_connection(str(self.neural_socket()))
         try:
             req = {"cmd": "say", "text": sentence, "voice": self.cfg.get("voice", "butler"),
                    "instruct": self.instruct()}
@@ -310,7 +338,9 @@ class TTS:
         """Return int16 PCM at self.rate for one already-normalized sentence."""
         engine = self.cfg["engine"]
         lang = self.cfg.get("lang", "ru")
-        if engine == "silero" and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
+        # Chatterbox сам по себе фразу целиком не синтезирует — сюда он попадает, когда занята
+        # видеокарта или служба недоступна, и тогда говорит Silero.
+        if engine in ("silero", "chatterbox") and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
             try:
                 try:
                     pcm = self.silero_remote(sentence)

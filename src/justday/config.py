@@ -184,7 +184,9 @@ DEFAULTS: dict = {
         "initial_prompt": "Джарвис, JustDay, Claude Code, YouTube, Discord, Steam, Proton, GitHub, KDE, Helium, VS Code.",
     },
     "tts": {
-        "engine": "silero",  # qwen (neural, justday-voice service) | elevenlabs | silero | espeak | none
+        "engine": "silero",  # qwen (neural, justday-voice service) | chatterbox | elevenlabs | silero | espeak | none
+        # Chatterbox уступает Silero, когда видеокарта загружена на столько процентов (или идёт игра)
+        "gpu_busy_percent": 50,
         "voice": "jarvis",  # neural voice id: the built-in jarvis, or one you designed/cloned
         "neural_quality": "fast",  # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
         "silero_model_url": "https://models.silero.ai/models/tts/ru/v5_5_ru.pt",

@@ -1,0 +1,15 @@
+[Unit]
+Description=JustDay voice (Chatterbox)
+PartOf=graphical-session.target
+After=graphical-session.target
+Requires=justday-chatterbox.socket
+After=justday-chatterbox.socket
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/justday/chatterbox/.venv/bin/python @REPO@/voice/chatterbox_server.py
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+# Выход по простою — не отказ: гнездо поднимет службу на следующую фразу.
+SuccessExitStatus=0
+RestartSec=5

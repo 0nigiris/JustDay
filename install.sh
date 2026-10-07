@@ -698,6 +698,12 @@ services() {
     systemctl --user enable --now justday-voice.socket
     systemctl --user try-restart justday-voice.service
   fi
+  if systemctl --user cat justday-chatterbox.service >/dev/null 2>&1; then
+    sed "s|@REPO@|$APP_DIR|" "$APP_DIR/systemd/justday-chatterbox.service" > "$UNIT_DIR/justday-chatterbox.service"
+    cp "$APP_DIR/systemd/justday-chatterbox.socket" "$UNIT_DIR/justday-chatterbox.socket"
+    systemctl --user daemon-reload
+    systemctl --user try-restart justday-chatterbox.service
+  fi
 }
 step "$(t 'Службы' 'Services')" services
 

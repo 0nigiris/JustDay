@@ -1,0 +1,9 @@
+[Unit]
+Description=JustDay voice socket (Chatterbox)
+
+[Socket]
+ListenStream=%t/justday-chatterbox.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

@@ -237,13 +237,16 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         if value == "listening":
             self.stt.warm()
         engine = self.cfg["tts"]["engine"]
-        if value not in ("listening", "thinking") or self.silent() or engine not in ("qwen", "silero"):
+        if value not in ("listening", "thinking") or self.silent() or engine not in ("qwen", "silero", "chatterbox"):
             return
         try:   # состояние меняется и до запуска цикла — тогда греть попросту некуда и незачем
             # `to_thread`, а не `run_in_executor`: тот отдаёт Future, а задачу делают из корутины.
             # Из-за этого прогрев падал TypeError прямо в присваивании состояния — и с ним падал
             # весь заход в прослушивание. Со стороны это выглядело так: Джарвис перестал слышать.
-            extra = {"engine": "silero", "model": str(self.tts._silero_path())} if engine == "silero" else {}
+            if engine == "silero" or (engine == "chatterbox" and self.tts.gpu_busy()):
+                extra = {"engine": "silero", "model": str(self.tts._silero_path())}
+            else:
+                extra = {}
             spawn(asyncio.to_thread(self.tts.nudge, "warm", **extra))
         except RuntimeError:
             pass
@@ -438,7 +441,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         предыдущая: раньше каждая ждала конца предыдущей и потом ещё 0,1–0,5 с собственного синтеза (Р-53).
         Потоковые голоса (Qwen, ElevenLabs) не тронуты: они и так играют по мере генерации."""
         engine = self.tts.cfg["engine"]
-        if engine in ("qwen", "elevenlabs", "none") or sentence in self._synth_ahead:
+        if engine in ("qwen", "elevenlabs", "chatterbox", "none") or sentence in self._synth_ahead:
             return
         try:
             self._synth_ahead[sentence] = asyncio.get_running_loop().run_in_executor(None, self.tts.synth, sentence)
@@ -464,6 +467,9 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 if (engine in ("qwen", "elevenlabs") and time.monotonic() >= self._neural_cold_until
                         and await self._speak_stream(sentence, gen, "qwen")):
                     continue
+                if (engine == "chatterbox" and time.monotonic() >= self._neural_cold_until and not self._gpu_taken()
+                        and await self._speak_stream(sentence, gen, "chatterbox")):
+                    continue
                 ahead = self._synth_ahead.pop(sentence, None)
                 pcm = await (ahead or loop.run_in_executor(None, self.tts.synth, sentence))
                 if gen != self._speech_gen or not len(pcm):
@@ -474,6 +480,11 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                     self.state = "thinking" if self.brain.busy else "idle"
             except Exception:
                 log.exception("speech failed")
+
+    def _gpu_taken(self) -> bool:
+        """Chatterbox делит видеокарту с игрой или монтажом — и тогда лагают оба. Его просьба 7 октября:
+        «если видеокарта сильно используется — пусть переключается на Silero, чтобы не лагало»."""
+        return bool(desktop.running_game() or self.tts.gpu_busy())
 
     async def _speak_stream(self, sentence: str, gen: int, engine: str) -> bool:
         """Stream one sentence from a voice that generates as it speaks (the local neural service or ElevenLabs).
@@ -487,7 +498,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             # большую часть ускорения берёт на себя модель, а остаток — мягкое
             # растяжение: 1,07 вместо 1,2 слышно несравнимо меньше.
             stream, rate = self.tts.stream(sentence), self.tts.NEURAL_RATE
-            native = self.tts.native_pace()
+            native = self.tts.native_pace() if engine == "qwen" else 1.0  # Chatterbox просьб о темпе не понимает
         stretch = audio.Stretcher(self.tts.speed / native, rate)
         try:
             first = await stream.__anext__()
