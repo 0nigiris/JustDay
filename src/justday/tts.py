@@ -166,10 +166,12 @@ class TTS:
         at, load = self._gpu_seen
         if now - at > 2:  # nvidia-smi стоит ~50 мс, а фразы идут подряд
             try:
-                out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                                     capture_output=True, text=True, timeout=2).stdout
-                load = max((int(x) for x in out.split() if x.isdigit()), default=0)
-            except (OSError, subprocess.TimeoutExpired):
+                out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.free",
+                                      "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=2).stdout
+                util, free = (int(x) for x in out.split("\n")[0].split(","))
+                # Видеопамяти меньше гигабайта — Chatterbox упадёт по памяти, даже если карта не считает
+                load = 100 if free < 1024 else util
+            except (OSError, ValueError, subprocess.TimeoutExpired):
                 load = 0  # не NVIDIA или драйвера нет — мерить нечем, не мешаем
             self._gpu_seen = (now, load)
         return load >= int(self.cfg.get("gpu_busy_percent", 50) or 101)

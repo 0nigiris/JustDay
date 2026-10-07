@@ -28,18 +28,24 @@ def _smi(monkeypatch, out: str | None) -> None:
 
 
 def test_игра_грузит_карту_говорит_silero(monkeypatch) -> None:
-    _smi(monkeypatch, "87\n")
+    _smi(monkeypatch, "87, 6000\n")
     assert голос().gpu_busy()
 
 
 def test_карта_свободна_говорит_chatterbox(monkeypatch) -> None:
-    _smi(monkeypatch, "4\n")
+    _smi(monkeypatch, "4, 6000\n")
     assert not голос().gpu_busy()
 
 
 def test_порог_настраивается(monkeypatch) -> None:
-    _smi(monkeypatch, "40\n")
+    _smi(monkeypatch, "40, 6000\n")
     assert голос(gpu_busy_percent=30).gpu_busy()
+
+
+def test_видеопамять_кончилась_говорит_silero(monkeypatch) -> None:
+    """7 октября: карта простаивала, но 11,9 из 12 ГБ было занято — Chatterbox упал по памяти."""
+    _smi(monkeypatch, "3, 36\n")
+    assert голос().gpu_busy()
 
 
 def test_без_nvidia_не_мешаем(monkeypatch) -> None:

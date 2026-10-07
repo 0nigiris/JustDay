@@ -102,6 +102,11 @@ def handle(conn: socket.socket) -> None:
                     say(conn, req["text"], req.get("voice", ""))
                 except Exception as e:  # закрытое соединение демон понимает как «голоса нет» и говорит Silero
                     log("say failed:", repr(e))
+                    # Нехватка видеопамяти посреди загрузки оставляла полмодели в памяти навсегда —
+                    # 2,7 ГБ, которые не нужны ни нам, ни игре.
+                    if isinstance(e, torch.cuda.OutOfMemoryError):
+                        with lock:
+                            unload()
                 return
             if cmd == "warm":
                 threading.Thread(target=warm, daemon=True).start()
