@@ -768,6 +768,9 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             return await self.session_switch(what)
         if (levels := await asyncio.get_running_loop().run_in_executor(None, volume.plan, text)) is not None:
             return await self._set_volumes(text, levels)
+        if re.match(r"^верни (удален\w+|только что удален\w+) (трек|песню|музыку)$", fastpath._clean(text)):
+            name = await asyncio.to_thread(media.untrash_last)
+            return t("Вернул: {name}", name=name) if name else t("Возвращать нечего.")
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         if (said := fastpath.small_talk(text)) is not None:

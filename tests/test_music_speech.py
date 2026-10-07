@@ -84,3 +84,22 @@ def test_pasted_youtube_link_gives_a_play_row_not_an_empty_search():
     got = launcher.items("https://youtu.be/dQw4w9WgXcQ?t=5")
     assert [r["kind"] for r in got] == ["link"]
     assert launcher.items("https://example.com/watch?v=1") != got
+
+
+def test_untrash_returns_the_last_deleted_track(monkeypatch):
+    """Удалил трек по ошибке, сказал «верни» — возвращать нечем: корзина была, а пути никто не помнил (Р2-32)."""
+    moved = []
+
+    def fake(cmd, **kw):
+        class R:
+            returncode = 0
+            stdout = "x.mp3\ttrash::orig-path=/m/x.mp3\n" if cmd[1] == "list" else ""
+        if cmd[1] == "move":
+            moved.append(cmd[2:])
+        return R()
+
+    monkeypatch.setattr(media.subprocess, "run", fake)
+    monkeypatch.setattr(media, "_TRASHED", ["/m/x.mp3"])
+    assert media.untrash_last() == "x"
+    assert moved == [["trash:///x.mp3", "/m/x.mp3"]]
+    assert media.untrash_last() is None

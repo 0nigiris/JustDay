@@ -354,6 +354,10 @@ class CommandsMixin:
         """«Удалить» в строке медиатеки: файл уходит в корзину"""
         return {"ok": await asyncio.to_thread(media.trash_track, str(req.get("file", "")))}
 
+    async def _cmd_music_untrash(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        name = await asyncio.to_thread(media.untrash_last)
+        return {"ok": bool(name), "name": name}
+
     # ---------- чат (Р2-42): ответы пишутся в файл и в окно, в динамик не идут никогда ----------
     async def _cmd_chat_open(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         self.publish(kind="chat_open")

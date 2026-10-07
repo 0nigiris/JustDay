@@ -89,6 +89,10 @@ ColumnLayout {
                 Label2 { visible: !row.asking; text: lib.fmt(row.modelData.duration); font.pixelSize: 11 }
                 IconButton { visible: !row.asking && rowHover.hovered; icon: "list-add"; size: 24
                              onClicked: JD.send({ cmd: "media_play", query: row.modelData.file, mode: "append" }) }
+                IconButton { visible: !row.asking && rowHover.hovered; icon: "media-skip-forward"; size: 24
+                             onClicked: JD.send({ cmd: "media_play", query: row.modelData.file, mode: "next" }) }
+                IconButton { visible: !row.asking && rowHover.hovered; icon: "document-open-folder"; size: 24
+                             onClicked: JD.showInFolder(row.modelData.file) }
                 IconButton { visible: !row.asking && rowHover.hovered; icon: "user-trash"; size: 24
                              onClicked: lib.confirm = row.modelData.file }
                 // необратимое спрашивает в самой строке, а не системным окном

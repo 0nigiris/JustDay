@@ -615,7 +615,27 @@ def trash_track(path: str) -> bool:
     p = Path(path).expanduser().resolve()
     if not p.is_file() or music_dir().resolve() not in p.parents:
         return False
-    return subprocess.run(["gio", "trash", str(p)], capture_output=True, timeout=20).returncode == 0
+    ok = subprocess.run(["gio", "trash", str(p)], capture_output=True, timeout=20).returncode == 0
+    if ok:
+        _TRASHED.append(str(p))
+    return ok
+
+
+_TRASHED: list[str] = []  # что удалили отсюда, в порядке удаления: «верни» достаёт с конца
+
+
+def untrash_last() -> str | None:
+    """Вернуть последний удалённый трек из корзины на прежнее место; None — возвращать нечего."""
+    while _TRASHED:
+        orig = _TRASHED.pop()
+        out = subprocess.run(["gio", "list", "-a", "trash::orig-path,standard::name", "trash:///"],
+                             capture_output=True, text=True, timeout=20).stdout
+        for line in out.splitlines():
+            name, _, rest = line.partition("\t")
+            if f"trash::orig-path={orig}" in rest and subprocess.run(
+                    ["gio", "move", f"trash:///{name}", orig], capture_output=True, timeout=20).returncode == 0:
+                return Path(orig).stem
+    return None
 
 
 def find_local(query: str, kind: str = "music", limit: int = 5) -> list[dict]:
