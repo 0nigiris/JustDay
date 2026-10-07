@@ -214,10 +214,24 @@ Item {
             Layout.fillHeight: true
             Layout.preferredWidth: 244
             color: win.side
-            ColumnLayout {
+            // Скругление карточки, а не квадратный угол, торчащий за ней (Р2-29). Радиус — как у карточки.
+            topLeftRadius: 30
+            bottomLeftRadius: 30
+            // Шестнадцать пунктов и пять подписей выше окна 640: без прокрутки нижний («Приватность», «О
+            // программе») резался краем. Нижний отступ равен радиусу карточки, иначе последний садится на угол.
+            Flickable {
+                id: sideScroll
                 anchors.fill: parent
-                anchors.margins: 12
-                anchors.topMargin: 18
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                contentHeight: sideCol.implicitHeight + 18 + 30
+                ScrollBar.vertical: ThinBar {}
+            ColumnLayout {
+                id: sideCol
+                x: 12
+                y: 18
+                width: parent.width - 24
+                height: Math.max(implicitHeight, sideScroll.height - 18 - 30)
                 spacing: 2
                 RowLayout {
                     Layout.leftMargin: 8
@@ -316,6 +330,7 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
+            }
         }
 
         // pages
@@ -381,6 +396,7 @@ Item {
                 anchors.fill: parent
                 visible: !win.loading
                 contentHeight: pageLoader.implicitHeight + 60
+                bottomMargin: 30   // не меньше радиуса карточки: последний пункт не садится на скруглённый угол
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ThinBar {}

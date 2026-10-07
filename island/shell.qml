@@ -780,7 +780,8 @@ ShellRoot {
                            : (island.mode === "settings" || dropCard.held === "settings")
                     parent: JD.islandStyle === "bar" ? dropCard : stage
                     implicitWidth: 940
-                    implicitHeight: 640
+                    // На низком экране или при масштабе 125% 640 не влезает: карточка не выше экрана.
+                    implicitHeight: Math.min(640, JD.screenHeight - 2 * (JD.topMargin + 20))
                     Loader {
                         anchors.fill: parent
                         active: settingsHolder.shown || settingsHolder.opacity > 0.01
