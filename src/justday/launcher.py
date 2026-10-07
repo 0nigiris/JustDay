@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import time
 
-from . import config, desktop, filesearch
+from . import config, desktop, filesearch, media
 
 RECENT_FILE = config.STATE_DIR / "launcher-recent.json"
 FAV_FILE = config.STATE_DIR / "launcher-favourites.json"
@@ -89,6 +89,10 @@ def items(query: str = "", limit: int = 40, *, windows: bool = True) -> list[dic
     """Что показать на запрос. Пустой запрос — недавние, потом остальное по алфавиту.
 
     Ничего не нашлось — пробуем ту же строку в другой раскладке, и только потом отвечаем пустотой."""
+    # Вставленная ссылка YouTube — одна строка «Включить по ссылке», выше всего остального (Р2-33).
+    if media.parse_youtube(query):
+        return [{"kind": "link", "id": query.strip(), "name": "Включить по ссылке", "icon": "media-playback-start",
+                 "sub": query.strip()}]
     got = _items(query, limit, windows=windows)
     if not got and query.strip():
         got = _items(swap_layout(query), limit, windows=windows)

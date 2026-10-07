@@ -510,6 +510,9 @@ class CommandsMixin:
         return {"ok": True, "apps": found}
 
     async def _cmd_apps_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        if req.get("kind") == "link":  # играет долго и сам спрашивает про микс: ответ островку не ждём
+            spawn(self.play_music(str(req.get("id", ""))))
+            return {"ok": True, "kind": "link"}
         drop = [str(f) for f in (req.get("files") or [])]
         return await asyncio.get_running_loop().run_in_executor(
             None, lambda: launcher.run(req.get("kind", "app"), str(req.get("id", "")), drop))

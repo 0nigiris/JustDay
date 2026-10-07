@@ -76,3 +76,11 @@ def test_louder_and_quieter():
     from justday import fastpath
     for p in ("громче", "погромче", "чуть громче", "потише", "тише", "немного тише"):
         assert any(rx.match(fastpath._clean(p)) for rx, _c, _d in fastpath.MEDIA), p
+
+
+def test_pasted_youtube_link_gives_a_play_row_not_an_empty_search():
+    """Вставил ссылку в Spotlight — искали «ссылку» среди программ и находили пустоту (Р2-33)."""
+    from justday import launcher
+    got = launcher.items("https://youtu.be/dQw4w9WgXcQ?t=5")
+    assert [r["kind"] for r in got] == ["link"]
+    assert launcher.items("https://example.com/watch?v=1") != got

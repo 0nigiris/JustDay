@@ -41,6 +41,7 @@ Item {
              : kind === "game" ? JD.tr("Игры")
              : kind === "window" ? JD.tr("Открытые окна")
              : kind === "file" ? JD.tr("Файлы")
+             : kind === "link" ? JD.tr("Ссылка")
              : JD.tr("Другое")
     }
 
