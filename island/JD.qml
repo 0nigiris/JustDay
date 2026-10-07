@@ -301,6 +301,18 @@ Singleton {
     property string playerPage: "now"   // страница плеера: "now" | "library" (Р2-32)
     property var libTracks: []          // медиатека: приходит от демона по music_library
     property string libSort: "recent"
+    // Чат (Р2-42): окно ChatWindow.qml; ответы приходят строками подписки kind:"chat", в динамик не идут
+    property bool chatOpen: false
+    property var chatList: []
+    property string chatCurrent: ""
+    property var chatMessages: []
+    property bool chatBusy: false
+    property bool _chatWantNew: false
+    function chatRefresh() { send({ cmd: "chat_list" }) }
+    function chatOpenOne(id) { chatCurrent = id; chatMessages = []; send({ cmd: "chat_get", id: id }) }
+    function chatNew() { _chatWantNew = true; send({ cmd: "chat_new" }) }
+    function chatSend(text) { if (chatCurrent && text.trim()) send({ cmd: "chat_send", id: chatCurrent, text: text }) }
+    function chatDelete(id) { send({ cmd: "chat_delete", id: id }); if (id === chatCurrent) { chatCurrent = ""; chatMessages = [] }; chatRefresh() }
     function libRefresh() { send({ cmd: "music_library", sort: libSort }) }
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
     onPlayerOpenChanged: if (!playerOpen) { artOpen = false; playerPage = "now" }
@@ -1587,6 +1599,9 @@ Singleton {
             }
         }
         if (m.tracks !== undefined) libTracks = m.tracks || []
+        if (m.chats !== undefined) chatList = m.chats || []
+        if (m.messages !== undefined && m.kind === undefined) chatMessages = m.messages || []
+        if (m.id !== undefined && _chatWantNew) { _chatWantNew = false; chatOpenOne(m.id); chatRefresh() }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }
         if (m.moved !== undefined || (trashWaiting && m.trash_full !== undefined && m.ok !== undefined)) {
             trashWaiting = false
@@ -1733,6 +1748,11 @@ Singleton {
             flash(tr("Отменено"), "dialog-cancel", accentRed)
             break
         case "error": flash(m.detail, "dialog-error", accentRed); break
+        case "chat":
+            if (m.chat === chatCurrent) chatMessages = chatMessages.concat([m.message])
+            chatRefresh()
+            break
+        case "chat_busy": if (m.chat === chatCurrent) chatBusy = !!m.busy; break
         case "notification":
             if (island.show_notifications === false) break
             if (!gameMode) { notification = m.notification; notifExpanded = false; notifTimer.restart() }

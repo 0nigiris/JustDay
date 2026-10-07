@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from . import (
+    chats,
     clipboard,
     config,
     desktop,
@@ -37,6 +38,7 @@ from . import (
     voiceprint,
 )
 from .aio import spawn
+from .brain import Brain
 from .i18n import t
 
 log = logging.getLogger("justday.daemon")
@@ -349,6 +351,79 @@ class CommandsMixin:
     async def _cmd_music_trash(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """«Удалить» в строке медиатеки: файл уходит в корзину"""
         return {"ok": await asyncio.to_thread(media.trash_track, str(req.get("file", "")))}
+
+    # ---------- чат (Р2-42): ответы пишутся в файл и в окно, в динамик не идут никогда ----------
+    async def _cmd_chat_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        return {"ok": True, "chats": await asyncio.to_thread(chats.listing, str(req.get("query", "")))}
+
+    async def _cmd_chat_new(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        return {"ok": True, "id": await asyncio.to_thread(chats.create)}
+
+    async def _cmd_chat_get(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        return {"ok": True, "messages": await asyncio.to_thread(chats.messages, str(req.get("id", "")))}
+
+    async def _cmd_chat_delete(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        cid = str(req.get("id", ""))
+        if brain := self._chat_brains.pop(cid, None):
+            await brain.stop()
+        return {"ok": await asyncio.to_thread(chats.delete, cid)}
+
+    async def _cmd_chat_send(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Сообщение в чат. Ответ придёт позже строкой подписки {kind: chat}: ход долгий, держать сокет незачем."""
+        cid, text = str(req.get("id", "")), str(req.get("text", "")).strip()
+        if not text:
+            return {"ok": False, "error": "empty"}
+        self.chat_say(cid, "user", text)
+        spawn(self._chat_turn(cid, text))
+        return {"ok": True}
+
+    def chat_say(self, cid: str, role: str, text: str) -> None:
+        """Запись в чат и в окно. Отсюда же пишут телефон, Telegram и `tell_chat`: общий путь, без озвучки."""
+        row = chats.append(cid, role, text)
+        self.publish(kind="chat", chat=cid, message=row)
+
+    async def chat_ask(self, source: str, text: str) -> str:
+        """Телефон и Telegram пишут сюда, а не в голос: у каждого источника свой постоянный чат."""
+        key = f"chat_{source}"
+        cid = events.load_state().get(key)
+        if not cid or not chats.exists(cid):
+            cid = chats.create(title={"phone": "Телефон", "telegram": "Telegram"}.get(source, source))
+            events.save_state(**{key: cid})
+        self.chat_say(cid, "user", text)
+        return await self._chat_turn(cid, text)
+
+    async def _chat_turn(self, cid: str, text: str) -> str:
+        brain = self._chat_brains.get(cid)
+        if brain is None:
+            async def on_text(reply: str, cid: str = cid) -> None:
+                self.chat_say(cid, "assistant", reply)
+            brain = Brain(self.cfg, on_text=on_text, approver=self._approve, asker=self._answer_questions,
+                          persist=False, chat=True, resume_id=chats.meta(cid).get("session"))
+            self._chat_brains[cid] = brain
+        self.publish(kind="chat_busy", chat=cid, busy=True)
+        reply = ""
+        try:
+            reply = await brain.ask(text, source="chat")
+            if brain.session_id:
+                chats.set_meta(cid, session=brain.session_id)
+        except Exception as e:
+            events.emit("turn_failed", error=repr(e), lane="chat")
+            reply = t("Не получилось связаться с мозгом. Подробности в логе.")
+            self.chat_say(cid, "assistant", reply)
+        finally:
+            self.publish(kind="chat_busy", chat=cid, busy=False)
+        # процесс мозга на каждый открытый чат тяжёл: закрываем, когда в чате тихо
+        loop = asyncio.get_running_loop()
+        if old := self._chat_closers.pop(cid, None):
+            old.cancel()
+        self._chat_closers[cid] = loop.call_later(600, lambda: spawn(self._chat_close(cid)))
+        return reply
+
+    async def _chat_close(self, cid: str) -> None:
+        brain = self._chat_brains.get(cid)
+        if brain and not brain.busy:
+            self._chat_brains.pop(cid, None)
+            await brain.stop()
 
     async def _cmd_reminder_set(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """`justday timer 10m` and the island's own buttons"""

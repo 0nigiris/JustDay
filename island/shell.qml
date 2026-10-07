@@ -80,6 +80,7 @@ ShellRoot {
         function collapse(): void { JD.closeAll() }
         function toggle(): void { JD.expanded = !JD.expanded }
         function settings(): void { JD.openSettings("general") }
+        function chat(): void { JD.chatOpen = true }
         function settingsPage(page: string): void { JD.openSettings(page) }
         function peek(): void { JD.peeking = true; JD.islandHovered = false }
         function status(): string {
@@ -277,6 +278,8 @@ ShellRoot {
         }
     }
 
+
+    ChatWindow {}
 
     // ───────────── system OSD (volume / layout / brightness) — Noctalia-like, not app toasts ─────────────
     // Own monitor + corner (island.osd_screen / osd_position). Telegram toasts stay on notification_*.

@@ -32,7 +32,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from . import config, dispatch, events, providers
+from . import chats, config, dispatch, events, providers
 from . import persona as persona_mod
 from .i18n import t
 
@@ -151,9 +151,13 @@ class Brain:
         approver: Callable[[str, str, bool], Awaitable[bool]],
         asker: Callable[[list[dict]], Awaitable[dict | None]],
         persist: bool = True,
+        chat: bool = False,
+        resume_id: str | None = None,
     ):
         self.cfg = cfg
         self.persist = persist          # False: a side session — never resumed, never remembered as «the» session
+        self.chat = chat                # окно чата (Р2-42): разметка можно, голоса нет никогда
+        self.resume_id = resume_id      # сессия этого чата, записанная в его файле
         self.request = ""               # what the current turn is about, for a side session to be told
         self.tool_label = ""            # the tool it is running now, in words
         self._tool_since: float | None = None
@@ -196,6 +200,8 @@ class Brain:
         claude = providers.is_claude(self.cfg)
         if role := dispatch.role_for(b["model"]):
             persona += "\n\n" + role
+        if self.chat:
+            persona += chats.CHAT_NOTE
         # Claude in Chrome and the auto-mode classifier need an Anthropic account; other models use the local policy
         extra = {"chrome": None} if b.get("chrome") and claude else {}
         return ClaudeAgentOptions(
@@ -238,6 +244,15 @@ class Brain:
         BRAIN_DIR.mkdir(parents=True, exist_ok=True)
         state = events.load_state()
         resume = None
+        if self.chat:
+            try:
+                await self._connect(self.resume_id)
+            except Exception:
+                if not self.resume_id:
+                    raise
+                log.exception("chat resume of %s failed, starting a fresh session", self.resume_id)
+                await self._connect(None)
+            return
         within = self.cfg["brain"]["resume_within_hours"] * 3600
         if fresh := self.cfg["brain"].get("fresh_after_minutes", 20):
             within = min(within, fresh * 60)  # тот же порог, что в stale(): после перезапуска тоже
@@ -368,6 +383,9 @@ class Brain:
             events.emit("say_suppressed", text=text[:200])
             return
         self._spoke_in_turn = True
+        if self.chat:  # событие «say» слушают озвучка и островок: чату они не нужны
+            await self.on_text(text)
+            return
         events.emit("say", text=text)
         await self.on_text(text)
 

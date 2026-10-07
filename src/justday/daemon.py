@@ -108,6 +108,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         self._gave_up_vram = False   # видеопамять уже отдана игре
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
+        self._chat_brains: dict[str, Brain] = {}   # по мозгу на открытый чат; закрываются после 10 минут тишины
+        self._chat_closers: dict[str, asyncio.TimerHandle] = {}
         self.side: Brain | None = None             # a second session, for what must not wait for the first one
         self._side_close: asyncio.TimerHandle | None = None
         self.jobs = jobs.Jobs(on_change=lambda: self.publish(jobs=self.jobs.state()), on_done=self._job_done)
@@ -959,7 +961,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         events.emit("heard", text=text, source="phone")
         self.publish(kind="heard", detail=text)
         local = await self.handle_local(text, "phone")
-        reply = local if local is not None else await self.run_turn(text, source="phone")
+        reply = local if local is not None else await self.chat_ask("phone", text)
         return {"ok": True, "text": text, "result": reply or t("сделано")}
 
     async def _telegram_loop(self) -> None:
@@ -1028,7 +1030,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 events.emit("heard", text=text, source="telegram")
                 try:
                     local = await self.handle_local(text, "telegram")
-                    reply = local if local is not None else await self.run_turn(text, source="telegram")
+                    reply = local if local is not None else await self.chat_ask("telegram", text)
                 except Exception:
                     log.exception("телеграм: ход не удался")
                     reply = "Не получилось — посмотри журнал."
