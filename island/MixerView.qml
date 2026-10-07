@@ -49,14 +49,18 @@ Item {
     function nameOf(node) {
         if (!node) return ""
         const p = node.properties || ({})
+        // Браузер называет все потоки одинаково («Chromium»): без названия вкладки не понять, где что (Р2-48).
+        if (isBrowser(p) && p["media.name"]) return p["media.name"] + " — " + p["application.name"]
         return p["application.name"] || p["media.name"] || node.description || node.name || ""
     }
+    readonly property var outputs: Pipewire.nodes.values.filter(n => n.isSink && !n.isStream && n.audio)
+    function isBrowser(p) { return /chrom|firefox|brave|vivaldi|opera|edge/i.test(p["application.name"] || "") }
     function noteOf(node) {
         if (!node) return ""
         const p = node.properties || ({})
         const what = p["media.name"] || ""
         const who = p["application.name"] || ""
-        return what && what !== who ? what : (p["application.process.binary"] || "")
+        return what && what !== who && !isBrowser(p) ? what : (p["application.process.binary"] || "")
     }
     // Значок берём только тот, который программа назвала сама. Имя двоичного файла в роли имени
     // значка выглядит правдоподобно и врёт: в теме находится что-нибудь похожее по названию, и в
@@ -199,6 +203,8 @@ Item {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onSingleTapped: e => lane.setVolume(e.position.x / track.width)
                     }
+                    // Двойной щелчок — ровно сто: вернуться к «как было» после усиления
+                    TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onDoubleTapped: lane.setVolume(1.0) }
                     // Колесом — по пять процентов: точность руки на узкой дорожке кончается
                     // примерно там же.
                     WheelHandler {
@@ -224,6 +230,25 @@ Item {
             tint: JD.accentBlue
             title: mx.sink ? (mx.sink.description || mx.sink.name || "Выход") : "Выхода нет"
             note: "Общая громкость — всё сразу"
+        }
+        // Куда звук идёт: наушники/колонки одним щелчком (он жаловался, что наушники пропали из настроек)
+        Flow {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: mx.outputs.length > 1
+            Repeater {
+                model: mx.outputs
+                delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool on: mx.sink && modelData.id === mx.sink.id
+                    height: 26; width: chipText.implicitWidth + 20; radius: 13
+                    color: on ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.1)
+                    Label2 { id: chipText; anchors.centerIn: parent; font.pixelSize: 12
+                             color: parent.on ? "#ffffff" : JD.text2
+                             text: modelData.description || modelData.name }
+                    TapHandler { onTapped: Quickshell.execDetached(["wpctl", "set-default", String(modelData.id)]) }
+                }
+            }
         }
         Lane {
             node: mx.source
