@@ -111,6 +111,18 @@ def steps_of(session_id: str) -> list[dict]:
 
 
 ASKING_TOOLS = ("AskUserQuestion", "ExitPlanMode")
+# Правка файла выполняется мгновенно: если результата нет дольше этого, Claude Code ждёт разрешения. Для Bash так
+# сказать нельзя — команда может просто идти долго.
+EDIT_TOOLS = ("Edit", "Write", "NotebookEdit")
+PERMISSION_AFTER = 15.0
+
+
+def _stamp(line_obj: dict) -> float:
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(line_obj.get("timestamp", "")).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def asking(session_id: str) -> str:
@@ -121,22 +133,25 @@ def asking(session_id: str) -> str:
     hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
     if not hits:
         return ""
-    pending: dict[str, str] = {}
+    pending: dict[str, tuple[str, float]] = {}
     for line in _tail(max(hits, key=lambda p: p.stat().st_mtime)):
         if '"tool_use' not in line:
             continue
         try:
-            content = (json.loads(line).get("message") or {}).get("content")
+            obj = json.loads(line)
+            content = (obj.get("message") or {}).get("content")
         except ValueError:
             continue
         for c in content if isinstance(content, list) else []:
             if not isinstance(c, dict):
                 continue
             if c.get("type") == "tool_use":
-                pending[str(c.get("id", ""))] = str(c.get("name", ""))
+                pending[str(c.get("id", ""))] = (str(c.get("name", "")), _stamp(obj))
             elif c.get("type") == "tool_result":
                 pending.pop(str(c.get("tool_use_id", "")), None)
-    return next((n for n in reversed(pending.values()) if n in ASKING_TOOLS), "")
+    now = time.time()
+    return next((n for n, at in reversed(pending.values())
+                 if n in ASKING_TOOLS or (n in EDIT_TOOLS and at and now - at > PERMISSION_AFTER)), "")
 
 
 def model_of(session_id: str) -> str:
