@@ -25,12 +25,19 @@ Singleton {
     // app opens the matching dialog/chat. Focus/launch is only a fallback when no action exists
     // (eavesdrop-only copy with no live Notify object). No per-app hardcoding.
     property var _notifActionRefs: []   // keep action QObjects; Quickshell may clear live.actions
+    property var notifButtons: []       // [{id, text}] — кнопки карточки; «default» — это щелчок по самой карточке (Р2-38)
     function _cacheNotifActions(live) {
         _notifActionRefs = []
-        if (!live) return
-        const acts = live.actions || []
-        for (let i = 0; i < acts.length; i++)
-            _notifActionRefs.push(acts[i])
+        const btns = []
+        if (live) {
+            const acts = live.actions || []
+            for (let i = 0; i < acts.length; i++) {
+                _notifActionRefs.push(acts[i])
+                const id = String(acts[i].identifier || "")
+                if (id && id !== "default" && acts[i].text) btns.push({ id: id, text: String(acts[i].text) })
+            }
+        }
+        notifButtons = btns.slice(0, 3)
     }
     function openNotification(n) {
         if (!n) return

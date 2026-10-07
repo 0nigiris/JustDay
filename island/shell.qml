@@ -1600,6 +1600,7 @@ ShellRoot {
         readonly property bool open: JD.notifExpanded
         implicitWidth: open ? 600 : Math.min(580, Math.max(380, nRow.implicitWidth + 36))
         implicitHeight: nCol.implicitHeight + 26
+        HoverHandler { id: nvHover }
         MouseArea {
             anchors.fill: parent
             z: 0
@@ -1644,6 +1645,19 @@ ShellRoot {
                     onClicked: JD.notifExpanded = !JD.notifExpanded
                 }
                 RoundKey { Layout.alignment: Qt.AlignTop; icon: "window-close"; onClicked: JD.dismissNotification() }
+            }
+            Row {
+                visible: JD.notifButtons.length > 0 && (nvHover.hovered || nv.open)
+                spacing: 8
+                Layout.alignment: Qt.AlignHCenter
+                Repeater {
+                    model: JD.notifButtons
+                    delegate: PillButton {
+                        required property var modelData
+                        label: modelData.text
+                        onClicked: JD.runNotificationAction(modelData.id)
+                    }
+                }
             }
             Label2 {
                 visible: !nv.open
