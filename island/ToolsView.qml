@@ -129,16 +129,29 @@ Item {
                     }
                 }
                 Component.onCompleted: Qt.callLater(revealCurrent)
+                // Не влезло — край гаснет, а не режется посреди слова.
+                Rectangle {
+                    anchors.right: parent.right
+                    height: parent.height
+                    width: 24
+                    visible: tabScroll.contentX + tabScroll.width < tabScroll.contentWidth - 1
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: "transparent" }
+                        GradientStop { position: 1; color: JD.ink }
+                    }
+                }
             }
 
-            // Поиск. Фокус берёт сразу: открыли панель — можно печатать, как в Spotlight.
+            IconButton { icon: "x"; size: 30; onClicked: JD.closeTools() }
+        }
+
+        // Поиск. Фокус берёт сразу: открыли панель — можно печатать, как в Spotlight.
             Rectangle {
                 visible: tv.searchable
-                Layout.preferredWidth: 200
-                Layout.minimumWidth: 148
-                Layout.maximumWidth: 220
-                implicitHeight: 34
-                radius: 17
+                Layout.fillWidth: true
+                implicitHeight: 32
+                radius: 16
                 color: JD.fill1
                 border.width: field.activeFocus ? 1 : 0
                 border.color: JD.accentBlue
@@ -201,11 +214,10 @@ Item {
                             text: tv.page === "emoji" ? "кот, сердце, флаг…" : "искать в истории…"
                         }
                     }
+                    IconButton { visible: field.text.length > 0; icon: "x"; size: 20; onClicked: field.text = "" }
                 }
             }
 
-            IconButton { icon: "x"; size: 30; onClicked: JD.closeTools() }
-        }
 
         // Поиск не на каждую букву: демон читает историю с диска, и дёргать его на «к», «ко», «кот»
         // значит три чтения вместо одного.
