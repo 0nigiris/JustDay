@@ -271,6 +271,9 @@ class TTS:
         try:
             req = {"cmd": "say", "text": sentence, "voice": self.cfg.get("voice", "butler"),
                    "instruct": self.instruct()}
+            if self.cfg["engine"] == "chatterbox":  # хрипота и ровность подбираются на слух: tts.chatterbox_*
+                req.update({k: self.cfg[f"chatterbox_{k}"] for k in ("exaggeration", "cfg_weight", "temperature")
+                            if f"chatterbox_{k}" in self.cfg})
             writer.write((json.dumps(req, ensure_ascii=False) + "\n").encode())
             await writer.drain()
             while True:
