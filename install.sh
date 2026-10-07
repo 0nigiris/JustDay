@@ -10,6 +10,7 @@
 #   --text-only         no microphone, no voice: 250 MB, commands typed
 #   --parts a,b,c       exactly these: speech, voice, cuda
 #   --yes               do not ask anything, take what fits this computer
+#   --beta              take the newest code (branch main) instead of the tested one (branch stable)
 #   --debug             show what every tool prints, as it prints it
 #   --no-sudo           never ask for the admin password
 #   --help
@@ -35,6 +36,7 @@ STARTED=$SECONDS
 # ───────────── what was asked for ─────────────
 DEBUG=${JUSTDAY_DEBUG:-0}
 ASK=1; [[ "${JUSTDAY_YES:-}" == 1 ]] && ASK=0
+CHANNEL=""                     # пусто = стабильная, если она есть; --beta / --stable выбирают явно
 WANT="${JUSTDAY_PARTS-}"       # пусто = ещё не выбрано; "-" = ничего необязательного
 usage() { sed -n '2,20p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'; exit 0; }
 while (($#)); do
@@ -49,6 +51,8 @@ while (($#)); do
     # показывать на экране». Без него обновление молча оставляет всё как было — и правильно
     # делает, но человеку нужен способ передумать, не вспоминая названия переменных.
     --setup|--reconfigure)    JUSTDAY_ASK=1; JUSTDAY_SETUP=1 ;;
+    --beta)                   CHANNEL=main ;;
+    --stable)                 CHANNEL=stable ;;
     --debug|-d)               DEBUG=1 ;;
     --no-sudo)                JUSTDAY_NO_SUDO=1 ;;
     --help|-h)                usage ;;
@@ -221,7 +225,18 @@ get_code() {
   if [[ $FROM_CLONE == 1 ]]; then
     note "$(t 'из этой папки' 'this folder') · $(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
   else
-    if [[ -d "$APP_DIR/.git" ]]; then git -C "$APP_DIR" pull --ff-only; else git clone --depth 1 "$REPO_URL" "$APP_DIR"; fi
+    if [[ -d "$APP_DIR/.git" ]]; then
+      # Уже стоящую копию на другую ветку молча не переводим: только по явному --beta / --stable.
+      if [[ -n "$CHANNEL" ]]; then
+        git -C "$APP_DIR" fetch --depth 1 origin "$CHANNEL" && git -C "$APP_DIR" checkout -B "$CHANNEL" FETCH_HEAD
+      else
+        git -C "$APP_DIR" pull --ff-only
+      fi
+    else
+      # stable двигают перемоткой после проверки; пока её нет (или --beta) — main.
+      if [[ -z "$CHANNEL" ]] && git ls-remote --exit-code --heads "$REPO_URL" stable >/dev/null 2>&1; then CHANNEL=stable; fi
+      git clone --depth 1 ${CHANNEL:+--branch "$CHANNEL"} "$REPO_URL" "$APP_DIR"
+    fi
     note "$(t 'версия' 'version') $(git -C "$APP_DIR" rev-parse --short HEAD)"
   fi
 }
