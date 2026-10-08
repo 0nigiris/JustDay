@@ -1973,6 +1973,14 @@ ShellRoot {
         property int volumeWas: 0      // where the mute button came from
         Timer { interval: 250; repeat: true; running: pl.visible && !pl.p.paused; onTriggered: pl.now = Date.now() }
         readonly property real pos: { pl.now; return JD.playerPos(Date.now()) }
+        // повтор отрезка A–B. ponytail: проверяется раз в 250 мс и только пока карточка плеера открыта
+        property real loopA: -1
+        property real loopB: -1
+        readonly property string trackKey: (p.title || "") + "|" + (p.index || 0)
+        onTrackKeyChanged: { loopA = -1; loopB = -1 }
+        onPosChanged: if (loopA >= 0 && loopB > loopA && pos >= loopB && !p.paused) {
+            JD.media("seek", loopA); optimistic({ pos: loopA })
+        }
         readonly property var upcoming: (p.queue || []).filter(q => q.i >= (p.index || 0))
         implicitWidth: 540
         implicitHeight: plCol.implicitHeight + 36
@@ -2117,6 +2125,30 @@ ShellRoot {
                     onClicked: {
                         const next = ({ off: "all", all: "one", one: "off" })[pl.p.repeat || "off"]
                         JD.media("repeat", next); pl.optimistic({ repeat: next })
+                    }
+                }
+                // отрезок: нажатие 1 — точка A, 2 — точка B, 3 — сбросить
+                Rectangle {
+                    implicitWidth: mabLabel.implicitWidth + 20; implicitHeight: 28; radius: 14
+                    readonly property bool set: pl.loopA >= 0
+                    color: set ? Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.32) : (mabHover.hovered ? JD.fill2 : JD.fill1)
+                    Label1 {
+                        id: mabLabel
+                        anchors.centerIn: parent
+                        font.pixelSize: 12; font.weight: Font.DemiBold
+                        font.features: { "tnum": 1 }
+                        color: parent.set ? pl.tint : JD.text1
+                        text: pl.loopB > pl.loopA ? "A–B " + JD.fmtTime(pl.loopA) + "–" + JD.fmtTime(pl.loopB)
+                              : pl.loopA >= 0 ? "A " + JD.fmtTime(pl.loopA) + " → B" : "A–B"
+                    }
+                    HoverHandler { id: mabHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: {
+                            if (pl.loopA < 0) pl.loopA = pl.pos
+                            else if (pl.loopB < 0) { if (pl.pos > pl.loopA + 0.5) pl.loopB = pl.pos }
+                            else { pl.loopA = -1; pl.loopB = -1 }
+                        }
                     }
                 }
                 Item { Layout.fillWidth: true }
@@ -2284,7 +2316,7 @@ ShellRoot {
                 volume: JD.videoVolume * (["listening", "speaking", "approval"].includes(JD.dstate) ? 0.25 : 1.0)
                 muted: Quickshell.env("JUSTDAY_ISLAND_MUTE") === "1"  // the headless test stand stays silent
             }
-            onSourceChanged: { vv.ended = false; if (source.toString() !== "") play() }
+            onSourceChanged: { vv.ended = false; JD.loopA = -1; JD.loopB = -1; if (source.toString() !== "") play() }
             // ролик, который вернули из окна или продолжили, начинается с той же секунды
             onMediaStatusChanged: {
                 if (mediaStatus === MediaPlayer.LoadedMedia && (vv.v.start || 0) > 1 && position < 1000)
@@ -2298,7 +2330,11 @@ ShellRoot {
                 JD.videoPlaying = playbackState === MediaPlayer.PlayingState
                 JD.send({ cmd: "video_state", playing: playbackState === MediaPlayer.PlayingState, pos: position / 1000 })
             }
-            onPositionChanged: { JD.videoPos = position / 1000; JD.videoDur = duration / 1000 }
+            onPositionChanged: {
+                JD.videoPos = position / 1000; JD.videoDur = duration / 1000
+                // отрезок A–B: дошли до B — назад к A (пока B не задан, отрезка нет)
+                if (JD.loopA >= 0 && JD.loopB > JD.loopA && JD.videoPos >= JD.loopB) position = JD.loopA * 1000
+            }
         }
         Timer { id: endTimer; interval: 12000; onTriggered: if (vv.ended) { if (JD.islandHovered) restart(); else vv.close() } }
         Connections {
@@ -2462,6 +2498,32 @@ ShellRoot {
                                 onTapped: {
                                     const steps = [0.5, 0.75, 1, 1.25, 1.5, 2]
                                     JD.videoRate = steps[(steps.indexOf(JD.videoRate) + 1) % steps.length]
+                                }
+                            }
+                        }
+                        // повтор отрезка: нажатие 1 — точка A, 2 — точка B, 3 — сбросить
+                        Rectangle {
+                            implicitWidth: abLabel.implicitWidth + 20; implicitHeight: 28; radius: 14
+                            readonly property bool set: JD.loopA >= 0
+                            color: set ? Qt.rgba(JD.accentPink.r, JD.accentPink.g, JD.accentPink.b, 0.32)
+                                       : (abHover.hovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.14))
+                            Label1 {
+                                id: abLabel
+                                anchors.centerIn: parent
+                                font.pixelSize: 12; font.weight: Font.DemiBold
+                                font.features: { "tnum": 1 }
+                                color: parent.set ? JD.accentPink : JD.text1
+                                text: JD.loopB > JD.loopA ? "A–B " + JD.fmtTime(JD.loopA) + "–" + JD.fmtTime(JD.loopB)
+                                      : JD.loopA >= 0 ? "A " + JD.fmtTime(JD.loopA) + " → B" : "A–B"
+                            }
+                            HoverHandler { id: abHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: {
+                                    if (JD.loopA < 0) JD.loopA = JD.videoPos
+                                    else if (JD.loopB < 0) {
+                                        if (JD.videoPos > JD.loopA + 0.5) { JD.loopB = JD.videoPos; JD.videoLoop = false }
+                                    } else { JD.loopA = -1; JD.loopB = -1 }
                                 }
                             }
                         }

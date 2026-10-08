@@ -360,6 +360,8 @@ Singleton {
     Timer { id: volumeSave; interval: 900; onTriggered: jd.saveVideoVolume() }
     property real videoRate: 1.0         // скорость: 0.5 … 2
     property bool videoLoop: false       // повтор одного ролика
+    property real loopA: -1              // повтор отрезка: начало и конец в секундах, -1 — не задано
+    property real loopB: -1
     property bool videoMini: false       // кадр свёрнут в пилюлю, звук идёт дальше
     property bool videoPlaying: false    // что делает кадр прямо сейчас — для пилюли
     property real videoPos: 0
