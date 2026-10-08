@@ -164,6 +164,10 @@ DEFAULTS: dict = {
         # Через сколько тишины начинать распознавать, не дожидаясь конца просьбы (0 — выключить): текст готов
         # к моменту, когда пауза дорастёт до silence_seconds. Только для коротких просьб.
         "speculate_after_seconds": 0.45,
+        # Быстрый ответ: модель Smart Turn (turn.py) слушает хвост записи и, если мысль закончена, не ждёт всей паузы.
+        # Не закончена («поставь таймер на…») — ждёт обычную паузу. Нет файла модели — работает как раньше.
+        "smart_turn": True,
+        "smart_turn_after_seconds": 0.5,
         "no_speech_timeout_seconds": 7,
         # After JustDay asks a question, listen again automatically for this long (0 = off).
         "followup_seconds": 6,

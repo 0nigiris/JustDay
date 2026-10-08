@@ -2049,6 +2049,7 @@ Item {
             GroupTitle { text: JD.tr("КАК СЛУШАЕТ") }
             Group {
                 Row { title: JD.tr("Пауза в конце фразы"); subtitle: JD.tr("Сколько тишины считать концом просьбы"); SSlider { key: "audio.silence_seconds"; from: 0.5; to: 2.0; step: 0.1; unit: JD.tr(" с") } }
+                Row { title: JD.tr("Быстрый ответ"); subtitle: JD.tr("Модель слышит, что фраза закончена, и не ждёт всю паузу; недоговорённое ждёт как раньше"); Toggle { checked: win.get("audio.smart_turn") !== false; onToggled: v => win.set("audio.smart_turn", v) } }
                 Row { title: JD.tr("Ждать ответа на вопрос"); subtitle: JD.tr("Слушать без кнопки после вопроса ассистента (0 — выкл)"); SSlider { key: "audio.followup_seconds"; from: 0; to: 15; step: 1; decimals: 0; unit: JD.tr(" с") } }
                 Row { title: JD.tr("Двойное нажатие = отмена"); subtitle: JD.tr("Максимальный промежуток между нажатиями (0 — выкл)"); SSlider { key: "audio.double_tap_seconds"; from: 0; to: 0.6; step: 0.05; decimals: 2; unit: JD.tr(" с") } }
                 Row { title: JD.tr("Слово пробуждения"); subtitle: JD.tr("«Hey Jarvis» без кнопки. Микрофон слушает постоянно, звук не покидает компьютер"); Toggle { checked: !!win.get("wakeword.enabled"); onToggled: v => win.set("wakeword.enabled", v) } }

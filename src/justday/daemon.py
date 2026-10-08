@@ -102,6 +102,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                                                 a.get("silence_long_seconds", 2.2),
                                                 a.get("long_speech_seconds", 5.0),
                                                 a.get("speculate_after_seconds", 0.45))
+        self.recorder.smart_after_s = a.get("smart_turn_after_seconds", 0.5) if a.get("smart_turn", True) else 0.0
         self.stt = STT(self.cfg["stt"])
         self._wake_score = 0.0       # последний балл openWakeWord: по нему слух имён решает, будить ли Whisper
         self._name_gate: tuple[float, bool] = (0.0, True)
@@ -670,6 +671,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         if followup:
             rec = audio.UtteranceRecorder(self.mic, rec.silence_s, self.cfg["audio"]["followup_seconds"], rec.max_s,
                                           rec.silence_long_s, rec.long_after_s, rec.speculate_after_s)
+            rec.smart_after_s = self.recorder.smart_after_s
         loop = asyncio.get_running_loop()
         early: list[asyncio.Future] = []  # раннее распознавание: последнее запущенное, годится ли — решает rec.speculated
 
@@ -1134,6 +1136,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         restart: list[str] = []
         a = new["audio"]
         self.recorder.silence_s = a["silence_seconds"]
+        self.recorder.smart_after_s = a.get("smart_turn_after_seconds", 0.5) if a.get("smart_turn", True) else 0.0
         self.recorder.no_speech_timeout_s = a["no_speech_timeout_seconds"]
         self.recorder.max_s = a["max_utterance_seconds"]
         if a.get("microphone", True) != old["audio"].get("microphone", True):

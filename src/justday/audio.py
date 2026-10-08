@@ -153,6 +153,8 @@ class UtteranceRecorder:
         # решению «он закончил» текст уже готов. Если человек заговорил снова — готовое выбрасывается.
         self.speculate_after_s = speculate_after_s
         self.speculated: np.ndarray | None = None  # запись, отданная на раннее распознавание и ещё годная
+        # Через сколько тишины спросить Smart Turn (turn.py), закончена ли мысль; 0 — не спрашивать, ждать обычную паузу.
+        self.smart_after_s = 0.0
 
     def patience(self, spoken_s: float) -> float:
         """Сколько тишины считать концом просьбы, если человек говорит уже spoken_s секунд."""
@@ -195,6 +197,7 @@ class UtteranceRecorder:
         pre_roll: list[np.ndarray] = []
         speech = False
         silence = 0.0
+        asked = False  # Smart Turn спрашиваем один раз за каждую паузу, а не на каждом кадре
         started = time.monotonic()
         held: list[np.ndarray] = []
         self.mic.subscribe(cb)
@@ -230,6 +233,13 @@ class UtteranceRecorder:
                 spoken = len(frames) * FRAME / RATE
                 if silence == 0.0:
                     self.speculated = None  # заговорил снова: раннее распознавание неполное
+                    asked = False
+                elif self.smart_after_s > 0 and not asked and silence >= self.smart_after_s and spoken - silence >= 0.4:
+                    asked = True
+                    from . import turn
+                    p_end = await asyncio.to_thread(turn.complete, np.concatenate(frames))
+                    if p_end is not None and p_end > 0.5:
+                        break
                 elif (speculate and self.speculated is None and silence >= self.speculate_after_s > 0
                       and spoken - silence < self.long_after_s and spoken - silence >= 0.4):
                     self.speculated = np.concatenate(frames)
