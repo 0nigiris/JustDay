@@ -1,7 +1,6 @@
 pragma Singleton
 // Shared state of the Dynamic Island: daemon connection, live status, theme, UI mode.
 import QtQuick
-import QtMultimedia
 import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
@@ -1822,11 +1821,12 @@ Singleton {
         id: sfxBank
         model: ["hover", "click", "select", "toggle_on", "toggle_off", "drag_start", "drop", "open", "close",
                 "notify", "success", "error", "listen", "listen_end", "faceid_scan", "faceid_ok"]
-        delegate: SoundEffect {
+        // pw-play, а не SoundEffect: QSoundEffect в qs не декодирует даже правильный wav.
+        delegate: Process {
             required property string modelData
             readonly property string name: modelData
-            source: Qt.resolvedUrl("sounds/" + modelData + ".wav")
-            volume: 0.8
+            function play() { if (!running) running = true }
+            command: ["pw-play", "--volume=0.7", Qt.resolvedUrl("sounds/" + modelData + ".wav").toString().replace("file://", "")]
         }
     }
 
