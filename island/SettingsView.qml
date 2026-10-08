@@ -604,6 +604,7 @@ Item {
         height: implicitHeight
         radius: 13
         pressScale: JD.pressScaleSmall
+        sound: ""
         color: checked ? "#30d158" : "#48484a"
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Rectangle {
@@ -613,7 +614,7 @@ Item {
             color: "white"
             Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         }
-        onClicked: tg.toggled(!tg.checked)
+        onClicked: { JD.sfx(tg.checked ? "toggle_off" : "toggle_on"); tg.toggled(!tg.checked) }
     }
 
     component Btn: Pressable {

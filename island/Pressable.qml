@@ -6,6 +6,7 @@ Rectangle {
     id: p
     property real pressScale: JD.pressScale     // значок мал и сжимается сильнее: JD.pressScaleSmall
     property bool pressEnabled: true
+    property string sound: "click"      // "" — кнопка играет свой звук сама (переключатель)
     property alias hovered: hover.hovered
     property alias pressed: tap.pressed
     signal clicked()
@@ -16,5 +17,5 @@ Rectangle {
     // достаётся заодно всем обработчикам выше: стрелка «развернуть» на острове разворачивала текст
     // и тут же открывала поверх него панель управления. ReleaseWithinBounds берёт захват
     // исключительно — родитель молчит.
-    TapHandler { id: tap; enabled: p.pressEnabled; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: p.clicked() }
+    TapHandler { id: tap; enabled: p.pressEnabled; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: { if (p.sound) JD.sfx(p.sound); p.clicked() } }
 }
