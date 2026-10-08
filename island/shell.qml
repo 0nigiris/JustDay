@@ -1577,7 +1577,8 @@ ShellRoot {
             Rectangle {
                 implicitWidth: 22; implicitHeight: 22; radius: 11
                 color: Qt.rgba(JD.flashColor.r, JD.flashColor.g, JD.flashColor.b, 0.2)
-                Icon { anchors.centerIn: parent; name: JD.flashIcon; fallback: "dialog-ok"; implicitSize: 16 }
+                Icon { visible: JD.flashIcon !== "check"; anchors.centerIn: parent; name: JD.flashIcon; fallback: "dialog-ok"; implicitSize: 16 }
+                DrawMark { visible: JD.flashIcon === "check" && JD.flashText !== ""; anchors.centerIn: parent; kind: "check"; tint: JD.flashColor; size: 14 }
             }
             Label1 { text: JD.flashText; TextSwap on text {} Layout.maximumWidth: 520 }
             Text { visible: !JD.flashAct; font.family: JD.fontFamily; text: JD.flashColor === JD.accentRed ? "" : "✓"; color: JD.accentGreen; font.pixelSize: 15; font.weight: Font.Bold }
