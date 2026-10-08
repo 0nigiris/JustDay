@@ -1,6 +1,7 @@
 pragma Singleton
 // Shared state of the Dynamic Island: daemon connection, live status, theme, UI mode.
 import QtQuick
+import QtMultimedia
 import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
@@ -1753,6 +1754,8 @@ Singleton {
         if (m.state !== undefined && m.state !== dstate) {
             const was = dstate
             dstate = m.state
+            if (m.state === "listening") sfx("listen")
+            else if (was === "listening") sfx("listen_end")
             if (m.state === "listening") {
                 activity = ""; activityIcon = ""
                 // продолжение разговора: ответ дочитывается, пока микрофон ждёт — отсчёт замирает
@@ -1787,7 +1790,7 @@ Singleton {
         case "chat_busy": if (m.chat === chatCurrent) chatBusy = !!m.busy; break
         case "notification":
             if (island.show_notifications === false) break
-            if (!gameMode) { notification = m.notification; notifExpanded = false; notifTimer.restart() }
+            if (!gameMode) { notification = m.notification; notifExpanded = false; notifTimer.restart(); sfx("notify") }
             notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
             break
         case "compose": openCompose(m.text, m.context); break
@@ -1805,7 +1808,31 @@ Singleton {
         }
     }
 
+    // Звуки интерфейса (scripts/ui_sounds.py). Играют только когда это не мешает: не в игре и
+    // не при выключенных звуках.
+    readonly property bool sfxOn: island.ui_sounds !== false && !gameMode
+    function sfx(name) {
+        if (!sfxOn) return
+        for (let i = 0; i < sfxBank.count; i++) {
+            const e = sfxBank.objectAt(i)
+            if (e && e.name === name) { e.play(); return }
+        }
+    }
+    Instantiator {
+        id: sfxBank
+        model: ["hover", "click", "select", "toggle_on", "toggle_off", "drag_start", "drop", "open", "close",
+                "notify", "success", "error", "listen", "listen_end", "faceid_scan", "faceid_ok"]
+        delegate: SoundEffect {
+            required property string modelData
+            readonly property string name: modelData
+            source: Qt.resolvedUrl("sounds/" + modelData + ".wav")
+            volume: 0.8
+        }
+    }
+
     function flash(textValue, iconName, color, act) {
+        if (iconName === "check") sfx("success")
+        else if (color === accentRed) sfx("error")
         flashAct = act || null
         flashTimer.interval = act ? 7000 : 2200
         flashText = textValue

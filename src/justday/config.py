@@ -347,6 +347,7 @@ DEFAULTS: dict = {
     # Dynamic Island look & feel (applied live)
     "island": {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off
+        "ui_sounds": True,  # тихие звуки интерфейса (island/sounds, собирает scripts/ui_sounds.py)
         "hover_reveal": True,  # hover the top edge to show the island
         "show_weather": True,
         "weather_peek": True,      # погода в полоске при наведении на верхний край
