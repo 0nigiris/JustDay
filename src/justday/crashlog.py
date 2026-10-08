@@ -54,7 +54,33 @@ def save(service: str, result: str | None = None) -> Path | None:
     return path
 
 
+QS_CRASHES = Path.home() / ".cache" / "quickshell" / "crashes"
+
+
+def adopt_quickshell() -> None:
+    """Сбой самого qs попадает в наши отчёты.
+
+    Проверка `kill -SEGV` показала: quickshell ловит крах сам, поднимает новый экземпляр и пишет
+    отчёт в ~/.cache/quickshell/crashes. Для systemd служба не падала, ExecStopPost не вызывался,
+    и человек видел мигнувший экран без единой строки об этом. Время файла берём от папки сбоя,
+    чтобы старые сбои не считались новыми."""
+    if not QS_CRASHES.is_dir():
+        return
+    DIR.mkdir(parents=True, exist_ok=True)
+    for d in QS_CRASHES.iterdir():
+        out = DIR / f"{time.strftime('%Y%m%d-%H%M%S', time.localtime(d.stat().st_mtime))}-qs-{d.name}.log"
+        report = d / "report.txt"
+        if out.exists() or not report.is_file():
+            continue
+        out.write_text(scrub(f"служба: quickshell (упал и поднялся сам)\n\n{report.read_text(errors='replace')}"),
+                       encoding="utf-8")
+        os.utime(out, (d.stat().st_mtime,) * 2)
+    for old in sorted(DIR.glob("*.log"))[:-KEEP]:
+        old.unlink(missing_ok=True)
+
+
 def count() -> int:
+    adopt_quickshell()
     return len(list(DIR.glob("*.log"))) if DIR.is_dir() else 0
 
 
@@ -86,6 +112,7 @@ def unseen() -> int:
     Первый запуск после обновления молчит: старые отчёты не «новый сбой»."""
     from . import events
 
+    adopt_quickshell()
     newest = max((p.stat().st_mtime for p in DIR.glob("*.log")), default=0.0) if DIR.is_dir() else 0.0
     seen = events.load_state().get("crash_seen_at")
     events.save_state(crash_seen_at=max(newest, seen or time.time()))
