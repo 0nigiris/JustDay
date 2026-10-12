@@ -299,7 +299,7 @@ def run_wizard() -> None:
             print(f"\n  {Y}" + W("пропущено") + R)
     print(f"\n{C}" + W("Перезапускаю JustDay…") + R)
     subprocess.run(["systemctl", "--user", "restart", "justday.service"], capture_output=True)
-    for unit in ("justday-island.service", "justday-voice.service"):
+    for unit in ("justday-ui.service", "justday-voice.service"):
         subprocess.run(["systemctl", "--user", "try-restart", unit], capture_output=True)
     name = config.load()["user"]["assistant_name"]
     print(f"\n{G}{B}" + W("Готово!") + R)

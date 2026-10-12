@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import config, kde, providers
 
-SERVICES = ["justday.service", "justday-island.service", "justday-voice.service", "justday-ollama.service"]
+SERVICES = ["justday.service", "justday-ui.service", "justday-voice.service", "justday-ollama.service"]
 VOICES = [
     {"id": "eugene", "name": "Евгений", "kind": "мужской"},
     {"id": "aidar", "name": "Айдар", "kind": "мужской"},

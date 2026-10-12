@@ -708,6 +708,8 @@ ShellRoot {
                 id: dropZone
                 anchors.fill: parent
                 z: 50
+                // Поднесённый файл раскрывает остров сам: в тонкой капсуле «отпустите» не прочитать и не попасть.
+                onContainsDragChanged: { JD.islandHovered = containsDrag; if (!containsDrag) JD.scheduleIslandHide() }
                 onDropped: drop => {
                     let target = ""
                     if (drop.hasUrls && drop.urls.length) target = drop.urls[0].toString()

@@ -57,6 +57,21 @@ Item {
     function get(path) {
         return path.split(".").reduce((o, k) => (o === undefined || o === null) ? undefined : o[k], d.config)
     }
+    // Список полосы дока с включённой/выключенной частью: новая часть встаёт после ближайшей предыдущей по
+    // обычному порядку, а черты, оставшиеся рядом или с краю, убираются.
+    function dockLayoutWith(part, on) {
+        const order = ["launcher", "pinned", "running", "trash", "cat", "clock"]
+        let l = (get("dock.layout") || []).filter(x => x !== part)
+        if (on) {
+            let at = 0
+            for (let i = order.indexOf(part) - 1; i >= 0; i--) {
+                const j = l.indexOf(order[i])
+                if (j >= 0) { at = j + 1; break }
+            }
+            l.splice(at, 0, part)
+        }
+        return l.filter((x, i) => x !== "sep" || (i > 0 && i < l.length - 1 && l[i - 1] !== "sep"))
+    }
     function set(path, value) {
         const parts = path.split(".")
         let o = d.config
@@ -1325,10 +1340,20 @@ Item {
                 }
                 Row { title: JD.tr("Порядок значков перетаскиванием"); subtitle: JD.tr("Потянуть закреплённый значок вдоль дока и отпустить на новом месте"); Toggle { checked: win.get("dock.reorder") !== false; onToggled: v => win.set("dock.reorder", v) } }
                 Row { title: JD.tr("Окна программы при наведении"); subtitle: JD.tr("Миниатюры и заголовки открытых окон; щелчок по карточке поднимает это окно"); Toggle { checked: win.get("dock.preview") !== false; onToggled: v => win.set("dock.preview", v) } }
-                Row {
-                    title: JD.tr("Состав полосы")
-                    subtitle: JD.tr("Порядок слов — порядок на экране. launcher, pinned, running, trash, cat, clock, sep (черта), space (промежуток)")
-                    Field { key: "dock.layout"; implicitWidth: 320 }
+                // Состав — переключатели, а не слова через запятую. Порядок и черты в списке сохраняются.
+                Repeater {
+                    model: [{ k: "launcher", t: JD.tr("Меню приложений") }, { k: "pinned", t: JD.tr("Закреплённые программы") },
+                            { k: "running", t: JD.tr("Открытые программы") }, { k: "trash", t: JD.tr("Корзина") },
+                            { k: "cat", t: JD.tr("Лоток") }, { k: "clock", t: JD.tr("Часы") }]
+                    Row {
+                        id: partRow
+                        required property var modelData
+                        title: modelData.t
+                        Toggle {
+                            checked: (win.get("dock.layout") || []).indexOf(partRow.modelData.k) >= 0
+                            onToggled: v => win.set("dock.layout", win.dockLayoutWith(partRow.modelData.k, v))
+                        }
+                    }
                 }
                 Row {
                     title: JD.tr("Место под черту")
@@ -2736,7 +2761,7 @@ Item {
                     model: win.d.services || []
                     Row {
                         required property var modelData
-                        title: ({ "justday.service": JD.tr("Ассистент"), "justday-island.service": "Dynamic Island", "justday-ollama.service": JD.tr("Локальная модель"), "justday-voice.service": JD.tr("Нейроголос") })[modelData.unit] || modelData.unit
+                        title: ({ "justday.service": JD.tr("Ассистент"), "justday-ui.service": JD.tr("Остров на экране"), "justday-ollama.service": JD.tr("Локальная модель"), "justday-voice.service": JD.tr("Нейроголос") })[modelData.unit] || modelData.unit
                         subtitle: modelData.unit + " · " + modelData.state
                         Rectangle { implicitWidth: 10; implicitHeight: 10; radius: 5; color: modelData.active ? "#30d158" : "#ff453a" }
                     }
