@@ -501,7 +501,7 @@ Singleton {
     // Сначала закрыть панель, потом просить вставить. Пока панель на экране, клавиатура принадлежит
     // ей: напечатанное уходит в никуда, и человек видит «скопировано» вместо вставленного символа.
     function useEmoji(ch) { closeTools(); send({ cmd: "emoji_use", char: ch }) }
-    function useClip(which) { closeTools(); send({ cmd: "clip_use", which: String(which) }) }
+    function useClip(which) { closeTools(); send({ cmd: "clip_use", which: String(which), paste: false }) }
     function forgetClip(which) { send({ cmd: "clip_forget", which: String(which) }); refreshTools() }
     function pauseClip(on) { send({ cmd: "clip_pause", on: on }) }
     function pinClip(which, on) { send({ cmd: "clip_pin", which: String(which), on: on === undefined ? null : on }) }

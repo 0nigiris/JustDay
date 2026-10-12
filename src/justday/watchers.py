@@ -166,7 +166,7 @@ class WatchersMixin:
 
         После клика по панели эмодзи фокус на миг уходит к ней, и Ctrl+V, пришедший раньше времени,
         пропадал. Фиксированные паузы (0,4 с) это лечили, но были заметны; список окон же обновляется
-        событием KWin, так что смотрим в него. Не вернулся за 0,15 с — просим KWin явно."""
+        событием KWin, так что смотрим в него. Не вернулось — просим KWin сразу, без ожидания."""
         want = self._last_active_id
         if not want:
             return False
@@ -174,13 +174,15 @@ class WatchersMixin:
         def back() -> bool:
             return any(w.get("id") == want and w.get("active") for w in self._windows or [] if isinstance(w, dict))
 
-        time.sleep(0.015)  # событие о смене фокуса идёт чуть позже щелчка; цикл ниже ждёт остальное
-        for step in range(30):
+        time.sleep(0.015)  # событие о смене фокуса идёт чуть позже щелчка
+        if not back():
+            # Окно островка держит фокус, пока человек не уберёт его сам, и ждать, что он вернётся
+            # «сам», — это 0,15 с впустую на каждую вставку (замер: 700–790 мс). Просим KWin сразу.
+            desktop.windows("focus", wid=want)
+        for _ in range(40):
             if back():
                 return True
-            if step == 7:
-                desktop.windows("focus", wid=want)
-            time.sleep(0.02)
+            time.sleep(0.015)
         return False
 
     async def _publish_windows_debounced(self) -> None:

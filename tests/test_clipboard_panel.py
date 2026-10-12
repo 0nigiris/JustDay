@@ -81,3 +81,15 @@ def test_russian_text_from_the_clipboard_panel_was_pasted_not_typed(state_dir, m
     monkeypatch.setattr(glyphs, "paste_chord", lambda *a: (True, "test-ctrl-v"))
     got = clipboard.put_back(iid, paste=True, ready=lambda: True)
     assert got["pasted"] is True and not got["typed"]
+
+
+def test_put_back_without_paste_only_fills_clipboard(state_dir, monkeypatch):
+    """Буфер обмена: выбор записи кладёт её в буфер, а вставляет человек сам, — Ctrl+V от нас не шлём."""
+    from justday import glyphs
+
+    clipboard.store("hello world")
+    iid = clipboard.items()[0]["id"]
+    monkeypatch.setattr(glyphs, "to_clipboard", lambda t: True)
+    monkeypatch.setattr(glyphs, "paste_chord", lambda *a, **k: (_ for _ in ()).throw(AssertionError("вставка")))
+    got = clipboard.put_back(iid, paste=False)
+    assert got["ok"] and not got["pasted"]

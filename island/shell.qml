@@ -463,8 +463,11 @@ ShellRoot {
         // окно под панелью осталось в фокусе, как у Win+. на Windows, — но тогда ни стрелки, ни Enter, ни
         // ввод в поиск до панели не доходили (Shortcut без фокуса не срабатывает). Фокус окну, где печатали,
         // возвращает демон перед вставкой (Daemon._focus_back).
-        WlrLayershell.keyboardFocus: island.mode === "compose" || island.mode === "tools" || (island.mode === "player" && JD.playerPage === "library") ? WlrKeyboardFocus.Exclusive
-                                   : island.mode === "settings" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        // Страницы инструментов без ввода (микшер, планы, нагрузка, claude) не берут клавиатуру сами: окно
+        // под ними оставалось без фокуса, хотя печатать в панели было нечего. Щелчок по панели даёт фокус.
+        readonly property bool toolsTyping: ["emoji", "clip", "history", "qr"].includes(JD.toolsPage)
+        WlrLayershell.keyboardFocus: island.mode === "compose" || (island.mode === "tools" && toolsTyping) || (island.mode === "player" && JD.playerPage === "library") ? WlrKeyboardFocus.Exclusive
+                                   : island.mode === "settings" || island.mode === "tools" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         // Р2-31: плеер, видео и expanded клавиатуру не берут. Раньше у них стоял OnDemand, и щелчок по
         // громкости в игре отдавал островку клавиатуру — игра переставала слышать клавиши. Поля ввода
         // есть только в настройках (OnDemand), в compose и в инструментах (Exclusive).

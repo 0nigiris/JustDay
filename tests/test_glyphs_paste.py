@@ -123,10 +123,11 @@ def test_daemon_waits_for_the_typing_window_to_come_back(monkeypatch):
     threading.Timer(0.08, lambda: me._windows.__setitem__(0, {"id": "w1", "active": True})).start()
     start = time.monotonic()
     assert Daemon._focus_back(me)
-    assert time.monotonic() - start < 0.3 and asked == []      # окно вернулось само, KWin не просили
+    assert time.monotonic() - start < 0.3 and asked == ["focus"]  # просим сразу, а не ждём 0,15 с: вставка тормозила
+    asked.clear()
 
     me._windows = [{"id": "w1", "active": False}]              # так и не вернулось
-    assert not Daemon._focus_back(me) and asked == ["focus"]   # один раз попросили явно, потом честный отказ
+    assert not Daemon._focus_back(me) and asked == ["focus"]   # просили явно, потом честный отказ
     assert not Daemon._focus_back(SimpleNamespace(_last_active_id="", _windows=[]))
 
 
