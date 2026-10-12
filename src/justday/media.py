@@ -597,6 +597,13 @@ def library(kind: str = "music") -> list[dict]:
     return sorted(out, key=lambda r: -r.get("played", 0))
 
 
+def _abc(name: str) -> tuple[bool, str]:
+    """Ключ сортировки: названия со знака или цифры («(Remix)», «2 Phut Hon») уходят в конец, как в Apple Music,
+    а не лежат первыми, заслоняя алфавит."""
+    n = name.strip().lower()
+    return (not n[:1].isalpha(), n)
+
+
 def library_view(sort: str = "recent") -> list[dict]:
     """Медиатека для страницы в плеере: только то, что нужно строке списка (Р2-32)."""
     rows = []
@@ -608,8 +615,8 @@ def library_view(sort: str = "recent") -> list[dict]:
             continue
         rows.append({"file": str(f), "title": rec.get("title") or f.stem, "artist": rec.get("artist", ""),
                      "duration": rec.get("duration", 0), "thumb": rec.get("thumb", ""), "size": st.st_size,
-                     "added": st.st_mtime})
-    key = {"title": lambda r: r["title"].lower(), "artist": lambda r: (r["artist"] or "я").lower()}.get(sort)
+                     "added": max(st.st_mtime, rec.get("played", 0))})
+    key = {"title": lambda r: _abc(r["title"]), "artist": lambda r: _abc(r["artist"] or "я")}.get(sort)
     return sorted(rows, key=key) if key else sorted(rows, key=lambda r: -r["added"])
 
 

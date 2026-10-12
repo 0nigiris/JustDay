@@ -340,7 +340,7 @@ Singleton {
     }
     function libRefresh() { send({ cmd: "music_library", sort: libSort }) }
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
-    onPlayerOpenChanged: if (!playerOpen) { artOpen = false; playerPage = "now" }
+    onPlayerOpenChanged: if (!playerOpen) artOpen = false   // страницу не сбрасываем: выбор «Медиатека» не должен пропадать
     property var video: null            // {title, channel, thumb, file, progress} — a video playing inside the island
     // ширина кадра в точках: её тянут за уголок, а запомненная лежит в island.video_width
     property real videoWidth: videoFit(island.video_width || 640)
@@ -1471,7 +1471,7 @@ Singleton {
         "file-text", "folder-open", "globe", "headphones", "house", "image", "info", "keyboard", "key-round",
         "layout-grid", "list-music", "log-out", "mail", "maximize-2", "message-circle", "message-square-plus", "mic",
         "monitor", "moon", "mouse-pointer-click", "music", "package", "palette", "panel-top", "pause", "play", "plus", "power",
-        "refresh-cw", "repeat", "repeat-1", "rotate-ccw", "search", "settings", "shield", "shuffle", "skip-back",
+        "brackets", "refresh-cw", "repeat", "repeat-1", "rotate-ccw", "search", "settings", "shield", "shuffle", "skip-back",
         "skip-forward", "sparkles", "square", "sun", "terminal", "text-cursor", "trash", "user-round", "users",
         "video", "volume-2", "volume-x", "wand-sparkles", "x", "zap",
         // значки панели инструментов

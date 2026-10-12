@@ -19,6 +19,10 @@ Item {
     property bool dragging: false
     property real dragValue: 0
     signal moved(real v)
+    // Отрезок для повтора: доли 0…1 (-1 — не задан). Ручки тянутся пальцем; ползунок их не трогает.
+    property real markA: -1
+    property real markB: -1
+    signal markMoved(string which, real frac)
     readonly property real shown: Math.max(from, Math.min(to, dragging ? dragValue : value))
     readonly property real fraction: to > from ? (shown - from) / (to - from) : 0
     readonly property bool active: hover.hovered || dragging
@@ -75,6 +79,36 @@ Item {
         border.color: JD.accentBlue
         Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Behavior on x { enabled: JD.animOn && !sl.dragging; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+    }
+    Rectangle {
+        visible: sl.markA >= 0 && sl.markB > sl.markA
+        x: sl.width * sl.markA; width: sl.width * (sl.markB - sl.markA); height: track.height + 6
+        anchors.verticalCenter: parent.verticalCenter
+        radius: 3; color: Qt.rgba(sl.tint.r, sl.tint.g, sl.tint.b, 0.28)
+    }
+    Repeater {
+        model: sl.markA >= 0 && sl.markB > sl.markA ? ["A", "B"] : []
+        Rectangle {
+            id: mk
+            required property string modelData
+            readonly property real frac: modelData === "A" ? sl.markA : sl.markB
+            width: 8; height: 22; radius: 3
+            function place() { return Math.max(0, Math.min(sl.width - width, sl.width * frac - width / 2)) }
+            x: place()
+            z: 2        // выше MouseArea ползунка, иначе нажатие по ручке было бы перемоткой
+            anchors.verticalCenter: parent.verticalCenter
+            color: sl.tint
+            Text { anchors.centerIn: parent; text: mk.modelData; font.pixelSize: 8; font.weight: Font.Bold; color: "#000000" }
+            HoverHandler { cursorShape: Qt.SizeHorCursor }
+            DragHandler {
+                yAxis.enabled: false
+                xAxis.minimum: -mk.width / 2; xAxis.maximum: sl.width - mk.width / 2
+                onActiveChanged: if (!active) {
+                    sl.markMoved(mk.modelData, Math.max(0, Math.min(1, (mk.x + mk.width / 2) / sl.width)))
+                    mk.x = Qt.binding(() => mk.place())    // перетаскивание рвёт привязку x — возвращаем
+                }
+            }
+        }
     }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
     MouseArea {

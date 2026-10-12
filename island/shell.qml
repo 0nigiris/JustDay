@@ -1988,6 +1988,12 @@ ShellRoot {
         property real loopB: -1
         readonly property string trackKey: (p.title || "") + "|" + (p.index || 0)
         onTrackKeyChanged: { loopA = -1; loopB = -1 }
+        // Ручку нельзя протащить за соседнюю: между A и B остаётся хотя бы секунда.
+        function moveMark(which, sec) {
+            const dur = p.duration || 0
+            if (which === "A") loopA = Math.max(0, Math.min(sec, loopB - 1))
+            else loopB = Math.min(dur, Math.max(sec, loopA + 1))
+        }
         onPosChanged: if (loopA >= 0 && loopB > loopA && pos >= loopB && !p.paused) {
             JD.media("seek", loopA); optimistic({ pos: loopA })
         }
@@ -2095,13 +2101,16 @@ ShellRoot {
                     Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 18; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
                     Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
                 }
-                IconButton { icon: "go-up"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: JD.playerOpen = false }
+                IconButton { icon: "go-up"; size: 26; Layout.alignment: Qt.AlignTop; Layout.rightMargin: -5; onClicked: JD.playerOpen = false }
             }
             JSlider {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
                 tint: pl.tint
                 value: pl.p.duration > 0 ? pl.pos / pl.p.duration : 0
+                markA: pl.loopB > pl.loopA && pl.p.duration > 0 ? pl.loopA / pl.p.duration : -1
+                markB: pl.loopB > pl.loopA && pl.p.duration > 0 ? pl.loopB / pl.p.duration : -1
+                onMarkMoved: (which, frac) => pl.moveMark(which, frac * (pl.p.duration || 0))
                 onMoved: frac => { const to = frac * (pl.p.duration || 0); JD.media("seek", to); pl.optimistic({ pos: to }) }
             }
             RowLayout {
@@ -2137,28 +2146,14 @@ ShellRoot {
                         JD.media("repeat", next); pl.optimistic({ repeat: next })
                     }
                 }
-                // отрезок: нажатие 1 — точка A, 2 — точка B, 3 — сбросить
-                Rectangle {
-                    implicitWidth: mabLabel.implicitWidth + 20; implicitHeight: 28; radius: 14
-                    readonly property bool set: pl.loopA >= 0
-                    color: set ? Qt.rgba(pl.tint.r, pl.tint.g, pl.tint.b, 0.32) : (mabHover.hovered ? JD.fill2 : JD.fill1)
-                    Label1 {
-                        id: mabLabel
-                        anchors.centerIn: parent
-                        font.pixelSize: 12; font.weight: Font.DemiBold
-                        font.features: { "tnum": 1 }
-                        color: parent.set ? pl.tint : JD.text1
-                        text: pl.loopB > pl.loopA ? "A–B " + JD.fmtTime(pl.loopA) + "–" + JD.fmtTime(pl.loopB)
-                              : pl.loopA >= 0 ? "A " + JD.fmtTime(pl.loopA) + " → B" : "A–B"
-                    }
-                    HoverHandler { id: mabHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler {
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: {
-                            if (pl.loopA < 0) pl.loopA = pl.pos
-                            else if (pl.loopB < 0) { if (pl.pos > pl.loopA + 0.5) pl.loopB = pl.pos }
-                            else { pl.loopA = -1; pl.loopB = -1 }
-                        }
+                // повтор отрезка: включил — на ползунке появились ручки A и B, тяни их
+                ModeButton {
+                    icon: "brackets"; on: pl.loopB > pl.loopA; tint: pl.tint
+                    onClicked: {
+                        if (pl.loopB > pl.loopA) { pl.loopA = -1; pl.loopB = -1; return }
+                        const dur = pl.p.duration || 0
+                        if (dur < 3) return
+                        pl.loopA = Math.min(pl.pos, dur - 2); pl.loopB = Math.min(dur, pl.loopA + Math.max(5, dur * 0.1))
                     }
                 }
                 Item { Layout.fillWidth: true }
@@ -2457,6 +2452,13 @@ ShellRoot {
                         Layout.fillWidth: true
                         tint: JD.accentPink
                         value: player.duration > 0 ? player.position / player.duration : 0
+                        markA: JD.loopB > JD.loopA && player.duration > 0 ? JD.loopA * 1000 / player.duration : -1
+                        markB: JD.loopB > JD.loopA && player.duration > 0 ? JD.loopB * 1000 / player.duration : -1
+                        onMarkMoved: (which, frac) => {
+                            const sec = frac * player.duration / 1000
+                            if (which === "A") JD.loopA = Math.max(0, Math.min(sec, JD.loopB - 1))
+                            else JD.loopB = Math.min(player.duration / 1000, Math.max(sec, JD.loopA + 1))
+                        }
                         onMoved: frac => { player.position = frac * player.duration; vv.ended = false }
                     }
                     RowLayout {
@@ -2511,30 +2513,16 @@ ShellRoot {
                                 }
                             }
                         }
-                        // повтор отрезка: нажатие 1 — точка A, 2 — точка B, 3 — сбросить
-                        Rectangle {
-                            implicitWidth: abLabel.implicitWidth + 20; implicitHeight: 28; radius: 14
-                            readonly property bool set: JD.loopA >= 0
-                            color: set ? Qt.rgba(JD.accentPink.r, JD.accentPink.g, JD.accentPink.b, 0.32)
-                                       : (abHover.hovered ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.14))
-                            Label1 {
-                                id: abLabel
-                                anchors.centerIn: parent
-                                font.pixelSize: 12; font.weight: Font.DemiBold
-                                font.features: { "tnum": 1 }
-                                color: parent.set ? JD.accentPink : JD.text1
-                                text: JD.loopB > JD.loopA ? "A–B " + JD.fmtTime(JD.loopA) + "–" + JD.fmtTime(JD.loopB)
-                                      : JD.loopA >= 0 ? "A " + JD.fmtTime(JD.loopA) + " → B" : "A–B"
-                            }
-                            HoverHandler { id: abHover; cursorShape: Qt.PointingHandCursor }
-                            TapHandler {
-                                gesturePolicy: TapHandler.ReleaseWithinBounds
-                                onTapped: {
-                                    if (JD.loopA < 0) JD.loopA = JD.videoPos
-                                    else if (JD.loopB < 0) {
-                                        if (JD.videoPos > JD.loopA + 0.5) { JD.loopB = JD.videoPos; JD.videoLoop = false }
-                                    } else { JD.loopA = -1; JD.loopB = -1 }
-                                }
+                        // повтор отрезка: на ползунке появляются ручки A и B
+                        ModeButton {
+                            icon: "brackets"; on: JD.loopB > JD.loopA; tint: JD.accentPink
+                            implicitWidth: 30; implicitHeight: 30
+                            onClicked: {
+                                if (JD.loopB > JD.loopA) { JD.loopA = -1; JD.loopB = -1; return }
+                                const dur = player.duration / 1000
+                                if (dur < 3) return
+                                JD.loopA = Math.min(JD.videoPos, dur - 2); JD.loopB = Math.min(dur, JD.loopA + Math.max(5, dur * 0.1))
+                                JD.videoLoop = false
                             }
                         }
                         ModeButton {
