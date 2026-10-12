@@ -752,6 +752,12 @@ ShellRoot {
                     JD.expanded = true
                 }
             }
+            TapHandler {
+                // Двойное нажатие по островку — выход из любого вида, как Escape, но мышью:
+                // у видео двойное нажатие уже «в окно», его не трогаем.
+                enabled: island.mode !== "video" && island.mode !== "listening"
+                onDoubleTapped: { JD.answerOpen = false; JD.closeAll() }
+            }
             // Every view is laid out at its own natural size; the island springs to it and the view follows.
             Item {
                 id: stage
