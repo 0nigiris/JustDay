@@ -481,6 +481,9 @@ def _download(entry: dict, kind: str, progress: Callable[[float], None] | None =
     old = idx.get(key)
     if old and Path(old.get("file", "")).exists():
         old["played"] = time.time()
+        if not Path(old.get("thumb") or "").exists():  # the cover was lost or never saved: fetch it again
+            old["thumb"] = fetch_thumb(entry)
+            old["color"] = thumb_color(old["thumb"]) if old["thumb"] else ""
         idx[key] = old
         _save_index(idx)
         return old
