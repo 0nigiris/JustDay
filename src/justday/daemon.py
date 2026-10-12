@@ -415,9 +415,9 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             await self.say(said)
         self.state = "thinking" if self.brain.busy else "idle"
 
-    async def _on_brain_text(self, text: str, force: bool = False) -> None:
+    async def _on_brain_text(self, text: str, force: bool = False, private: bool = False) -> None:
         if not force and (why := self.silent()):
-            events.emit("say_suppressed", text=text[:200], reason=why)
+            events.emit("say_suppressed", text="" if private else text[:200], reason=why)
             return
         if ACK.match(text.strip()) and len(text) < 60:
             events.emit("ack_suppressed", text=text)
@@ -439,8 +439,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             self._speech_q.put_nowait(s)
             self._synth_in_advance(s)
 
-    async def say(self, text: str, force: bool = False) -> None:
-        await self._on_brain_text(text, force)
+    async def say(self, text: str, force: bool = False, private: bool = False) -> None:
+        await self._on_brain_text(text, force, private)
 
     def _synth_in_advance(self, sentence: str) -> None:
         """Голос, который синтезирует фразу целиком (Silero, espeak), начинает следующую, пока играет
@@ -1216,7 +1216,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         card = self.mail.card(reply)
         if card:
             self.publish(kind="card", card=card)
-        await self.say(reply)
+        await self.say(reply, private=self.mail.last_action == "code")
         await self.wait_speech_done()
         self.state = "thinking" if self.brain.busy else "idle"
         if expects and self.cfg["audio"]["followup_seconds"] > 0:

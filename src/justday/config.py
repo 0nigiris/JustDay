@@ -629,7 +629,7 @@ DEFAULTS: dict = {
         "query": "category:primary is:unread newer_than:7d",
         "other_query": "is:unread newer_than:7d -category:primary",
         "max_letters": 8,
-        "announce": True,  # say "новое письмо от …" when important mail arrives
+        "announce": False,  # по умолчанию тихо: say "новое письмо от …" when important mail arrives
         "poll_seconds": 180,
     },
     # Local creative studio (justday studio): ComfyUI is found automatically; empty = auto

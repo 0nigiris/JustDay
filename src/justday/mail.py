@@ -26,6 +26,17 @@ from . import config, contacts, events, localllm, providers
 from .i18n import reply_language_hint, t
 
 MAIL_WORDS = re.compile(r"\b(почт\w*|письм\w*|писем|имейл\w*|емейл\w*|e-?mail\w*|мейл\w*|gmail|джимейл\w*|inbox|входящ\w*|mail|letters?)\b", re.I)
+CODE_ASK = re.compile(r"\bкод\w*\b", re.I)
+CODE_RE = re.compile(r"(?<![\w.])(\d{3}[- ]?\d{3}|\d{4,8})(?!\w)(?!\.\d)")
+
+
+def find_code(letters: list[Letter]) -> tuple[str, str] | None:
+    """(отправитель, код) из самого свежего письма, где он есть; письма идут от новых к старым."""
+    for l in letters:
+        m = CODE_RE.search(f"{l.subject}\n{l.body[:1200]}")
+        if m:
+            return l.sender, re.sub(r"\D", "", m.group(1))
+    return None
 
 
 # ---------------- IMAP / SMTP ----------------
@@ -236,6 +247,17 @@ class MailAssistant:
 
     def handle(self, text: str) -> tuple[str, bool] | None:
         """Returns (spoken reply, expects an answer) or None if the utterance is not about mail."""
+        if CODE_ASK.search(text):
+            # Код читаем вслух и нигде не держим: ни в self.letters, ни в журнале (см. Daemon.handle_mail).
+            try:
+                found = find_code(fetch("newer_than:1d", 6))
+            except (RuntimeError, imaplib.IMAP4.error, OSError):
+                return t("Не получилось связаться с почтой."), False
+            self.last_action = "code"
+            if not found:
+                return t("Письма с кодом за сутки не нашёл."), False
+            sender, code = found
+            return t("Код от {s}: {c}", s=sender, c=" ".join(code)), False
         listing = "\n".join(f"{i}. от {l.sender}: {l.subject}" for i, l in enumerate(self.letters, 1)) or "(нет)"
         draft = json.dumps(self.draft, ensure_ascii=False) if self.draft else "(нет)"
         raw = localllm.chat(INTENT_PROMPT, f"Письма в разговоре:\n{listing}\nЧерновик: {draft}\nКоманда: {text}",
