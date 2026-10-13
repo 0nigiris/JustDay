@@ -128,6 +128,10 @@ FloatingWindow {
                             wrapMode: TextEdit.Wrap
                             color: mine ? "#ffffff" : JD.text1
                             font.family: JD.fontFamily; font.pixelSize: 14
+                            // Ссылки (источники из поиска) раньше не нажимались вовсе. Открываем только
+                            // http(s): `file:` или `data:` из текста модели открыли бы у него что угодно.
+                            onLinkActivated: link => { if (/^https?:\/\//i.test(link)) Qt.openUrlExternally(link) }
+                            HoverHandler { cursorShape: body.hoveredLink ? Qt.PointingHandCursor : Qt.IBeamCursor }
                             // ширину задаёт самая длинная строка, но не шире окна
                             Component.onCompleted: width = Math.min(implicitWidth, win.width - 120)
                         }
