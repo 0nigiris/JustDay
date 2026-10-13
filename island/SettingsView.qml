@@ -2322,8 +2322,10 @@ Item {
                     title: JD.tr("Провайдер")
                     subtitle: mp.info.desc || ""
                     Segmented {
-                        options: [{ value: "claude", label: "Claude" }, { value: "ollama", label: JD.tr("Локальная") }, { value: "openrouter", label: "OpenRouter" },
-                                  { value: "custom", label: JD.tr("Свой адрес") }]
+                        options: [{ value: "claude", label: "Claude" }, { value: "ollama", label: JD.tr("Локальная") }, { value: "ollama_cloud", label: "Ollama Cloud" },
+                                  { value: "openrouter", label: "OpenRouter" }, { value: "groq", label: "Groq" }, { value: "cerebras", label: "Cerebras" },
+                                  { value: "gemini", label: "Gemini" }, { value: "mistral", label: "Mistral" }, { value: "cohere", label: "Cohere" },
+                                  { value: "deepseek", label: "DeepSeek" }, { value: "custom", label: JD.tr("Свой адрес") }]
                         current: mp.provider
                         onPicked: v => {
                             mp.provider = v
@@ -2469,6 +2471,11 @@ Item {
                     : mp.provider === "ollama_cloud" ? JD.tr("Большие открытые модели бесплатно: нажмите «Войти», создайте аккаунт на ollama.com и подтвердите подключение этого компьютера, затем «Проверить» и «Перезапустить». Лимиты бесплатного плана сбрасываются каждые 5 часов и раз в неделю. Запросы (ваши фразы и снимки экрана) обрабатываются на серверах Ollama; почта и календарь всё равно остаются локальными.")
                     : mp.provider === "ollama" ? JD.tr("Всё на вашей видеокарте, ничего не уходит в интернет. Модель слабее Claude в сложных действиях с окнами.")
                     : mp.provider === "openrouter" ? JD.tr("Модели с суффиксом :free и openrouter/free бесплатны: 50 запросов в день (одна просьба — несколько запросов), 1000 — если однажды пополнить счёт на $10. Ключ бесплатный: <a href='https://openrouter.ai/keys'>openrouter.ai/keys</a>")
+                    : mp.provider === "groq" ? JD.tr("Groq: бесплатный тариф (14 400 запросов/день). Нужен LiteLLM на порту 4000. Ключ: <a href='https://console.groq.com/keys'>console.groq.com/keys</a>")
+                    : mp.provider === "cerebras" ? JD.tr("Cerebras: бесплатный тариф, высокая скорость. Нужен LiteLLM на порту 4000. Ключ: <a href='https://cloud.cerebras.ai/'>cloud.cerebras.ai</a>")
+                    : mp.provider === "gemini" ? JD.tr("Google Gemini: бесплатный тариф (1 500 запросов/день). Нужен LiteLLM на порту 4000. Ключ: <a href='https://aistudio.google.com/apikey'>aistudio.google.com/apikey</a>")
+                    : mp.provider === "mistral" ? JD.tr("Mistral: бесплатный тариф. Нужен LiteLLM на порту 4000. Ключ: <a href='https://console.mistral.ai/api-keys'>console.mistral.ai/api-keys</a>")
+                    : mp.provider === "cohere" ? JD.tr("Cohere: бесплатный тариф. Нужен LiteLLM на порту 4000. Ключ: <a href='https://dashboard.cohere.ai/api-keys'>dashboard.cohere.ai/api-keys</a>")
                     : mp.provider === "deepseek" ? JD.tr("Ключ: <a href='https://platform.deepseek.com/api_keys'>platform.deepseek.com</a>")
                     : JD.tr("Любой сервер с Anthropic Messages API. Для провайдеров только с OpenAI API поставьте LiteLLM.")
             }

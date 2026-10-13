@@ -29,6 +29,18 @@ PROVIDERS: dict[str, dict] = {
                    "desc": "сотни моделей, есть бесплатные (суффикс :free, 50 запросов в день); ключ на openrouter.ai/keys"},
     "deepseek": {"base_url": "https://api.deepseek.com/anthropic", "secret": "deepseek",
                  "desc": "DeepSeek напрямую; ключ на platform.deepseek.com"},
+    # Free OpenAI-compatible providers via local LiteLLM proxy (http://127.0.0.1:4000).
+    # LiteLLM converts OpenAI format → Anthropic format for Claude Code.
+    "groq": {"base_url": "http://127.0.0.1:4000", "secret": "groq",
+             "desc": "Groq: бесплатный тариф (14 400 запросов/день), мгновенные ответы. Нужен LiteLLM на 4000 порту."},
+    "cerebras": {"base_url": "http://127.0.0.1:4000", "secret": "cerebras",
+                 "desc": "Cerebras: бесплатный тариф, высокая скорость. Нужен LiteLLM на 4000 порту."},
+    "gemini": {"base_url": "http://127.0.0.1:4000", "secret": "gemini",
+               "desc": "Google Gemini: бесплатный тариф (1 500 запросов/день). Нужен LiteLLM на 4000 порту."},
+    "mistral": {"base_url": "http://127.0.0.1:4000", "secret": "mistral",
+                "desc": "Mistral: бесплатный тариф. Нужен LiteLLM на 4000 порту."},
+    "cohere": {"base_url": "http://127.0.0.1:4000", "secret": "cohere",
+               "desc": "Cohere: бесплатный тариф. Нужен LiteLLM на 4000 порту."},
     "custom": {"secret": "custom", "desc": "любой Anthropic-совместимый адрес (brain.base_url), например LiteLLM"},
 }
 
