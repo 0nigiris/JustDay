@@ -791,13 +791,15 @@ ShellRoot {
                 ComposeView { id: composeView; shown: island.mode === "compose" }
                 // Пока остров держит клавиатуру целиком, клавиши не доходят до окон под ним — об этом надо
                 // сказать глазами, иначе «пропали клавиши» выглядит как поломка.
-                Rectangle {
+                // Посередине верхнего края, тихим серым: оранжевая капсула справа сверху садилась на крестик
+                // инструментов и стрелку плеера («иконка клавы выглядит хуёво»). Верхняя полоса в 16 px
+                // свободна у всех трёх видов, которые держат клавиатуру (инструменты, compose, медиатека).
+                Icon {
                     id: kbGrab
                     readonly property bool held: win.WlrLayershell.keyboardFocus === WlrKeyboardFocus.Exclusive
-                    anchors { top: parent.top; right: parent.right; topMargin: 8; rightMargin: 10 }
-                    width: 26; height: 20; radius: 10
-                    color: Qt.rgba(1, 0.62, 0.04, 0.2)
-                    Icon { anchors.centerIn: parent; name: "keyboard"; implicitSize: 14; tint: JD.accentOrange }
+                    parent: JD.islandStyle === "bar" && island.mode === "tools" ? dropCard : stage
+                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 3 }
+                    name: "keyboard"; implicitSize: 11; tint: JD.text3
                     z: 50
                     opacity: held ? 1 : 0
                     visible: opacity > 0
