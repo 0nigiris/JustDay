@@ -2380,7 +2380,31 @@ Item {
                             text: JD.tr("Войти"); primary: true
                             onClicked: Quickshell.execDetached(["xdg-open", acc.signin_url])
                         }
+                        Btn {
+                            visible: !acc.signed_in && !!acc.signin_url
+                            glyph: "copy"
+                            text: JD.tr("Скопировать ссылку")
+                            onClicked: {
+                                Quickshell.execDetached(["wl-copy", acc.signin_url])
+                                win.notify(JD.tr("Ссылка скопирована"))
+                            }
+                        }
                         Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
+                    }
+                    Row {
+                        visible: !acc.signed_in && !!acc.signin_url
+                        title: JD.tr("Ссылка для входа")
+                        subtitle: acc.signin_url
+                        RowLayout {
+                            Btn {
+                                glyph: "copy"
+                                text: JD.tr("Скопировать")
+                                onClicked: {
+                                    Quickshell.execDetached(["wl-copy", acc.signin_url])
+                                    win.notify(JD.tr("Ссылка скопирована"))
+                                }
+                            }
+                        }
                     }
                 }
                 Row { visible: mp.provider === "custom"; title: JD.tr("Адрес API"); subtitle: JD.tr("Anthropic-совместимый, например LiteLLM"); Field { key: "brain.base_url"; placeholderText: "http://127.0.0.1:4000" } }
