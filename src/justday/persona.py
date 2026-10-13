@@ -18,6 +18,11 @@ EXTRAS = {
         "swearing": "Можно материться — к месту и естественно, как в живом разговоре с другом: не через слово и "
                     "никогда всерьёз в адрес пользователя.",
         "clean": "Без мата.",
+        # от редкого меткого слова до густого; во всех ступенях — только «вокруг», никогда в адрес человека
+        "levels": ("Мат — редкий и очень к месту: раз в несколько ответов, чтобы подчеркнуть, а не для связки.",
+                   "Можно материться — к месту и естественно, как друг в живом разговоре: не через слово.",
+                   "Матерись свободно и часто, как свой в доску парень; в каждом втором ответе можно.",
+                   "Матерись как сапожник — густо и красочно; но это живость речи, а не злоба: на человека не злись."),
         "live_speech": "Говори как человек вслух, а не как текст: паузы (многоточие), «ну», «так», «э-э», "
                        "оговорки и поправки на ходу («а, да, точно… как я мог забыть»). Это живость, а не вода: "
                        "ответ всё равно короткий и по делу.",
@@ -26,6 +31,10 @@ EXTRAS = {
         "swearing": "Swearing is fine — natural and in place, the way friends talk: not every other word, and "
                     "never seriously at the user.",
         "clean": "No swearing.",
+        "levels": ("Swearing is rare and very much in place: once every few answers, for emphasis, not as glue.",
+                   "Swearing is fine — natural and in place, the way friends talk: not every other word.",
+                   "Swear freely and often, like a close buddy; every second answer is fine.",
+                   "Swear like a sailor — thick and colourful; it is colour of speech, not anger: never at the user."),
         "live_speech": "Talk like a person speaking, not like written text: pauses (an ellipsis), \"well\", "
                        "\"uh\", little slips and corrections on the fly (\"oh, right… how did I forget\"). "
                        "Liveliness, not padding: the answer stays short.",
@@ -45,7 +54,9 @@ def character(cfg: dict) -> str:
         path = DIR / (f"{name}.md" if lang == "ru" else f"{name}.{lang}.md")
         text = (path if path.exists() else DIR / f"{name}.md").read_text(encoding="utf-8").strip()
     extra = EXTRAS[lang]
-    lines = [text, extra["swearing"] if p.get("swearing") else extra["clean"]]
+    level = max(0, min(100, int(p.get("swearing_level", 40))))
+    never = "Никогда всерьёз в адрес пользователя." if lang == "ru" else "Never seriously at the user."
+    lines = [text, f'{extra["levels"][min(3, level // 25)]} {never}' if p.get("swearing") else extra["clean"]]
     if p.get("live_speech"):
         lines.append(extra["live_speech"])
     return "\n".join(lines)

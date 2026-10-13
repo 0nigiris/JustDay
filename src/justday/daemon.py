@@ -744,7 +744,13 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             if carry:
                 await self.handle_utterance(carry)
                 return
-            await self.earcon("error")
+            # Пустое после слова пробуждения или в разговоре — чужой звук, а не просьба: молчим.
+            # Звук ошибки уместен, только если человек сам нажал кнопку и ждёт ответа.
+            if self._activation == "button" and not followup:
+                await self.earcon("error")
+            return
+        if not carry and self._activation == "wake" and text.strip(" .,!?…").lower() in ("э", "эм", "м", "мм", "ну", "а", "ага", "угу", "хм", "ой", "эх", "ах"):
+            events.emit("heard_ignored", text=text)  # «э», «ну», обрывок чужой речи — не просьба
             return
         if not carry and fastpath.unfinished(text):
             # «поставь таймер на…» — пауза пришла раньше конца мысли: слушаем ещё раз и склеиваем

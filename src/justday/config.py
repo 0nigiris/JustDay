@@ -176,7 +176,7 @@ DEFAULTS: dict = {
     },
     # who the assistant is: jarvis (a butler), friend (casual, «ты»), calm (no act), custom (persona.custom);
     # swearing and live_speech (pauses, «ну», slips) go with any of them
-    "persona": {"character": "jarvis", "swearing": False, "live_speech": False, "custom": ""},
+    "persona": {"character": "jarvis", "swearing": False, "swearing_level": 40, "live_speech": False, "custom": ""},
     "stt": {
         "model": "large-v3-turbo",
         "device": "cuda",

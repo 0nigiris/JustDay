@@ -1046,6 +1046,12 @@ Item {
                     Toggle { checked: !!win.get("persona.swearing"); onToggled: v => win.set("persona.swearing", v) }
                 }
                 Row {
+                    visible: !!win.get("persona.swearing")
+                    title: JD.tr("Сколько мата")
+                    subtitle: JD.tr("От «редко и очень к месту» до «как сапожник». Это не злость: на вас он не ругается")
+                    SSlider { key: "persona.swearing_level"; from: 0; to: 100; step: 5; decimals: 0; unit: "%" }
+                }
+                Row {
                     title: JD.tr("Живая речь")
                     subtitle: JD.tr("Паузы, «ну», «э-э», оговорки на ходу: «а, да, точно… как я мог забыть»")
                     Toggle { checked: !!win.get("persona.live_speech"); onToggled: v => win.set("persona.live_speech", v) }
