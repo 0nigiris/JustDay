@@ -466,7 +466,11 @@ Item {
                         property int probedKind: 0   // 0 keep, 2 truly black
                         readonly property string mode: tv.trayMode(slot.modelData, probedKind)
                         readonly property bool wash: mode !== "none"
-                        readonly property string src: tv.trayIconSource(slot.modelData.icon)
+                        // Подменённая картинка (discord.png) есть не на каждой машине: не загрузилась —
+                        // значок, который отдала сама программа.
+                        property bool srcBroken: false
+                        readonly property string src: srcBroken ? String(slot.modelData.icon || "")
+                                                                : tv.trayIconSource(slot.modelData.icon)
                         readonly property int px: tv.trayIconPx()
                         // Значка нет или он не загрузился — буква вместо чёрного кружка.
                         //
@@ -501,7 +505,12 @@ Item {
                             // No layer.enabled — offscreen round-trip was the laggy "halo".
                             visible: !trayIconWrap.wash
                             asynchronous: false
-                            onStatusChanged: if (status === Image.Ready && tv.iconStyle === "auto") trayProbe.requestPaint()
+                            onStatusChanged: {
+                                if (status === Image.Error && !trayIconWrap.srcBroken
+                                        && trayIconWrap.src !== String(slot.modelData.icon || ""))
+                                    trayIconWrap.srcBroken = true
+                                else if (status === Image.Ready && tv.iconStyle === "auto") trayProbe.requestPaint()
+                            }
                             onSourceChanged: {
                                 trayIconWrap.probedKind = 0
                                 if (status === Image.Ready && tv.iconStyle === "auto") trayProbe.requestPaint()

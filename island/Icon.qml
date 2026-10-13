@@ -52,6 +52,11 @@ Item {
     // Icon= in .desktop is often an absolute path (AppImage, custom PNG). Quickshell.iconPath
     // only resolves theme names — a path was treated as a missing name and every such app
     // collapsed to the same fallback gear. Paths go straight to Image as file://.
+    // Файл не загрузился — значок темы по имени. Путь к картинке мог быть верен только на одной машине
+    // (Discord из Flatpak кладёт значок не в /usr/share) или файл удалили вместе с AppImage; тогда
+    // вместо пустого места пусть будет хотя бы значок темы или запасной.
+    property bool fileBroken: false
+    onNameChanged: fileBroken = false
     readonly property bool fileIcon: {
         const n = String(resolvedName || "")
         return n.startsWith("/") || n.startsWith("file:") || n.startsWith("image:")
@@ -89,13 +94,16 @@ Item {
         anchors.fill: parent
         visible: !ic.glyph && !ic._wash
         source: {
-            if (ic.fileIcon) {
+            if (ic.fileIcon && !ic.fileBroken) {
                 const n = String(ic.resolvedName || "")
                 if (n.startsWith("file:") || n.startsWith("image:")) return n
                 return "file://" + n
             }
-            return Quickshell.iconPath(ic.resolvedName || ic.fallback, ic.fallback)
+            const bare = ic.fileBroken ? String(ic.name || "").split("/").pop().replace(/\.(png|svgz?|xpm|ico)$/i, "")
+                                       : ic.resolvedName
+            return Quickshell.iconPath(bare || ic.fallback, ic.fallback)
         }
+        onStatusChanged: if (status === Image.Error && ic.fileIcon && !ic.fileBroken) ic.fileBroken = true
         // Integer device pixels; mipmap off — mip chains soften fine glyph detail
         // (Discord eyes looked smaller / mushy on MacTahoe-style plates).
         sourceSize: Qt.size(Math.round(ic.renderSize), Math.round(ic.renderSize))
