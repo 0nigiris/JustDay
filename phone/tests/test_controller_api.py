@@ -311,3 +311,25 @@ class TestСтатикаИКэш:
         manifest = json.loads(anon.get("/static/manifest.webmanifest").text)
         for icon in manifest["icons"]:
             assert anon.get(icon["src"]).status_code == 200, icon["src"]
+
+
+def test_a_button_icon_from_the_pc_config_cannot_inject_markup() -> None:
+    """Иконка кнопки «lucide:…» приходит из конфига на компьютере и вставлялась в style как есть:
+    кавычка в имени выводила наружу из атрибута, и пульт выполнял чужую разметку."""
+    import json
+    import re
+    import shutil
+    import subprocess
+
+    from remo32_controller.app import WEB_DIR
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("нет node")
+    source = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    icon = re.search(r"^function icon\(.*?^}", source, re.S | re.M).group(0)
+    evil = 'x.svg)" onmouseover="alert(1)" data-a="('
+    out = subprocess.run([node, "-e", f"{icon}\nprocess.stdout.write(icon({json.dumps(evil)}))"],
+                         capture_output=True, text=True, check=True).stdout
+    assert out == ('<i class="i " style="--src:url(/static/icons/xsvgonmouseoveralert1data-a.svg)"'
+                   ' aria-hidden="true"></i>')

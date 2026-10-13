@@ -1830,7 +1830,10 @@ const QUICK_ASKS = [
    текста рядом с собой, поэтому один файл годится и на синей кнопке, и на
    красной, и в выключенном состоянии. */
 function icon(name, extra = "") {
-  return `<i class="i ${extra}" style="--src:url(/static/icons/${name}.svg)" aria-hidden="true"></i>`;
+  // Имя иконки приходит и из конфига кнопок на компьютере («lucide:…»), а стоит внутри style:
+  // кавычка или скобка в нём вывела бы наружу из url() и из атрибута. Имена Lucide — только [a-z0-9-].
+  const safe = String(name).replace(/[^a-z0-9-]/gi, "");
+  return `<i class="i ${extra}" style="--src:url(/static/icons/${safe}.svg)" aria-hidden="true"></i>`;
 }
 
 /* ====================================================== надиктовка ======
