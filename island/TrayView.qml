@@ -461,7 +461,7 @@ Item {
                         // the spring-driven k — only press feedback is animated).
                         Behavior on scale {
                             enabled: JD.animOn && slotTap.pressed
-                            NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut }
                         }
                         property int probedKind: 0   // 0 keep, 2 truly black
                         readonly property string mode: tv.trayMode(slot.modelData, probedKind)

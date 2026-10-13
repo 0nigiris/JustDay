@@ -212,7 +212,7 @@ Item {
                                 anchors.fill: parent
                                 radius: 8
                                 color: (hover.hovered && row.live) || row.deeperOpen ? JD.fill1 : "transparent"
-                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: 90 } }
+                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             }
                             readonly property bool deeperOpen: deeper && (tm.sub1 === modelData || tm.sub2 === modelData)
 

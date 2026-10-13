@@ -49,7 +49,7 @@ Item {
                 width: pg.unknown ? parent.width * 0.32 : parent.width * Math.max(0, Math.min(1, pg.value))
                 x: pg.unknown ? runner.at * (parent.width + width) - width : 0
                 Behavior on width { enabled: !pg.unknown && JD.animOn
-                                    NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                                    NumberAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
                 Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
             }
         }

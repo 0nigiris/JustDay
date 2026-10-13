@@ -852,7 +852,7 @@ Item {
                     readonly property real mid: dv.atTop ? dv.rowTop + appBox / 2 : dv.rowBottom - appBox / 2
                     y: mid - draw / 2 + (dv.atTop ? slot.dragLift : -slot.dragLift) + slot.bounce
                     opacity: slot.dragged ? 0.86 : (slotTap.pressed ? 0.88 : 1)
-                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: 90 } }
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
