@@ -142,9 +142,36 @@ def parse_time(text: str) -> float | None:
     return when.timestamp()
 
 
+_ONES = {"ноль": 0, "один": 1, "одну": 1, "одна": 1, "два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6,
+         "семь": 7, "восемь": 8, "девять": 9, "десять": 10, "одиннадцать": 11, "двенадцать": 12, "тринадцать": 13,
+         "четырнадцать": 14, "пятнадцать": 15, "шестнадцать": 16, "семнадцать": 17, "восемнадцать": 18,
+         "девятнадцать": 19}
+_TENS = {"двадцать": 20, "тридцать": 30, "сорок": 40, "пятьдесят": 50, "шестьдесят": 60, "семьдесят": 70,
+         "восемьдесят": 80, "девяносто": 90}
+_NUMWORD = re.compile(r"\b(?:(" + "|".join(_TENS) + r")\s+)?(" + "|".join(_ONES) + r")\b|\b(" + "|".join(_TENS) + r")\b", re.I)
+
+
+def digits(text: str) -> str:
+    """«пять минут», «двадцать пять минут» → «5 минут», «25 минут»: распознавание иногда пишет числа словами,
+    а разборщик понимает только цифры, и просьба уходила к нейросети вместо мгновенного ответа."""
+    def sub(m: re.Match) -> str:
+        tens, ones, tens_only = (g.lower() if g else "" for g in m.groups())
+        return str(_TENS[tens_only] if tens_only else _TENS.get(tens, 0) + _ONES[ones])
+    return _NUMWORD.sub(sub, text)
+
+
+_SPAN_FIRST = re.compile(r"\b(мин\w*|час\w*|сек\w*)\s+(?:на\s+)?(\d+)\b", re.I)
+_START_WORDS = re.compile(r"\b(засеки|засекай|отсчитай|засечь)\b", re.I)
+
+
 def parse(text: str) -> dict | None:
     """One spoken line → what to do: {action: set|cancel|list, ...}. None when it is not about time at all."""
-    low = text.strip().lower()
+    text = _SPAN_FIRST.sub(lambda m: f"{m[2]} {m[1]}", digits(text.strip()))
+    low = text.lower()
+    if _START_WORDS.search(low) and not TIMER_WORDS.search(low):
+        # «засеки две минуты» — это таймер, хоть слова «таймер» и нет
+        low += " таймер"
+        text += " таймер"
     if not low:
         return None
     wants_timer, wants_alarm, wants_remind = TIMER_WORDS.search(low), ALARM_WORDS.search(low), REMIND_WORDS.search(low)
@@ -166,7 +193,7 @@ def parse(text: str) -> dict | None:
 
 
 _LABEL_CUT = re.compile(
-    r"^(джарвис|justday|пожалуйста|поставь|постав|заведи|засеки|засекай|установи|сделай|включи|"
+    r"^(ну|слушай|так|эй|а|джарвис|justday|пожалуйста|поставь|постав|заведи|засеки|засекай|установи|сделай|включи|"
     r"напомни|напоминание|разбуди( меня)?|будильник|таймер|мне|на|через|в|к|set|start|a|an|the|remind( me)?|timer|alarm|wake me( up)?)\b",
     re.I)
 _LABEL_STRIP = re.compile(r"\b(на|через|в|к|at|in|for)?\s*\d+(?:[.,]\d+)?\s*(сек\w*|мин\w*|час\w*|second\w*|minute\w*|hour\w*)\b|"
