@@ -947,6 +947,20 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   border-radius: 18px 18px 18px 6px;
   animation: rise 0.35s var(--ease) both;
 }
+/* Хвост журнала ночи: моноширинный, чтобы круги и инструменты читались
+   столбцом; свой прокрут, чтобы длинный журнал не утягивал страницу. */
+.work-tail {
+  margin: 10px 0;
+  padding: 10px 12px;
+  max-height: 14em;
+  overflow-y: auto;
+  font: 12px/1.45 ui-monospace, monospace;
+  white-space: pre-wrap;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
 .jarvis-answer.heard {
   margin-left: auto;
   background: rgba(255, 255, 255, 0.06);

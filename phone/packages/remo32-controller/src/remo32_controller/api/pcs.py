@@ -187,6 +187,16 @@ async def justday_inbox_list(
     )
 
 
+@router.get("/{pc_id}/justday/work", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
+async def justday_work(
+    pc_id: str, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    """Ход ночной работы: телефон только смотрит, ничего не запускает."""
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_work(), request_id
+    )
+
+
 @router.get("/{pc_id}/justday/plans", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
 async def justday_plans(
     pc_id: str, request: Request, _session: Session, request_id: RequestId, closed: bool = False

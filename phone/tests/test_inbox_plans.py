@@ -169,3 +169,36 @@ class TestГолосБезСвязи:
         monkeypatch.setattr("remo32_agent.justday.call", fake_call)
         agent_client.post("/api/justday/dictate", content=b"\x1a\x45\xdf\xa3" + b"opus" * 400)
         assert видел["inbox"] is False
+
+
+class TestХодНочи:
+    """«Лёг спать, открыл приложение — видно прогресс». Мост только смотрит: ни одной команды,
+    кроме чтения хода, телефон этим путём на компьютер не передаёт."""
+
+    def test_агент_спрашивает_только_ход(self, agent_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        команды: list[str] = []
+
+        async def fake(command: str, **payload: Any) -> dict[str, Any]:
+            команды.append(command)
+            return {"ok": True, "running": True, "tail": ["— Круг 3"], "need": []}
+
+        monkeypatch.setattr("remo32_agent.justday.call", fake)
+        data = agent_client.get("/api/justday/work").json()["data"]
+        assert data["tail"] == ["— Круг 3"]
+        assert команды == ["work"]
+
+    def test_без_входа_ход_не_виден(self, anon) -> None:  # type: ignore[no-untyped-def]
+        assert anon.get("/api/pcs/testpc/justday/work").status_code == 401
+
+    def test_контроллер_пересылает_ход(self, anon, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        from conftest import TEST_PASSWORD
+
+        async def fake(self: object) -> dict[str, Any]:
+            return {"ok": True, "running": False, "tail": [], "need": ["поставить APK"]}
+
+        monkeypatch.setattr(
+            "remo32_controller.agent_client.AgentClient.justday_work", fake, raising=True
+        )
+        assert anon.post("/api/auth/login", json={"password": TEST_PASSWORD}).status_code == 200
+        data = anon.get("/api/pcs/testpc/justday/work").json()["data"]
+        assert data["need"] == ["поставить APK"]

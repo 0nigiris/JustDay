@@ -189,6 +189,11 @@ async def scene(scene_id: str) -> dict[str, Any]:
     return await call("scene_run", id=scene_id, timeout=60.0)
 
 
+async def work() -> dict[str, Any]:
+    """Ход ночной работы: идёт ли, хвост журнала, что ждёт человека. Только чтение."""
+    return await call("work")
+
+
 async def plans(only_open: bool = True) -> dict[str, Any]:
     """Планы из хранилища Obsidian."""
     return await call("plan_list", open=only_open)

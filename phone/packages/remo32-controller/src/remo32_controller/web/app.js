@@ -2269,6 +2269,19 @@ function viewJarvisOffline(pc) {
   ${plansCard()}`;
 }
 
+/* Ход ночной работы: «лёг спать, открыл приложение — видно прогресс и то,
+   что сделано». Только чтение — отсюда ничего не запускается. */
+function workBlock() {
+  const w = state.work;
+  if (!w || !w.ok) return "";
+  const tail = (w.tail || []).slice(-12);
+  return `<div class="meta">${w.running ? "Ночная работа идёт" : "Ночная работа не идёт"}${
+      w.server_mode ? " · экраны погашены" : ""}</div>
+    ${tail.length ? `<div class="work-tail">${esc(tail.join("\n"))}</div>` : ""}
+    ${(w.need || []).length ? `<div class="list">${w.need.map((line) =>
+      `<div class="step"><div><b>${esc(line)}</b></div></div>`).join("")}</div>` : ""}`;
+}
+
 function justdayTerminalCard(pc) {
   const action = (pc.actions || []).find((item) => item.id === "justday-terminal");
   if (!action) {
@@ -2287,6 +2300,7 @@ function justdayTerminalCard(pc) {
       : "Сессия переживает обрыв связи; можно продолжить ввод с этого телефона.";
   return `<section class="card">
     <div class="card-head"><h2>Работа на компьютере</h2><span class="meta">JustDay Terminal</span></div>
+    ${workBlock()}
     <div class="meta">${esc(hint)}</div>
     <div class="row"><button class="btn primary" data-justday-terminal="${esc(pc.id)}" ${enabled ? "" : "disabled"}>
       ${icon("terminal")} ${enabled ? "Открыть и продолжить" : "Терминал выключен"}
@@ -2848,6 +2862,7 @@ async function render(force = false) {
     }
     if (current === "jarvis" && pc && pc.state === "online") {
       state.plans = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/plans`).catch(() => state.plans);
+      state.work = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/work`).catch(() => null);
       await flushOutbox(pc.id);  // всё, что записали в дороге, уходит при первой встрече
     }
     rememberState();

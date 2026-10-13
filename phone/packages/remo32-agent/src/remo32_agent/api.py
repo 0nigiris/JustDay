@@ -432,6 +432,15 @@ def build_router(ctx: AgentContext) -> APIRouter:
         return ApiResponse[dict[str, Any]].success(await justday.inbox_list(), request_id)
 
     @router.get(
+        "/api/justday/work",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Ход ночной работы",
+    )
+    async def justday_work(request_id: RequestId) -> ApiResponse[dict[str, Any]]:
+        return ApiResponse[dict[str, Any]].success(await justday.work(), request_id)
+
+    @router.get(
         "/api/justday/plans",
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],
