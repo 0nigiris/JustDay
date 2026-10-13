@@ -19,6 +19,12 @@ FloatingWindow {
     Connections {
         target: JD
         function onChatMessagesChanged() { Qt.callLater(() => list.positionViewAtEnd()) }
+        // Надиктованное ложится туда, где стоит курсор, и не уходит само: Whisper мог расслышать криво.
+        function onChatDictated(text) {
+            const gap = input.cursorPosition > 0 && !/\s$/.test(input.getText(0, input.cursorPosition)) ? " " : ""
+            input.insert(input.cursorPosition, gap + text)
+            input.forceActiveFocus()
+        }
     }
 
     RowLayout {
@@ -157,7 +163,7 @@ FloatingWindow {
                 enabled: !!JD.chatCurrent
                 TextEdit {
                     id: input
-                    anchors { fill: parent; margins: 12 }
+                    anchors { left: parent.left; right: mic.left; top: parent.top; bottom: parent.bottom; margins: 12 }
                     wrapMode: TextEdit.Wrap
                     color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 14
                     Keys.onPressed: (e) => {
@@ -166,6 +172,18 @@ FloatingWindow {
                         }
                     }
                     Text { visible: !input.text; text: JD.tr("Сообщение"); color: JD.text3; font: input.font }
+                }
+                // Диктовка в поле, без озвучки ответа. Второе нажатие — «я договорил».
+                Rectangle {
+                    id: mic
+                    anchors { right: parent.right; rightMargin: 8; bottom: parent.bottom; bottomMargin: 8 }
+                    width: 28; height: 28; radius: 14
+                    color: JD.chatDictating ? JD.accentRed : (micHover.hovered ? JD.fill2 : "transparent")
+                    Accessible.role: Accessible.Button
+                    Accessible.name: JD.chatDictating ? JD.tr("Остановить диктовку") : JD.tr("Надиктовать")
+                    Icon { anchors.centerIn: parent; name: "mic"; implicitSize: 16; tint: JD.chatDictating ? "#ffffff" : JD.text2 }
+                    HoverHandler { id: micHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: JD.chatDictate() }
                 }
             }
         }

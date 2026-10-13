@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from . import (
+    audio,
     chats,
     clipboard,
     config,
@@ -399,6 +400,40 @@ class CommandsMixin:
         self.chat_say(cid, "user", text)
         spawn(self._chat_turn(cid, text))
         return {"ok": True}
+
+    async def _cmd_chat_dictate(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Голосовой ввод в окне чата (Р2-42): одна фраза с микрофона → текст в поле ввода.
+
+        Без мозга и без озвучки: сказанное ложится в поле, человек поправит и отправит сам. Пустить
+        его сразу в мозг значило бы отправлять то, что Whisper расслышал криво. `stop` — второе
+        нажатие на кнопку: дописать сейчас, не дожидаясь паузы."""
+        if req.get("stop"):
+            if self._dictating and self._listen_cancel:
+                self._listen_cancel.set()
+            return {"ok": True}
+        if not self.mic_on():
+            return {"ok": False, "dictated": "", "error": t("Микрофон выключен")}
+        if self._dictating or self.state in ("listening", "transcribing"):
+            return {"ok": False, "dictated": "", "error": t("Микрофон занят")}
+        self._dictating = True
+        self.stop_speaking()
+        self.mic.start()
+        self._listen_cancel = asyncio.Event()
+        self._discard_recording = False
+        self.state = "listening"
+        try:
+            await self.earcon("listen")
+            pcm = await self.recorder.record(self._listen_cancel)
+            if self._discard_recording or pcm is None or len(pcm) < audio.RATE * 0.3:
+                return {"ok": False, "dictated": "", "error": t("Не расслышал.")}
+            self.state = "transcribing"
+            text = (await asyncio.to_thread(self.stt.transcribe, pcm)).strip()
+            events.emit("chat_dictated", chars=len(text))   # сам текст — только в окно, не в журнал
+            return {"ok": bool(text), "dictated": text}
+        finally:
+            self._dictating = False
+            self._last_mic_use = time.monotonic()
+            self.state = "thinking" if self.brain.busy else "idle"
 
     def chat_say(self, cid: str, role: str, text: str) -> None:
         """Запись в чат и в окно. Отсюда же пишут телефон, Telegram и `tell_chat`: общий путь, без озвучки."""

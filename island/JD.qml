@@ -328,6 +328,13 @@ Singleton {
     property var chatMessages: []
     property bool chatBusy: false
     property bool _chatWantNew: false
+    property bool chatDictating: false   // кнопка микрофона в чате: идёт запись фразы в поле
+    signal chatDictated(string text)
+    function chatDictate() {
+        if (chatDictating) { send({ cmd: "chat_dictate", stop: true }); return }
+        chatDictating = true
+        send({ cmd: "chat_dictate" })
+    }
     function chatRefresh() { send({ cmd: "chat_list" }) }
     function chatOpenOne(id) { chatCurrent = id; chatMessages = []; send({ cmd: "chat_get", id: id }) }
     function chatSetModel(model) { if (chatCurrent) { chatModel = model; send({ cmd: "chat_model", id: chatCurrent, model: model }) } }
@@ -1642,6 +1649,11 @@ Singleton {
         }
         if (m.tracks !== undefined) libTracks = m.tracks || []
         if (m.chats !== undefined) chatList = m.chats || []
+        if (m.dictated !== undefined) {
+            chatDictating = false
+            if (m.dictated) chatDictated(m.dictated)
+            else if (m.error) flash(m.error, "mic-off", accentOrange)
+        }
         if (m.messages !== undefined && m.kind === undefined) { chatMessages = m.messages || []; chatModel = m.model || "" }
         if (m.id !== undefined && _chatWantNew) { _chatWantNew = false; chatOpenOne(m.id); chatRefresh() }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }

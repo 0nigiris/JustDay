@@ -78,3 +78,44 @@ def test_write_to_chat_by_voice_lands_in_the_open_chat(monkeypatch, tmp_path):
     d._chat_last = opened
     d.chat_note("в открытый")
     assert [m["text"] for m in chats.messages(opened)] == ["в открытый"]
+
+
+def test_dictation_in_the_chat_window_fills_the_field_and_says_nothing(monkeypatch):
+    """Кнопка микрофона в чате: сказанное должно лечь в поле ввода, а не уйти мозгу и не прозвучать (Р2-42).
+
+    Сразу в мозг — значит отправить то, что Whisper расслышал криво; вслух — то, ради чего чат и
+    отделён от голоса."""
+    import asyncio
+    import types
+
+    import numpy as np
+
+    from justday import audio, events
+    from justday.daemon import Daemon
+
+    monkeypatch.setattr(events, "emit", lambda *a, **kw: None)
+    d = Daemon.__new__(Daemon)
+    d._state, d._dictating, d._listen_cancel, d._discard_recording = "idle", False, None, False
+    d.publish = lambda **kw: None
+    d._warm_models = lambda value: None
+    d.music = types.SimpleNamespace(alive=False)
+    d.brain = types.SimpleNamespace(busy=False, ask=None)
+    d.mic_on = lambda: True
+    d.stop_speaking = lambda: None
+    d.mic = types.SimpleNamespace(start=lambda: None)
+    d.stt = types.SimpleNamespace(transcribe=lambda pcm: " привет из чата ")
+
+    async def quiet(*a, **kw):
+        return None
+
+    async def record(cancel, prefill=None, speculate=None):
+        return np.zeros(audio.RATE, dtype=np.int16)
+
+    async def never(*a, **kw):
+        raise AssertionError("диктовка в чат заговорила или ушла мозгу")
+
+    d.earcon, d.say, d.run_turn = quiet, never, never
+    d.recorder = types.SimpleNamespace(record=record)
+    got = asyncio.run(d._cmd_chat_dictate({}, None))
+    assert got == {"ok": True, "dictated": "привет из чата"}
+    assert d.state == "idle" and not d._dictating, "после диктовки микрофон остался занят"

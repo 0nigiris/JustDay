@@ -111,6 +111,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
         self._chat_last = ""   # чат, который последним открывали в окне: сюда идёт «запиши в чат»
+        self._dictating = False  # кнопка микрофона в окне чата пишет фразу в поле ввода
         self._chat_brains: dict[str, Brain] = {}   # по мозгу на открытый чат; закрываются после 10 минут тишины
         self._chat_closers: dict[str, asyncio.TimerHandle] = {}
         self.side: Brain | None = None             # a second session, for what must not wait for the first one
