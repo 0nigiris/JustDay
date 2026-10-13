@@ -52,3 +52,20 @@ def test_allow_rules_that_promised_more_than_they_did():
     for bad in ("java -jar x.jar", "jii install foo", "find ~ -name x -delete", "find . -exec rm {} ;",
                 "justday approve", "pactl load-module module-native-protocol-tcp"):
         assert not _runs_silently(bad), bad
+
+
+def test_allowed_tools_ran_any_command_past_the_ask_list():
+    """`rm -rf` спрашивал, а то же самое через разрешённые `flatpak run`, `qdbus` и `xdotool` — нет:
+    у VS Code и LibreOffice в flatpak весь диск, Konsole выполняет присланное по D-Bus, KWin грузит
+    скрипт, xdotool печатает в окно. Сайт, прочитанный мозгом, мог дойти так до чего угодно."""
+    for bad in ("flatpak run --command=sh com.visualstudio.code -c 'rm -rf ~/x'",
+                "flatpak run --filesystem=host --command=bash org.libreoffice.LibreOffice",
+                "qdbus-qt6 org.kde.konsole-4242 /Sessions/1 runCommand 'rm -rf ~/x'",
+                "qdbus org.kde.konsole-4242 /Sessions/1 sendText 'rm -rf ~/x'",
+                "qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript /tmp/x.js",
+                "qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript 'x'",
+                "xdotool type 'rm -rf ~/x'", "xdotool search --name x windowactivate key Return"):
+        assert not _runs_silently(bad), bad
+    for ok in ("flatpak run com.visualstudio.code", "qdbus-qt6 org.kde.KWin /KWin org.kde.KWin.showDesktop",
+               "xdotool getactivewindow"):
+        assert _runs_silently(ok), ok

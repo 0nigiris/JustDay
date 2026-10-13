@@ -163,7 +163,14 @@
       "Bash(find * -delete*)",
       "Bash(find * -exec*)",
       "Bash(find * -ok*)",
-      "Bash(pactl load-module:*)"
+      "Bash(pactl load-module:*)",
+      "Bash(flatpak run *--command*)",
+      "Bash(qdbus* *runCommand*)",
+      "Bash(qdbus* *sendText*)",
+      "Bash(qdbus* *Scripting*)",
+      "Bash(qdbus* *evaluateScript*)",
+      "Bash(xdotool *type*)",
+      "Bash(xdotool *key*)"
     ],
     "deny": [
       "Bash(justday mail:*)",
