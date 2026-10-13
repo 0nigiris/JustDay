@@ -23,8 +23,11 @@ Singleton {
     // а одной строкой «ещё N» (Р2-38). Сбрасывается, когда карточка ушла.
     property int notifMore: 0
     property string _notifShownApp: ""
+    // Курсор на карточке в углу. Она в своём окне, мимо `islandHovered`, и уходила через 6 с прямо из-под
+    // руки, пока её дочитывали. Сброс на уходе карточки: скрытое окно не всегда присылает «курсор ушёл».
+    property bool notifHovered: false
     onNotificationChanged: {
-        if (!notification) { notifMore = 0; _notifShownApp = ""; return }
+        if (!notification) { notifMore = 0; _notifShownApp = ""; notifHovered = false; return }
         const app = notification.app || ""
         notifMore = (_notifShownApp && app === _notifShownApp) ? notifMore + 1 : 0
         _notifShownApp = app
@@ -1891,7 +1894,7 @@ Singleton {
             }
         }
     }
-    Timer { id: notifTimer; interval: 6000; onTriggered: if (jd.islandHovered || jd.notifExpanded) restart(); else jd.notification = null }
+    Timer { id: notifTimer; interval: 6000; onTriggered: if (jd.islandHovered || jd.notifHovered || jd.notifExpanded) restart(); else jd.notification = null }
     Timer {
         id: answerTimer
         // without a voice the text is all there is: give time to read it

@@ -1634,7 +1634,7 @@ ShellRoot {
         readonly property bool open: JD.notifExpanded
         implicitWidth: open ? 600 : Math.min(580, Math.max(380, nRow.implicitWidth + 36))
         implicitHeight: nCol.implicitHeight + 26
-        HoverHandler { id: nvHover }
+        HoverHandler { id: nvHover; onHoveredChanged: JD.notifHovered = hovered }
         MouseArea {
             anchors.fill: parent
             z: 0
@@ -1673,13 +1673,21 @@ ShellRoot {
                         Layout.fillWidth: true; Layout.maximumWidth: 440
                     }
                 }
+                // ⌄ и ✕ проявляются при наведении: пока не навёл, на карточке только текст (Р2-38).
+                // Прозрачностью, а не visible: иначе ширина карточки прыгала бы под курсором.
                 RoundKey {
                     visible: !!nv.n.body
+                    opacity: nvHover.hovered || nv.open ? 1 : 0
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast } }
                     Layout.alignment: Qt.AlignTop
                     icon: nv.open ? "go-up" : "go-down"
                     onClicked: JD.notifExpanded = !JD.notifExpanded
                 }
-                RoundKey { Layout.alignment: Qt.AlignTop; icon: "window-close"; onClicked: JD.dismissNotification() }
+                RoundKey {
+                    opacity: nvHover.hovered || nv.open ? 1 : 0
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast } }
+                    Layout.alignment: Qt.AlignTop; icon: "window-close"; onClicked: JD.dismissNotification()
+                }
             }
             Row {
                 visible: JD.notifButtons.length > 0 && (nvHover.hovered || nv.open)
