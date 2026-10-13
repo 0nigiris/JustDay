@@ -25,3 +25,16 @@ def _done(task: asyncio.Task) -> None:
     _live.discard(task)
     if not task.cancelled() and (exc := task.exception()):
         log.error("task %s failed", task.get_name(), exc_info=exc)
+
+
+def die_with_daemon() -> None:
+    """`preexec_fn` для долгих помощников демона (dbus-monitor, journalctl -f, wl-paste --watch).
+
+    Служба живёт с `KillMode=process`, чтобы запущенные ассистентом программы пережили перезапуск, —
+    поэтому systemd не трогает и помощников. Убивать их руками при остановке ненадёжно: про двух
+    забыли, а при падении до этого кода не доходит вовсе, и за сутки набралось 97 сирот dbus-monitor.
+    Ядро само пошлёт SIGTERM, когда умрёт поток демона, их запустивший (цикл asyncio — главный поток)."""
+    import ctypes
+    import signal
+
+    ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGTERM)    # PR_SET_PDEATHSIG

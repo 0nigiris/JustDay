@@ -61,7 +61,7 @@ from . import (
 from . import brain as brain_mod
 from . import tts as tts_mod
 from . import weather as weather_mod
-from .aio import spawn
+from .aio import die_with_daemon, spawn
 from .approvals import AskMixin
 from .brain import Brain
 from .commands import CommandsMixin
@@ -1950,7 +1950,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 try:
                     proc = await asyncio.create_subprocess_exec(
                         *cmd, stdout=asyncio.subprocess.PIPE if piped else asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL)
+                        stderr=asyncio.subprocess.DEVNULL, preexec_fn=die_with_daemon)
                 except OSError as e:
                     log.warning("не удалось следить за буфером: %s", e)
                     continue

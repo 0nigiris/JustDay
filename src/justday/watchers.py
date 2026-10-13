@@ -15,6 +15,7 @@ from . import (
     desktop,
     notifications,
 )
+from .aio import die_with_daemon
 
 log = logging.getLogger("justday.daemon")
 
@@ -30,7 +31,7 @@ class WatchersMixin:
                 continue
             try:
                 proc = self._notify_proc = await asyncio.create_subprocess_exec(
-                    "dbus-monitor", "--session", rule, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                    "dbus-monitor", "--session", rule, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, preexec_fn=die_with_daemon)
                 buf: list[str] = []
                 async for raw in proc.stdout:
                     line = raw.decode("utf-8", "replace")
@@ -79,7 +80,7 @@ class WatchersMixin:
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "dbus-monitor", "--session", rule,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, preexec_fn=die_with_daemon)
                 async for raw in proc.stdout:
                     if b"brightnessChanged" not in raw and b"int32" not in raw:
                         continue
@@ -112,7 +113,7 @@ class WatchersMixin:
             try:
                 proc = self._layout_proc = await asyncio.create_subprocess_exec(
                     "dbus-monitor", "--session", rule, stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL)
+                    stderr=asyncio.subprocess.DEVNULL, preexec_fn=die_with_daemon)
                 async for raw in proc.stdout:
                     if b"layoutChanged" not in raw and b"layoutListChanged" not in raw:
                         continue
@@ -206,7 +207,7 @@ class WatchersMixin:
             try:
                 proc = self._windows_proc = await asyncio.create_subprocess_exec(
                     "journalctl", "-f", "-n", "0", "--no-pager", "-o", "cat", "-g", desktop.WATCH_TAG.strip(),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, preexec_fn=die_with_daemon)
                 # Скрипт селится после того, как журнал уже читают: он говорит первое слово сразу
                 # при загрузке, и сказанное до подписки не догнать ничем.
                 await asyncio.sleep(0.4)
