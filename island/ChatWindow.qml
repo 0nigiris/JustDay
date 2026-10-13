@@ -11,6 +11,12 @@ FloatingWindow {
     implicitWidth: 880
     implicitHeight: 620
     color: "#1c1c1e"
+    // MarkdownText сам скачивает картинки `![](адрес)`, и `![x][ссылка]` тоже. Сайт, прочитанный
+    // мозгом, может внушить ему такую картинку с чем-нибудь личным в адресе, и окно отправит это
+    // наружу, едва ответ покажется: никто ничего не нажимал. Проверено опытом — запрос уходил.
+    // Без `!` картинка становится обычной ссылкой, а ссылку открывает только человек. HTML <img>
+    // и фоны в стилях MarkdownText не грузит — проверено тем же опытом.
+    function noRemoteImages(t) { return String(t || "").replace(/!\[/g, "[") }
     onVisibleChanged: {
         if (visible) { JD.chatRefresh(); input.forceActiveFocus() }
         else JD.chatOpen = false   // окно закрыли крестиком рамки
@@ -64,7 +70,7 @@ FloatingWindow {
                         HoverHandler { id: hover }
                         Text {
                             anchors { left: parent.left; right: del.left; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 4 }
-                            text: modelData.title; elide: Text.ElideRight
+                            text: modelData.title; textFormat: Text.PlainText; elide: Text.ElideRight
                             color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 13
                         }
                         Text {
@@ -118,7 +124,7 @@ FloatingWindow {
                             width: parent.width - 24
                             readOnly: true; selectByMouse: true
                             textFormat: mine ? Text.PlainText : Text.MarkdownText
-                            text: modelData.text
+                            text: mine ? modelData.text : win.noRemoteImages(modelData.text)
                             wrapMode: TextEdit.Wrap
                             color: mine ? "#ffffff" : JD.text1
                             font.family: JD.fontFamily; font.pixelSize: 14
