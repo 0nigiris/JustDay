@@ -208,7 +208,10 @@ def try_handle(text: str) -> str | None:
             return _t(desc) if _run(*cmd) else None
     m = re.match(r"^(громкость|звук|volume|set volume to|volume to) (на )?(\d{1,3})( процент\w*| percent)?$", t)
     if m:
-        return _t("громкость {n}%", n=m.group(3)) if _run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{min(100, int(m.group(3)))}%") else None
+        # выше ста общий звук не ставим (усиление — программам и музыке, см. volume.plan), и говорим, сколько
+        # поставили на самом деле: «громкость 130%» при ста было враньём
+        n = min(100, int(m.group(3)))
+        return _t("громкость {n}%", n=n) if _run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{n}%") else None
 
     m = re.match(r"^(открой|открыть|запусти|запустить|включи|вруби|open|launch|start|run) (.+)$", t)
     if m:

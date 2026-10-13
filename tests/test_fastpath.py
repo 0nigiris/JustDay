@@ -70,3 +70,11 @@ class TestЧтоНеДолжноИдтиМимоМодели:
 
     def test_слишком_длинная_фраза_не_мгновенная(self) -> None:
         assert fastpath.try_handle("открой " + "очень " * 20 + "длинное") is None
+
+
+def test_громкость_130_говорила_130_а_ставила_100(monkeypatch) -> None:
+    """Общий звук выше ста не поднимается нарочно, но ответ называл несбывшееся число."""
+    ran = []
+    monkeypatch.setattr(fastpath, "_run", lambda *cmd: ran.append(cmd) or True)
+    assert fastpath.try_handle("громкость 130") == "громкость 100%"
+    assert ran[-1][-1] == "100%"
