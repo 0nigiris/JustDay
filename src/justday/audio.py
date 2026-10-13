@@ -135,7 +135,8 @@ class UtteranceRecorder:
     её в окружении нет вовсе, и демон должен запускаться — он просто никогда не начнёт запись."""
 
     def __init__(self, mic: Microphone, silence_s: float, no_speech_timeout_s: float, max_s: float,
-                 silence_long_s: float = 2.2, long_after_s: float = 5.0, speculate_after_s: float = 0.0):
+                 silence_long_s: float = 2.2, long_after_s: float = 5.0, speculate_after_s: float = 0.0,
+                 end_guess_s: float = 0.6, end_hard_s: float = 3.0):
         self.mic = mic
         self._vad = None
         self.silence_s = silence_s
@@ -153,17 +154,30 @@ class UtteranceRecorder:
         # решению «он закончил» текст уже готов. Если человек заговорил снова — готовое выбрасывается.
         self.speculate_after_s = speculate_after_s
         self.speculated: np.ndarray | None = None  # запись, отданная на раннее распознавание и ещё годная
+        # Две паузы для конца фразы (Р2-35):
+        # end_guess — после неё запускаем распознавание и ответ (если мысль закончена по Smart Turn)
+        # end_hard — после неё разговор окончательно закрыт, микрофон не слушает
+        self.end_guess_s = end_guess_s
+        self.end_hard_s = end_hard_s
         # Через сколько тишины спросить Smart Turn (turn.py), закончена ли мысль; 0 — не спрашивать, ждать обычную паузу.
         self.smart_after_s = 0.0
 
     def patience(self, spoken_s: float) -> float:
-        """Сколько тишины считать концом просьбы, если человек говорит уже spoken_s секунд."""
+        """Сколько тишины считать концом просьбы, если человек говорит уже spoken_s секунд.
+
+        Две паузы (Р2-35):
+        - end_guess (0.5–0.7 с): после неё, если Smart Turn сказал «мысль закончена», отвечаем сразу
+        - end_hard (3 с): после неё разговор окончательно закрыт, микрофон не слушает
+        """
         if spoken_s >= self.max_s:
             # Заговорился дольше отведённого. Рубить по секундомеру нельзя: именно так его и
             # обрывало — ровно на сороковой секунде, посреди слова, и половина просьбы уходила
             # в работу как целая. Поэтому после срока ждём ближайшей паузы, а не её конца.
             return 0.5
-        return self.silence_long_s if spoken_s >= self.long_after_s else self.silence_s
+        # После long_after_s речи используем увеличенный порог (silence_long_s)
+        base = self.silence_long_s if spoken_s >= self.long_after_s else self.silence_s
+        # end_hard — абсолютный предел: если тишина дольше, заканчиваем независимо от Smart Turn
+        return min(base, self.end_hard_s)
 
     @property
     def hard_max_s(self) -> float:
@@ -239,11 +253,16 @@ class UtteranceRecorder:
                     from . import turn
                     p_end = await asyncio.to_thread(turn.complete, np.concatenate(frames))
                     if p_end is not None and p_end > 0.5:
+                        # end_guess: Smart Turn подтвердил, что мысль закончена — отвечаем сразу
                         break
                 elif (speculate and self.speculated is None and silence >= self.speculate_after_s > 0
                       and spoken - silence < self.long_after_s and spoken - silence >= 0.4):
                     self.speculated = np.concatenate(frames)
                     speculate(self.speculated)
+                # end_hard: жёсткий предел тишины (3 с) — заканчиваем безусловно
+                # patience() уже учитывает end_hard_s, но добавляем явную проверку для ясности
+                if silence >= self.end_hard_s:
+                    break
                 if silence >= self.patience(spoken - silence) or spoken >= self.hard_max_s:
                     break
             if not frames:

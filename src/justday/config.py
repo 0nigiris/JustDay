@@ -169,6 +169,11 @@ DEFAULTS: dict = {
         # Не закончена («поставь таймер на…») — ждёт обычную паузу. Нет файла модели — работает как раньше.
         "smart_turn": True,
         "smart_turn_after_seconds": 0.5,
+        # Две паузы для конца фразы (Р2-35):
+        # end_guess — после неё запускаем распознавание и ответ (0.5–0.7 с)
+        # end_hard — после неё разговор окончательно закрыт, микрофон не слушает (3 с)
+        "end_guess_seconds": 0.6,
+        "end_hard_seconds": 3.0,
         "no_speech_timeout_seconds": 7,
         # After JustDay asks a question, listen again automatically for this long (0 = off).
         "followup_seconds": 6,
