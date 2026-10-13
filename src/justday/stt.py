@@ -158,7 +158,9 @@ class STT:
         segments = self._run(
             audio,
             language=self.cfg["language"] or None,
-            beam_size=1,
+            # Жадный поиск (1) ошибается на редких словах и именах; луч в 5 на видеокарте стоит доли
+            # секунды на короткой фразе. Голова фразы (transcribe_head) остаётся жадной: ей важна скорость.
+            beam_size=int(self.cfg.get("beam_size") or 5),
             vad_filter=True,
             initial_prompt=self.vocabulary or self.cfg.get("initial_prompt") or None,
             condition_on_previous_text=False,

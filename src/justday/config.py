@@ -185,6 +185,7 @@ DEFAULTS: dict = {
         "idle_unload_minutes": 15,
         "compute_type": "int8_float16",
         "language": "ru",
+        "beam_size": 5,  # 1 = быстрее, но хуже на именах и редких словах
         "initial_prompt": "Джарвис, JustDay, Claude Code, YouTube, Discord, Steam, Proton, GitHub, KDE, Helium, VS Code.",
     },
     "tts": {
