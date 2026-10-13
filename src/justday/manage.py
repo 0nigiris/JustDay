@@ -215,7 +215,7 @@ HOTKEYS: tuple[tuple[str, str, str], ...] = (
     ("type", "Написать текстом", "Meta+K"),
     ("yes", "Да / разрешить", "Meta+Y"),
     ("no", "Нет / отклонить", "Meta+N"),
-    ("apps", "Spotlight / поиск", "Alt+Space"),
+    ("apps", "Поиск", "Alt+Space"),
     ("clip", "Буфер обмена", "Meta+V"),
     ("emoji", "Эмодзи", "Meta+."),
     ("load", "Нагрузка машины", ""),

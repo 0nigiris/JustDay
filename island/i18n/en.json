@@ -105,11 +105,9 @@
   "Язык распознавания": "Recognition language",
   "Русский": "Russian",
   "Автоопределение": "Auto-detect",
-  "Как выглядит и двигается Dynamic Island": "How the Dynamic Island looks and moves",
   "Анимации": "Animations",
   "Мгновенные переходы": "Instant transitions",
   "Плавно, без отскока": "Smooth, no bounce",
-  "Пружинные, как у Apple": "Springy, like Apple",
   "Пружинные": "Springy",
   "Плавные": "Smooth",
   "Выкл": "Off",
@@ -597,5 +595,11 @@
   "открой письмо номер ": "open email number ",
   " в браузере": " in the browser",
   "Процессор ": "CPU ",
-  "Память ": "Memory "
+  "Память ": "Memory ",
+  "Как выглядит и двигается островок": "How the island looks and moves",
+  "Пружинные, с лёгким отскоком": "Springy, with a light bounce",
+  "Карточка — компактная, размер тянется за угол. Во весь экран — крупные значки и плитки управления справа": "Card is compact, resize it by the corner. Full screen has large icons and control tiles on the right",
+  "Во весь экран": "Full screen",
+  "Поиск": "Search",
+  "Узкий поиск программ, файлов и окон; не нашлось — уходит ассистенту": "A narrow search for apps, files and windows; nothing found — it goes to the assistant"
 }

@@ -1075,11 +1075,11 @@ Item {
         ColumnLayout {
             spacing: 6
             BackBar {}
-            PageTitle { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается Dynamic Island") }
+            PageTitle { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается островок") }
             Group {
                 Row {
                     title: JD.tr("Анимации")
-                    subtitle: win.get("island.animations") === "off" ? JD.tr("Мгновенные переходы") : win.get("island.animations") === "smooth" ? JD.tr("Плавно, без отскока") : JD.tr("Пружинные, как у Apple")
+                    subtitle: win.get("island.animations") === "off" ? JD.tr("Мгновенные переходы") : win.get("island.animations") === "smooth" ? JD.tr("Плавно, без отскока") : JD.tr("Пружинные, с лёгким отскоком")
                     Segmented {
                         options: [{ value: "spring", label: JD.tr("Пружинные") }, { value: "smooth", label: JD.tr("Плавные") }, { value: "off", label: JD.tr("Выкл") }]
                         current: win.get("island.animations")
@@ -1145,10 +1145,10 @@ Item {
                 }
                 Row {
                     title: JD.tr("Вид меню приложений")
-                    subtitle: JD.tr("Карточка — компактная, размер тянется за угол. Launchpad — во весь экран: крупные значки и плитки управления справа")
+                    subtitle: JD.tr("Карточка — компактная, размер тянется за угол. Во весь экран — крупные значки и плитки управления справа")
                     Choice {
                         key: "island.menu_style"
-                        options: [{ value: "card", label: JD.tr("Карточка") }, { value: "launchpad", label: JD.tr("Launchpad") }]
+                        options: [{ value: "card", label: JD.tr("Карточка") }, { value: "launchpad", label: JD.tr("Во весь экран") }]
                     }
                 }
                 Row {
@@ -1566,7 +1566,7 @@ Item {
                 NavRow { title: JD.tr("Верхняя панель"); subtitle: JD.tr("Островок, полоса и кошка у верхнего края"); dest: "panel-top" }
                 NavRow { title: JD.tr("Док"); subtitle: JD.tr("Полоса программ у края экрана"); dest: "panel-dock" }
                 NavRow { title: JD.tr("Трей"); subtitle: JD.tr("Системный лоток и его значки"); dest: "panel-tray" }
-                NavRow { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается Dynamic Island"); dest: "appearance" }
+                NavRow { title: JD.tr("Остров и анимации"); subtitle: JD.tr("Как выглядит и двигается островок"); dest: "appearance" }
             }
             Note { text: JD.tr("Громкость отдельной программы — правой кнопкой по её значку в доке, пока она что-то играет. Спрятать значок лотка можно и прямо из полосы: Ctrl и правая кнопка. Кнопка выхода в этом списке закрывает программу, даже если значок спрятан. Чтобы добавить программу в док, откройте её — она появится за чертой справа — и нажмите на её значок правой кнопкой: «Оставить в доке». Нажатие левой: не запущена — запустить, запущена — поднять, уже наверху — свернуть. Правая кнопка по значку в лотке открывает его собственное меню.") }
         }
@@ -2193,7 +2193,7 @@ Item {
             Group {
                 Row { title: JD.tr("Меню приложений"); subtitle: JD.tr("Разделы, значки, поиск и кнопка питания — вместо меню KDE");
                       Field { id: menuKey; text: win.d.hotkeys ? win.d.hotkeys.menu : ""; implicitWidth: 180 } }
-                Row { title: JD.tr("Spotlight / поиск"); subtitle: JD.tr("Узкий поиск программ, файлов и окон (как Spotlight); не нашлось — уходит ассистенту");
+                Row { title: JD.tr("Поиск"); subtitle: JD.tr("Узкий поиск программ, файлов и окон; не нашлось — уходит ассистенту");
                       Field { id: appsKey; text: win.d.hotkeys ? win.d.hotkeys.apps : ""; implicitWidth: 180 } }
                 Row { title: JD.tr("Буфер обмена"); subtitle: JD.tr("История скопированного; пароли в неё не попадают");
                       Field { id: clipKey; text: win.d.hotkeys ? win.d.hotkeys.clip : ""; implicitWidth: 180 } }
