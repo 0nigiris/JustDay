@@ -19,6 +19,16 @@ Singleton {
     property var history: []
     property var weather: null
     property var notification: null   // desktop notification being shown
+    // Сколько уведомлений той же программы пришло, пока это ещё на экране: они не столбцом друг на друге,
+    // а одной строкой «ещё N» (Р2-38). Сбрасывается, когда карточка ушла.
+    property int notifMore: 0
+    property string _notifShownApp: ""
+    onNotificationChanged: {
+        if (!notification) { notifMore = 0; _notifShownApp = ""; return }
+        const app = notification.app || ""
+        notifMore = (_notifShownApp && app === _notifShownApp) ? notifMore + 1 : 0
+        _notifShownApp = app
+    }
     property var notifications: []    // recent ones for the menu
     property bool notifExpanded: false  // the whole text, unfolded inside the island (the ⌄ button)
     // Tap a toast like Plasma: invoke the notification's default action (ActionInvoked) so the

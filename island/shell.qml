@@ -1662,6 +1662,7 @@ ShellRoot {
                         spacing: 6
                         Label2 { text: nv.n.app || ""; color: JD.text3; font.pixelSize: 11 }
                         Label2 { text: JD.tr("· сейчас"); color: JD.text3; font.pixelSize: 11 }
+                        Label2 { visible: JD.notifMore > 0; text: JD.tr("· ещё ") + JD.notifMore; color: JD.accentBlue; font.pixelSize: 11 }
                     }
                     Label1 { text: nv.n.summary || ""; TextSwap on text {} Layout.fillWidth: true; Layout.maximumWidth: 440 }
                     Label2 {
