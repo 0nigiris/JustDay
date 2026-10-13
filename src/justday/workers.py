@@ -166,11 +166,17 @@ def open_terminal(ident: str | None, cwd: str | None = None) -> None:
     subprocess.Popen(desktop.detached(cmd), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+FINISHED = ("done", "failed", "error", "stopped", "gone")
+
+
 def pending_reports() -> tuple[list[dict], int]:
     """Workers started by JustDay whose state changed to something the brain should react to,
     plus how many of them are still working."""
     reg = _registry()
-    if not reg:
+    # Доложенный конец уже не изменится (продолжение — `send` — заводит новый id), а записи нужны
+    # `result`. Без этой проверки один давно законченный работник заставлял демон звать
+    # `claude agents --json` каждые 15 секунд навсегда.
+    if all(info.get("reported_state") in FINISHED for info in reg.values()):
         return [], 0
     live = {a.get("id"): a for a in agents()}
     active = sum(1 for sid in reg if (live.get(sid) or {}).get("state") == "working")
