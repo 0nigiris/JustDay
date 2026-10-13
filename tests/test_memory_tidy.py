@@ -45,3 +45,16 @@ def test_forget_drops_line_that_moved_to_long_memory(monkeypatch, tmp_path):
     monkeypatch.setattr(manage, "trash", lambda p: {"ok": True, "error": ""})
     manage.forget_memory(tmp_path / "project_old.md")
     assert "project_old.md" not in (tmp_path / memory.LONG).read_text(encoding="utf-8")
+
+
+def test_memory_warning_follows_his_threshold_and_zero_means_silence(monkeypatch, tmp_path):
+    """Порог «память разрослась» был зашит числом 40: ни увидеть, сколько строк сейчас, ни заглушить
+    напоминание. Теперь порог из настроек, 0 — молчать, а страница памяти показывает текущее число."""
+    monkeypatch.setattr(memory, "folder", lambda: tmp_path)
+    monkeypatch.setattr("justday.cli.memory_dir", lambda: tmp_path)
+    (tmp_path / memory.INDEX).write_text("".join(f"- [n{i}](n{i}.md) — дело\n" for i in range(12)), encoding="utf-8")
+
+    assert memory.state(10)["busy"] is True
+    assert memory.state(20)["busy"] is False
+    assert memory.state(0)["busy"] is False, "0 — не предупреждать, а не «всегда много»"
+    assert manage.memory_files()["index_lines"] == 12

@@ -65,8 +65,8 @@ def entries() -> list[dict]:
     return out
 
 
-def state() -> dict:
-    """Насколько память разрослась и чем давно не пользовались."""
+def state(warn_lines: int = BUSY_LINES) -> dict:
+    """Насколько память разрослась и чем давно не пользовались. Порог — из настроек, 0 — не предупреждать."""
     base = folder()
     items = entries()
     try:
@@ -82,7 +82,8 @@ def state() -> dict:
         "bytes": sum(i["bytes"] for i in items),
         # Строки указателя — главное число: они читаются в каждом разговоре.
         "index_lines": len(lines),
-        "busy": len(lines) >= BUSY_LINES,
+        "busy": bool(warn_lines) and len(lines) >= warn_lines,
+        "warn_lines": warn_lines,
         "stale": stale[:12],
         "stale_count": len(stale),
     }

@@ -574,7 +574,12 @@ def memory_files() -> dict:
         desc = next((l.split(":", 1)[1].strip() for l in text.splitlines() if l.startswith("description:")), "")
         files.append({"file": str(f), "name": f.stem, "description": desc, "body": body[:600]})
     journal = config.EVENTS_FILE
-    return {"dir": str(mem), "profile": str(BRAIN_DIR / "CLAUDE.md"), "files": files,
+    # Сколько строк указателя уходит в каждый разговор — без этого порог в настройках был бы числом
+    # ни о чём: не видно, далеко ли до него.
+    index = mem / "MEMORY.md"
+    index_lines = sum(1 for ln in index.read_text(encoding="utf-8", errors="replace").splitlines()
+                      if ln.strip().startswith("-")) if index.exists() else 0
+    return {"dir": str(mem), "profile": str(BRAIN_DIR / "CLAUDE.md"), "files": files, "index_lines": index_lines,
             "journal": str(journal), "journal_kb": round(journal.stat().st_size / 1024) if journal.exists() else 0}
 
 

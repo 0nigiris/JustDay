@@ -229,6 +229,8 @@ DEFAULTS: dict = {
     "focus": {"schedule": []},
     # Цикл ассистента — его круг дел без человека (cycle.py). Свои [[cycle.steps]] в config.toml заменяют
     # этот список целиком. Подтверждений цикл не спрашивает: необратимого сюда не класть.
+    # Сколько строк указателя памяти — уже «разрослась» (они читаются в каждом разговоре). 0 — молчать.
+    "memory": {"warn_lines": 40},
     "cycle": {"enabled": True, "steps": [
         {"name": "Обновить JustDay", "run": "justday update", "at": "05:00", "away": True, "on": True},
         {"name": "Проверить части", "run": "justday doctor --quick", "at": "05:30", "away": True, "on": True},

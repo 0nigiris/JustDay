@@ -1675,7 +1675,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         state = events.load_state()
         if time.time() - float(state.get("memory_said") or 0) < 7 * 86400:
             return
-        st = await asyncio.get_running_loop().run_in_executor(None, memory.state)
+        warn = int((self.cfg.get("memory") or {}).get("warn_lines", memory.BUSY_LINES) or 0)
+        st = await asyncio.get_running_loop().run_in_executor(None, memory.state, warn)
         if not st["busy"]:
             return
         events.save_state(memory_said=time.time())

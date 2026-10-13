@@ -629,5 +629,10 @@
   "Поиск": "Search",
   "Узкий поиск программ, файлов и окон; не нашлось — уходит ассистенту": "A narrow search for apps, files and windows; nothing found — it goes to the assistant",
   "Корзина": "Trash",
-  "Лоток": "Tray"
+  "Лоток": "Tray",
+  "РАЗМЕР": "SIZE",
+  "Предупреждать, когда указатель разросся": "Warn when the index grows",
+  "Сейчас строк: ": "Lines now: ",
+  ". Каждая уходит модели в каждом разговоре. 0 — не предупреждать": ". Each one goes to the model in every conversation. 0 — never warn",
+  " строк": " lines"
 }
