@@ -52,6 +52,13 @@ Item {
             }
         }
 
+        // Лимит один на всё: видеть его надо до того, как он кончится посреди дела, а не после.
+        Label2 {
+            Layout.fillWidth: true
+            visible: JD.claudeLimits !== ""
+            text: JD.claudeLimits
+        }
+
         Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true

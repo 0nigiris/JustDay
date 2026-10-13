@@ -337,7 +337,7 @@ class CommandsMixin:
 
         got = await asyncio.get_running_loop().run_in_executor(
             None, sessions_mod.live, self.cfg["brain"].get("claude_cli", "claude"))
-        return {"ok": True, "sessions": got}
+        return {"ok": True, "sessions": got, "claudeLimits": sessions_mod.limits()}
 
     async def _cmd_plan_open(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """«показать в Obsidian» со страницы планов"""

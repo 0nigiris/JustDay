@@ -1869,7 +1869,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             if fingerprint != seen or time.monotonic() - at >= self.SESSIONS_HEARTBEAT:
                 try:
                     got = await loop.run_in_executor(None, sessions_mod.live, self.cfg["brain"].get("claude_cli", "claude"))
-                    self.publish(sessions=got)
+                    self.publish(sessions=got, claudeLimits=sessions_mod.limits())
                 except Exception:
                     log.debug("не смог прочитать сессии", exc_info=True)
                 seen, at = fingerprint, time.monotonic()

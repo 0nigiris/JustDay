@@ -276,3 +276,28 @@ def live(claude: str = "claude") -> list[dict]:
     # Ждущие человека первыми, за ними вставшие на ошибке, потом занятые: про них и спрашивают.
     out.sort(key=lambda s: (not s["waiting"], not s["failed"], not s["busy"], -s["minutes"]))
     return out
+
+
+LIMITS_FILE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "justday" / "claude-limits.json"
+
+
+def limits(now: float | None = None) -> str:
+    """Сколько лимита подписки потрачено — то, что последней видела статусная строка (`statusline.py`).
+
+    Окно, чей сброс уже прошёл, не показываем: «5 ч — 97%» со вчерашнего вечера пугало бы зря,
+    а свежих чисел до первого ответа модели просто нет."""
+    now = time.time() if now is None else now
+    try:
+        got = json.loads(LIMITS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    parts = []
+    for key, name in (("five_hour", "5 ч"), ("seven_day", "неделя")):
+        w = got.get(key) if isinstance(got, dict) else None
+        if not isinstance(w, dict) or float(w.get("resets_at") or 0) <= now:
+            continue
+        part = f"{name} — {round(float(w.get('used') or 0))}%"
+        if key == "five_hour":
+            part += time.strftime(" (сброс в %H:%M)", time.localtime(float(w["resets_at"])))
+        parts.append(part)
+    return "Лимит Claude: " + " · ".join(parts) if parts else ""

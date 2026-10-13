@@ -495,6 +495,8 @@ Singleton {
     // «Клод работает ×3» — это не сведения, а обещание, что что-то происходит. Здесь видно, что
     // именно: какая сессия что читает, правит и запускает.
     property var sessions: []
+    // Сколько лимита подписки потрачено — готовая строка от демона, пустая, пока чисел нет (Р2-39).
+    property string claudeLimits: ""
     // История разговоров: что сказал человек и что ответили (страница «История» в панели).
     property var talk: []
     function sessionsRefresh() { send({ cmd: "sessions" }) }
@@ -1689,6 +1691,7 @@ Singleton {
         }
         if (m.items !== undefined && m.file !== undefined) plans = m.items
         if (m.sessions !== undefined) sessions = m.sessions
+        if (m.claudeLimits !== undefined) claudeLimits = m.claudeLimits || ""
         if (m.focused === false) flash(m.error || tr("Окна у сессии нет"), "terminal", accentOrange)
         if (m.talk !== undefined) talk = m.talk
         if (m.items !== undefined && m.path !== undefined) {
