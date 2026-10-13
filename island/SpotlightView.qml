@@ -4,6 +4,10 @@
 // плитки и полка питания. Spotlight открывают, уже зная, что нужно: нажал, напечатал три буквы,
 // Enter. Всё остальное на этой поверхности лишнее, и поэтому его здесь нет.
 //
+// Но когда запрос пуст (Р2-5): показываем режим «Приложения» — недавние сверху, ниже сетка
+// всех программ по разделам из того же каталога, что и меню. Переключатель категорий — сегменты
+// сверху, как у Tahoe. Стрелки и Enter работают по сетке.
+//
 // Правила, которым подчинён этот вид:
 //   — поле ввода стоит на месте и не шевелится, когда меняются находки: прыгающая строка под
 //     пальцами — худшее, что может сделать поиск;
@@ -19,6 +23,47 @@ Item {
 
     readonly property var rows: JD.menuFound || []
     readonly property bool asking: JD.menuSearching && rows.length === 0
+    // Режим «Приложения» в Spotlight: пустой запрос в режиме поиска
+    readonly property bool appsMode: JD.menuSearchMode && !JD.menuSearching
+
+    // Недавние приложения для режима приложений
+    readonly property var recentApps: {
+        const recents = (JD.menuCatalog.recent || [])
+        const apps = JD.menuCatalog.apps || []
+        const by = {}
+        for (const a of apps) by[a.kind + ":" + a.id] = a
+        return recents.map(k => by[k]).filter(a => a !== undefined).slice(0, 8)
+    }
+
+    // Приложения по категориям для режима приложений
+    readonly property var appsByCategory: {
+        const apps = JD.menuCatalog.apps || []
+        const groups = JD.menuCatalog.groups || []
+        const cats = {}
+        for (const a of apps) {
+            const cat = a.cat || "tools"
+            if (!cats[cat]) cats[cat] = []
+            cats[cat].push(a)
+        }
+        // Сортируем внутри категории по имени
+        for (const cat in cats) {
+            cats[cat].sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+        }
+        // Порядок категорий из menuCatalog.groups
+        const ordered = []
+        for (const g of groups) {
+            if (cats[g.id] && cats[g.id].length > 0) {
+                ordered.push({ id: g.id, name: g.name, icon: g.icon, apps: cats[g.id] })
+            }
+        }
+        // Остальные категории, которых нет в groups
+        for (const cat in cats) {
+            if (!groups.some(g => g.id === cat) && cats[cat].length > 0) {
+                ordered.push({ id: cat, name: cat, icon: "folder", apps: cats[cat] })
+            }
+        }
+        return ordered
+    }
 
     // Плоский список: подписи групп и сами находки вперемешку, по порядку. Высота у строк разная,
     // поэтому ListView, а не сетка: сетке все ячейки нужны одного роста.
@@ -53,12 +98,42 @@ Item {
     implicitHeight: Math.min(maxHeight, barHeight + (list.count ? Math.min(list.contentHeight + 12, maxHeight - barHeight) : (asking ? 92 : 0)))
 
     function move(step) {
-        if (!rows.length) return
-        JD.menuPick = Math.max(0, Math.min(rows.length - 1, JD.menuPick + step))
+        if (appsMode) {
+            // Навигация в режиме приложений: стрелки по сетке
+            if (recentApps.length > 0 && JD.menuPick < recentApps.length) {
+                JD.menuPick = Math.max(0, Math.min(recentApps.length - 1, JD.menuPick + step))
+            } else {
+                const gridModel = currentCategory ? currentCategory.apps : []
+                const cols = Math.max(1, Math.floor(appsGrid.width / appsGrid.cellWidth))
+                const idx = JD.menuPick - recentApps.length
+                if (idx >= 0 && gridModel.length > 0) {
+                    const row = Math.floor(idx / cols)
+                    const col = idx % cols
+                    const newCol = Math.max(0, Math.min(cols - 1, col + (step > 0 ? 1 : -1)))
+                    const newIdx = row * cols + newCol
+                    JD.menuPick = recentApps.length + Math.max(0, Math.min(gridModel.length - 1, newIdx))
+                }
+            }
+        } else {
+            if (!rows.length) return
+            JD.menuPick = Math.max(0, Math.min(rows.length - 1, JD.menuPick + step))
+        }
     }
     function take() {
         if (asking) { JD.askFromMenu(JD.menuQuery); return }
-        JD.runFromMenu(rows[JD.menuPick] || rows[0])
+        if (appsMode) {
+            if (recentApps.length > 0 && JD.menuPick < recentApps.length) {
+                JD.runFromMenu(recentApps[JD.menuPick])
+            } else {
+                const gridModel = currentCategory ? currentCategory.apps : []
+                const idx = JD.menuPick - recentApps.length
+                if (idx >= 0 && idx < gridModel.length) {
+                    JD.runFromMenu(gridModel[idx])
+                }
+            }
+        } else {
+            JD.runFromMenu(rows[JD.menuPick] || rows[0])
+        }
     }
 
     // Открыли клавишей — значит печатать можно сразу, не целясь мышью в строку.
@@ -145,8 +220,165 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            visible: list.count > 0 || sp.asking
+            visible: (list.count > 0 || sp.asking) && !sp.appsMode
             color: Qt.rgba(1, 1, 1, 0.07)
+        }
+
+        // ───────────── режим «Приложения» (пустой запрос в Spotlight) ─────────────
+        //
+        // Недавние сверху, ниже сетка программ по категориям. Переключатель категорий —
+        // сегменты сверху сетки. Стрелки и Enter работают по сетке.
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: sp.appsMode
+
+            property int currentCatIndex: 0
+            property var currentCategory: sp.appsByCategory[currentCatIndex]
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 12
+
+                // Недавние
+                Item {
+                    Layout.fillWidth: true
+                    visible: sp.recentApps.length > 0
+                    Column {
+                        spacing: 8
+                        Label2 {
+                            anchors.left: parent.left
+                            leftPadding: 4
+                            color: JD.text3
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            font.capitalization: Font.AllUppercase
+                            text: JD.tr("Недавние")
+                        }
+                        GridView {
+                            id: recentGrid
+                            width: parent.width
+                            height: 80
+                            cellWidth: 80
+                            cellHeight: 80
+                            model: sp.recentApps
+                            clip: true
+                            delegate: Pressable {
+                                id: recentTile
+                                width: grid.cellWidth
+                                height: grid.cellHeight
+                                radius: 12
+                                color: hovered ? JD.menuFill1 : "transparent"
+                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.topMargin: 8
+                                    anchors.bottomMargin: 8
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 6
+                                    Icon {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        name: modelData.icon
+                                        fallback: "application-x-executable"
+                                        implicitSize: 36
+                                        renderSize: 72
+                                        theme: true
+                                    }
+                                    Text {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        font.family: JD.fontFamily
+                                        font.pixelSize: 11
+                                        color: JD.text1
+                                        horizontalAlignment: Text.AlignHCenter
+                                        maximumLineCount: 1
+                                        elide: Text.ElideRight
+                                        text: modelData.name
+                                    }
+                                }
+                                onClicked: JD.runFromMenu(modelData)
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            }
+                        }
+                    }
+                }
+
+                // Переключатель категорий
+                Row {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: sp.appsByCategory.length > 1
+                    spacing: 8
+                    Repeater {
+                        model: sp.appsByCategory
+                        delegate: Pressable {
+                            id: catBtn
+                            property int index: model.index
+                            implicitWidth: 120
+                            implicitHeight: 30
+                            radius: 15
+                            pressScale: JD.pressScaleSmall
+                            color: index === sp.currentCatIndex ? JD.accentBlue : (catBtn.hovered ? JD.menuFill1 : "transparent")
+                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                            Text {
+                                anchors.centerIn: parent
+                                font.family: JD.fontFamily
+                                font.pixelSize: 12
+                                color: index === sp.currentCatIndex ? JD.text1 : JD.text3
+                                text: modelData.name
+                            }
+                            onClicked: sp.currentCatIndex = index
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        }
+                    }
+                }
+
+                // Сетка программ выбранной категории
+                GridView {
+                    id: appsGrid
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: sp.currentCategory ? sp.currentCategory.apps : []
+                    property real tileSize: 96
+                    cellWidth: tileSize
+                    cellHeight: tileSize
+                    delegate: Pressable {
+                        id: appTile
+                        width: grid.cellWidth
+                        height: grid.cellHeight
+                        radius: 12
+                        color: hovered ? JD.menuFill1 : "transparent"
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 6
+                            Icon {
+                                Layout.alignment: Qt.AlignHCenter
+                                name: modelData.icon
+                                fallback: "application-x-executable"
+                                implicitSize: 36
+                                renderSize: 72
+                                theme: true
+                            }
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                font.family: JD.fontFamily
+                                font.pixelSize: 11
+                                color: JD.text1
+                                horizontalAlignment: Text.AlignHCenter
+                                maximumLineCount: 1
+                                elide: Text.ElideRight
+                                text: modelData.name
+                            }
+                        }
+                        onClicked: JD.runFromMenu(modelData)
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+                }
+            }
         }
 
         // ───────────── ничего не нашлось ─────────────
@@ -155,7 +387,7 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: sp.asking ? 90 : 0
-            visible: sp.asking
+            visible: sp.asking && !sp.appsMode
             Column {
                 anchors.centerIn: parent
                 spacing: 6
@@ -175,7 +407,7 @@ Item {
             id: list
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: !sp.asking
+            visible: !sp.asking && !sp.appsMode
             clip: true
             model: sp.lines
             boundsBehavior: Flickable.StopAtBounds
