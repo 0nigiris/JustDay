@@ -10,7 +10,7 @@ Prefer direct commands; use the `kwin` MCP server for real GUI interaction; scre
 ## Launch / close apps
 - Launch by fuzzy name (handles flatpaks, Russian names): `justday apps launch discord` → prints the matched entry. If the match looks wrong: `justday apps find <name>` and launch the right id with `gtk-launch <id>`.
 - Open a file/URL/folder with its default app: `xdg-open <path-or-url>`; folder in Dolphin: `dolphin <dir> &`.
-- Terminal in a directory: `kitty --detach --directory <dir>` (optionally followed by a command).
+- Terminal in a directory: `justday term <dir>` — picks whichever terminal is installed. It takes no command on purpose; run commands with your own Bash.
 - Windows (fast, native KWin scripting): `justday windows list`, `justday windows focus <app or title>`, `justday windows close <app or title>` (same as the close button — apps can save), `justday windows minimize <…>`.
 - Close an app: `justday windows close <name>`; check with `pgrep`. Only if it has no window or ignores close: `pkill -TERM -x <process>` (never -9 first; never `pkill -f` with a pattern that could match your own shell).
 - Is it running? `pgrep -af <name>`.

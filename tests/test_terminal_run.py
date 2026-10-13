@@ -74,3 +74,17 @@ def test_the_brain_cannot_open_a_terminal_through_the_socket(monkeypatch) -> Non
     started: list = []
     monkeypatch.setattr("justday.commands.subprocess.Popen", lambda argv, **kw: started.append(argv))
     assert _ask({"cmd": "terminal_run", "what": "update"}, human=False)["ok"] is False and started == []
+
+
+def test_open_a_terminal_works_without_kitty_and_takes_no_command(monkeypatch, tmp_path) -> None:
+    """PERSONA велела мозгу `kitty --detach …`: без kitty «открой терминал» не делал ничего. А команду `justday term`
+    не берёт нарочно: `justday` мозгу разрешён без вопроса, и это был бы запуск в обход его запретов."""
+    _only(monkeypatch, "konsole")
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    started: list = []
+    monkeypatch.setattr(desktop.subprocess, "Popen", lambda argv, **kw: started.append((argv, kw.get("cwd"))))
+    assert desktop.open_terminal(str(tmp_path))["ok"] is True
+    argv, cwd = started[0]
+    assert "/usr/bin/konsole" in argv and argv[-1] == "/bin/zsh" and cwd == str(tmp_path)
+    import inspect
+    assert list(inspect.signature(desktop.open_terminal).parameters) == ["folder"]

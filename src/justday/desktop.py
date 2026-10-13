@@ -138,6 +138,23 @@ def terminal_command(cmd: list[str], hold: bool = True) -> list[str] | None:
     return None
 
 
+def open_terminal(folder: str = "") -> dict:
+    """Окно терминала в папке. Мозгу раньше было велено звать `kitty` напрямую, и на машине без kitty «открой
+    терминал» не делал ничего.
+
+    Команды здесь нет нарочно: `justday …` мозгу разрешён без вопроса, и `term ~ что-угодно` стал бы запуском
+    в обход его запретов. Команды он запускает своим Bash, под своими правилами."""
+    where = os.path.expanduser(folder or "~")
+    if not os.path.isdir(where):
+        return {"ok": False, "error": f"нет папки {where}"}
+    full = terminal_command([os.environ.get("SHELL") or "sh"], hold=False)
+    if not full:
+        return {"ok": False, "error": "не нашёл ни одного терминала: " + ", ".join(_TERMINALS)}
+    subprocess.Popen(detached(full), cwd=where, start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ok": True, "terminal": os.path.basename(full[0]), "dir": where}
+
+
 def qdbus_bin() -> str:
     """Имя утилиты qdbus для Plasma 6.
 

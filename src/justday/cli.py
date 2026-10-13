@@ -377,6 +377,8 @@ def main(argv: list[str] | None = None) -> None:
     # Одна команда на «сесть за работу»: пока подписка Claude отвечает — Claude Code (только в нём
     # она и разрешена), кончился лимит — оболочка на живой ступени лестницы.
     # Своя оболочка: один терминал, в котором задачу подхватывает тот, кто сейчас может.
+    sp = sub.add_parser("term", help="окно терминала (какой стоит) в папке: term [ПАПКА]")
+    sp.add_argument("folder", nargs="?", default="")
     sp = sub.add_parser("terminal", help="своя оболочка: один терминал, лестница движков")
     sp.add_argument("task", nargs="*", help="задача строкой (без неё открывается окно)")
     sp.add_argument("--night", action="store_true",
@@ -1032,6 +1034,13 @@ def main(argv: list[str] | None = None) -> None:
         for i, r in enumerate(media.library()[: a.n], 1):
             when = time.strftime("%d.%m %H:%M", time.localtime(r.get("played", 0)))
             print(f"{i}. {when} — {r.get('artist') + ' — ' if r.get('artist') else ''}{r['title']}")
+    elif a.cmd == "term":
+        from . import desktop
+
+        r = desktop.open_terminal(a.folder)
+        _print(r)
+        if not r["ok"]:
+            sys.exit(1)
     elif a.cmd == "said":
         from . import history
 
