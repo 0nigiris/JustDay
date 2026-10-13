@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import time
 from typing import Annotated
+from urllib.parse import urlsplit
 
 import websockets
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -34,6 +35,11 @@ async def terminal_proxy(
 ) -> None:
     auth = websocket.app.state.auth
     registry = websocket.app.state.devices
+
+    if not _own_page(websocket):
+        log.warning("терминал отклонён: чужая страница", origin=websocket.headers.get("origin"))
+        await websocket.close(code=4403, reason="чужая страница")
+        return
 
     token = websocket.cookies.get(str(auth.cookie_settings()["key"]))
     if not token:
@@ -85,6 +91,18 @@ async def terminal_proxy(
         pass
     finally:
         log.info("проброс терминала закрыт", pc=pc_id)
+
+
+def _own_page(websocket: WebSocket) -> bool:
+    """WebSocket не подчиняется CORS: любая страница, открытая у него в браузере, может постучаться
+    сюда, и cookie уйдёт вместе с ней. SameSite=Lax от этого не спасает внутри tailnet: соседние
+    `*.ts.net` браузер считает тем же сайтом. Браузер всегда ставит Origin, поэтому его отсутствие —
+    не браузер, и там cookie красть неоткуда."""
+    origin = (websocket.headers.get("origin") or "").rstrip("/")
+    if not origin:
+        return True
+    public = (websocket.app.state.settings.server.public_origin or "").rstrip("/")
+    return origin == public or urlsplit(origin).netloc == websocket.headers.get("host", "")
 
 
 async def _pump(browser: WebSocket, agent: websockets.ClientConnection) -> None:

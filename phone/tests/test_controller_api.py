@@ -340,3 +340,23 @@ def test_dictation_is_not_forbidden_its_own_microphone(anon: TestClient) -> None
     getUserMedia в WebView отвечал отказом. Своей странице можно, встроенным — нет."""
     policy = anon.get("/").headers["permissions-policy"]
     assert "microphone=(self)" in policy and "camera=()" in policy
+
+
+def test_a_foreign_page_could_open_his_terminal_with_his_cookie(client: TestClient) -> None:
+    """WebSocket не подчиняется CORS: страница с соседнего адреса в tailnet открыла бы терминал его
+    cookie. Чужой Origin закрывается сразу, свой проходит дальше, к обычным проверкам."""
+    from starlette.websockets import WebSocketDisconnect
+
+    url = "/api/pcs/testpc/terminal/ws"
+    with (
+        pytest.raises(WebSocketDisconnect) as foreign,
+        client.websocket_connect(url, headers={"origin": "https://evil.tail5b9c71.ts.net"}),
+    ):
+        pass
+    assert foreign.value.code == 4403 and "чужая" in foreign.value.reason
+    with (
+        pytest.raises(WebSocketDisconnect) as own,
+        client.websocket_connect(url, headers={"origin": "http://testserver"}),
+    ):
+        pass
+    assert "чужая" not in (own.value.reason or "")
