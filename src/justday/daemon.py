@@ -110,6 +110,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         self._gave_up_vram = False   # видеопамять уже отдана игре
         self.tts = TTS(self.cfg["tts"])
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
+        self._chat_last = ""   # чат, который последним открывали в окне: сюда идёт «запиши в чат»
         self._chat_brains: dict[str, Brain] = {}   # по мозгу на открытый чат; закрываются после 10 минут тишины
         self._chat_closers: dict[str, asyncio.TimerHandle] = {}
         self.side: Brain | None = None             # a second session, for what must not wait for the first one
@@ -788,6 +789,9 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             return ""
         if re.match(r"^(включи|поставь|запусти|играй) (это )?(из буфера|что (я )?скопировал\w*|ссылку из буфера)$", fastpath._clean(text)):
             return await self._play_from_clipboard()
+        if (note := fastpath.to_chat(text)) is not None:
+            await asyncio.to_thread(self.chat_note, note)
+            return t("Записал в чат.")
         if await self.media_fast(text) or await self.reminder_fast(text):
             return ""
         if (said := fastpath.small_talk(text)) is not None:

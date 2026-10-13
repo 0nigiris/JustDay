@@ -55,3 +55,26 @@ def test_chat_model_overrides_voice_model_only_when_chosen():
     assert chats.cfg_with_model(cfg, "gpt-5")["brain"]["model"] == "haiku"
     got = chats.cfg_with_model(cfg, "opus")
     assert got["brain"] == {"model": "opus", "effort": "low"} and cfg["brain"]["model"] == "haiku"
+
+
+def test_write_to_chat_by_voice_lands_in_the_open_chat(monkeypatch, tmp_path):
+    """«Запиши в чат: …» голосом уходило мозгу, и тот отвечал вслух вместо того, чтобы записать (Р2-42, п.16)."""
+    from justday import events, fastpath
+    from justday.daemon import Daemon
+
+    assert fastpath.to_chat("Джарвис, запиши в чат: купить Молоко!") == "купить Молоко!"
+    assert fastpath.to_chat("запиши в чат") is None
+    assert fastpath.to_chat("запиши в планы купить молоко") is None
+
+    state = {}
+    monkeypatch.setattr(events, "load_state", lambda: dict(state))
+    monkeypatch.setattr(events, "save_state", lambda **kw: state.update(kw))
+    d = Daemon.__new__(Daemon)
+    d.publish = lambda **kw: None
+    d._chat_last = ""
+    first = d.chat_note("без окна")            # окна не открывали — постоянный чат «Джарвис»
+    assert chats.meta(first)["title"] == "Джарвис" and d.chat_note("ещё") == first
+    opened = chats.create("Работа")
+    d._chat_last = opened
+    d.chat_note("в открытый")
+    assert [m["text"] for m in chats.messages(opened)] == ["в открытый"]

@@ -371,6 +371,7 @@ class CommandsMixin:
 
     async def _cmd_chat_get(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         cid = str(req.get("id", ""))
+        self._chat_last = cid
         return {"ok": True, "messages": await asyncio.to_thread(chats.messages, cid),
                 "model": await asyncio.to_thread(lambda: chats.meta(cid).get("model", ""))}
 
@@ -403,6 +404,18 @@ class CommandsMixin:
         """Запись в чат и в окно. Отсюда же пишут телефон, Telegram и `tell_chat`: общий путь, без озвучки."""
         row = chats.append(cid, role, text)
         self.publish(kind="chat", chat=cid, message=row)
+
+    def chat_note(self, text: str) -> str:
+        """«Запиши в чат» голосом: в чат, открытый последним, а если его нет — в постоянный чат «Джарвис».
+        Записывается как его собственное сообщение, без ответа мозга: он просил записать, а не спросить."""
+        cid = self._chat_last if self._chat_last and chats.exists(self._chat_last) else ""
+        if not cid:
+            cid = events.load_state().get("chat_voice") or ""
+            if not cid or not chats.exists(cid):
+                cid = chats.create(title="Джарвис")
+                events.save_state(chat_voice=cid)
+        self.chat_say(cid, "user", text)
+        return cid
 
     async def chat_ask(self, source: str, text: str) -> str:
         """Телефон и Telegram пишут сюда, а не в голос: у каждого источника свой постоянный чат."""

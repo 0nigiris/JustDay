@@ -238,3 +238,16 @@ def try_handle(text: str) -> str | None:
                 return _t({"close": "закрыл {what}", "minimize": "свернул {what}", "focus": "переключил на {what}"}[action], what=app["name"])
         return None
     return None
+
+
+_TO_CHAT = re.compile(r"^\s*(?:джарвис\W+)?(?:запиши|напиши|отправь|скинь|сохрани)\s+(?:это\s+)?в\s+чат\W*\s*(.+?)\s*$",
+                      re.I | re.S)
+
+
+def to_chat(text: str) -> str | None:
+    """«Запиши в чат: купить молоко» → «купить молоко» (с его регистром и знаками), иначе None.
+
+    Обратная дорога Р2-42: из чата Джарвису передают через `justday say`, а голосом в чат было нечем —
+    просьба уходила мозгу, и тот отвечал вслух, вместо того чтобы записать."""
+    m = _TO_CHAT.match(text)
+    return m.group(1) if m and m.group(1).strip(" .,!?") else None
