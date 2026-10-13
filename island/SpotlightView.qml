@@ -129,7 +129,6 @@ Item {
         width: sp.tileW
         height: 84
         radius: 12
-        pressScale: JD.pressScaleSmall
         color: on ? Qt.rgba(1, 1, 1, 0.10) : (hovered ? JD.menuFill1 : "transparent")
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Accessible.role: Accessible.Button
@@ -380,7 +379,6 @@ Item {
                                             implicitWidth: Math.max(64, catLabel.implicitWidth + 28)
                                             implicitHeight: 28
                                             radius: 14
-                                            pressScale: JD.pressScaleSmall
                                             color: current ? JD.accentBlue : (hovered ? JD.menuFill1 : "transparent")
                                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                                             Accessible.role: Accessible.Button
@@ -438,7 +436,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("mixer") }
@@ -452,7 +449,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("emoji") }
@@ -466,7 +462,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("clip") }
@@ -480,7 +475,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("load") }
@@ -506,7 +500,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: JD.serverMode ? (hovered ? "#3a5a3a" : "#2d4a2d") : (hovered ? JD.menuFill3 : "transparent")
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.toggleServerMode() }
@@ -519,7 +512,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.checkUpdate() }
@@ -532,7 +524,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openSettings("general") }
@@ -545,7 +536,6 @@ Item {
                             implicitWidth: 30
                             implicitHeight: 30
                             radius: 15
-                            pressScale: JD.pressScaleSmall
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.systemSettings("") }
@@ -562,7 +552,6 @@ Item {
                                 implicitWidth: 30
                                 implicitHeight: 30
                                 radius: 15
-                                pressScale: JD.pressScaleSmall
                                 color: asking ? JD.accentRed : (pow.hovered ? JD.menuFill3 : "transparent")
                                 Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                                 Icon {

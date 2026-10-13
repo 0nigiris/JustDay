@@ -81,7 +81,6 @@ Item {
         implicitWidth: 30
         implicitHeight: 30
         radius: 15
-        pressScale: JD.pressScaleSmall
         color: hovered ? JD.menuFill3 : "transparent"
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         onHoveredChanged: mv.hintFor(hovered, dot.note)
@@ -225,7 +224,7 @@ Item {
                     radius: 17
                     color: on ? JD.menuFill3 : (chipHover.hovered ? JD.menuFill1 : "transparent")
                     Behavior on implicitWidth { enabled: JD.animOn
-                                               NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                                               NumberAnimation { duration: JD.durBase; easing.type: Easing.OutCubic } }
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
@@ -577,7 +576,6 @@ Item {
                         implicitWidth: 30
                         implicitHeight: 30
                         radius: 15
-                        pressScale: JD.pressScaleSmall
                         color: asking ? JD.accentRed : (pow.hovered ? JD.menuFill3 : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         Icon {

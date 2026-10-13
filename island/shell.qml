@@ -545,7 +545,7 @@ ShellRoot {
                 }
             }
             onPositionChanged: {
-                const p = mapToItem(win, mouseX, mouseY)
+                const p = mapToItem(null, mouseX, mouseY)
                 JD.pointerX = p.x
                 JD.pointerY = p.y
                 if (!revealPad.enabled || !containsMouse || !parked || suppressEnter) return
@@ -862,12 +862,12 @@ ShellRoot {
                     // Пришёл новый значок — вырастает на месте, соседи отъезжают, а не прыгают.
                     add: Transition {
                         enabled: JD.animOn
-                        NumberAnimation { property: "scale"; from: 0.4; to: 1; duration: 220; easing.type: Easing.OutBack }
-                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 160 }
+                        NumberAnimation { property: "scale"; from: 0.4; to: 1; duration: JD.durBase; easing.type: Easing.OutBack }
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: JD.durFast }
                     }
                     move: Transition {
                         enabled: JD.animOn
-                        NumberAnimation { property: "x"; duration: 200; easing.type: Easing.OutCubic }
+                        NumberAnimation { property: "x"; duration: JD.durBase; easing.type: Easing.OutCubic }
                     }
                     // Кошку сюда переносят с середины полосы и уносят обратно (CatCarry).
                     Item {
@@ -1624,7 +1624,6 @@ ShellRoot {
         implicitWidth: 28
         implicitHeight: 28
         radius: 14
-        pressScale: JD.pressScaleSmall
         color: hovered ? JD.fill2 : JD.fill1
         Icon { anchors.centerIn: parent; name: rk.icon; implicitSize: 14 }
     }
@@ -1984,7 +1983,6 @@ ShellRoot {
         implicitWidth: 36
         implicitHeight: 36
         radius: 18
-        pressScale: JD.pressScaleSmall
         color: on ? Qt.rgba(tint.r, tint.g, tint.b, 0.28) : (hovered ? JD.fill2 : "transparent")
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Icon { anchors.centerIn: parent; name: mb.icon; implicitSize: 18; opacity: mb.on ? 1 : 0.55 }
@@ -2167,7 +2165,6 @@ ShellRoot {
                 IconButton { icon: "media-skip-backward"; size: 40; onClicked: JD.media("prev") }
                 Pressable {
                     implicitWidth: 56; implicitHeight: 56; radius: 28
-                    pressScale: JD.pressScaleSmall
                     color: hovered ? Qt.lighter(pl.tint, 1.15) : pl.tint
                     PlayGlyph { anchors.centerIn: parent; paused: !!pl.p.paused; size: 20; tint: "black" }
                     onClicked: { JD.media("toggle"); pl.optimistic({ pos: pl.pos, paused: !pl.p.paused }) }
@@ -2992,7 +2989,6 @@ ShellRoot {
                         Layout.preferredWidth: 1
                         implicitHeight: tileCol.implicitHeight + 24
                         radius: 16
-                        pressScale: JD.pressScale
                         color: hovered ? JD.fill2 : JD.fill1
                         border.width: index === 0 ? 1 : 0
                         border.color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.6)
@@ -3040,7 +3036,6 @@ ShellRoot {
                     Layout.fillWidth: true
                     implicitHeight: optCol.implicitHeight + 16
                     radius: 12
-                    pressScale: JD.pressScale
                     color: hovered ? JD.fill2 : JD.fill1
                     ColumnLayout {
                         id: optCol

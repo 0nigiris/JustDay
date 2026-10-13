@@ -627,7 +627,6 @@ Item {
         id: ri
         property string glyph: ""
         width: 30; height: 30; radius: 15
-        pressScale: JD.pressScaleSmall
         color: hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
         Glyph { anchors.centerIn: parent; name: ri.glyph; size: 16 }
     }
@@ -641,7 +640,6 @@ Item {
         width: implicitWidth
         height: implicitHeight
         radius: 13
-        pressScale: JD.pressScaleSmall
         sound: ""
         color: checked ? "#30d158" : "#48484a"
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
@@ -1133,7 +1131,6 @@ Item {
                                 required property string modelData
                                 readonly property bool on: (win.get("island.accent") || "blue") === modelData
                                 implicitWidth: 22; implicitHeight: 22; radius: 11
-                                pressScale: JD.pressScaleSmall
                                 color: JD.accents[modelData]
                                 border.width: on ? 2 : 0
                                 border.color: win.t1

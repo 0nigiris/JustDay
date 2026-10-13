@@ -99,7 +99,6 @@ Item {
                         id: card
                         required property var modelData
                         readonly property var step: modelData.now || ({})
-                        pressScale: 0.985
                         onClicked: JD.send({ cmd: "session_focus", pid: modelData.pid || 0 })
                         Layout.fillWidth: true
                         implicitHeight: body.implicitHeight + 22

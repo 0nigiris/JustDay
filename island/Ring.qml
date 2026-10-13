@@ -26,7 +26,7 @@ Item {
         radius: width / 2
         color: ring.tint
         opacity: 0.9
-        Behavior on width { enabled: JD.animOn && ring.visible; NumberAnimation { duration: 90 } }
+        Behavior on width { enabled: JD.animOn && ring.visible; NumberAnimation { duration: JD.durFast } }
         SequentialAnimation on opacity {
             running: ring.visible && JD.dstate === "speaking"
             loops: Animation.Infinite

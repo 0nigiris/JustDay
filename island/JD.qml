@@ -1266,12 +1266,11 @@ Singleton {
     // системы, а линейная кривая по умолчанию делала отклик на нажатие «деревянным». Гасит их всех
     // одно место — animOn: каждый Behavior пишет `enabled: JD.animOn`.
     readonly property int durFast: 120    // отклик на нажатие и наведение
-    readonly property int durBase: 200    // появление, смена размера
+    readonly property int durBase: 240    // появление, смена размера
     readonly property int durSlow: 400    // смена обложки, взгляд: то, что должно быть плавным
     readonly property int easeOut: Easing.OutCubic     // обычное затухание
     readonly property int easeSoft: Easing.OutQuint    // крупные карточки: быстрый старт, мягкая посадка
     // Жест нажатия один на все кнопки: сжатие и его длительность лежат здесь, а не в девяти копиях.
-    readonly property real pressScale: 0.94           // обычная кнопка
     readonly property real pressScaleSmall: 0.9       // значок: он мал, и 0.94 не видно
     // сколько оставить сверху: панель KDE у верхнего края больше не уходит под остров
     // Где висит остров и в какую сторону он растёт. Пилюля горизонтальная, поэтому «слева» и

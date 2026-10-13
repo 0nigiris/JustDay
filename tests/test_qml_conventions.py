@@ -26,3 +26,21 @@ def test_every_behavior_follows_the_no_animations_setting() -> None:
             if "JD.animOn" not in block:
                 bad.append(f"{f.name}: {block.splitlines()[0][:90]}")
     assert not bad, "Behavior не гасится настройкой «без анимаций»:\n" + "\n".join(bad)
+
+
+# Характер зверька (Mascot, Buddy) и кольцо — своя хореография, не интерфейсное движение.
+FREE_TIMING = {"Mascot.qml", "Buddy.qml", "Ring.qml", "ActivityProgress.qml"}
+
+
+def test_behavior_durations_come_from_the_motion_tokens() -> None:
+    """Движение — три длительности на весь проект (Р2-9): числа в Behavior разъезжались от 55 до 450 мс, и
+    у соседних кнопок отклик был разным. Блок с `duration: 170` ловится здесь; нужная длительность — один из
+    JD.durFast / durBase / durSlow."""
+    bad = []
+    for f in sorted(ISLAND.glob("*.qml")):
+        if f.name in FREE_TIMING:
+            continue
+        for block in behaviors(f.read_text(encoding="utf-8")):
+            if re.search(r"duration:\s*\d", block):
+                bad.append(f"{f.name}: {block.splitlines()[0][:90]}")
+    assert not bad, "Behavior с числом вместо токена движения:\n" + "\n".join(bad)

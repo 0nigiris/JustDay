@@ -269,7 +269,6 @@ Item {
                     width: 48
                     height: 48
                     radius: 12
-                    pressScale: JD.pressScaleSmall
                     color: index === JD.toolsPick ? JD.fill2 : (hovered ? JD.fill1 : "transparent")
                     border.width: index === JD.toolsPick ? 1 : 0
                     border.color: JD.accentBlue
