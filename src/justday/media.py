@@ -163,7 +163,9 @@ def live_music(text: str) -> tuple[str, str] | None:
     Что нет: «включи свет», «поставь будильник на семь», «поставь на зарядку», «включи телевизор».
     """
     raw = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
-    t = _say(text)
+    # «Теперь запускай Absolute Zero» — продолжение разговора; с «теперь» впереди фраза не
+    # узнавалась и уходила к мозгу на три секунды. Снимаем только в начале: в названии оно нужно.
+    t = re.sub(r"^(?:а |и )?(?:теперь|потом|затем|следом) (?=\S+ )", "", _say(text))
     if not t or len(t) > 120 or _NOT_MUSIC.search(t) or _ASKING.match(t):
         return None
     if re.fullmatch(_V_BARE, t) or re.fullmatch(rf"(?:{_V_ANY}) {_ANY_TAIL}", t):

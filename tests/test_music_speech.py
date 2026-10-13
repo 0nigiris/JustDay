@@ -36,6 +36,8 @@ def test_these_mean_music_from_the_library(lib, phrase):
     ("поставь трек от Nirvana", "nirvana"),
     ("сыграй Пошлая Молли", "пошлая молли"),
     ("поставь Radiohead", "radiohead"),        # нет в фонотеке, но похоже на имя: ищем снаружи
+    ("Теперь запускай Nirvana", "nirvana"),    # «теперь» впереди уводило к мозгу на 3 с
+    ("а теперь включи песню Группа крови", "группа крови"),
 ])
 def test_a_title_without_a_command_is_a_track(lib, phrase, query):
     assert media.live_music(phrase) == ("music", query)
