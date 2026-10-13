@@ -357,6 +357,29 @@ Item {
                 }
             }
             }
+            // Список выше окна и листается, а жёсткий край резал шапку «JustDay» и нижние пункты пополам
+            // (его красные пометки 13 окт). Ужимать строки нельзя — он же жаловался, что всё «прижатое».
+            // Поэтому край затухает, как у страниц справа: видно, что дальше есть ещё, и ничего не режется.
+            Rectangle {
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 40
+                topLeftRadius: 30
+                visible: sideScroll.contentY > 2
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.tint(JD.ink, win.side) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            Rectangle {
+                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                height: 48
+                bottomLeftRadius: 30
+                visible: sideScroll.contentY < sideScroll.contentHeight - sideScroll.height - 2
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 1.0; color: Qt.tint(JD.ink, win.side) }
+                }
+            }
         }
 
         // pages
@@ -379,8 +402,9 @@ Item {
                 z: 10
                 anchors { top: parent.top; right: parent.right; topMargin: 18; rightMargin: 20 }
                 spacing: 10
-                RoundIcon { glyph: "house"; onClicked: { JD.settingsOpen = false; JD.expanded = true } }
-                RoundIcon { glyph: "x"; onClicked: JD.closeAll() }
+                // 30 px было мелко («какого хуя кнопки сверху такие маленькие»): попадать мышью неудобно.
+                RoundIcon { side: 36; glyph: "house"; onClicked: { JD.settingsOpen = false; JD.expanded = true } }
+                RoundIcon { side: 36; glyph: "x"; onClicked: JD.closeAll() }
             }
 
             Text {
@@ -626,9 +650,10 @@ Item {
     component RoundIcon: Pressable {
         id: ri
         property string glyph: ""
-        width: 30; height: 30; radius: 15
+        property real side: 30
+        width: side; height: side; radius: side / 2
         color: hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
-        Glyph { anchors.centerIn: parent; name: ri.glyph; size: 16 }
+        Glyph { anchors.centerIn: parent; name: ri.glyph; size: Math.round(ri.side / 2) }
     }
 
     component Toggle: Pressable {
