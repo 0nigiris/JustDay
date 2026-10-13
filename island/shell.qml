@@ -2048,30 +2048,41 @@ ShellRoot {
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
             spacing: 10
             // Главное меню — вторая страница той же карточки: значок-сетка никто не находил (Р2-30).
-            Rectangle {
+            // «Сейчас играет» и «Медиатека» — два вида одного плеера, а «Островок» — выход из него. Третьим
+            // сегментом он выглядел как ещё один вид, и нажатие «выкидывало» из выбора (13 окт, п.5).
+            Row {
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: pageRow.implicitWidth + 4; implicitHeight: 28
-                radius: 14; color: Qt.rgba(1, 1, 1, 0.08)
-                Row {
-                    id: pageRow
-                    anchors.centerIn: parent; spacing: 2
-                    Repeater {
-                        model: [{ l: JD.tr("Сейчас играет"), cur: JD.playerPage === "now", page: "now" },
-                                { l: JD.tr("Медиатека"), cur: JD.playerPage === "library", page: "library" },
-                                { l: JD.tr("Островок"), cur: false, page: "" }]
-                        Rectangle {
-                            required property var modelData
-                            width: pageText.implicitWidth + 24; height: 24; radius: 12
-                            color: modelData.cur ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
-                            Text { id: pageText; anchors.centerIn: parent; text: modelData.l; font.pixelSize: 12
-                                   color: modelData.cur ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7) }
-                            TapHandler { enabled: !modelData.cur; onTapped: {
-                                if (modelData.page) { JD.playerPage = modelData.page; if (modelData.page === "library") JD.libRefresh() }
-                                else { JD.playerOpen = false; JD.expanded = true }
-                            } }
-                            HoverHandler { cursorShape: modelData.cur ? Qt.ArrowCursor : Qt.PointingHandCursor }
+                spacing: 8
+                Rectangle {
+                    width: pageRow.implicitWidth + 4; height: 28
+                    radius: 14; color: Qt.rgba(1, 1, 1, 0.08)
+                    Row {
+                        id: pageRow
+                        anchors.centerIn: parent; spacing: 2
+                        Repeater {
+                            model: [{ l: JD.tr("Сейчас играет"), cur: JD.playerPage === "now", page: "now" },
+                                    { l: JD.tr("Медиатека"), cur: JD.playerPage === "library", page: "library" }]
+                            Rectangle {
+                                required property var modelData
+                                width: pageText.implicitWidth + 24; height: 24; radius: 12
+                                color: modelData.cur ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                                Text { id: pageText; anchors.centerIn: parent; text: modelData.l; font.pixelSize: 12
+                                       color: modelData.cur ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7) }
+                                TapHandler { enabled: !modelData.cur; onTapped: {
+                                    JD.playerPage = modelData.page; if (modelData.page === "library") JD.libRefresh()
+                                } }
+                                HoverHandler { cursorShape: modelData.cur ? Qt.ArrowCursor : Qt.PointingHandCursor }
+                            }
                         }
                     }
+                }
+                Rectangle {
+                    width: islandText.implicitWidth + 24; height: 28; radius: 14
+                    color: islandHover.hovered ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.08)
+                    Text { id: islandText; anchors.centerIn: parent; text: JD.tr("Островок"); font.pixelSize: 12
+                           color: Qt.rgba(1, 1, 1, 0.7) }
+                    TapHandler { onTapped: { JD.playerOpen = false; JD.expanded = true } }
+                    HoverHandler { id: islandHover; cursorShape: Qt.PointingHandCursor }
                 }
             }
             MusicLibrary {
