@@ -722,6 +722,27 @@ services() {
 }
 step "$(t 'Службы' 'Services')" services
 
+# Видео, открытое из файлового менеджера, шло в системный проигрыватель (Showtime, VLC), а «включи»
+# голосом — в наш плеер на острове; он видел два разных плеера и считал наш хуже работающим (п.7b
+# плана 13 октября). Здесь только пункт «Открыть с помощью»: проигрыватель по умолчанию — его выбор,
+# и установщик его не переписывает.
+video_handler() {
+  local apps="$HOME/.local/share/applications"
+  mkdir -p "$apps"
+  cat > "$apps/net.local.justday-video.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=$(t 'JustDay: видео в острове' 'JustDay: video on the island')
+Exec=$HOME/.local/bin/justday video --where island %f
+Icon=justday
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/ogg;
+NoDisplay=true
+DESKTOP
+  update-desktop-database "$apps" >/dev/null 2>&1 || true
+  note "$(t 'видео → «Открыть с помощью» → JustDay' 'video → «Open with» → JustDay')"
+}
+step "$(t 'Видео из файлов' 'Video files')" video_handler
+
 # optional extras, asked for with environment variables (the setup wizard offers them too)
 if [[ "${JUSTDAY_LOCAL_LLM:-}" == 1 ]]; then
   local_llm() { "$APP_DIR/scripts/setup-local-llm.sh"; note "Ollama · Qwen 3.5 9B"; }
