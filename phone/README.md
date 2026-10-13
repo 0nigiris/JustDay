@@ -21,7 +21,7 @@
 
 <p align="center">
   <img src="docs/screenshots/justday.png" alt="Вкладка JustDay" width="250">
-  <img src="docs/screenshots/deck.png" alt="Пульт" width="250">
+  <img src="docs/screenshots/deck.png" alt="Стримдек" width="250">
   <img src="docs/screenshots/pcs.png" alt="Состояние компьютера" width="250">
 </p>
 
