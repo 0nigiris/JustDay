@@ -4,7 +4,7 @@
 // плитки и полка питания. Spotlight открывают, уже зная, что нужно: нажал, напечатал три буквы,
 // Enter. Всё остальное на этой поверхности лишнее, и поэтому его здесь нет.
 //
-// Но когда запрос пуст (Р2-5): показываем режим «Приложения» — недавние сверху, ниже сетка
+// Но когда запрос пуст (Р2-5): показываем режим «Приложения» — закреплённые и недавние сверху, ниже сетка
 // всех программ по разделам из того же каталога, что и меню. Переключатель категорий — сегменты
 // сверху, как у Tahoe. Стрелки и Enter работают по сетке.
 //
@@ -26,13 +26,17 @@ Item {
     // Режим «Приложения» в Spotlight: пустой запрос в режиме поиска
     readonly property bool appsMode: JD.menuSearchMode && !JD.menuSearching
 
-    // Недавние приложения для режима приложений
-    readonly property var recentApps: {
-        const recents = (JD.menuCatalog.recent || [])
-        const apps = JD.menuCatalog.apps || []
+    function appsByKeys(keys) {
         const by = {}
-        for (const a of apps) by[a.kind + ":" + a.id] = a
-        return recents.map(k => by[k]).filter(a => a !== undefined).slice(0, 8)
+        for (const a of (JD.menuCatalog.apps || [])) by[a.kind + ":" + a.id] = a
+        return (keys || []).map(k => by[k]).filter(a => a !== undefined)
+    }
+    // Закреплённые — настоящие, а не запасной вариант лаунчера (`pinned` при пустом избранном
+    // подставляет недавние, и тогда обе полосы показали бы одно и то же).
+    readonly property var favApps: appsByKeys(JD.menuCatalog.favourites).slice(0, 8)
+    readonly property var recentApps: {
+        const fav = JD.menuCatalog.favourites || []
+        return appsByKeys((JD.menuCatalog.recent || []).filter(k => fav.indexOf(k) < 0)).slice(0, 8)
     }
 
     // Приложения по категориям для режима приложений
@@ -63,6 +67,102 @@ Item {
             }
         }
         return ordered
+    }
+
+    property int catIndex: 0
+    readonly property var currentCategory: appsByCategory[Math.min(catIndex, appsByCategory.length - 1)]
+    readonly property int tileW: 86
+    readonly property int cols: 8
+
+    // Ряды режима «Приложения»: закреплённые, недавние, переключатель категорий, сетка рядами по
+    // `cols`. `base` — сквозной номер первой плитки ряда, он же то, что лежит в JD.menuPick.
+    readonly property var appRows: {
+        const out = []
+        let base = 0
+        const add = (caption, apps) => {
+            for (let i = 0; i < apps.length; i += cols)
+                out.push({ caption: i === 0 ? caption : "", apps: apps.slice(i, i + cols), base: base + i })
+            base += apps.length
+        }
+        if (favApps.length) add(JD.tr("Закреплённые"), favApps)
+        if (recentApps.length) add(JD.tr("Недавние"), recentApps)
+        if (appsByCategory.length > 1) out.push({ caption: "", pills: true })
+        if (currentCategory) add(appsByCategory.length > 1 ? "" : currentCategory.name, currentCategory.apps)
+        return out
+    }
+    readonly property var tileRows: appRows.filter(r => !!r.apps)
+    readonly property int tileCount: tileRows.reduce((n, r) => n + r.apps.length, 0)
+
+    function tileAt(flat) {
+        for (const r of tileRows)
+            if (flat >= r.base && flat < r.base + r.apps.length) return r.apps[flat - r.base]
+        return undefined
+    }
+    // Вверх-вниз — по рядам, влево-вправо — по плиткам. В короткий ряд попадаем в его последнюю плитку.
+    function moveApps(dRow, dCol) {
+        if (!tileCount) return
+        if (dCol) { JD.menuPick = Math.max(0, Math.min(tileCount - 1, JD.menuPick + dCol)); return }
+        let r = tileRows.findIndex(t => JD.menuPick >= t.base && JD.menuPick < t.base + t.apps.length)
+        const col = r < 0 ? 0 : JD.menuPick - tileRows[r].base
+        r = Math.max(0, Math.min(tileRows.length - 1, (r < 0 ? 0 : r) + dRow))
+        JD.menuPick = tileRows[r].base + Math.min(col, tileRows[r].apps.length - 1)
+    }
+    // Выбранная плитка не должна уезжать за край прокручиваемой области.
+    function reveal() {
+        const r = tileRows.findIndex(t => JD.menuPick >= t.base && JD.menuPick < t.base + t.apps.length)
+        const it = r < 0 ? null : rowsRep.itemAt(appRows.indexOf(tileRows[r]))
+        if (!it) return
+        const top = it.y + appsColumn.y, bottom = top + it.height
+        if (top < appsFlick.contentY) appsFlick.contentY = Math.max(0, top - 8)
+        else if (bottom > appsFlick.contentY + appsFlick.height) appsFlick.contentY = bottom - appsFlick.height + 8
+    }
+    Connections {
+        target: JD
+        function onMenuPickChanged() { if (sp.appsMode) sp.reveal() }
+    }
+
+    component AppTile: Pressable {
+        id: tile
+        required property var app
+        required property int at
+        readonly property bool on: at === JD.menuPick
+        width: sp.tileW
+        height: 84
+        radius: 12
+        pressScale: JD.pressScaleSmall
+        color: on ? Qt.rgba(1, 1, 1, 0.10) : (hovered ? JD.menuFill1 : "transparent")
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+        Accessible.role: Accessible.Button
+        Accessible.name: app.name
+        onHoveredChanged: if (hovered) JD.menuPick = at
+        onClicked: JD.runFromMenu(app)
+        // Правой кнопкой — закрепить в доке или снять (Р2-6)
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            gesturePolicy: TapHandler.ReleaseWithinBounds
+            onTapped: JD.pinFromMenu(tile.app)
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 6
+            Icon {
+                Layout.alignment: Qt.AlignHCenter
+                name: tile.app.icon
+                fallback: "application-x-executable"
+                implicitSize: 36
+                renderSize: 72
+                theme: true
+            }
+            Label2 {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.pixelSize: 11
+                color: JD.text1
+                elide: Text.ElideRight
+                text: tile.app.name
+            }
+        }
     }
 
     // Плоский список: подписи групп и сами находки вперемешку, по порядку. Высота у строк разная,
@@ -110,45 +210,17 @@ Item {
     readonly property int barHeight: 76
     readonly property int maxHeight: 760
     implicitWidth: 720
-    implicitHeight: Math.min(maxHeight, barHeight + (list.count ? Math.min(list.contentHeight + 12, maxHeight - barHeight) : (asking ? 92 : 0)))
+    implicitHeight: appsMode && tileCount ? barHeight + 520 : Math.min(maxHeight, barHeight + (list.count ? Math.min(list.contentHeight + 12, maxHeight - barHeight) : (asking ? 92 : 0)))
 
     function move(step) {
-        if (appsMode) {
-            // Навигация в режиме приложений: стрелки по сетке
-            if (recentApps.length > 0 && JD.menuPick < recentApps.length) {
-                JD.menuPick = Math.max(0, Math.min(recentApps.length - 1, JD.menuPick + step))
-            } else {
-                const gridModel = currentCategory ? currentCategory.apps : []
-                const cols = Math.max(1, Math.floor(appsGrid.width / appsGrid.cellWidth))
-                const idx = JD.menuPick - recentApps.length
-                if (idx >= 0 && gridModel.length > 0) {
-                    const row = Math.floor(idx / cols)
-                    const col = idx % cols
-                    const newCol = Math.max(0, Math.min(cols - 1, col + (step > 0 ? 1 : -1)))
-                    const newIdx = row * cols + newCol
-                    JD.menuPick = recentApps.length + Math.max(0, Math.min(gridModel.length - 1, newIdx))
-                }
-            }
-        } else {
-            if (!rows.length) return
-            JD.menuPick = Math.max(0, Math.min(rows.length - 1, JD.menuPick + step))
-        }
+        if (appsMode) { moveApps(step, 0); return }
+        if (!rows.length) return
+        JD.menuPick = Math.max(0, Math.min(rows.length - 1, JD.menuPick + step))
     }
     function take() {
         if (asking) { JD.askFromMenu(JD.menuQuery); return }
-        if (appsMode) {
-            if (recentApps.length > 0 && JD.menuPick < recentApps.length) {
-                JD.runFromMenu(recentApps[JD.menuPick])
-            } else {
-                const gridModel = currentCategory ? currentCategory.apps : []
-                const idx = JD.menuPick - recentApps.length
-                if (idx >= 0 && idx < gridModel.length) {
-                    JD.runFromMenu(gridModel[idx])
-                }
-            }
-        } else {
-            JD.runFromMenu(rows[JD.menuPick] || rows[0])
-        }
+        if (appsMode) JD.runFromMenu(tileAt(JD.menuPick))
+        else JD.runFromMenu(rows[JD.menuPick] || rows[0])
     }
 
     // Открыли клавишей — значит печатать можно сразу, не целясь мышью в строку.
@@ -208,8 +280,11 @@ Item {
                         case Qt.Key_Up: sp.move(-1); break
                         case Qt.Key_PageDown: sp.move(5); break
                         case Qt.Key_PageUp: sp.move(-5); break
+                        // Влево-вправо ходят по плиткам, пока поле пусто; с текстом это курсор.
+                        case Qt.Key_Left: if (!sp.appsMode) return; sp.moveApps(0, -1); break
+                        case Qt.Key_Right: if (!sp.appsMode) return; sp.moveApps(0, 1); break
                         case Qt.Key_Home: JD.menuPick = 0; break
-                        case Qt.Key_End: JD.menuPick = Math.max(0, sp.rows.length - 1); break
+                        case Qt.Key_End: JD.menuPick = Math.max(0, (sp.appsMode ? sp.tileCount : sp.rows.length) - 1); break
                         case Qt.Key_Return:
                         case Qt.Key_Enter: sp.take(); break
                         default: return
@@ -241,166 +316,105 @@ Item {
 
         // ───────────── режим «Приложения» (пустой запрос в Spotlight) ─────────────
         //
-        // Недавние сверху, ниже сетка программ по категориям. Переключатель категорий —
-        // сегменты сверху сетки. Стрелки и Enter работают по сетке.
+        // Сверху закреплённые («избранное» старого меню), под ними недавние, ниже — сетка программ
+        // выбранной категории. Всё это — один список плиток с сквозным номером (`JD.menuPick`), так что
+        // стрелки и Enter ходят по нему целиком, а не по трём разным спискам.
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: sp.appsMode
 
-            property int currentCatIndex: 0
-            property var currentCategory: sp.appsByCategory[currentCatIndex]
-
-            Column {
+            ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                spacing: 0
 
-                // Недавние
-                Item {
-                    Layout.fillWidth: true
-                    visible: sp.recentApps.length > 0
-                    Column {
-                        spacing: 8
-                        Label2 {
-                            anchors.left: parent.left
-                            leftPadding: 4
-                            color: JD.text3
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            font.capitalization: Font.AllUppercase
-                            text: JD.tr("Недавние")
-                        }
-                        GridView {
-                            id: recentGrid
-                            width: parent.width
-                            height: 80
-                            cellWidth: 80
-                            cellHeight: 80
-                            model: sp.recentApps
-                            clip: true
-                            delegate: Pressable {
-                                id: recentTile
-                                width: grid.cellWidth
-                                height: grid.cellHeight
-                                radius: 12
-                                color: hovered ? JD.menuFill1 : "transparent"
-                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.topMargin: 8
-                                    anchors.bottomMargin: 8
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    spacing: 6
-                                    Icon {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        name: modelData.icon
-                                        fallback: "application-x-executable"
-                                        implicitSize: 36
-                                        renderSize: 72
-                                        theme: true
-                                    }
-                                    Text {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        font.family: JD.fontFamily
-                                        font.pixelSize: 11
-                                        color: JD.text1
-                                        horizontalAlignment: Text.AlignHCenter
-                                        maximumLineCount: 1
-                                        elide: Text.ElideRight
-                                        text: modelData.name
-                                    }
-                                }
-                                onClicked: JD.runFromMenu(modelData)
-                                HoverHandler { cursorShape: Qt.PointingHandCursor }
-                            }
-                        }
-                    }
-                }
-
-                // Переключатель категорий
-                Row {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: sp.appsByCategory.length > 1
-                    spacing: 8
-                    Repeater {
-                        model: sp.appsByCategory
-                        delegate: Pressable {
-                            id: catBtn
-                            property int index: model.index
-                            implicitWidth: 120
-                            implicitHeight: 30
-                            radius: 15
-                            pressScale: JD.pressScaleSmall
-                            color: index === sp.currentCatIndex ? JD.accentBlue : (catBtn.hovered ? JD.menuFill1 : "transparent")
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            Text {
-                                anchors.centerIn: parent
-                                font.family: JD.fontFamily
-                                font.pixelSize: 12
-                                color: index === sp.currentCatIndex ? JD.text1 : JD.text3
-                                text: modelData.name
-                            }
-                            onClicked: sp.currentCatIndex = index
-                            HoverHandler { cursorShape: Qt.PointingHandCursor }
-                        }
-                    }
-                }
-
-                // Сетка программ выбранной категории
-                GridView {
-                    id: appsGrid
+                Flickable {
+                    id: appsFlick
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    model: sp.currentCategory ? sp.currentCategory.apps : []
-                    property real tileSize: 96
-                    cellWidth: tileSize
-                    cellHeight: tileSize
-                    delegate: Pressable {
-                        id: appTile
-                        width: grid.cellWidth
-                        height: grid.cellHeight
-                        radius: 12
-                        color: hovered ? JD.menuFill1 : "transparent"
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 6
-                            Icon {
-                                Layout.alignment: Qt.AlignHCenter
-                                name: modelData.icon
-                                fallback: "application-x-executable"
-                                implicitSize: 36
-                                renderSize: 72
-                                theme: true
-                            }
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                font.family: JD.fontFamily
-                                font.pixelSize: 11
-                                color: JD.text1
-                                horizontalAlignment: Text.AlignHCenter
-                                maximumLineCount: 1
-                                elide: Text.ElideRight
-                                text: modelData.name
+                    contentWidth: width
+                    contentHeight: appsColumn.height + 24
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Column {
+                        id: appsColumn
+                        x: 16
+                        y: 8
+                        width: parent.width - 32
+                        spacing: 6
+
+                        Repeater {
+                            id: rowsRep
+                            model: sp.appRows
+                            delegate: Column {
+                                id: rowItem
+                                required property var modelData
+                                width: appsColumn.width
+                                spacing: 4
+
+                                Label2 {
+                                    visible: !!rowItem.modelData.caption
+                                    topPadding: 6
+                                    leftPadding: 4
+                                    color: JD.text3
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.capitalization: Font.AllUppercase
+                                    font.letterSpacing: 0.6
+                                    text: rowItem.modelData.caption || ""
+                                }
+
+                                // Переключатель категорий сетки
+                                Flow {
+                                    visible: !!rowItem.modelData.pills
+                                    width: parent.width
+                                    spacing: 6
+                                    Repeater {
+                                        model: rowItem.modelData.pills ? sp.appsByCategory : []
+                                        delegate: Pressable {
+                                            id: catBtn
+                                            required property var modelData
+                                            required property int index
+                                            readonly property bool current: index === sp.catIndex
+                                            implicitWidth: Math.max(64, catLabel.implicitWidth + 28)
+                                            implicitHeight: 28
+                                            radius: 14
+                                            pressScale: JD.pressScaleSmall
+                                            color: current ? JD.accentBlue : (hovered ? JD.menuFill1 : "transparent")
+                                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                                            Accessible.role: Accessible.Button
+                                            Accessible.name: modelData.name
+                                            Label2 {
+                                                id: catLabel
+                                                anchors.centerIn: parent
+                                                font.pixelSize: 12
+                                                color: catBtn.current ? JD.text1 : JD.text3
+                                                text: catBtn.modelData.name
+                                            }
+                                            onClicked: sp.catIndex = index
+                                        }
+                                    }
+                                }
+
+                                Row {
+                                    visible: !!rowItem.modelData.apps
+                                    spacing: 0
+                                    Repeater {
+                                        model: rowItem.modelData.apps || []
+                                        delegate: AppTile {
+                                            required property var modelData
+                                            required property int index
+                                            app: modelData
+                                            at: rowItem.modelData.base + index
+                                        }
+                                    }
+                                }
                             }
                         }
-                        onClicked: JD.runFromMenu(modelData)
-                        // Правой кнопкой — закрепить в доке (Р2-6)
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            gesturePolicy: TapHandler.ReleaseWithinBounds
-                            onTapped: JD.pinFromMenu(modelData)
-                        }
-                        HoverHandler { cursorShape: Qt.PointingHandCursor }
                     }
                 }
 
-                // ───────────── нижняя полка (инструменты, режим сервера, питание) ─────────────
                 Item {
                     visible: sp.appsMode
                     Layout.fillWidth: true
@@ -428,8 +442,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("mixer") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: volDot.icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
                         Pressable {
                             id: emojiDot
@@ -442,8 +456,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("emoji") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: emojiDot.icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
                         Pressable {
                             id: clipDot
@@ -456,8 +470,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("clip") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: clipDot.icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
                         Pressable {
                             id: loadDot
@@ -470,8 +484,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openTools("load") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: mv.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: loadDot.icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
 
                         Label2 {
@@ -496,8 +510,8 @@ Item {
                             color: JD.serverMode ? (hovered ? "#3a5a3a" : "#2d4a2d") : (hovered ? JD.menuFill3 : "transparent")
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.toggleServerMode() }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
                         Pressable {
                             property string icon: "refresh-cw"
@@ -509,8 +523,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.checkUpdate() }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
                         Pressable {
                             property string icon: "settings"
@@ -522,8 +536,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.openSettings("general") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
                         Pressable {
                             property string icon: "sliders-horizontal"
@@ -535,8 +549,8 @@ Item {
                             color: hovered ? JD.menuFill3 : "transparent"
                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             onClicked: { JD.closeMenu(); JD.systemSettings("") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, note) }
-                            Icon { anchors.centerIn: parent; name: icon; implicitSize: 16; tint: hovered ? JD.text1 : JD.text3 }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
+                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
                         }
 
                         Repeater {
@@ -557,7 +571,7 @@ Item {
                                     implicitSize: 15
                                     tint: pow.asking || pow.hovered ? JD.text1 : JD.text3
                                 }
-                                onHoveredChanged: mv.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
+                                onHoveredChanged: sp.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
                                                                                     : pow.modelData.name)
                                 onClicked: JD.sessionDo(pow.modelData.id, pow.modelData.danger)
                             }
@@ -566,6 +580,7 @@ Item {
                 }
             }
         }
+
 
         // ───────────── ничего не нашлось ─────────────
         //

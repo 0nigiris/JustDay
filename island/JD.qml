@@ -599,6 +599,7 @@ Singleton {
         menuSerial++
         closeAll()
         searchMenu()                   // пустой запрос → недавние (launcher.items)
+        send({ cmd: "apps_catalog" })  // закреплённые и сетка в Spotlight берут каталог меню
     }
     // Закрытие гасит только menuOpen. Режим, запрос и найденное сбрасывают openMenu и openSearch.
     // Раньше всё обнулялось здесь же — и пока Spotlight таял, он уже был «полным меню»: карточка
