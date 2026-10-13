@@ -34,9 +34,13 @@
   --border-strong: rgba(84, 84, 88, 0.9);
   --shine: rgba(255, 255, 255, 0.06);     /* блик по верхней кромке */
 
+  /* Прозрачности подписей посчитаны числом (tests/test_style_contrast.py): dim — 4,5:1 на любой
+     поверхности, faint — 3:1 и только для того, что не читают (заполнитель, точки, шеврон).
+     Взятые у Apple как есть, в светлой теме они давали 3,3:1 и 1,8:1, и «Поверните телефон —
+     вернётся приложение» было почти не видно. */
   --text: #ffffff;
   --text-dim: rgba(235, 235, 245, 0.6);
-  --text-faint: rgba(235, 235, 245, 0.3);
+  --text-faint: rgba(235, 235, 245, 0.42);
 
   --accent: #0a84ff;
   --accent-soft: rgba(10, 132, 255, 0.18);
@@ -157,7 +161,7 @@ img.login-mark {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--text-faint);
+  color: var(--text-dim);
   font-size: 13px;
   margin: 18px 0;
 }
@@ -752,7 +756,7 @@ body[data-mode="deck"] #main { height: 100dvh; }
 .deck-side .dots { margin-top: auto; padding: 8px 0 0; }
 .deck-side .row { margin-top: 8px; }
 .deck-side .icon-btn { width: 100%; }
-.deck-hint { font-size: 11px; color: var(--text-faint); line-height: 1.25; }
+.deck-hint { font-size: 11px; color: var(--text-dim); line-height: 1.25; }
 
 body[data-mode="deck"] .pager { flex: 1; margin: 0; padding: 0; min-width: 0; }
 body[data-mode="deck"] .page { padding: 0 3px; height: 100%; }
@@ -1179,7 +1183,7 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
   font-weight: 600;
   color: var(--text-dim);
 }
-.field .hint { font-size: 13px; color: var(--text-faint); line-height: 1.4; }
+.field .hint { font-size: 13px; color: var(--text-dim); line-height: 1.4; }
 .field.bad input, .field.bad select, .field.bad textarea { border-color: var(--error); }
 
 .form-error {
@@ -1482,7 +1486,7 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
 .crumbs {
   padding: 2px 2px 8px;
   font-size: 13px;
-  color: var(--text-faint);
+  color: var(--text-dim);
   word-break: break-word;
 }
 
@@ -1533,7 +1537,7 @@ body[data-mode="deck"] #toasts { bottom: calc(16px + env(safe-area-inset-bottom)
 }
 .toast.ok { border-color: rgba(48, 209, 88, 0.4); }
 .toast.err { border-color: rgba(255, 69, 58, 0.45); }
-.toast .rid { display: block; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+.toast .rid { display: block; font-size: 11px; color: var(--text-dim); margin-top: 3px; }
 
 @keyframes toast-in {
   from { transform: translateY(16px) scale(0.94); opacity: 0; }
@@ -1680,8 +1684,8 @@ body[data-mode="deck"] #toasts { bottom: calc(16px + env(safe-area-inset-bottom)
     --shine: rgba(255, 255, 255, 0.7);
 
     --text: #000000;
-    --text-dim: rgba(60, 60, 67, 0.6);
-    --text-faint: rgba(60, 60, 67, 0.32);
+    --text-dim: rgba(60, 60, 67, 0.75);
+    --text-faint: rgba(60, 60, 67, 0.58);
 
     --accent: #007aff;
     --accent-soft: rgba(0, 122, 255, 0.12);
