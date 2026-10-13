@@ -2732,6 +2732,9 @@ Item {
                         id: cycleLog
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
                         text: cyc.logText.trim() ? cyc.logText.trim() : JD.tr("Запусков пока нет")
+                        // Журнал пишет модель, читавшая сайты: в AutoText её `<img src=http…>` ушёл бы
+                        // запросом наружу сам, едва откроешь настройки. Проверено опытом.
+                        textFormat: Text.PlainText
                         color: win.t1
                         font.family: win.font
                         font.pixelSize: 12
