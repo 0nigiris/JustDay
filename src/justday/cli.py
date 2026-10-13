@@ -545,7 +545,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--via", default="", help="Discord, Telegram, WhatsApp…")
     sp.add_argument("--text", required=True, help="the exact text that will be sent")
     sp = sub.add_parser("studio", help="local creative studio: status | image | edit | upscale | nobg | video | animate | "
-                                       "music | 3d | speech | subs | cut | join | audio | burn | vertical | nopause | "
+                                       "music | 3d | speech | subs | cut | join | audio | burn | vertical | clips | nopause | "
                                        "speed | gif | slideshow | info | jobs | job ID | stop  (key=value options)")
     sp.add_argument("action")
     sp.add_argument("args", nargs="*", help="text / files, then key=value")
@@ -1415,7 +1415,8 @@ def _screen_context() -> dict:
 def _studio_cmd(a) -> None:
     from . import studio
 
-    words = [x for x in a.args if "=" not in x or x.startswith(("/", "~", "."))]
+    # Ссылка на YouTube несёт «?v=…» и без этой оговорки уходила в key=value, а не в цель.
+    words = [x for x in a.args if "=" not in x or x.startswith(("/", "~", ".")) or "://" in x]
     kw = dict(x.split("=", 1) for x in a.args if x not in words)
     text = " ".join(words)
     opt = kw.get
@@ -1460,6 +1461,8 @@ def _studio_cmd(a) -> None:
             r = studio.subtitles(words[0], words[1] if len(words) > 1 else None, out, opt("burn", "1") != "0")
         elif act == "vertical":
             r = studio.vertical(text, out, opt("mode", "blur"))
+        elif act == "clips":
+            r = studio.clips(text, out, int(num("n", 0)), opt("ratio", "9:16"))
         elif act == "nopause":
             r = studio.trim_silence(text, out, num("pause", 0.6))
         elif act == "speed":

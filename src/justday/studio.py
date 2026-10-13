@@ -109,6 +109,7 @@ def status() -> dict:
     caps["speech"] = True
     caps["subtitles"] = True
     caps["montage"] = bool(shutil.which("ffmpeg"))
+    caps["clips"] = AUTOCLIP.exists()
     return {"engine": str(s["comfy"] or ""), "running": _alive(s["url"]), "can": caps,
             "gpu": bool(shutil.which("nvidia-smi"))}
 
@@ -828,6 +829,42 @@ def vertical(src: str, out: str | None = None, mode: str = "blur") -> dict:
                  "boxblur=30:3,eq=brightness=-0.08[bg];[b]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[v]")
         _ff(["-i", str(Path(src).expanduser()), "-filter_complex", graph, "-map", "[v]", "-map", "0:a?", *ENC, str(dst)])
     return {"state": "done", "file": str(dst)}
+
+
+AUTOCLIP = HOME / "Applications/autoclip/.venv/bin/autoclip"
+# ponytail: одна модель на всех; если её не окажется в `ollama list`, autoclip так и скажет —
+# тогда вынести в настройки studio.
+CLIPS_MODEL = "qwen3.5:9b"
+
+
+def clips(src: str, out: str | None = None, count: int = 0, ratio: str = "9:16") -> dict:
+    """Long video or a YouTube link → the best moments as captioned vertical clips (autoclip, MIT).
+
+    Провайдер всегда ollama: по умолчанию autoclip ходит в платный Anthropic API, а здесь всё
+    обещано бесплатным и не покидающим компьютер. Свой AUTOCLIP_HOME — чтобы его настройки и
+    скачанные исходники не смешивались с ручными запусками в ~/.autoclip.
+    """
+    if not AUTOCLIP.exists():
+        raise RuntimeError("autoclip не установлен (~/Applications/autoclip, см. docs/ИНСТРУМЕНТЫ.md)")
+    home = config.STATE_DIR / "autoclip"
+    exports = home / "exports"
+    exports.mkdir(parents=True, exist_ok=True)
+    (home / "config.json").write_text(json.dumps({
+        "active_provider": "ollama",
+        "providers": {"ollama": {"model": CLIPS_MODEL, "base_url": "http://127.0.0.1:11434"}}}), encoding="utf-8")
+    before = set(exports.iterdir())
+    target = src if src.startswith(("http://", "https://")) else str(Path(src).expanduser())
+    p = subprocess.run([str(AUTOCLIP), "clip", "-p", "ollama", "-r", ratio, *(["-n", str(count)] if count else []),
+                        target], env={**os.environ, "AUTOCLIP_HOME": str(home), "NO_COLOR": "1"},
+                       capture_output=True, text=True, timeout=7200)
+    new = sorted(set(exports.iterdir()) - before)
+    if p.returncode != 0 or not new:
+        raise RuntimeError("autoclip: " + (p.stdout.strip().splitlines() or ["ошибка"])[-1][:300])
+    files = sorted(new[0].glob("*.mp4"))
+    name = Path(src).stem if not target.startswith("http") else "клипы"
+    dst = Path(out).expanduser() if out else _unique(out_dir("video") / f"{name} клипы")
+    shutil.move(str(new[0]), dst)
+    return {"state": "done", "folder": str(dst), "files": [str(dst / f.name) for f in files]}
 
 
 def trim_silence(src: str, out: str | None = None, min_pause: float = 0.6, noise_db: int = -35) -> dict:

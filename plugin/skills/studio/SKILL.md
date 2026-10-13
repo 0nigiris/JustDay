@@ -1,6 +1,6 @@
 ---
 name: studio
-description: Create and edit media on the local GPU — pictures ("нарисуй", "сделай фото/обои/логотип/иконку"), photo edits, upscaling, background removal, video from text or from a photo ("оживи фото"), music and beats, 3D models (GLB/STL), voice-over, subtitles, and montage (cut, join, music under video, burned-in subtitles, vertical shorts, remove pauses, speed, GIF, slideshow). Free and private — nothing leaves the computer.
+description: Create and edit media on the local GPU — pictures ("нарисуй", "сделай фото/обои/логотип/иконку"), photo edits, upscaling, background removal, video from text or from a photo ("оживи фото"), music and beats, 3D models (GLB/STL), voice-over, subtitles, and montage (cut, join, music under video, burned-in subtitles, vertical shorts, best-moment clips from a long video ("нарежь на шортсы"), remove pauses, speed, GIF, slideshow). Free and private — nothing leaves the computer.
 ---
 
 # Studio (`justday studio …`)
@@ -45,6 +45,7 @@ The user does the creative cut; you do the mechanics they ask for. Input files: 
 | subtitles (.srt + text) from speech | `justday studio subs VIDEO_OR_AUDIO` |
 | burn subtitles into the video | `justday studio burn VIDEO [SUBS.srt]` (makes them if missing; `burn=0` = switchable track) |
 | vertical 9:16 for Shorts/TikTok/Reels | `justday studio vertical VIDEO` (`mode=crop` = fill the frame) |
+| best moments of a long video / stream / podcast as captioned shorts | `justday studio clips VIDEO_OR_YOUTUBE_URL` (`n=5` clips, `ratio=1:1`/`16:9`); slow — tens of minutes, say so first |
 | remove pauses | `justday studio nopause VIDEO pause=0.6` |
 | speed up / slow down | `justday studio speed VIDEO 1.5` |
 | GIF | `justday studio gif VIDEO from=00:00:03 seconds=4 width=480` |
