@@ -14,6 +14,7 @@ from . import (
     events,
     island,
     media,
+    memory,
     palette,
 )
 from .aio import spawn
@@ -226,7 +227,7 @@ class MusicMixin:
                          shuffle: bool = False) -> dict:
         """Find the song on YouTube, download its audio, play it. `count` > 1: the rest follow in the background."""
         loop = asyncio.get_running_loop()
-        query = query.strip()
+        query = memory.resolve(query.strip())
         if not query:
             if self.music.active:
                 await self.music.resume()

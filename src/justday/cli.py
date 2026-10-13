@@ -509,6 +509,11 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--json", action="store_true")
     sp = sub.add_parser("recent", help="recently used files and Claude Code projects")
     sp.add_argument("--hours", type=float, default=48)
+    sp = sub.add_parser("pin", help="hard preference «раз и навсегда»: pin СЛОВО = ЗАПРОС (play СЛОВО will play ЗАПРОС); "
+                                    "pin --list | pin --remove СЛОВО")
+    sp.add_argument("words", nargs="*")
+    sp.add_argument("--list", action="store_true")
+    sp.add_argument("--remove", action="store_true")
     sp = sub.add_parser("history", help="what played lately: «включи то, что я слушал»")
     sp.add_argument("-n", type=int, default=10)
     sp = sub.add_parser("claude", help="Claude Code worker sessions")
@@ -966,6 +971,22 @@ def main(argv: list[str] | None = None) -> None:
         if window:
             print(f"потолок разговора: {n(window)} токенов, дальше история сжимается")
         print("разговор с нуля — «начни заново»: короткий контекст стоит в разы дешевле длинного")
+    elif a.cmd == "pin":
+        from . import memory
+
+        text = " ".join(a.words)
+        if a.list or not text:
+            for k, v in memory.pins().items():
+                print(f"{k} = {v}")
+        elif a.remove:
+            print("убрано" if memory.unpin(text) else "такого нет")
+        elif "=" in text:
+            word, target = text.split("=", 1)
+            memory.pin(word, target)
+            print(f"запомнил: «{word.strip()}» → {target.strip()}")
+        else:
+            print("нужно: justday pin СЛОВО = ЗАПРОС")
+            sys.exit(1)
     elif a.cmd == "history":
         from . import media
 

@@ -92,3 +92,48 @@ def summary(st: dict | None = None) -> str:
     if st["busy"]:
         line += " Указатель читается в каждом разговоре — его стоит проредить."
     return line
+
+
+# ─────────────── «раз и навсегда»: жёсткие предпочтения ───────────────
+#
+# Беда: человек сказал «Temporarily — запомни раз и навсегда» (он про одну песню), а в следующий раз
+# включился Эминем. Запись в обычной памяти — подсказка модели, и поиск её перебивает. Жёсткая запись
+# лежит отдельно и применяется ДО поиска, кодом: слово → ровно этот запрос.
+PINS = config.DATA_DIR / "pins.json"
+
+
+def _key(phrase: str) -> str:
+    return " ".join(phrase.lower().replace("ё", "е").split())
+
+
+def pins() -> dict:
+    import json
+
+    try:
+        return json.loads(PINS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def pin(phrase: str, target: str) -> None:
+    import json
+
+    data = pins()
+    data[_key(phrase)] = target.strip()
+    PINS.parent.mkdir(parents=True, exist_ok=True)
+    PINS.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def unpin(phrase: str) -> bool:
+    import json
+
+    data = pins()
+    if data.pop(_key(phrase), None) is None:
+        return False
+    PINS.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return True
+
+
+def resolve(query: str) -> str:
+    """Запрос целиком совпал с закреплённым словом → закреплённый запрос; иначе без изменений."""
+    return pins().get(_key(query), query)

@@ -43,6 +43,7 @@ from . import (
     jobs,
     mail,
     media,
+    memory,
     namespot,
     notifications,
     numerals,
@@ -1553,6 +1554,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                         log.info("update check failed: %s", type(e).__name__)
                 self._publish_focus()
                 await self._reboot_maybe()
+                await self._memory_maybe()
                 await self._welcome_back()
                 # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
                 # возвращается сам по себе, и ждать с ним до разговора незачем.
@@ -1661,6 +1663,18 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         self.notify(t("Компьютер работает без перезагрузки {days} дней — стоит перезагрузить.")
                     .format(days=int(weeks)), icon="system-reboot")
         events.emit("reboot_reminder", days=round(weeks, 1))
+
+    async def _memory_maybe(self) -> None:
+        """Указатель памяти читается в каждом разговоре; когда он разросся, сказать об этом — раз в неделю."""
+        state = events.load_state()
+        if time.time() - float(state.get("memory_said") or 0) < 7 * 86400:
+            return
+        st = await asyncio.get_running_loop().run_in_executor(None, memory.state)
+        if not st["busy"]:
+            return
+        events.save_state(memory_said=time.time())
+        self.notify(t("Память разрослась: {n} строк в указателе. Загляни в настройки и убери лишнее.")
+                    .format(n=st["index_lines"]), icon="dialog-information")
 
     async def _diary_maybe(self) -> None:
         """Страница дня в Obsidian, вечером и сама.
