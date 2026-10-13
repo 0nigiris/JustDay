@@ -156,10 +156,9 @@ def test_jarvis_kept_retelling_the_inbox_instead_of_opening_a_letter() -> None:
 def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
     """Значок при переносе метался между местами и ложился поверх соседа.
 
-    Место значка мерили по живой полосе, а полоса в это время жила своей жизнью: под курсором
-    росло увеличение, соседи разъезжались, граница между ячейками уезжала — и порядок защёлкивало
-    туда-сюда на каждом кадре. Лечится это одним: пока значок в руке, полоса стоит. Поэтому тест
-    проверяет не формулу, а то, что во время жеста ничего живого под руку не попадает.
+    Место значка мерили по живой полосе, а под курсором росло увеличение, граница между ячейками
+    уезжала — и порядок защёлкивало туда-сюда на каждом кадре. Место считается в спокойных
+    координатах полосы — тех же, по которым работает лупа; живая полоса только рисует.
     """
     import pathlib
     import re
@@ -168,14 +167,29 @@ def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
     move = re.search(r"function moveDrag\(sceneX\) \{(.+?)\n    \}", qml, re.S)
     assert move, "правило перестановки пропало"
     body = move.group(1)
-    assert "dragBase" in body, "место значка снова меряют по живой полосе — она едет под рукой"
-    assert not re.search(r"\bgeom\[", body), "в перестановку вернулась живая геометрия: будет дребезг"
+    assert "solveRest(" in body and "restCentre(" in body, "место значка снова меряют по живой полосе"
+    assert not re.search(r"\bgeom\[", body), "в выбор места вернулась живая геометрия: будет дребезг"
+    assert re.search(r"function startDrag\(\w+\) \{(?:.|\n)+?laneHold = ", qml), \
+        "полосу перестали держать на время жеста — делегаты пересоздадутся и жест оборвётся"
+
+
+def test_the_dock_froze_while_an_icon_was_dragged() -> None:
+    """Пока тащишь значок, док застывал: лупа стояла, значок в руке не рос (Р2-1).
+
+    Заморозку когда-то поставили против дребезга; дребезг лечится спокойными координатами,
+    а замороженная лупа делала док мёртвым ровно тогда, когда на него смотрят.
+    """
+    import pathlib
+    import re
+
+    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
     phys = re.search(r"function stepPhysics\(dt\) \{(.+?)\n    \}", qml, re.S)
     assert phys, "шаг физики пропал"
-    assert re.search(r'dragKey\s*!==\s*""', phys.group(1)), \
-        "пружина увеличения снова работает во время жеста — полоса поедет под рукой"
-    assert re.search(r"function startDrag\(\w+\) \{(?:.|\n)+?dragBase = ", qml), \
-        "геометрию перестали замораживать в начале жеста"
+    assert not re.search(r"dragKey !== \"\" \|\| dropAnim\) \{\s*if \(!slideOn\) return", phys.group(1)), \
+        "лупу снова выключили на время жеста"
+    under = re.search(r"function restUnderPointer\(\) \{(.+?)\n    \}", qml, re.S)
+    assert under and "dragSceneX" in under.group(1), "лупа во время жеста не идёт за значком в руке"
+    assert "function dragWalk(" in qml, "пропала проба жеста без мыши (dockWalk)"
 
 
 def test_jarvis_answered_that_there_was_nothing_to_grab_the_screen_with(monkeypatch) -> None:

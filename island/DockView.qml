@@ -205,7 +205,10 @@ Item {
     // Визуальный порядок живёт отдельно от модели: модель во время жеста не меняется, Repeater
     // не пересоздаёт значки, жест не обрывается. Соседи едут пружиной (slideOff), не Behavior.
     property var dragOrder: []
-    property var dragBase: []            // замороженные x/w ячеек: увеличение во время жеста не едет
+    // В какой ячейке полосы сейчас стоит каждый значок. Ячейки те же, что без жеста, и лупа над
+    // ними работает как обычно — меняется только, кто в какой стоит (Р2-4). Раньше вместо этого
+    // замораживали всю раскладку, и док на время жеста умирал: лупа стояла, значок в руке не рос.
+    property var dragDest: []
     property var laneHold: null          // полоса не пересобирается, пока палец на значке
     property var slideOff: []
     property var slideVel: []
@@ -391,7 +394,9 @@ Item {
         return u
     }
 
+    // Пока значок в руке, лупа идёт за ним, даже если курсор ушёл с карточки вверх.
     function restUnderPointer() {
+        if (dragKey !== "") return solveRest(dragSceneX)
         return engaged ? solveRest(pointerScene) : -99999
     }
 
@@ -418,19 +423,16 @@ Item {
         // После пропущенного кадра нельзя швырять пружину на всю задолженность — она взорвётся.
         // Жёсткую пружину режем на шаги 1/170, раскладку публикуем один раз за кадр.
         dt = Math.max(0.001, Math.min(0.033, dt))
-        // Увеличение и длина карточки заморожены, пока значок в руке или доезжает в ячейку.
-        // Иначе пружина размера двигает полосу под курсором, и хват дёргается.
-        if (dragKey !== "" || dropAnim) {
-            if (!slideOn) return false
-            return stepSlide(dt)
-        }
+        // Лупа работает и во время жеста: значок в руке клеится к курсору в координатах сцены,
+        // поэтому дышащая под ним карточка хват не дёргает.
         const u = restUnderPointer()
         const n = lane.length
         const s = sizes, v = speeds
         const omega = Math.sqrt(springK)
         const c = 2 * springDamp * omega
         let moving = false
-        if (wheel) moving = settleWheel(u, dt) || moving
+        // Колесо с защёлками во время жеста молчит: щелчок под рукой, которая несёт значок, — шум.
+        if (wheel && !slideOn) moving = settleWheel(u, dt) || moving
         let left = dt
         const hmax = 1 / 170
         while (left > 0.00005) {
@@ -456,8 +458,9 @@ Item {
         return moving
     }
 
-    // Сдвиг значков при перестановке. Цель — чужая ячейка, не новый порядок модели: модель
-    // меняется один раз, когда пружина уже доехала. Иначе Repeater мигает и значки телепортируются.
+    // Сдвиг значков при перестановке: остаток пути до своей ячейки, который пружина гасит до нуля.
+    // Ячейка сама плывёт с лупой, а остаток — нет, поэтому значок не отстаёт от увеличения и не
+    // налезает на соседа. Модель меняется один раз, когда всё доехало, иначе Repeater мигает.
     function stepSlide(dt) {
         const n = lane.length
         if (!n) return false
@@ -468,7 +471,6 @@ Item {
             slideOff = o
             slideVel = v
         }
-        const target = slideTargets()
         const off = slideOff
         const vel = slideVel
         // Критическое затухание, мелкие шаги: без перелёта и без щелчка в конце.
@@ -482,15 +484,13 @@ Item {
             const h = Math.min(hmax, left)
             left -= h
             for (let i = 0; i < n; i++) {
-                const goal = target[i] || 0
-                vel[i] += (-(off[i] - goal) * k - c * vel[i]) * h
+                vel[i] += (-off[i] * k - c * vel[i]) * h
                 off[i] += vel[i] * h
             }
         }
         for (let i = 0; i < n; i++) {
-            const goal = target[i] || 0
-            if (Math.abs(off[i] - goal) < 0.15 && Math.abs(vel[i]) < 2) {
-                off[i] = goal
+            if (Math.abs(off[i]) < 0.15 && Math.abs(vel[i]) < 2) {
+                off[i] = 0
                 vel[i] = 0
             } else moving = true
         }
@@ -599,24 +599,12 @@ Item {
     }
     // Анимации выключены совсем — значит просто ставим целевые размеры без физики.
     function instantly() {
-        if (dragKey !== "" || dropAnim) {
-            if (!slideOn) return
-            const target = slideTargets()
-            const o = [], v = []
-            for (let i = 0; i < lane.length; i++) { o.push(target[i] || 0); v.push(0) }
-            slideOff = o
-            slideVel = v
-            slideTick++
-            if (dropAnim) dropCommit = true
-            return
-        }
         const u = restUnderPointer()
         for (let i = 0; i < lane.length; i++) { sizes[i] = targetSize(i, u); speeds[i] = 0 }
         tick++
         if (!slideOn) return
-        const target = slideTargets()
         const o = [], v = []
-        for (let i = 0; i < lane.length; i++) { o.push(target[i] || 0); v.push(0) }
+        for (let i = 0; i < lane.length; i++) { o.push(0); v.push(0) }
         slideOff = o
         slideVel = v
         slideTick++
@@ -801,7 +789,9 @@ Item {
                 readonly property var wins: e.wins || []
                 readonly property bool running: wins.length > 0
                 readonly property bool active: wins.some(w => w.activated && !w.minimized)
-                readonly property var g: dv.geom[index] || ({ x: e.at, w: e.w, k: 1 })
+                // Ячейка, в которой значок стоит сейчас: во время жеста это не всегда его собственная.
+                readonly property int place: (dv.slideOn && dv.dragDest.length > index) ? dv.dragDest[index] : index
+                readonly property var g: dv.geom[place] || ({ x: e.at, w: e.w, k: 1 })
                 readonly property real k: g.k
                 // Тащимый значок идёт за курсором. Соседи сдвигаются пружиной slideOff: модель
                 // полосы при этом не меняется, делегаты не пересоздаются и жест не обрывается.
@@ -810,21 +800,17 @@ Item {
                 // Приподнят, только пока палец на значке. Без Behavior нарочно: после отпускания
                 // он сразу на одной линии с остальными, а не продолжает оседать за край.
                 readonly property real dragLift: dragged ? Math.round(dv.icon * 0.22) : 0
-                // Замороженная ячейка: живой geom под курсором дёргал и хват, и соседей.
-                readonly property bool flowHold: dv.slideOn && dv.dragBase.length > index
-                readonly property real baseX: flowHold ? dv.dragBase[index].x : g.x
-                readonly property real baseW: flowHold ? dv.dragBase[index].w : g.w
-                readonly property real nudgeX: (!flowHold && dv.wheel && dv.nudges.length === dv.lane.length) ? dv.nudges[index] : 0
+                readonly property real nudgeX: (!dv.slideOn && dv.wheel && dv.nudges.length === dv.lane.length) ? dv.nudges[index] : 0
                 readonly property real slideX: {
                     dv.slideTick
                     return (dv.slideOn && dv.slideOff.length > index) ? dv.slideOff[index] : 0
                 }
-                // Хват — в координатах сцены, каждый кадр. Ширина ячейки заморожена,
-                // поэтому центр не уезжает, когда пружина размера дышит.
-                x: (dragged ? (dv.dragSceneX - dv.x - card.x - baseW / 2) : (baseX + slideX)) + nudgeX
+                // Хват — в координатах сцены, каждый кадр: карточка под ним дышит с лупой, а
+                // значок остаётся серединой под курсором.
+                x: (dragged ? (dv.dragSceneX - dv.x - card.x - g.w / 2) : (g.x + slideX)) + nudgeX
                 z: dragged ? 2 : 0
                 y: 0
-                width: flowHold ? baseW : g.w
+                width: g.w
                 height: card.height
 
                 // Разделитель: волосяная черта, а не пустота. Без неё закреплённое и просто
@@ -1950,11 +1936,11 @@ Item {
     // Какой значок программы сейчас под сценой X — и закреплённый, и просто открытый.
     function appKeyAtSceneX(sceneX) {
         const local = sceneX - dv.x - card.x
-        const src = (dragBase.length === lane.length) ? dragBase : null
+        const moved = slideOn && dragDest.length === lane.length
         for (let i = 0; i < lane.length; i++) {
             const e = lane[i]
             if (!e || e.t !== "app" || !e.key) continue
-            const g = src ? src[i] : geom[i]
+            const g = geom[moved ? dragDest[i] : i]
             if (g && local >= g.x && local < g.x + g.w) return e.key
         }
         return ""
@@ -1980,36 +1966,18 @@ Item {
         return keys
     }
 
-    // Куда каждый значок программы должен съехать. Дырки — замороженные ячейки исходного
-    // порядка; яблоко, черты и часы в них не входят, поэтому к ним никто не летит.
-    function slideTargets() {
+    // Порядок значков → в какой ячейке стоит каждый. Яблоко, черты и часы стоят на своих местах.
+    function destMap(order) {
         const n = lane.length
-        const t = []
-        for (let i = 0; i < n; i++) t.push(0)
-        if (!(dragKey !== "" || dropAnim) || !dragOrder.length) return t
+        const out = []
+        for (let i = 0; i < n; i++) out.push(i)
         const spots = []
-        for (let i = 0; i < n; i++)
-            if (lane[i].t === "app" && lane[i].key) spots.push(i)
         const srcOf = ({})
-        for (const i of spots) srcOf[lane[i].key] = i
-        const base = dragBase.length === n ? dragBase : null
-        // Пока значок в руке, его ячейку пропускаем: ряд смыкается, и эта щель — единственная.
-        // После отпускания ключ пуст, и тот же порядок опускает значок ровно в неё.
-        const gap = dragKey !== "" ? dragOrder.indexOf(dragKey) : -1
-        let destAt = 0
-        for (let h = 0; h < dragOrder.length; h++) {
-            const key = dragOrder[h]
-            const src = srcOf[key]
-            if (src === undefined) continue
-            if (h === gap) { destAt++; continue }
-            if (destAt >= spots.length) break
-            const dest = spots[destAt++]
-            const gs = base ? base[src] : geom[src]
-            const gd = base ? base[dest] : geom[dest]
-            if (!gs || !gd) continue
-            t[src] = gd.x - gs.x
-        }
-        return t
+        for (let i = 0; i < n; i++)
+            if (lane[i].t === "app" && lane[i].key) { spots.push(i); srcOf[lane[i].key] = i }
+        for (let h = 0; h < order.length && h < spots.length; h++)
+            if (srcOf[order[h]] !== undefined) out[srcOf[order[h]]] = spots[h]
+        return out
     }
 
     // Взяли значок. Модель не переписываем: новый массив в полосе пересоздал бы делегаты
@@ -2022,15 +1990,10 @@ Item {
         const snap = []
         for (let i = 0; i < lane.length; i++) snap.push(lane[i])
         laneHold = snap
-        const base = []
-        for (let i = 0; i < lane.length; i++) {
-            const g = geom[i] || { x: lane[i].at, w: lane[i].w }
-            base.push({ x: g.x, w: g.w })
-        }
-        dragBase = base
         dragOrder = keys.slice()
+        dragDest = destMap(dragOrder)
         const z = [], v = []
-        for (let i = 0; i < base.length; i++) { z.push(0); v.push(0) }
+        for (let i = 0; i < lane.length; i++) { z.push(0); v.push(0) }
         slideOff = z
         slideVel = v
         if (!(dragSceneX > -9000) && pointerScene > -9000) dragSceneX = pointerScene
@@ -2046,24 +2009,21 @@ Item {
         wake()
     }
 
-    // Одна дырка — там, где курсор. Остальные значки сразу смыкаются в остальные
-    // замороженные ячейки: пустое место, откуда взяли, не остаётся.
+    // Куда встать, считается в спокойных координатах полосы, а не в нарисованных: нарисованные
+    // плывут с лупой, и граница между соседями убегала бы от курсора — значок метался бы туда-сюда.
     function moveDrag(sceneX) {
         dragSceneX = sceneX
         dragLocal = sceneX - dv.x - card.x
         if (dragKey === "") return
+        wake()                               // лупа идёт за значком на каждом движении, не только на перестановке
         const spots = []
         for (let i = 0; i < lane.length; i++)
             if (lane[i].t === "app" && lane[i].key) spots.push(i)
-        if (dragBase.length !== lane.length || !spots.length) return
+        if (dragDest.length !== lane.length || !spots.length) return
+        const u = solveRest(sceneX)
         let to = spots.length - 1
-        for (let i = 0; i < spots.length - 1; i++) {
-            const a = dragBase[spots[i]]
-            const b = dragBase[spots[i + 1]]
-            if (!a || !b) continue
-            const boundary = (a.x + a.w * 0.5 + b.x + b.w * 0.5) * 0.5
-            if (dragLocal < boundary) { to = i; break }
-        }
+        for (let i = 0; i < spots.length - 1; i++)
+            if (u < (restCentre(spots[i]) + restCentre(spots[i + 1])) * 0.5) { to = i; break }
         const keys = appKeysNow()
         const next = []
         for (let i = 0; i < keys.length; i++) if (keys[i] !== dragKey) next.push(keys[i])
@@ -2073,7 +2033,20 @@ Item {
         for (let i = 0; same && i < next.length; i++) if (next[i] !== dragOrder[i]) same = false
         if (same) return
         dragOrder = next
-        wake()
+        reseat(destMap(next))
+    }
+
+    // Переехавший сосед начинает путь оттуда, где он нарисован сейчас, и доезжает пружиной.
+    function reseat(dest) {
+        const off = slideOff.slice()
+        for (let i = 0; i < lane.length; i++) {
+            if (dest[i] === dragDest[i] || lane[i].key === dragKey) continue
+            const was = geom[dragDest[i]], now = geom[dest[i]]
+            if (was && now) off[i] = (off[i] || 0) + was.x - now.x
+        }
+        slideOff = off
+        dragDest = dest
+        slideTick++
     }
 
     function endDrag() {
@@ -2082,16 +2055,20 @@ Item {
         const off = slideOff.length === n ? slideOff.slice() : []
         const vel = slideVel.length === n ? slideVel.slice() : []
         while (off.length < n) { off.push(0); vel.push(0) }
+        // Отпущенный значок доезжает в свою ячейку от того места, где его отпустили.
         for (let i = 0; i < n; i++) {
-            if (lane[i] && lane[i].key === dragKey && dragBase[i]) {
-                const local = dragSceneX - dv.x - card.x
-                off[i] = (local - dragBase[i].w / 2) - dragBase[i].x
+            const g = geom[dragDest[i]]
+            if (lane[i] && lane[i].key === dragKey && g) {
+                off[i] = (dragSceneX - dv.x - card.x - g.w / 2) - g.x
                 vel[i] = 0
             }
         }
         slideOff = off
         slideVel = vel
         slideTick++
+        // Курсор всё это время был у значка; без этого лупа после отпускания прыгнула бы туда,
+        // где жест начинался.
+        pointerScene = dragSceneX
         dragKey = ""
         pressKey = ""
         dropAnim = true
@@ -2121,8 +2098,8 @@ Item {
         slideOn = false
         dragKey = ""
         dragOrder = []
+        dragDest = []
         laneHold = null
-        dragBase = []
         slideOff = []
         slideVel = []
         slideTick++
@@ -2132,35 +2109,69 @@ Item {
 
     // Перетаскивание без мыши: взять n-й значок программы (закреплённый или открытый),
     // отнести в точку x спокойной полосы и отпустить.
-    function dragProbe(n, x) {
+    function dragProbe(n, x) { return dragWalk(n, x, x, 1) }
+
+    // Где сейчас нарисован каждый значок: x в карточке и в сцене, ширина, размер.
+    function paintedNow() {
+        const out = []
+        for (let i = 0; i < lane.length; i++) {
+            const g = geom[(slideOn && dragDest.length > i) ? dragDest[i] : i] || { x: 0, w: 0, k: 1 }
+            const held = dragKey !== "" && lane[i].key === dragKey
+            const x = held ? dragSceneX - dv.x - card.x - g.w / 2 : g.x + (slideOff[i] || 0)
+            out.push({ x: x, sx: x + card.x, w: g.w, k: g.k, held: held })
+        }
+        return out
+    }
+
+    // Пронести n-й значок от from до to за steps шагов и отпустить, ничего не сохраняя. Отдаёт то,
+    // чем жест плох на глаз: наложение соседей, самый большой скачок соседа за шаг (телепорт
+    // виден как скачок в целую ячейку), размер значка в руке (лупа жива — больше 1) и сколько
+    // отпущенному осталось до ячейки, когда всё успокоилось.
+    function dragWalk(n, from, to, steps) {
         const spots = lane.filter(s => s.t === "app" && s.key)
         const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]
         if (!pick) return JSON.stringify({ pinned: 0 })
-        engaged = true
-        pointerScene = anchorCentre - restLength / 2 + x
         const savedOverride = pinOverride.slice()
         const savedApp = appOrder.slice()
         const savedMemo = runMemo.slice()
+        const scene = x => anchorCentre - restLength / 2 + x
+        engaged = true
+        pointerScene = scene(from)
         dragSceneX = pointerScene
         startDrag(pick.key)
-        moveDrag(pointerScene)
-        for (let i = 0; i < 240 && stepPhysics(1 / 120); i++) { /* до схождения */ }
-        const order = dragOrder.slice()
-        const painted = []
-        for (let i = 0; i < lane.length; i++) {
-            const b = dragBase.length > i ? dragBase[i] : (geom[i] || { x: 0, w: 0 })
-            const off = slideOff.length > i ? slideOff[i] : 0
-            const px = (lane[i].key && lane[i].key === pick.key)
-                ? (dragSceneX - dv.x - card.x - b.w / 2) : (b.x + off)
-            painted.push({ x: px, w: b.w })
+        const src = lane.findIndex(s => s.key === pick.key)
+        const k = Math.max(1, Math.min(400, steps || 1))
+        let jump = 0, overlap = 0, prev = null
+        const overlaps = (rows) => {
+            const r = rows.filter(c => !c.held).sort((a, b) => a.x - b.x)
+            let o = 0
+            for (let i = 1; i < r.length; i++) if (r[i].x + 0.5 < r[i - 1].x + r[i - 1].w) o++
+            return o
         }
+        for (let st = 0; st < k; st++) {
+            moveDrag(scene(k === 1 ? from : from + (to - from) * st / (k - 1)))
+            for (let f = 0; f < 3; f++) stepPhysics(1 / 120)
+            const now = paintedNow()
+            overlap = Math.max(overlap, overlaps(now))
+            if (prev) for (let i = 0; i < now.length; i++)
+                if (!now[i].held) jump = Math.max(jump, Math.abs(now[i].sx - prev[i].sx))
+            prev = now
+        }
+        for (let i = 0; i < 240 && stepPhysics(1 / 120); i++) { /* до схождения */ }
+        const settled = paintedNow()
+        overlap = Math.max(overlap, overlaps(settled))
+        const order = dragOrder.slice()
+        const held = settled[src] ? settled[src].k : 0
+        endDrag()
+        for (let i = 0; i < 600 && stepPhysics(1 / 120); i++) { /* доезжает */ }
+        const landed = Math.abs(slideOff[src] || 0)
         dragKey = ""
         dropAnim = false
         dropCommit = false
         slideOn = false
         dragOrder = []
+        dragDest = []
         laneHold = null
-        dragBase = []
         slideOff = []
         slideVel = []
         slideTick++
@@ -2171,12 +2182,9 @@ Item {
         pointerScene = -99999
         dragSceneX = 0
         wake()
-        const sorted = painted.map((r, i) => ({ i: i, x: r.x, w: r.w })).sort((a, b) => a.x - b.x)
-        let overlap = 0
-        for (let i = 1; i < sorted.length; i++)
-            if (sorted[i].x + 0.5 < sorted[i - 1].x + sorted[i - 1].w) overlap++
-        return JSON.stringify({ took: pick.key, order: order, overlap: overlap,
-                                cells: lane.map((s, i) => [s.t, Math.round(painted[i].x), Math.round(painted[i].w)]) })
+        return JSON.stringify({ took: pick.key, order: order, overlap: overlap, jump: Math.round(jump),
+                                held: Math.round(held * 100) / 100, landed: Math.round(landed * 10) / 10,
+                                cells: lane.map((s, i) => [s.t, Math.round(settled[i].x), Math.round(settled[i].w)]) })
     }
 
     // Прогулка курсора по полосе маленькими шагами: где именно колесо щёлкает. Одной пробой этого
