@@ -351,6 +351,12 @@ class CommandsMixin:
 
         return terminal.queue_next(req.get("text", ""))
 
+    async def _cmd_work_drop(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Снять задачу с телефона, пока ночь её не взяла"""
+        from . import terminal
+
+        return terminal.drop_next(req.get("id", ""))
+
     async def _cmd_inbox_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "items": inbox.recent(int(req.get("limit") or 20)),
                 "pending": len(inbox.pending())}

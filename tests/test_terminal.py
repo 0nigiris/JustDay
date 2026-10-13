@@ -985,3 +985,21 @@ def test_a_task_written_from_the_phone_is_what_the_next_night_round_does(monkeyp
     assert "почини звук в доке" in said_to_it[1], "ночь не взяла задачу с телефона"
     assert terminal.take_next() == [], "взятая задача осталась бы и повторялась каждый круг"
     assert terminal.work_view()["queued"] == 0
+
+
+def test_a_wrong_task_from_the_phone_can_be_taken_back_before_the_night_does_it() -> None:
+    """Написал с телефона не то — до этого оставалось только ждать, пока ночь сделает. Снять можно
+    только свою задачу: имя с «../» не должно удалять файлы за пределами очереди."""
+    terminal.queue_next("удали старые снимки")
+    terminal.queue_next("почини звук в доке")
+    waiting = terminal.work_view()["pending"]
+    assert [w["text"] for w in waiting] == ["удали старые снимки", "почини звук в доке"]
+
+    outside = terminal.NIGHT_DIR / "журнал.md"
+    outside.write_text("ночь", encoding="utf-8")
+    assert terminal.drop_next("../журнал")["ok"] is False
+    assert outside.exists()
+
+    assert terminal.drop_next(waiting[0]["id"]) == {"ok": True, "queued": 1}
+    assert terminal.drop_next(waiting[0]["id"])["ok"] is False, "снятую дважды — не молча"
+    assert terminal.take_next() == ["почини звук в доке"]

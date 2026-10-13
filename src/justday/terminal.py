@@ -893,6 +893,29 @@ def take_next() -> list[str]:
     return [t for t in got if t]
 
 
+def pending() -> list[dict]:
+    """Что ждёт следующего круга — чтобы с телефона было видно, что именно ушло, и можно было снять."""
+    out = []
+    for path in sorted(NEXT_DIR.glob("[!.]*.txt")) if NEXT_DIR.exists() else []:
+        with contextlib.suppress(OSError):
+            out.append({"id": path.stem, "text": path.read_text(encoding="utf-8").strip()})
+    return out
+
+
+def drop_next(task_id: str) -> dict:
+    """Снять задачу до того, как ночь её взяла: написал не то — убрал, а не ждал, пока сделает.
+
+    Имя — только цифры (так его пишет `queue_next`): иначе «../что-то» с телефона удаляло бы чужой файл."""
+    task_id = str(task_id or "")
+    if not task_id.isdigit():
+        return {"ok": False, "error": "нет такой задачи"}
+    try:
+        (NEXT_DIR / f"{task_id}.txt").unlink()
+    except FileNotFoundError:
+        return {"ok": False, "error": "ночь уже взяла эту задачу"}
+    return {"ok": True, "queued": len(pending())}
+
+
 def from_phone(asks: list[str]) -> str:
     return ("Человек написал с телефона, что делать дальше:\n" + "\n".join(f"- {a}" for a in asks)
             + "\nЭто важнее очереди плана: сделай это первым и запиши в ПЕРЕДАЧА.md, потом продолжай "
@@ -1115,9 +1138,10 @@ def work_view(lines: int = 40) -> dict:
                     if "нужно от него" in ln.lower()][-8:]
     except (OSError, subprocess.SubprocessError):
         pass
-    queued = len(list(NEXT_DIR.glob("[!.]*.txt"))) if NEXT_DIR.exists() else 0
+    waiting = pending()
     return {"ok": True, "running": st["running"], "log": st["log"], "tail": tail, "need": need,
-            "queued": queued, "server_mode": bool((st.get("server_mode") or {}).get("on"))}
+            "queued": len(waiting), "pending": waiting,
+            "server_mode": bool((st.get("server_mode") or {}).get("on"))}
 
 
 def nightly_stop() -> dict:

@@ -240,3 +240,37 @@ class TestЗадачаНочи:
         got = anon.post("/api/pcs/testpc/justday/work", json={"text": "почини звук"})
         assert got.status_code == 200
         assert видел == ["почини звук"]
+
+
+class TestСнятьЗадачуНочи:
+    """Написал с телефона не то — снять, пока ночь не взяла; снимается только задача, не файл."""
+
+    def test_агент_передаёт_только_имя_задачи(self, agent_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        видел: dict[str, Any] = {}
+
+        async def fake(command: str, **payload: Any) -> dict[str, Any]:
+            видел.update(cmd=command, **payload)
+            return {"ok": True, "queued": 0}
+
+        monkeypatch.setattr("remo32_agent.justday.call", fake)
+        assert agent_client.delete("/api/justday/work/1760331000123").json()["data"]["ok"] is True
+        assert видел == {"cmd": "work_drop", "id": "1760331000123"}
+
+    def test_контроллер_не_пропускает_чужое_имя(self, anon, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        from conftest import TEST_PASSWORD
+
+        видел: list[str] = []
+
+        async def fake(self: object, task_id: str) -> dict[str, Any]:
+            видел.append(task_id)
+            return {"ok": True, "queued": 0}
+
+        monkeypatch.setattr(
+            "remo32_controller.agent_client.AgentClient.justday_work_drop", fake, raising=True
+        )
+        assert anon.delete("/api/pcs/testpc/justday/work/123").status_code == 401
+        assert anon.post("/api/auth/login", json={"password": TEST_PASSWORD}).status_code == 200
+        assert anon.delete("/api/pcs/testpc/justday/work/..%2Fжурнал").status_code in (404, 422)
+        assert anon.delete("/api/pcs/testpc/justday/work/12a").status_code == 422
+        assert anon.delete("/api/pcs/testpc/justday/work/123").status_code == 200
+        assert видел == ["123"]

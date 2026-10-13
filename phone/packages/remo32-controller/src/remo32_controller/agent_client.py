@@ -328,6 +328,12 @@ class AgentClient:
         )
         return got
 
+    async def justday_work_drop(self, task_id: str) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "DELETE", f"/api/justday/work/{task_id}", timeout=15.0
+        )
+        return got
+
     async def justday_plans(self, closed: bool = False) -> dict[str, Any]:
         got: dict[str, Any] = await self._request(
             "GET", "/api/justday/plans", params={"closed": str(closed).lower()}, timeout=15.0

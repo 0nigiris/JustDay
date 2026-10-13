@@ -461,6 +461,16 @@ def build_router(ctx: AgentContext) -> APIRouter:
             await justday.work_next(command.text), request_id
         )
 
+    @router.delete(
+        "/api/justday/work/{task_id}",
+        dependencies=[auth],
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Снять задачу с очереди ночи",
+    )
+    async def justday_work_drop(task_id: str, request_id: RequestId) -> ApiResponse[dict[str, Any]]:
+        return ApiResponse[dict[str, Any]].success(await justday.work_drop(task_id), request_id)
+
     @router.get(
         "/api/justday/plans",
         dependencies=[auth],

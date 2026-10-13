@@ -2306,7 +2306,11 @@ function workBlock() {
       <input type="text" id="work-text" placeholder="Что делать дальше" autocomplete="off" enterkeyhint="send">
       <button class="btn primary" type="submit" aria-label="Передать ночи">${icon("chevron-right")}</button>
     </form>
-    ${w.queued ? `<div class="meta">Ждут следующего круга: ${w.queued}</div>` : ""}`;
+    ${(w.pending || []).length ? `<div class="meta">Ждут следующего круга</div>
+    <div class="list">${w.pending.map((task) => `<div class="step">
+      <div><b>${esc(task.text)}</b></div>
+      <button class="btn tiny" data-work-drop="${esc(task.id)}" aria-label="Снять задачу">${icon("x")}</button>
+    </div>`).join("")}</div>` : ""}`;
 }
 
 function justdayTerminalCard(pc) {
@@ -3582,6 +3586,17 @@ document.addEventListener("click", async (event) => {
       () => api(`/api/schedules/${encodeURIComponent(d.schedDel)}`, { method: "DELETE" }),
       () => {
         toast("правило удалено", "ok");
+        render(true);
+      });
+  }
+  // Снять задачу ночи: без подтверждения, как и «Ждут отправки» — это отмена своей же записи,
+  // а не удаление чего-то, что потом не вернуть (текст можно написать заново).
+  if (d.workDrop) {
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(activePc().id)}/justday/work/${encodeURIComponent(d.workDrop)}`,
+        { method: "DELETE" }),
+      (result) => {
+        toast(result?.ok ? "Задача снята" : result?.error || "Не получилось", result?.ok ? "ok" : "err");
         render(true);
       });
   }

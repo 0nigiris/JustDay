@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
+from fastapi import Path as PathParam
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -209,6 +210,23 @@ async def justday_work_next(
     log.info("задача ночи с телефона", pc_id=pc_id)
     return ApiResponse[dict[str, Any]].success(
         await _registry(request).get(pc_id).client.justday_work_next(payload.text), request_id
+    )
+
+
+@router.delete(
+    "/{pc_id}/justday/work/{task_id}", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"]
+)
+async def justday_work_drop(
+    pc_id: str,
+    task_id: Annotated[str, PathParam(pattern=r"^\d{1,30}$")],
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+) -> ApiResponse[dict[str, Any]]:
+    """Снять задачу, пока ночь её не взяла. Имя — только цифры: дальше оно станет именем файла."""
+    log.info("задача ночи снята с телефона", pc_id=pc_id)
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_work_drop(task_id), request_id
     )
 
 

@@ -199,6 +199,11 @@ async def work_next(text: str) -> dict[str, Any]:
     return await call("work_next", text=text)
 
 
+async def work_drop(task_id: str) -> dict[str, Any]:
+    """Снять задачу с очереди ночи, пока та её не взяла. Имя проверяет демон."""
+    return await call("work_drop", id=task_id)
+
+
 async def plans(only_open: bool = True) -> dict[str, Any]:
     """Планы из хранилища Obsidian."""
     return await call("plan_list", open=only_open)
