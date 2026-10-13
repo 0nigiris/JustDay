@@ -137,6 +137,11 @@ def _alive(url: str) -> bool:
 def engine() -> str:
     """URL of a running ComfyUI; starts it (localhost only) when needed."""
     s = settings()
+    models = s["comfy"] / "models" if s["comfy"] else None
+    if models and models.is_symlink() and not models.exists():
+        # модели переехали на внешний диск (ссылка models → /run/media/…); без него ComfyUI поднимается
+        # четыре минуты и падает на «модель не найдена» — понятнее сказать сразу, чего не хватает
+        raise RuntimeError(f"диск с моделями студии не подключён: {os.readlink(models)}")
     if _alive(s["url"]):
         return s["url"]
     if not s["comfy"] or not s["python"]:
