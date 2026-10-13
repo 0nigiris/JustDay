@@ -943,3 +943,25 @@ def test_opencode_tools_reach_the_night_journal(monkeypatch) -> None:
     said = asyncio.run(terminal.ask_opencode(terminal.Rung("opencode", "ollama/qwen3.5:9b"), "прочти", "",
                                              {"terminal": {"unattended": True}}, lambda t: None, seen.append))
     assert seen == ["read"] and said.tools == ["read"] and said.text == "проба"
+
+
+def test_the_phone_sees_night_progress_and_what_waits_for_him(monkeypatch, tmp_path) -> None:
+    """«Лёг спать, открыл приложение — видно прогресс и то, что сделано».
+
+    Журнал ночи — сотни строк с пустыми между кругами; на телефон идёт хвост без пустых, а из
+    ПЕРЕДАЧА.md той папки, где идёт ночь, — строки «Нужно от него», чтобы утром не искать их."""
+    import subprocess
+
+    log = tmp_path / "ночь.md"
+    log.write_text("старое\n\n— Круг 1\n\n\nсделал тест\n", encoding="utf-8")
+    (tmp_path / "ПЕРЕДАЧА.md").write_text(
+        "# Передача\n- сделано\n- **Нужно от него:** поставить APK\n", encoding="utf-8")
+    monkeypatch.setattr(terminal, "nightly_status", lambda: {
+        "ok": True, "running": True, "log": str(log), "server_mode": {"on": True}})
+    monkeypatch.setattr(terminal.subprocess, "run", lambda cmd, **kw:
+                        subprocess.CompletedProcess(cmd, 0, f"{tmp_path}\n", ""))
+
+    got = terminal.work_view(lines=2)
+    assert got["tail"] == ["— Круг 1", "сделал тест"], "пустые строки съели экран телефона"
+    assert got["need"] == ["Нужно от него: поставить APK"]
+    assert got["running"] and got["server_mode"]

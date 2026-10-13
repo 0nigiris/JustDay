@@ -338,6 +338,13 @@ class CommandsMixin:
 
         return notes.mark_done(req.get("which", ""))
 
+    async def _cmd_work(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Ход ночной работы для телефона — только чтение"""
+        from . import terminal
+
+        return await asyncio.get_running_loop().run_in_executor(
+            None, terminal.work_view, min(int(req.get("lines") or 40), 200))
+
     async def _cmd_inbox_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "items": inbox.recent(int(req.get("limit") or 20)),
                 "pending": len(inbox.pending())}

@@ -1052,6 +1052,35 @@ def nightly_status() -> dict:
             "server_mode": server.status()}
 
 
+def work_view(lines: int = 40) -> dict:
+    """Что видно с телефона: идёт ли ночь, последние строки журнала и что ждёт человека.
+
+    Только чтение — телефон смотрит, но ничего здесь не запускает. Его слова: «лёг спать, открыл
+    приложение — видно прогресс и то, что сделано»."""
+    st = nightly_status()
+    tail: list[str] = []
+    if st["log"]:
+        try:
+            text = Path(st["log"]).read_text(encoding="utf-8", errors="replace")
+            tail = [ln for ln in text.splitlines() if ln.strip()][-lines:]
+        except OSError:
+            pass
+    # «Нужно от него» лежит в ПЕРЕДАЧА.md того проекта, где идёт ночь; служба помнит свою папку.
+    need: list[str] = []
+    try:
+        cwd = subprocess.run(["systemctl", "--user", "show", f"{NIGHT_UNIT}.service", "-p",
+                              "WorkingDirectory", "--value"], capture_output=True, text=True,
+                             timeout=10).stdout.strip()
+        if cwd:
+            handoff = (Path(cwd) / "ПЕРЕДАЧА.md").read_text(encoding="utf-8")
+            need = [ln.strip("-* ").replace("**", "") for ln in handoff.splitlines()
+                    if "нужно от него" in ln.lower()][-8:]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"ok": True, "running": st["running"], "log": st["log"], "tail": tail, "need": need,
+            "server_mode": bool((st.get("server_mode") or {}).get("on"))}
+
+
 def nightly_stop() -> dict:
     """Остановить ночную работу и вернуть человеку машину.
 
