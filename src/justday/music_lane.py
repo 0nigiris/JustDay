@@ -240,11 +240,16 @@ class MusicMixin:
         try:
             await self.music.ensure()
             if query.startswith(("/", "~", "./")) and path.exists():  # a file or a folder of music
-                files = sorted(p for p in (path.rglob("*") if path.is_dir() else [path])
-                               if p.suffix.lower() in (".mp3", ".m4a", ".opus", ".ogg", ".flac", ".wav", ".webm", ".aac"))
-                if not files:
+                def scan() -> list[dict]:
+                    files = sorted(p for p in (path.rglob("*") if path.is_dir() else [path])
+                                   if p.suffix.lower() in (".mp3", ".m4a", ".opus", ".ogg", ".flac", ".wav", ".webm", ".aac"))
+                    return [media.local_track(str(p)) for p in files[:500]]
+
+                # Обход папки и теги файлов — в потоке: «включи ~/» в цикле событий замораживал бы
+                # демон на секунды — ни голоса, ни острова.
+                tracks = await loop.run_in_executor(None, scan)
+                if not tracks:
                     return {"ok": False, "error": "no music files there"}
-                tracks = [media.local_track(str(p)) for p in files[:500]]
                 if shuffle:
                     import random
                     random.shuffle(tracks)
