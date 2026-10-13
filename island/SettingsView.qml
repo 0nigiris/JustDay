@@ -287,6 +287,7 @@ Item {
                         { group: JD.tr("Система") },
                         { id: "buttons", title: JD.tr("Кнопки"), icon: "keyboard", tint: "#0a84ff" },
                         { id: "memory", title: JD.tr("Память"), icon: "brain", tint: "#64d2ff" },
+                        { id: "cycle", title: JD.tr("Цикл ассистента"), icon: "refresh-cw", tint: "#30d158" },
                         { id: "privacy", title: JD.tr("Приватность"), icon: "shield", tint: "#ff9f0a" },
                         { id: "about", title: JD.tr("О программе"), icon: "info", tint: "#5e5ce6" }
                     ]
@@ -441,7 +442,7 @@ Item {
                                         dock: dockPage, "panel-top": panelTopPage, "panel-dock": panelDockPage, "panel-tray": panelTrayPage,
                                         widgets: notifyPage, notifications: notifyPage,
                                         voice: voicePage, media: mediaPage, buttons: buttonsPage, model: modelPage,
-                                        mail: mailPage, people: peoplePage, memory: memoryPage, privacy: privacyPage,
+                                        mail: mailPage, people: peoplePage, memory: memoryPage, cycle: cyclePage, privacy: privacyPage,
                                         diagnostics: systemPage, about: systemPage })[win.page]
                     onLoaded: {
                         scroller.contentY = 0
@@ -2553,6 +2554,143 @@ Item {
                             win.run(args, () => { pp.refresh(); win.notify(JD.tr("Сохранено")); [cName, cAliases, cEmail, cDiscord, cTelegram, cWhatsapp, cNote].forEach(f => f.text = "") })
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: cyclePage
+        ColumnLayout {
+            id: cyc
+            spacing: 6
+            property var cycle: win.get("cycle") || ({ enabled: false, steps: [] })
+            property string logText: ""
+            property string running: ""
+            property int editing: -1
+
+            function editStep(index, field, value) {
+                if (cyc.editing >= 0 || cyc.running) return
+                cyc.editing = index
+                win.run(["cycle", "edit", String(index), field, String(value)], result => {
+                    cyc.editing = -1
+                    if (result && Array.isArray(result.steps)) {
+                        cyc.cycle = Object.assign({}, cyc.cycle, { steps: result.steps })
+                        win.notify(result.reload && result.reload.ok === false
+                            ? JD.tr("Сохранено; вступит в силу после запуска JustDay")
+                            : JD.tr("Шаг обновлён"))
+                        win.reload()
+                    } else {
+                        win.notify(JD.tr("Не удалось сохранить шаг"))
+                    }
+                })
+            }
+
+            function refreshLog() {
+                win.run(["cycle", "log"], r => cyc.logText = typeof r === "string" ? r : "")
+            }
+            Component.onCompleted: refreshLog()
+
+            PageTitle {
+                title: JD.tr("Цикл ассистента")
+                subtitle: JD.tr("Пока вы заняты другим, JustDay выполняет выбранные шаги по расписанию. Запускайте только безопасные команды: цикл не спрашивает подтверждений.")
+            }
+            Group {
+                Row {
+                    title: JD.tr("Выполнять цикл")
+                    subtitle: cyc.cycle.enabled ? JD.tr("Шаги запускаются, когда ассистент свободен") : JD.tr("Автоматический запуск выключен")
+                    Toggle { checked: !!cyc.cycle.enabled; onToggled: value => { win.set("cycle.enabled", value); cyc.cycle = win.get("cycle") } }
+                }
+            }
+            GroupTitle { text: JD.tr("ШАГИ") }
+            Group {
+                Row { visible: !cyc.cycle.steps || cyc.cycle.steps.length === 0; title: JD.tr("Шагов пока нет"); subtitle: JD.tr("Добавьте [[cycle.steps]] в config.toml") }
+                Repeater {
+                    model: cyc.cycle.steps || []
+                    Row {
+                        id: cycleStep
+                        required property var modelData
+                        required property int index
+                        title: cycleStep.modelData.name || JD.tr("Без названия")
+                        subtitle: (cycleStep.modelData.at ? JD.tr("Каждый день в ") + cycleStep.modelData.at : JD.tr("Каждые ") + (cycleStep.modelData.every_hours || 24) + JD.tr(" ч"))
+                                  + (cycleStep.modelData.away ? " · " + JD.tr("только когда вас нет") : "")
+                                  + "\n" + (cycleStep.modelData.run || "")
+                        RowLayout {
+                            spacing: 5
+                            Toggle {
+                                checked: cycleStep.modelData.on !== false
+                                enabled: cyc.editing < 0 && !cyc.running
+                                onToggled: value => cyc.editStep(cycleStep.index, "on", value)
+                            }
+                            Text { text: JD.tr("Вкл."); color: win.t2; font.family: win.font; font.pixelSize: 11 }
+                            Toggle {
+                                checked: !!cycleStep.modelData.away
+                                enabled: cyc.editing < 0 && !cyc.running
+                                onToggled: value => cyc.editStep(cycleStep.index, "away", value)
+                            }
+                            Text { text: JD.tr("Когда меня нет"); color: win.t2; font.family: win.font; font.pixelSize: 11 }
+                            Field {
+                                id: scheduleField
+                                implicitWidth: 86
+                                placeholderText: cycleStep.modelData.at ? "ЧЧ:ММ" : JD.tr("часы")
+                                text: cycleStep.modelData.at || String(cycleStep.modelData.every_hours || 24)
+                                enabled: cyc.editing < 0 && !cyc.running
+                                onAccepted: cyc.editStep(cycleStep.index, cycleStep.modelData.at ? "at" : "every_hours", text.trim())
+                            }
+                            Btn {
+                                text: JD.tr("Сохранить")
+                                enabled: cyc.editing < 0 && !cyc.running
+                                onClicked: cyc.editStep(cycleStep.index, cycleStep.modelData.at ? "at" : "every_hours", scheduleField.text.trim())
+                            }
+                            Btn {
+                                glyph: "arrow-up"
+                                text: ""
+                                implicitWidth: 32
+                                enabled: cycleStep.index > 0 && cyc.editing < 0 && !cyc.running
+                                onClicked: cyc.editStep(cycleStep.index, "order", "up")
+                            }
+                            Btn {
+                                glyph: "arrow-down"
+                                text: ""
+                                implicitWidth: 32
+                                enabled: cycleStep.index < cyc.cycle.steps.length - 1 && cyc.editing < 0 && !cyc.running
+                                onClicked: cyc.editStep(cycleStep.index, "order", "down")
+                            }
+                            Btn {
+                                text: cyc.running === cycleStep.modelData.name ? JD.tr("Запускаю…") : JD.tr("Выполнить")
+                                enabled: cyc.editing < 0 && !cyc.running && !!cycleStep.modelData.run
+                                onClicked: {
+                                    cyc.running = cycleStep.modelData.name
+                                    win.run(["cycle", "run", cycleStep.modelData.name], r => {
+                                        cyc.running = ""
+                                        win.notify(r && r.__failed ? JD.tr("Шаг завершился с ошибкой") : JD.tr("Шаг выполнен"))
+                                        cyc.refreshLog()
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            GroupTitle { text: JD.tr("ПОСЛЕДНИЕ ЗАПУСКИ") }
+            Group {
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: cyc.width
+                    implicitHeight: cycleLog.implicitHeight + 24
+                    Text {
+                        id: cycleLog
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
+                        text: cyc.logText.trim() ? cyc.logText.trim() : JD.tr("Запусков пока нет")
+                        color: win.t1
+                        font.family: win.font
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+                }
+                Row {
+                    title: JD.tr("Обновить журнал")
+                    Btn { text: JD.tr("Обновить"); onClicked: cyc.refreshLog() }
                 }
             }
         }

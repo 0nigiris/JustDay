@@ -2,6 +2,8 @@
 если сказано «без него». И шаг, что обновляет JustDay, не должен умирать вместе с перезапуском демона."""
 import time
 
+import pytest
+
 from justday import cycle
 
 NOW = time.mktime((2026, 10, 14, 6, 0, 0, 0, 0, -1))  # 06:00
@@ -54,3 +56,40 @@ def test_manual_run_refuses_while_another_step_holds_the_lock(monkeypatch, tmp_p
         fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert cycle.run("Обновить") == 75
         assert not (tmp_path / "last.json").exists()  # второй не отметился как сделанный
+
+
+def test_edit_changes_schedule_without_losing_other_config(monkeypatch, tmp_path):
+    from justday import config
+
+    path = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "CONFIG_FILE", path)
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    path.write_text(
+        '[cycle]\nenabled = true\n\n'
+        '[[cycle.steps]]\nname = "Первый"\n# заметка пользователя\nrun = "true"\nat = "05:00"\non = true\n\n'
+        '[[cycle.steps]]\nname = "Второй"\nrun = "true"\nevery_hours = 6\naway = true\n\n'
+        '[mail]\nannounce = false\n', encoding="utf-8")
+
+    cycle.edit(0, "on", "false")
+    cycle.edit(0, "order", "down")
+    cycle.edit(1, "at", "07:15")
+
+    cfg = config.load()
+    saved = cfg["cycle"]["steps"]
+    assert [s["name"] for s in saved] == ["Второй", "Первый"]
+    assert saved[1]["on"] is False and saved[1]["at"] == "07:15"
+    assert "every_hours" not in saved[1]
+    assert saved[0]["away"] is True and saved[0]["every_hours"] == 6
+    assert cfg["mail"]["announce"] is False
+    assert "# заметка пользователя" in path.read_text(encoding="utf-8")
+
+
+def test_edit_rejects_arbitrary_commands_and_invalid_schedules(monkeypatch):
+    monkeypatch.setattr(cycle, "steps", lambda cfg=None: [{"name": "safe", "run": "true", "at": "05:00"}])
+    from justday import config
+
+    monkeypatch.setattr(config, "set_cycle_steps", lambda _: None)
+    with pytest.raises(ValueError, match="можно менять"):
+        cycle.edit(0, "run", "rm -rf ~")
+    with pytest.raises(ValueError):
+        cycle.edit(0, "at", "25:99")

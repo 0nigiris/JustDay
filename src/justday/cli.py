@@ -653,9 +653,11 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("transcript", help="видео → текст → выжимка: ссылка или файл, текст ложится в docs/видео/")
     sp.add_argument("source", help="ссылка (YouTube, Instagram…) или путь к файлу")
     sp.add_argument("--no-summary", action="store_true", help="только текст, без выжимки местной моделью")
-    sp = sub.add_parser("cycle", help="цикл ассистента: список шагов | run ИМЯ (выполнить сейчас) | log [ГГГГ-ММ-ДД]")
-    sp.add_argument("action", nargs="?", default="list", choices=["list", "run", "log"])
+    sp = sub.add_parser("cycle", help="цикл ассистента: список | run ИМЯ | log | edit НОМЕР ПОЛЕ ЗНАЧЕНИЕ")
+    sp.add_argument("action", nargs="?", default="list", choices=["list", "run", "log", "edit"])
     sp.add_argument("arg", nargs="?", default="")
+    sp.add_argument("field", nargs="?")
+    sp.add_argument("value", nargs="?")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -1052,6 +1054,13 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit(cycle.run(a.arg))
         if a.action == "log":
             print(cycle.journal(a.arg) or "в этот день цикл ничего не делал")
+            return
+        if a.action == "edit":
+            try:
+                changed = cycle.edit(int(a.arg), a.field or "", a.value or "")
+            except (ValueError, TypeError) as e:
+                sys.exit(str(e))
+            _print({"steps": changed, "reload": control("reload_settings", timeout=5)})
             return
         seen = cycle.last()
         for st in cycle.steps():

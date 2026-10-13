@@ -14,6 +14,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,41 @@ TIMEOUT = 1800  # шаг дольше получаса — завис; след�
 
 def steps(cfg: dict | None = None) -> list[dict]:
     return list(((cfg or config.load()).get("cycle") or {}).get("steps") or [])
+
+
+def edit(index: int, field: str, value: str) -> list[dict]:
+    """Update one safe schedule field or move a step; the command itself is never editable here."""
+    current = steps()
+    if not 0 <= index < len(current):
+        raise ValueError("номер шага вне списка")
+    if field == "order":
+        delta = {"up": -1, "down": 1}.get(value)
+        target = index + delta if delta is not None else -1
+        if not 0 <= target < len(current):
+            return current
+        current[index], current[target] = current[target], current[index]
+    elif field in {"on", "away"}:
+        if value.lower() not in {"true", "false"}:
+            raise ValueError("ожидается true или false")
+        current[index][field] = value.lower() == "true"
+    elif field == "at":
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("время должно быть в формате ЧЧ:ММ")
+        current[index].pop("every_hours", None)
+        current[index]["at"] = value
+    elif field == "every_hours":
+        try:
+            hours = float(value)
+        except ValueError as e:
+            raise ValueError("интервал должен быть числом часов") from e
+        if not 0.1 <= hours <= 8760:
+            raise ValueError("интервал должен быть от 0,1 до 8760 часов")
+        current[index].pop("at", None)
+        current[index]["every_hours"] = hours
+    else:
+        raise ValueError("можно менять только включение, расписание, условие отсутствия и порядок")
+    config.set_cycle_steps(current)
+    return current
 
 
 def last() -> dict:

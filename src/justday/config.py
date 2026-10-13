@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -806,6 +807,103 @@ def set_value(section: str, key: str, value) -> None:
         else:
             lines.insert(start + 1, line)
     CONFIG_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def set_cycle_steps(steps: list[dict]) -> None:
+    """Replace the cycle's array-of-tables while retaining the rest of config.toml."""
+    if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+        raise ValueError("шаги цикла должны быть списком таблиц")
+
+    def value(v):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (int, float)):
+            return str(v)
+        if isinstance(v, str):
+            return json.dumps(v, ensure_ascii=False)
+        if isinstance(v, (list, tuple)):
+            return "[" + ", ".join(value(x) for x in v) + "]"
+        if isinstance(v, dict):
+            return "{ " + ", ".join(f"{json.dumps(str(k))} = {value(x)}" for k, x in v.items()) + " }"
+        raise ValueError(f"неподдерживаемое значение цикла: {type(v).__name__}")
+
+    def array_delta(line):
+        depth = 0
+        quote = None
+        escaped = False
+        for char in line:
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\" and quote == '"':
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in {'"', "'"}:
+                quote = char
+            elif char == "#":
+                break
+            elif char == "[":
+                depth += 1
+            elif char == "]":
+                depth -= 1
+        return depth
+
+    # A compact array of inline tables is equivalent to [[cycle.steps]], and updating one
+    # assignment avoids losing neighbouring settings or comments in the user's config.
+    assignment = "steps = [" + ", ".join(value(step) for step in steps) + "]"
+    lines = CONFIG_FILE.read_text(encoding="utf-8").splitlines() if CONFIG_FILE.exists() else []
+    kept: list[str] = []
+    step_comments: list[str] = []
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        header = re.match(r"^\s*\[\[([^]]+)\]\]\s*(?:#.*)?$", raw)
+        if header and header.group(1) == "cycle.steps":
+            i += 1
+            while i < len(lines) and not re.match(r"^\s*\[{1,2}[A-Za-z0-9_.-]+\]{1,2}\s*(?:#.*)?$", lines[i]):
+                if lines[i].lstrip().startswith("#"):
+                    step_comments.append(lines[i])
+                i += 1
+            continue
+        kept.append(raw)
+        i += 1
+
+    lines = kept
+    start = _section_header_index(lines, "cycle")
+    if start is None:
+        lines.extend(["", "[cycle]", *step_comments, assignment])
+    else:
+        end = next((i for i in range(start + 1, len(lines)) if _header_name(lines[i])), len(lines))
+        body = lines[start + 1:end]
+        existing = next((i for i, line in enumerate(body) if re.match(r"\s*steps\s*=", line)), None)
+        if existing is not None:
+            depth = array_delta(body[existing])
+            finish = existing + 1
+            while depth > 0 and finish < len(body):
+                depth += array_delta(body[finish])
+                finish += 1
+            del body[existing + 1:finish]
+            body[existing] = assignment
+        else:
+            body.extend([*step_comments, assignment])
+        lines[start + 1:end] = body
+
+    text = "\n".join(lines) + "\n"
+    # Check the completed file before replacing the user's config.
+    tomllib.loads(text)
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    mode = CONFIG_FILE.stat().st_mode & 0o777 if CONFIG_FILE.exists() else 0o600
+    fd, tmp_name = tempfile.mkstemp(prefix=".config.toml.", suffix=".tmp", dir=CONFIG_DIR)
+    try:
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, CONFIG_FILE)
+    finally:
+        Path(tmp_name).unlink(missing_ok=True)
 
 
 def ensure_dirs() -> None:
