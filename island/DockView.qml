@@ -1440,8 +1440,8 @@ Item {
                     id: tipVolTrack
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 14 - 8 - 34 - 8
-                    height: 5
-                    radius: 2.5
+                    height: 7
+                    radius: 3.5
                     color: Qt.rgba(1, 1, 1, 0.18)
                     Rectangle {
                         height: parent.height
@@ -1449,15 +1449,20 @@ Item {
                         width: parent.width * Math.max(0, Math.min(1, tip.volume))
                         color: tip.muted ? JD.text3 : JD.accentBlue
                     }
-                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    // Ловить мимо полоски тоже: в 7 пикселей рукой не попасть, и «громкость не работает»
+                    // было именно про это. Выше ста тут не пускаем — усиление только в микшере.
+                    HoverHandler { margin: 7; cursorShape: Qt.PointingHandCursor }
                     DragHandler {
                         target: null
+                        margin: 7
                         yAxis.enabled: false
-                        onCentroidChanged: if (active) audio.setVolume(tip.streams, centroid.position.x / tipVolTrack.width)
+                        onCentroidChanged: if (active) audio.setVolume(tip.streams, Math.min(1, centroid.position.x / tipVolTrack.width))
                     }
                     TapHandler {
+                        margin: 7
                         gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onSingleTapped: eventPoint => audio.setVolume(tip.streams, eventPoint.position.x / tipVolTrack.width)
+                        // запас слева лежит на значке «без звука» — его нажатие не громкость
+                        onSingleTapped: eventPoint => { if (eventPoint.position.x > -4) audio.setVolume(tip.streams, Math.min(1, eventPoint.position.x / tipVolTrack.width)) }
                     }
                 }
                 Label2 {
@@ -1662,8 +1667,8 @@ Item {
                         id: volTrack
                         anchors.verticalCenter: parent.verticalCenter
                         width: ctx.width - 24 - 15 - 9 - 40
-                        height: 5
-                        radius: 2.5
+                        height: 7
+                        radius: 3.5
                         color: Qt.rgba(1, 1, 1, 0.18)
                         Rectangle {
                             height: parent.height
@@ -1672,24 +1677,27 @@ Item {
                             color: dv.ctxMuted ? JD.text3 : JD.accentBlue
                         }
                         Rectangle {
-                            width: 12
-                            height: 12
-                            radius: 6
+                            width: 14
+                            height: 14
+                            radius: 7
                             color: "#ffffff"
                             y: (parent.height - height) / 2
                             x: Math.max(0, Math.min(parent.width - width,
                                         parent.width * Math.max(0, Math.min(1, dv.ctxVolume)) - width / 2))
                         }
-                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        // По всей высоте строки, а не по самой полоске (см. подсказку выше)
+                        HoverHandler { margin: 16; cursorShape: Qt.PointingHandCursor }
                         DragHandler {
                             target: null
+                            margin: 16
                             xAxis.enabled: true
                             yAxis.enabled: false
-                            onCentroidChanged: if (active) audio.setVolume(dv.ctxStreams, centroid.position.x / volTrack.width)
+                            onCentroidChanged: if (active) audio.setVolume(dv.ctxStreams, Math.min(1, centroid.position.x / volTrack.width))
                         }
                         TapHandler {
+                            margin: 16
                             gesturePolicy: TapHandler.ReleaseWithinBounds
-                            onSingleTapped: eventPoint => audio.setVolume(dv.ctxStreams, eventPoint.position.x / volTrack.width)
+                            onSingleTapped: eventPoint => { if (eventPoint.position.x > -4) audio.setVolume(dv.ctxStreams, Math.min(1, eventPoint.position.x / volTrack.width)) }
                         }
                     }
                     Label2 {
