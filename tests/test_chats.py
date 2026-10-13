@@ -1,4 +1,6 @@
 """Чат: беда — id из окна мог вывести запись за папку чатов, а оборванная строка — потерять весь чат."""
+from pathlib import Path
+
 import pytest
 
 from justday import chats, config
@@ -119,3 +121,27 @@ def test_dictation_in_the_chat_window_fills_the_field_and_says_nothing(monkeypat
     got = asyncio.run(d._cmd_chat_dictate({}, None))
     assert got == {"ok": True, "dictated": "привет из чата"}
     assert d.state == "idle" and not d._dictating, "после диктовки микрофон остался занят"
+
+
+def test_a_screenshot_pasted_into_the_chat_reaches_the_brain_as_a_file(monkeypatch):
+    """Беда: Ctrl+V со снимком экрана в окне чата не вставлял ничего — QML видит в буфере только текст.
+    Демон кладёт картинку в файл, и в сообщение уходит путь, который мозг откроет через Read."""
+    import subprocess
+    import types
+
+    png = b"\x89PNG\r\n\x1a\nimage"
+
+    def run(cmd, **kw):
+        if "--list-types" in cmd:
+            return types.SimpleNamespace(stdout="text/plain\nimage/png\n")
+        assert cmd[-1] == "image/png"
+        return types.SimpleNamespace(stdout=png)
+
+    monkeypatch.setattr(chats.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(subprocess, "run", run)
+    path = chats.paste_image()
+    assert path.endswith(".png") and Path(path).read_bytes() == png
+    assert chats.paste_image() == path          # вставили второй раз — та же картинка, без копии
+
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(stdout="text/plain\n"))
+    assert chats.paste_image() == ""            # в буфере текст: окно вставит его само

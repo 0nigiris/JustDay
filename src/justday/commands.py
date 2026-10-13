@@ -401,6 +401,11 @@ class CommandsMixin:
         spawn(self._chat_turn(cid, text))
         return {"ok": True}
 
+    async def _cmd_chat_image(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Ctrl+V в окне чата: если в буфере картинка — её путь, окно вставит его в сообщение."""
+        path = await asyncio.to_thread(chats.paste_image)
+        return {"ok": bool(path), "chat_image": path}
+
     async def _cmd_chat_dictate(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Голосовой ввод в окне чата (Р2-42): одна фраза с микрофона → текст в поле ввода.
 

@@ -20,7 +20,7 @@ FloatingWindow {
         target: JD
         function onChatMessagesChanged() { Qt.callLater(() => list.positionViewAtEnd()) }
         // Надиктованное ложится туда, где стоит курсор, и не уходит само: Whisper мог расслышать криво.
-        function onChatDictated(text) {
+        function onChatInsert(text) {
             const gap = input.cursorPosition > 0 && !/\s$/.test(input.getText(0, input.cursorPosition)) ? " " : ""
             input.insert(input.cursorPosition, gap + text)
             input.forceActiveFocus()
@@ -167,11 +167,25 @@ FloatingWindow {
                     wrapMode: TextEdit.Wrap
                     color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 14
                     Keys.onPressed: (e) => {
+                        // картинку из буфера QML не видит; демон сохранит её в файл и вернёт путь.
+                        // Нажатие не забираем: если в буфере ещё и текст, он вставится как обычно
+                        if (e.matches(StandardKey.Paste)) JD.send({ cmd: "chat_image" })
                         if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && !(e.modifiers & Qt.ShiftModifier)) {
                             JD.chatSend(text); text = ""; e.accepted = true
                         }
                     }
                     Text { visible: !input.text; text: JD.tr("Сообщение"); color: JD.text3; font: input.font }
+                }
+                // файл, брошенный на поле, становится путём в сообщении: мозг сам откроет его через Read
+                DropArea {
+                    anchors.fill: parent
+                    onDropped: (drop) => {
+                        for (const u of drop.urls || []) {
+                            const path = decodeURIComponent(String(u).replace(/^file:\/\//, ""))
+                            JD.chatInsert(/\.(png|jpe?g|webp|gif)$/i.test(path) ? "[картинка: " + path + "]" : path)
+                        }
+                        drop.accept()
+                    }
                 }
                 // Диктовка в поле, без озвучки ответа. Второе нажатие — «я договорил».
                 Rectangle {

@@ -329,7 +329,7 @@ Singleton {
     property bool chatBusy: false
     property bool _chatWantNew: false
     property bool chatDictating: false   // кнопка микрофона в чате: идёт запись фразы в поле
-    signal chatDictated(string text)
+    signal chatInsert(string text)       // в поле ввода чата: надиктованное или вложенная картинка
     function chatDictate() {
         if (chatDictating) { send({ cmd: "chat_dictate", stop: true }); return }
         chatDictating = true
@@ -1651,9 +1651,10 @@ Singleton {
         if (m.chats !== undefined) chatList = m.chats || []
         if (m.dictated !== undefined) {
             chatDictating = false
-            if (m.dictated) chatDictated(m.dictated)
+            if (m.dictated) chatInsert(m.dictated)
             else if (m.error) flash(m.error, "mic-off", accentOrange)
         }
+        if (m.chat_image) chatInsert("[картинка: " + m.chat_image + "]")
         if (m.messages !== undefined && m.kind === undefined) { chatMessages = m.messages || []; chatModel = m.model || "" }
         if (m.id !== undefined && _chatWantNew) { _chatWantNew = false; chatOpenOne(m.id); chatRefresh() }
         if (m.apps !== undefined) { menuFound = m.apps; menuPick = 0 }

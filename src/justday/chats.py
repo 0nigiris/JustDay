@@ -4,9 +4,12 @@
 Файл, а не база: его видно глазами, и он переживает любое обновление."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import secrets
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -15,13 +18,48 @@ from . import config
 CHAT_NOTE = ("\n\n# Режим чата\nТы пишешь в текстовом чате, а не говоришь вслух: можно разметку, списки и код. "
              "Ничего не озвучивается. Если человек просит сказать что-то голосом, используй `justday say`; "
              "«передай Джарвису напомнить в 18:00» — это `justday alarm 18:00 текст` (или `justday timer 10m текст`): "
-             "Джарвис скажет это вслух в срок.")
+             "Джарвис скажет это вслух в срок. «[картинка: путь]» в сообщении — это вложение: посмотри его "
+             "инструментом Read, прежде чем отвечать.")
+
+IMAGE_TYPES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
+MAX_IMAGE = 20 * 1024 * 1024
 
 
 def chats_dir() -> Path:
     d = config.DATA_DIR / "chats"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def paste_image() -> str:
+    """Картинка из буфера обмена → файл в папке чатов; путь к нему, или «», если в буфере не картинка.
+
+    Окно чата не умеет достать картинку из буфера само (QML видит в нём только текст), а мозгу нужен
+    путь, а не байты: он смотрит картинку инструментом Read. Файл называется по содержимому, поэтому
+    одна и та же вставка дважды не плодит копий."""
+    if shutil.which("wl-paste"):
+        types_cmd, get_cmd = ["wl-paste", "--list-types"], ["wl-paste", "--type"]
+    elif shutil.which("xclip"):
+        types_cmd = ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"]
+        get_cmd = ["xclip", "-selection", "clipboard", "-o", "-t"]
+    else:
+        return ""
+    try:
+        types = subprocess.run(types_cmd, capture_output=True, text=True, timeout=5).stdout.split()
+        kind = next((t for t in IMAGE_TYPES if t in types), "")
+        if not kind:
+            return ""
+        data = subprocess.run([*get_cmd, kind], capture_output=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if not data or len(data) > MAX_IMAGE:
+        return ""
+    d = chats_dir() / "images"
+    d.mkdir(exist_ok=True)
+    path = d / f"{hashlib.sha256(data).hexdigest()[:16]}.{IMAGE_TYPES[kind]}"
+    if not path.exists():
+        path.write_bytes(data)
+    return str(path)
 
 
 def _path(chat_id: str) -> Path:
