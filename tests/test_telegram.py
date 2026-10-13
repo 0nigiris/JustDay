@@ -201,3 +201,24 @@ def test_guessing_the_pin_runs_into_a_pause() -> None:
 def test_without_a_pin_in_the_keyring_the_bot_works_as_before() -> None:
     gate = telegram.PinGate(pin=lambda: "")
     assert gate.check("/задача x") == "open"
+
+
+def test_asking_permission_opened_the_address_before_he_could_say_no(monkeypatch) -> None:
+    """Просьба «разрешить действие» несёт адрес, который модель хочет открыть. Превью телеграм
+    строит сам, со своих серверов: без запрета адрес открылся бы раньше, чем он нажмёт «Отклонить»."""
+    sent = []
+
+    class Answer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b'{"ok": true, "result": {}}'
+
+    monkeypatch.setattr(telegram, "token", lambda: "t")
+    monkeypatch.setattr(telegram.urllib.request, "urlopen", lambda req, timeout: sent.append(req.data) or Answer())
+    telegram.call("sendMessage", {"chat_id": "42", "text": "WebFetch https://x.example/?leak=1"})
+    assert b"disable_web_page_preview=true" in sent[0]

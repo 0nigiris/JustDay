@@ -56,7 +56,13 @@ def call(method: str, params: dict | None = None, timeout: float = TIMEOUT) -> d
     if not key:
         raise RuntimeError("нет токена бота: secret-tool store --label 'JustDay: telegram_token' "
                            "service justday key telegram_token")
-    data = urllib.parse.urlencode({k: v for k, v in (params or {}).items() if v is not None}).encode()
+    params = dict(params or {})
+    if method in ("sendMessage", "editMessageText"):
+        # Превью ссылки телеграм строит сам, со своих серверов, едва сообщение отправлено. Текст
+        # пишет модель, читавшая сайты, а в просьбе «разрешить действие» лежит адрес, который она
+        # хочет открыть: превью открыло бы его раньше, чем человек нажмёт «Отклонить».
+        params.setdefault("disable_web_page_preview", "true")
+    data = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None}).encode()
     req = urllib.request.Request(f"{API}/bot{key}/{method}", data=data)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
