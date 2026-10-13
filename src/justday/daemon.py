@@ -490,7 +490,17 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 if gen != self._speech_gen or not len(pcm):
                     continue
                 self.state = "speaking"
-                await self.player.play(pcm, self.tts.rate)
+                # Воспроизведение с мониторингом VAD для перебивания (Р2-35)
+                interrupted = await self._play_with_vad_monitor(pcm, self.tts.rate, gen)
+                if interrupted:
+                    # Человек перебил: распознаём новую речь и склеиваем с прошлым
+                    self._synth_ahead.clear()
+                    # Запускаем слушание с переносом контекста
+                    self._listen_cancel = asyncio.Event()
+                    # carry передастся в _listen_body через handle_utterance
+                    self.state = "listening"
+                    await self._listen_body(followup=True, prefill=None, carry=sentence)
+                    continue
                 if self.state == "speaking":
                     self.state = "thinking" if self.brain.busy else "idle"
             except Exception:
@@ -571,7 +581,81 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
 
         self.state = "speaking"
         try:
-            await self.player.play_stream(chunks(), rate)
+            # Play stream with VAD monitoring for interruption (Р2-35)
+            end_hard_s = float(self.cfg.get("audio", {}).get("end_hard_seconds", 3.0)) if hasattr(self, "cfg") else 3.0
+            if end_hard_s > 0 and self.mic_on():
+                # Ensure microphone is running for VAD
+                self.mic.start()
+                vad = None
+                try:
+                    await asyncio.to_thread(lambda: self.recorder.vad)
+                    vad = self.recorder.vad
+                    vad.reset_states()
+                except Exception:
+                    log.warning("VAD unavailable for interruption monitor")
+                    vad = None
+
+                if vad:
+                    loop = asyncio.get_running_loop()
+                    q: asyncio.Queue = asyncio.Queue()
+                    cb = lambda f: loop.call_soon_threadsafe(q.put_nowait, f)  # noqa: E731
+                    self.mic.subscribe(cb)
+
+                    interrupted = False
+                    last_audio_time = time.monotonic()
+
+                    async def vad_monitor():
+                        nonlocal interrupted, last_audio_time
+                        while not interrupted and self._speech_gen == gen:
+                            try:
+                                frame = await asyncio.wait_for(q.get(), timeout=0.5)
+                            except TimeoutError:
+                                continue
+                            p = float(vad.predict(frame, frame_size=640))
+                            if p > 0.5 and time.monotonic() - last_audio_time <= end_hard_s:
+                                interrupted = True
+                                self.stop_speaking()
+                                break
+
+                    monitor_task = asyncio.create_task(vad_monitor())
+
+                    async def chunks_with_vad():
+                        nonlocal last_audio_time
+                        for data in head:
+                            if interrupted or gen != self._speech_gen:
+                                break
+                            out = faster(data)
+                            if out:
+                                last_audio_time = time.monotonic()
+                                yield out
+                        async for data in stream:
+                            if interrupted or gen != self._speech_gen:
+                                break
+                            out = faster(data)
+                            if out:
+                                last_audio_time = time.monotonic()
+                                yield out
+                        rest = stretch.drain()
+                        if rest.size:
+                            yield rest.tobytes()
+
+                    try:
+                        await self.player.play_stream(chunks_with_vad(), rate)
+                    except OSError:
+                        log.warning("%s stream broke", engine)
+                    finally:
+                        monitor_task.cancel()
+                        try:
+                            await monitor_task
+                        except asyncio.CancelledError:
+                            pass
+                        self.mic.unsubscribe(cb)
+                    if interrupted:
+                        return True
+                else:
+                    await self.player.play_stream(chunks(), rate)
+            else:
+                await self.player.play_stream(chunks(), rate)
         except OSError:
             log.warning("%s stream broke", engine)
         if self.state == "speaking":
@@ -585,6 +669,87 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
     async def earcon(self, kind: str) -> None:
         if self.cfg["audio"]["earcons"]:
             await self.player.play(audio.earcon(kind), 48000)
+
+    async def _play_with_vad_monitor(self, pcm: np.ndarray, rate: int, gen: int) -> bool:
+        """Play PCM while monitoring microphone for VAD interruption (Р2-35).
+
+        Returns True if interrupted by user speech, False if played to completion."""
+        # Check if cfg exists (may not in tests)
+        if not hasattr(self, "cfg"):
+            await self.player.play(pcm, rate)
+            return False
+
+        end_hard_s = float(self.cfg.get("audio", {}).get("end_hard_seconds", 3.0))
+        if end_hard_s <= 0:
+            await self.player.play(pcm, rate)
+            return False
+
+        # Ensure microphone is running for VAD
+        if not self.mic_on():
+            self.mic.start()
+
+        vad = None
+        try:
+            # Load VAD model
+            await asyncio.to_thread(lambda: self.recorder.vad)
+            vad = self.recorder.vad
+            vad.reset_states()
+        except Exception:
+            log.warning("VAD unavailable for interruption monitor")
+            await self.player.play(pcm, rate)
+            return False
+
+        # Subscribe to microphone frames
+        loop = asyncio.get_running_loop()
+        q: asyncio.Queue = asyncio.Queue()
+        cb = lambda f: loop.call_soon_threadsafe(q.put_nowait, f)  # noqa: E731
+        self.mic.subscribe(cb)
+
+        interrupted = False
+        last_audio_time = time.monotonic()
+        chunk_duration = audio.FRAME / audio.RATE  # 80 ms
+
+        async def vad_monitor():
+            nonlocal interrupted, last_audio_time
+            while not interrupted and self._speech_gen == gen:
+                try:
+                    frame = await asyncio.wait_for(q.get(), timeout=0.5)
+                except TimeoutError:
+                    continue
+                p = float(vad.predict(frame, frame_size=640))
+                if p > 0.5 and time.monotonic() - last_audio_time <= end_hard_s:
+                    # Speech detected within end_hard window
+                    interrupted = True
+                    self.stop_speaking()
+                    break
+
+        # Start VAD monitor task
+        monitor_task = asyncio.create_task(vad_monitor())
+
+        try:
+            # Play audio in chunks, updating last_audio_time
+            chunk_size = rate * chunk_duration
+            for i in range(0, len(pcm), chunk_size):
+                if interrupted or gen != self._speech_gen:
+                    break
+                chunk = pcm[i:i + chunk_size]
+                if len(chunk) == 0:
+                    break
+                await self.player.play(chunk, rate)
+                last_audio_time = time.monotonic()
+                if interrupted:
+                    break
+            if not interrupted:
+                await asyncio.sleep(0.1)  # give VAD time to catch trailing speech
+        finally:
+            monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
+            self.mic.unsubscribe(cb)
+
+        return interrupted
 
     # ---------------- listening ----------------
     async def toggle(self, source: str = "button") -> str:
