@@ -333,3 +333,10 @@ def test_a_button_icon_from_the_pc_config_cannot_inject_markup() -> None:
                          capture_output=True, text=True, check=True).stdout
     assert out == ('<i class="i " style="--src:url(/static/icons/xsvgonmouseoveralert1data-a.svg)"'
                    ' aria-hidden="true"></i>')
+
+
+def test_dictation_is_not_forbidden_its_own_microphone(anon: TestClient) -> None:
+    """Заголовок `microphone=()` запрещал микрофон всем, и надиктовке тоже:
+    getUserMedia в WebView отвечал отказом. Своей странице можно, встроенным — нет."""
+    policy = anon.get("/").headers["permissions-policy"]
+    assert "microphone=(self)" in policy and "camera=()" in policy

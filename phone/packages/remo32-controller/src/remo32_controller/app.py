@@ -130,9 +130,11 @@ def install_security_headers(app: FastAPI, settings: ControllerSettings) -> None
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        # Пульт не спрашивает ни камеру, ни микрофон, ни местоположение.
+        # Камеру и местоположение пульт не спрашивает. Микрофон — только своей
+        # странице: им пишет надиктовка, и `microphone=()` запрещал его и ей
+        # самой — WebView отвечал NotAllowedError, и надиктовка молчала.
         response.headers.setdefault(
-            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+            "Permissions-Policy", "camera=(), microphone=(self), geolocation=(), interest-cohort=()"
         )
         if https:
             response.headers.setdefault(
