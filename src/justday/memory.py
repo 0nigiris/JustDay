@@ -289,5 +289,7 @@ def deduplicate_report(threshold: float = 0.85) -> str:
             d["similarity"], d["reason"], d["title_a"][:50], d["title_b"][:50]))
     if len(dupes) > 15:
         lines.append(f"  ... и ещё {len(dupes) - 15} пар")
-    lines.append("\nДля объединения: `justday memory merge ФАЙЛ1 ФАЙЛ2`")
+    # Команды merge нет: склеить две записи — работа для мозга (прочитать обе, оставить одну),
+    # а не для difflib. Раньше здесь советовали несуществующую `justday memory merge`.
+    lines.append("\nОбъединить: попроси «склей эти записи памяти» или `justday memory forget ФАЙЛ` для лишней.")
     return "\n".join(lines)

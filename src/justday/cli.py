@@ -402,7 +402,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("memory", help="show where JustDay's memory lives / print it")
     sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new", "tidy", "dupes"],
                     default="show")
-    sp.add_argument("target", nargs="?", help="memory file for `forget` or second file for `merge`")
+    sp.add_argument("target", nargs="?", help="memory file for `forget`")
     sp.add_argument("--threshold", type=float, default=0.85, help="similarity threshold for `dupes` (0.0-1.0)")
 
     # helpers used by the brain

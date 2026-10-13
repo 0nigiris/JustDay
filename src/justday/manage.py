@@ -33,12 +33,6 @@ MODELS = {  # suggested models per provider (any id works)
     "openrouter": ["openrouter/free", "nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free",
                    "google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-lightning:free"],
     "deepseek": ["deepseek-v4-pro", "deepseek-flash"],
-    # Free OpenAI-compatible providers via LiteLLM proxy
-    "groq": ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"],
-    "cerebras": ["llama3.1-70b", "llama3.1-8b"],
-    "gemini": ["gemini-1.5-flash", "gemini-1.5-pro"],
-    "mistral": ["mistral-large-latest", "mistral-small-latest", "open-mistral-7b"],
-    "cohere": ["command-r-plus", "command-r", "command-light"],
     "custom": [],
 }
 
