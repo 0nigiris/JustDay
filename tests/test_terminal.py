@@ -884,3 +884,44 @@ def test_no_codex_means_no_review_and_no_error(monkeypatch) -> None:
     monkeypatch.setattr(terminal.shutil, "which", lambda name: None)
     work = terminal.Work({"terminal": {}, "brain": {}}, rungs=rungs("claude:opus"), engines={})
     assert work.reviewer is None and not work.review_on()
+
+
+def test_opencode_limit_in_the_stream_steps_down_instead_of_spinning(monkeypatch) -> None:
+    """Ночь на 13 октября: OpenCode сказал 429 «The usage limit has been reached» строкой потока, а не в
+    stderr, — мы приняли это за ход без слов, и сто кругов за два часа ушли в пустоту."""
+    import json
+
+    async def fake_run(cmd, env, line, quiet):
+        line(json.dumps({"type": "error", "sessionID": "s1", "error": {
+            "name": "APIError", "data": {"message": "The usage limit has been reached", "statusCode": 429}}}))
+        return [], ""
+
+    monkeypatch.setattr(terminal, "_run", fake_run)
+    monkeypatch.setattr(terminal, "_opencode_cli", lambda: "opencode")
+    said = asyncio.run(terminal.ask_opencode(terminal.Rung("opencode", "openai/gpt-6-luna"), "дальше", "s1",
+                                             {"terminal": {"unattended": True}}, lambda t: None, lambda t: None))
+    assert said.limit and "usage limit" in said.error and not said.text
+
+
+def test_a_silent_turn_at_night_waits_instead_of_spinning_every_minute(monkeypatch) -> None:
+    """Ход без слов, без инструментов и без названной беды — пустой. Ночью такие круги шли раз в
+    75 секунд два часа подряд; теперь после пустого хода ночь ждёт, а не крутится."""
+    from justday import server
+
+    slept: list[float] = []
+
+    async def fake_sleep(s):
+        slept.append(s)
+
+    monkeypatch.setattr(server, "awake", lambda why="": 0)
+    monkeypatch.setattr(terminal.asyncio, "sleep", fake_sleep)
+    cfg = {"terminal": {"ladder": ["claude:opus"], "night_nudges": 0}, "brain": {}}
+    work = terminal.Work(cfg, rungs=rungs("claude:opus"),
+                         engines={"claude": engine([terminal.Said(text=""), terminal.Said(text="сделал")])})
+    expire_after_first_turn(work)
+    monkeypatch.setattr(terminal, "Work", lambda *a, **kw: work)
+    monkeypatch.setattr(terminal, "NIGHT_DIR", Path("/tmp") / "justday-тест-ночь")
+
+    asyncio.run(terminal.night("весь план", hours=0.5, cfg=cfg, dark=False))
+
+    assert 300 in slept, "после пустого хода ночь не подождала"

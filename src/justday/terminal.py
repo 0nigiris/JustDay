@@ -397,6 +397,12 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
         elif ev.get("type") in ("tool", "tool_start") and part.get("tool"):
             got.tools.append(str(part["tool"]))
             on_tool(str(part["tool"]))
+        elif ev.get("type") == "error":
+            # Беда приходит строкой потока, а не в stderr. Мы её не читали — и 429 «The usage limit
+            # has been reached» выглядел как ход без слов: в ночь на 13 октября сто кругов за два
+            # часа ушли в пустоту, лестница не спустилась и не подождала.
+            e = ev.get("error") or {}
+            got.error = str((e.get("data") or {}).get("message") or e.get("name") or e)[:400]
 
     _, err = await _run(cmd, {**shell.env(), **_marks(cfg)}, line, _quiet_for(cfg))
     if err.strip():
@@ -942,7 +948,9 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
                     on_text=lambda t: write(t), on_note=note, on_pick=picked,
                     on_tool=lambda name: write(f"\n· {name}\n", "\n"))
             log.write_text("\n".join(lines) + "\n", encoding="utf-8")   # журнал виден и посреди ночи
-            if said.error and not said.text:
+            # Ход без слов и без единого инструмента — тоже пустой, даже если беду не назвали: какую
+            # ещё ошибку движок промолчит, заранее не узнать, а круг раз в минуту ничего не даёт.
+            if not said.text and (said.error or not said.tools):
                 note("Ход не удался; жду 5 минут, чтобы не крутиться вхолостую.")
                 await asyncio.sleep(300)
             rounds += 1
