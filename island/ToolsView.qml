@@ -106,7 +106,8 @@ Item {
                     }
             }
 
-            IconButton { icon: "x"; size: 30; Layout.alignment: Qt.AlignTop; onClicked: JD.closeTools() }
+            // Ростом с вкладку: 30 px рядом с вкладками в 34 смотрелись мелкой кнопкой сбоку.
+            IconButton { icon: "x"; size: 34; Layout.alignment: Qt.AlignTop; onClicked: JD.closeTools() }
         }
 
         // Поиск. Фокус берёт сразу: открыли панель — можно печатать, как в Spotlight.
