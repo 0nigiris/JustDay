@@ -133,26 +133,6 @@ def system_popups(on: bool | None = None) -> dict:
     return {"ok": True, "popups": bool(on)}
 
 
-def app_popups(app: str, on: bool) -> dict:
-    """Всплывашки одной программы. История при этом остаётся: прячем показ, а не запись.
-
-    Нужно там, где «не беспокоить» бессильно: запись экрана плазма показывает всегда и нарочно, и
-    спорить с этим правилом целиком не стоит — а вот заткнуть одну программу, которая каждый раз
-    сообщает, куда она сохранила файл, можно и нужно.
-    """
-    ident = str(app or "").strip()
-    if not ident:
-        return {"ok": False, "error": "нечего прятать: пустое имя программы"}
-    try:
-        subprocess.run([kde.KWRITE, "--file", "plasmanotifyrc",
-                        "--group", "Applications", "--group", ident,
-                        "--key", "ShowPopups", "true" if on else "false"],
-                       capture_output=True, timeout=5, check=False)
-    except (OSError, subprocess.SubprocessError) as e:
-        return {"ok": False, "error": str(e)}
-    return {"ok": True, "app": ident, "popups": bool(on)}
-
-
 def _quiet_now() -> bool:
     try:
         raw = subprocess.run([kde.KREAD, "--file", "plasmanotifyrc", "--group", "DoNotDisturb",

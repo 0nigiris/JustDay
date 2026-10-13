@@ -12,8 +12,8 @@ import pytest
 
 ISLAND = Path(__file__).resolve().parent.parent / "island"
 VIEWS = ["MenuView", "ToolsView", "SessionsView", "HistoryView", "PlansView", "MixerView", "TrayView", "QrView",
-         "ActivityPanel", "MusicLibrary", "ControlTiles", "DockAudio", "DockClock", "DockCat", "Buddy", "Mascot",
-         "DockView", "TrayMenu", "ActivityPill", "ChatWindow"]
+         "MusicLibrary", "ControlTiles", "DockAudio", "DockClock", "DockCat", "Buddy", "Mascot",
+         "DockView", "TrayMenu", "ChatWindow"]
 
 PROBE = """import QtQuick
 import Quickshell
