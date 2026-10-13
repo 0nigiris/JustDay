@@ -119,3 +119,19 @@ def test_play_latency_pairs_heard_with_next_play(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "EVENTS_FILE", f)
     got = events.play_latency().splitlines()
     assert got[0].strip().startswith("1.2 с") and got[1].strip().startswith("0.8 с")
+
+
+@pytest.mark.parametrize("phrase", [
+    "Блять, ты включи последнюю музыку, которую я уже включал.",
+    "Ты мне музыку включи самую последнюю, которую ты мне включал, блять.",
+    "Верни то, что играло",
+])
+def test_play_what_you_played_before_is_answered_without_the_brain(phrase):
+    """6 октября: «включи последнюю музыку, которую ты включал» ушла к мозгу; он историю не видел,
+    трижды переспросил, а потом полез в память и поставил Back in Black."""
+    assert media.parse(phrase) == ("last", "")
+
+
+@pytest.mark.parametrize("phrase", ["Что ты включал вчера?", "Включи свет, который включал"])
+def test_a_question_about_what_played_is_not_a_play_request(phrase):
+    assert media.parse(phrase) != ("last", "")

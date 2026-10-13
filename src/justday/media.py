@@ -193,9 +193,18 @@ def live_music(text: str) -> tuple[str, str] | None:
     return None
 
 
+# «включи музыку, которую ты мне включал», «верни то, что играло» (6 окт: мозг истории не видел, полез в
+# память и поставил Back in Black). Нужны оба слова: повелительное и прошедшее — «что ты включал?» не просьба.
+_PLAY_NOW = re.compile(rf"\b(?:{_V_ANY}|верни|вернуть)\b")
+_PLAYED = re.compile(r"\b(?:включал\w*|играл\w*|слушал\w*|ставил\w*)\b")
+
+
 def parse(text: str) -> tuple[str, str] | None:
-    """("music" | "video" | "video_random" | "library", query) for "включи песню …", else None."""
+    """("music" | "video" | "video_random" | "library" | "last", query) for "включи песню …", else None."""
     t = _NAME.sub("", text.strip()).strip().rstrip(".!?…")
+    s = _say(t)
+    if _PLAY_NOW.search(s) and _PLAYED.search(s) and not _NOT_MUSIC.search(s) and len(s.split()) <= 14:
+        return "last", ""
     if _LIBRARY.match(t) and library():
         return "library", ""
     if got := live_music(t):

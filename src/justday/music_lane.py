@@ -94,9 +94,12 @@ class MusicMixin:
                 near = media.find_local(query, limit=1)
                 if not (near and near[0]["score"] >= 0.82):  # молча искать и молча не найти — как раз его жалоба
                     await self.say(t("В фонотеке нет, ищу на ютубе."))
-            r = await (self.play_library(shuffle=True) if kind == "library"
-                       else self.play_music(query) if kind == "music"
-                       else self.play_video(query, random=kind == "video_random"))
+            if kind == "last":  # прерванная очередь — продолжить; иначе фонотека с того, что играло последним
+                r = await (self.media_control("resume") if self.music.active else self.play_library())
+            else:
+                r = await (self.play_library(shuffle=True) if kind == "library"
+                           else self.play_music(query) if kind == "music"
+                           else self.play_video(query, random=kind == "video_random"))
             if r.get("ok"):
                 self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → {r.get('done', '')}. Не повторяй.]")
             elif r.get("error") != "cancelled":
