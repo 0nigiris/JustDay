@@ -235,3 +235,38 @@ def test_missing_presence_signal_never_blanks_a_screen_under_uncertainty(machine
     out = server.on("человек ушёл")
 
     assert out.get("waiting") and not any(c[:2] == ("kscreen-doctor", "--dpms=off") for c in machine)
+
+
+def _screens_json() -> str:
+    """Два монитора как у него: DP-1 1080p@165, DP-2 1440p@185; первым в списке — чужое разрешение."""
+    hd, qhd = {"width": 1920, "height": 1080}, {"width": 2560, "height": 1440}
+    return json.dumps({"outputs": [
+        {"id": 1, "connected": True, "enabled": True, "currentModeId": "a",
+         "modes": [{"id": "x", "size": {"width": 1280, "height": 720}}, {"id": "a", "size": hd}, {"id": "b", "size": hd}]},
+        {"id": 2, "connected": True, "enabled": True, "currentModeId": "c",
+         "modes": [{"id": "c", "size": qhd}]},
+    ]})
+
+
+def test_waking_the_monitor_never_changes_its_resolution(machine, monkeypatch) -> None:
+    """DP-1 не оживал после погашенных экранов; будит его только смена герцовки. 13 окт это сделали
+    вслепую — «первый другой режим», то есть и другое разрешение: KWin перекладывает окна. Теперь
+    только тот же размер, а выход без такого режима не трогается вовсе."""
+    real_out = server._out
+    monkeypatch.setattr(server, "_out", lambda *c, timeout=10: _screens_json() if c[:2] == ("kscreen-doctor", "-j")
+                        else real_out(*c, timeout=timeout))
+    server.on("ночная работа")
+    machine.clear()
+    server.off()
+    modes = [c[1] for c in machine if c[0] == "kscreen-doctor" and ".mode." in c[1]]
+    assert modes == ["output.1.mode.b", "output.1.mode.a"], modes
+
+
+def test_monitors_are_not_blinked_when_server_mode_never_dimmed_them(machine, monkeypatch) -> None:
+    """Экраны не гасили — и мигать им при выходе незачем."""
+    monkeypatch.setattr(server, "_opts", lambda: {"screens_off": False, "mute": True, "pause_players": True, "hours": 10})
+    monkeypatch.setattr(server, "_out", lambda *c, timeout=10: _screens_json() if c[:2] == ("kscreen-doctor", "-j") else "")
+    server.on("работа")
+    machine.clear()
+    server.off()
+    assert not [c for c in machine if c[0] == "kscreen-doctor" and ".mode." in c[1]]

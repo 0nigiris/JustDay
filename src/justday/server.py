@@ -82,12 +82,13 @@ def _screens(on: bool) -> bool:
 
 
 def _ensure_monitors_awake() -> None:
-    """После dpms=on монитор на NVIDIA+DP иногда не просыпается.
+    """После dpms=on монитор на NVIDIA+DP иногда не просыпается (ПЛАН п.24): система считает его
+    включённым, картинки нет, оживляет только смена герцовки туда-обратно.
 
-    Проблема: kscreen-doctor --dpms=on возвращает успех, система считает монитор включённым,
-    но картинки нет. Единственное, что будит — смена режима.
-    Фикс: для каждого подключенного выхода переключить режим на соседний и обратно.
-    Делаем один раз, осторожно: только для подключенных выходов с >1 режимом.
+    Понять из программы, что картинки нет, нельзя, поэтому переставляем всем — но только частоту
+    при том же разрешении: смена разрешения заставила бы KWin переложить и ужать окна. Зовётся
+    лишь после того, как экраны гасил режим сервера: монитор в этот миг и так пересинхронизируется,
+    и лишнее мигание почти не видно.
     """
     out = _out("kscreen-doctor", "-j")
     if not out:
@@ -96,23 +97,15 @@ def _ensure_monitors_awake() -> None:
         data = json.loads(out)
     except (json.JSONDecodeError, ValueError):
         return
-
     for output in data.get("outputs", []):
         if not output.get("connected") or not output.get("enabled"):
             continue
         modes = output.get("modes", [])
-        if len(modes) < 2:
-            continue
-        current = output.get("currentModeId")
-        if not current:
-            continue
-        # Найти соседний режим (не текущий)
-        for mode in modes:
-            if mode["id"] != current:
-                # Переключить на соседний и обратно
-                _run("kscreen-doctor", f"output.{output['id']}.mode.{mode['id']}")
-                _run("kscreen-doctor", f"output.{output['id']}.mode.{current}")
-                break
+        cur = next((m for m in modes if m.get("id") == output.get("currentModeId")), None)
+        other = cur and next((m for m in modes if m.get("id") != cur["id"] and m.get("size") == cur.get("size")), None)
+        if other:
+            _run("kscreen-doctor", f"output.{output['id']}.mode.{other['id']}")
+            _run("kscreen-doctor", f"output.{output['id']}.mode.{cur['id']}")
 
 
 def _mute(on: bool) -> bool:
@@ -394,8 +387,8 @@ def off(resume: bool = True) -> dict:
     """
     was = state()
     out: dict = {"ok": True, "on": False, "screens_on": _screens(True)}
-    # Монитор на NVIDIA+DP иногда не просыпается после dpms=on — пробуем разбудить сменой режима
-    _ensure_monitors_awake()
+    if was.get("screens_off"):
+        _ensure_monitors_awake()
     if was.get("leds_off"):
         out["leds_on"] = _leds(True)
     _watchdog_off()
