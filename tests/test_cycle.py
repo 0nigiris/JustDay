@@ -19,6 +19,7 @@ def test_daily_step_runs_once_after_its_hour():
 def test_away_step_waits_while_he_is_at_the_machine():
     step = {"name": "Обновить", "run": "true", "every_hours": 1, "away": True}
     assert not cycle.due(step, 0, NOW, True)
+    assert not cycle.due(step, 0, NOW, None)  # островок молчит — человека не видно, но и «ушёл» не сказано
     assert cycle.due(step, 0, NOW, False)
     assert not cycle.due({**step, "on": False}, 0, NOW, False)
 

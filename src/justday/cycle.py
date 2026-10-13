@@ -47,7 +47,8 @@ def due(step: dict, ran: float, now: float, here: bool | None) -> bool:
     """Пора ли шагу. here — сидит ли он за машиной (None — неизвестно, островок молчит)."""
     if not step.get("on", True) or not step.get("run"):
         return False
-    if step.get("away") and here is True:
+    # None — островок не ответил, а «не знаю» за человека не считается: шаг «без него» ждёт явного «ушёл»
+    if step.get("away") and here is not False:
         return False
     if step.get("at"):
         mark = _at_today(step["at"], now)
