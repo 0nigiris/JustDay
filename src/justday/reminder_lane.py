@@ -112,5 +112,7 @@ class ReminderMixin:
             return
         self._ringing = ""
         spawn(self.music.duck(False))
-        self.publish(kind="card_close")
+        # Своё событие, а не card_close: тот шлют и разрешения, и плеер, и звонящий будильник
+        # исчезал с экрана от чужой карточки, продолжая звенеть.
+        self.publish(kind="alarm_close")
         self.publish(reminders=self._reminders_state())

@@ -1839,7 +1839,8 @@ Singleton {
             break
         case "compose": openCompose(m.text, m.context); break
         case "video_cmd": videoCommand(m.action); break
-        case "card_close": card = null; alarm = null; break
+        case "card_close": card = null; break
+        case "alarm_close": alarm = null; break
         case "card":
             if (!m.card) { card = null; break }
             if (m.card.type === "alarm") { alarm = m.card; break }   // its own view, and no timeout: it rings until dismissed

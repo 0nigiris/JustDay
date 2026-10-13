@@ -1244,6 +1244,8 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
             self._discard_recording = True  # cancel ≠ "finish the phrase": drop what was recorded
             self._listen_cancel.set()
         self._preapproved_until = 0.0
+        if self._ringing:      # островок прячет будильник по «cancel» — значит, и звенеть ему незачем
+            self.dismiss_alarm()
         if self._approval and not self._approval.done():
             self._approval.set_result("deny")
         while not self._event_queue.empty():
