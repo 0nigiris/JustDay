@@ -84,7 +84,7 @@ def run(scene: dict[str, Any]) -> dict[str, Any]:
     failed: list[str] = []
 
     for name in scene["close"]:
-        if desktop.windows("close", name):
+        if desktop.windows("close_app", name):
             closed.append(name)
     for name in scene["open"]:
         app = _app_id(name)

@@ -417,7 +417,9 @@ const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
 let n = 0;
 for (const w of workspace.windowList()) {
   if (!w.normalWindow) continue;
-  const hay = (w.resourceClass + " " + w.resourceName + " " + w.caption).toLowerCase();
+  // close_app закрывает программу по имени и на заголовок не смотрит: «закрой Code» иначе закрыл бы
+  // и вкладку браузера «Claude Code docs», и редактор с files.py на «закрой Files».
+  const hay = (w.resourceClass + " " + w.resourceName + (action === "close_app" ? "" : " " + w.caption)).toLowerCase();
   if ((action === "active" || action === "close_active") && workspace.activeWindow !== w) continue;
   if (wid && String(w.internalId) !== wid) continue;
   if (q && !(action === "wake" ? squash(hay).includes(squash(q)) : hay.includes(q))) continue;
@@ -425,7 +427,7 @@ for (const w of workspace.windowList()) {
   // не должна получить его обратно нашими руками — это был бы значок, который не умеет прятать.
   if (action === "wake" && !w.minimized) continue;
   n++;
-  if (action === "close" || action === "close_active") w.closeWindow();
+  if (action === "close" || action === "close_app" || action === "close_active") w.closeWindow();
   else if (action === "focus" || action === "wake") { w.minimized = false; workspace.activeWindow = w; }
   else if (action === "minimize") w.minimized = true;
   const g = w.frameGeometry;
@@ -656,9 +658,9 @@ def _x11_windows(action: str, query: str) -> list[dict]:
         app = cls.split(".")[-1] or cls
         if action == "active" and int(wid, 16) != active:
             continue
-        if query and query.lower() not in f"{cls} {title}".lower():
+        if query and query.lower() not in (cls if action == "close_app" else f"{cls} {title}").lower():
             continue
-        if action == "close":
+        if action in ("close", "close_app"):
             subprocess.run(["wmctrl", "-i", "-c", wid], timeout=5, check=False)
         elif action == "focus":
             subprocess.run(["wmctrl", "-i", "-a", wid], timeout=5, check=False)

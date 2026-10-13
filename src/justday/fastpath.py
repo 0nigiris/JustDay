@@ -235,10 +235,10 @@ def try_handle(text: str) -> str | None:
             return None
         last_icon = app.get("icon") or app["id"]
         action = {"сверни": "minimize", "свернуть": "minimize", "разверни": "focus", "переключись на": "focus",
-                  "покажи": "focus", "minimize": "minimize", "switch to": "focus", "show": "focus", "focus": "focus"}.get(verb, "close")
+                  "покажи": "focus", "minimize": "minimize", "switch to": "focus", "show": "focus", "focus": "focus"}.get(verb, "close_app")
         for term in (app["name"], app["id"].rsplit(".", 1)[-1], target):
             if desktop.windows(action, term):
-                return _t({"close": "закрыл {what}", "minimize": "свернул {what}", "focus": "переключил на {what}"}[action], what=app["name"])
+                return _t({"close_app": "закрыл {what}", "minimize": "свернул {what}", "focus": "переключил на {what}"}[action], what=app["name"])
         return None
     return None
 
