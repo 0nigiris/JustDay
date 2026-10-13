@@ -2301,7 +2301,7 @@ Item {
                 Row { title: JD.tr("Закрепить в доке"); subtitle: JD.tr("Программу активного окна; повторно — открепить. По умолчанию Meta+P");
                       Field { id: pinKey; text: win.d.hotkeys ? win.d.hotkeys.pin : ""; implicitWidth: 180 } }
             }
-            PageTitle { title: JD.tr("Док · Meta+1…9"); subtitle: JD.tr("Как на macOS: Meta+N открывает N-ю программу слева направо. Забирает слоты у панели задач Plasma.") }
+            PageTitle { title: JD.tr("Док · Meta+1…9"); subtitle: JD.tr("Meta+N открывает N-ю программу слева направо. Забирает слоты у панели задач Plasma.") }
             Group {
                 Row { title: JD.tr("Док · слот 1"); subtitle: JD.tr("N-я программа слева направо (запуск или фокус)");
                       Field { id: dock1Key; text: win.d.hotkeys ? (win.d.hotkeys.dock1 || "") : ""; implicitWidth: 180 } }
