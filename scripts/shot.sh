@@ -51,7 +51,9 @@ ShellRoot {
 }
 EOF
 
-log=$(QT_QPA_PLATFORM=offscreen timeout 90 quickshell -p "$work/island/shot.qml" 2>&1 || true)
+# Тема KDE — явно: вне экрана Qt её сам не грузит, и значки программ (док, лоток) выходят
+# пурпурными клетками «нет значка».
+log=$(QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=${QT_QPA_PLATFORMTHEME:-kde} timeout 90 quickshell -p "$work/island/shot.qml" 2>&1 || true)
 if ! grep -q "SHOT ok" <<<"$log"; then
     echo "$log" | tail -20 >&2
     exit 1
