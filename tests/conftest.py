@@ -47,8 +47,14 @@ def no_live_machine(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     работы, ставил музыку на паузу и заводил сторожа — «как только ты что-то начинаешь, у меня
     блокируется экран». Теперь внешние команды режима подменены всем тестам сразу.
     """
-    from justday import server
+    from justday import cycle, server
 
+    # Пустая комната ниже — это «шаги без него созрели»: тест домашнего круга демона заводил живую
+    # службу justday-cycle, и pytest сам сводил человеку память и мог запустить `justday update`.
+    monkeypatch.setattr(cycle, "launch", lambda name: False)
+    monkeypatch.setattr(cycle, "running", lambda: False)
+    monkeypatch.setattr(cycle, "DIR", tmp_path / "цикл")
+    monkeypatch.setattr(cycle, "LAST", tmp_path / "цикл" / "last.json")
     monkeypatch.setattr(server, "_run", lambda *cmd, timeout=10: False)
     monkeypatch.setattr(server, "_out", lambda *cmd, timeout=10: "")
     monkeypatch.setattr(server, "_keep_awake", lambda why: 0)

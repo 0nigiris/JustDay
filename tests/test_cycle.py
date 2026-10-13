@@ -6,6 +6,7 @@ import pytest
 
 from justday import cycle
 
+REAL_LAUNCH = cycle.launch  # conftest глушит launch всем тестам; здесь проверяется сам запуск, с подменённым subprocess
 NOW = time.mktime((2026, 10, 14, 6, 0, 0, 0, 0, -1))  # 06:00
 FIVE = time.mktime((2026, 10, 14, 5, 0, 0, 0, 0, -1))
 
@@ -41,7 +42,7 @@ def test_step_runs_as_its_own_unit_not_as_daemon_child(monkeypatch):
     calls = []
     monkeypatch.setattr(cycle.shutil, "which", lambda _: "/usr/bin/systemd-run")
     monkeypatch.setattr(cycle.subprocess, "run", lambda cmd, **k: calls.append(cmd) or type("P", (), {"returncode": 0}))
-    assert cycle.launch("Обновить JustDay")
+    assert REAL_LAUNCH("Обновить JustDay")
     assert calls[-1][0] == "systemd-run" and f"--unit={cycle.UNIT}" in calls[-1]
 
 
@@ -93,3 +94,12 @@ def test_edit_rejects_arbitrary_commands_and_invalid_schedules(monkeypatch):
         cycle.edit(0, "run", "rm -rf ~")
     with pytest.raises(ValueError):
         cycle.edit(0, "at", "25:99")
+
+
+def test_pytest_never_starts_a_live_step():
+    """pytest крутил настоящий домашний круг в «пустой комнате» — и запускал шаги цикла на живой машине
+    (13 октября так свёл человеку память). conftest обязан держать цикл в песочнице для всех тестов."""
+    from justday import config
+
+    assert cycle.launch is not REAL_LAUNCH and cycle.launch("Обновить JustDay") is False
+    assert config.STATE_DIR not in cycle.LAST.parents
