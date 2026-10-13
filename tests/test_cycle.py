@@ -41,3 +41,16 @@ def test_step_runs_as_its_own_unit_not_as_daemon_child(monkeypatch):
     monkeypatch.setattr(cycle.subprocess, "run", lambda cmd, **k: calls.append(cmd) or type("P", (), {"returncode": 0}))
     assert cycle.launch("Обновить JustDay")
     assert calls[-1][0] == "systemd-run" and f"--unit={cycle.UNIT}" in calls[-1]
+
+
+def test_manual_run_refuses_while_another_step_holds_the_lock(monkeypatch, tmp_path):
+    """Ручной запуск мимо службы не должен идти параллельно с шагом, который уже обновляет установку."""
+    import fcntl
+
+    monkeypatch.setattr(cycle, "DIR", tmp_path)
+    monkeypatch.setattr(cycle, "LAST", tmp_path / "last.json")
+    monkeypatch.setattr(cycle, "steps", lambda cfg=None: [{"name": "Обновить", "run": "echo шаг"}])
+    with open(tmp_path / "run.lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert cycle.run("Обновить") == 75
+        assert not (tmp_path / "last.json").exists()  # второй не отметился как сделанный

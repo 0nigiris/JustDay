@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import shutil
@@ -83,6 +84,19 @@ def run(name: str) -> int:
     if not step:
         raise SystemExit(f"в цикле нет шага «{name}» (justday cycle — список)")
     DIR.mkdir(parents=True, exist_ok=True)
+    # Ручной `justday cycle run` идёт мимо службы, и systemd его не видит: без этой блокировки два
+    # шага «обновить» шли бы параллельно и топтали одну установку. Держится, пока жив процесс.
+    with open(DIR / "run.lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"другой шаг цикла уже идёт — «{name}» не запускаю")
+            return 75
+        return _run_step(step)
+
+
+def _run_step(step: dict) -> int:
+    name = step["name"]
     # время запуска, а не конца: упавший или зависший шаг тоже считается сделанным в этот круг,
     # иначе демон дёргал бы его каждую минуту до утра
     seen = last()
