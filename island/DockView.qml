@@ -1828,7 +1828,7 @@ Item {
                                           danger: true, confirm: "Точно очистить?" })
             return rows
         }
-        if (e.t === "cat") return [{ id: "load", label: "Нагрузка машины", icon: "gauge" },
+        if (e.t === "cat") return [{ id: "load", label: "Нагрузка машины", icon: "cpu" },
                                    { id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
         if (e.t === "clock") return [{ id: "settings", label: "Настроить док", icon: "sliders-horizontal" }]
         const out = [{ id: "open", label: "Открыть", icon: "external-link" }]

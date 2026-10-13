@@ -3550,7 +3550,7 @@ ShellRoot {
                     size: 32
                     onClicked: JD.setMuted(!JD.muted)
                 }
-                IconButton { icon: "gauge"; size: 32; onClicked: JD.openTools("emoji") }
+                IconButton { icon: "wand-sparkles"; size: 32; onClicked: JD.openTools("emoji") }   // спидометр читался как «скорость», а здесь — набор инструментов
                 IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
                 IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
             }
