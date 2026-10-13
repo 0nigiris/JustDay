@@ -195,6 +195,10 @@ Item {
     property real dragLocal: 0           // курсор в координатах карточки
     property real dragSceneX: 0          // курсор в сцене: значок клеится к нему, а не к плывущей карточке
     property bool dragMoved: false       // жест сдвинул значок: отпускание не должно ещё и запустить его
+    // Насколько курсор с значком ушёл от края экрана внутрь. Закреплённый значок, утащенный
+    // дальше значка ростом, отпускается не на место, а из дока — как и ждёт рука после макоси.
+    property real dragAway: 0
+    readonly property bool dragOut: dragKey !== "" && dragAway > icon * 0.9 && pinnedKeysNow().indexOf(dragKey) >= 0
     property real lastCycle: 0
     property var pinOverride: []         // порядок закреплённого, пока тащим (и до ответа демона)
     // Зрительный порядок всех значков программ, включая незакреплённые. Пустой — естественный.
@@ -751,13 +755,14 @@ Item {
             target: null
             dragThreshold: 2
             xAxis.enabled: true
-            yAxis.enabled: false
+            yAxis.enabled: true
             // Жест нельзя отбирать посреди удержания: TapHandler срывал его, значок
             // отпускался и пружиной уезжал обратно.
             grabPermissions: PointerHandler.CanTakeOverFromAnything
             onActiveChanged: {
                 if (active) {
                     dv.dragMoved = false
+                    dv.dragAway = 0
                     const x = centroid.scenePosition.x
                     dv.dragSceneX = x
                     dv.dragLocal = x - dv.x - card.x
@@ -772,7 +777,8 @@ Item {
             // centroidChanged — это смена точки, не её координаты, и на движении не приходит.
             // translation идёт за курсором: иначе значок замирает там, где его схватили.
             onTranslationChanged: if (active) {
-                if (Math.abs(activeTranslation.x) > 6) dv.dragMoved = true
+                if (Math.abs(activeTranslation.x) > 6 || Math.abs(activeTranslation.y) > 6) dv.dragMoved = true
+                dv.dragAway = dv.atTop ? activeTranslation.y : -activeTranslation.y
                 const x = centroid.scenePosition.x
                 dv.dragSceneX = x
                 if (dv.dragKey !== "") dv.moveDrag(x)
@@ -799,7 +805,8 @@ Item {
                 readonly property bool dragged: dv.dragKey !== "" && dv.dragKey === e.key
                 // Приподнят, только пока палец на значке. Без Behavior нарочно: после отпускания
                 // он сразу на одной линии с остальными, а не продолжает оседать за край.
-                readonly property real dragLift: dragged ? Math.round(dv.icon * 0.22) : 0
+                // Вверх значок идёт за курсором, пока хватает окна: дальше его срезал бы край.
+                readonly property real dragLift: dragged ? Math.round(dv.icon * 0.22 + Math.max(0, Math.min(dv.dragAway, dv.headroom * 0.7))) : 0
                 readonly property real nudgeX: (!dv.slideOn && dv.wheel && dv.nudges.length === dv.lane.length) ? dv.nudges[index] : 0
                 readonly property real slideX: {
                     dv.slideTick
@@ -851,7 +858,7 @@ Item {
                     readonly property real appBox: dv.icon * slot.k * 1.08
                     readonly property real mid: dv.atTop ? dv.rowTop + appBox / 2 : dv.rowBottom - appBox / 2
                     y: mid - draw / 2 + (dv.atTop ? slot.dragLift : -slot.dragLift) + slot.bounce
-                    opacity: slot.dragged ? 0.86 : (slotTap.pressed ? 0.88 : 1)
+                    opacity: slot.dragged ? (dv.dragOut ? 0.35 : 0.86) : (slotTap.pressed ? 0.88 : 1)
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
@@ -2051,6 +2058,15 @@ Item {
 
     function endDrag() {
         if (dragKey === "") return
+        // Утащенный из дока: порядок не меняем (иначе dock_arrange вслед вернул бы его в закреплённые),
+        // соседи пружиной едут на старые места, а сам значок уходит, когда демон пришлёт новый док.
+        if (dragOut) {
+            const gone = lane.find(e => e && e.key === dragKey)
+            if (gone) JD.dockPin(gone.kind, gone.id, false)
+            dragOrder = appKeysNow()
+            reseat(destMap(dragOrder))
+        }
+        dragAway = 0
         const n = lane.length
         const off = slideOff.length === n ? slideOff.slice() : []
         const vel = slideVel.length === n ? slideVel.slice() : []
