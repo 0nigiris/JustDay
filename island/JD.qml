@@ -1270,6 +1270,13 @@ Singleton {
     readonly property int durSlow: 400    // смена обложки, взгляд: то, что должно быть плавным
     readonly property int easeOut: Easing.OutCubic     // обычное затухание
     readonly property int easeSoft: Easing.OutQuint    // крупные карточки: быстрый старт, мягкая посадка
+    // Шкала радиусов (Р2-11): внутренний = внешний − отступ, поэтому ступеней четыре, а не пятнадцать.
+    // Капсулу (островок, док, пилюли) задаёт половина высоты, она в шкалу не входит. Старые числа по
+    // файлам переводятся по одному, глазом: вслепую 12 на круглом значке стало бы квадратом.
+    readonly property int radiusField: 6     // поля ввода и мелкие кнопки
+    readonly property int radiusRow: 10      // строки и плитки
+    readonly property int radiusCard: 16     // карточки
+    readonly property int radiusPanel: 26    // панели: Spotlight, лоток, меню
     // Жест нажатия один на все кнопки: сжатие и его длительность лежат здесь, а не в девяти копиях.
     readonly property real pressScaleSmall: 0.9       // значок: он мал, и 0.94 не видно
     // сколько оставить сверху: панель KDE у верхнего края больше не уходит под остров

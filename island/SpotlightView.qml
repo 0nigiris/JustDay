@@ -128,7 +128,7 @@ Item {
         readonly property bool on: at === JD.menuPick
         width: sp.tileW
         height: 84
-        radius: 12
+        radius: JD.radiusRow
         color: on ? Qt.rgba(1, 1, 1, 0.10) : (hovered ? JD.menuFill1 : "transparent")
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Accessible.role: Accessible.Button
