@@ -128,7 +128,9 @@ Item {
 
         // Ширина — по самому длинному имени, а не «на глаз»: меню, обрезающее «Выйти из Steam»,
         // выглядит поломкой, а меню шириной во весь экран — небрежностью.
-        TextMetrics {
+        // FontMetrics, а не TextMetrics: мерить через probe.text = …; probe.width значит писать в
+        // свойство изнутри биндинга, который от него же зависит, — сотни Binding loop на каждое меню.
+        FontMetrics {
             id: probe
             font.family: JD.fontFamily
             font.pixelSize: 13
@@ -139,8 +141,7 @@ Item {
             for (let i = 0; i < rows.length; i++) {
                 const e = rows[i]
                 if (!e || e.isSeparator) continue
-                probe.text = e.text || ""
-                w = Math.max(w, probe.width)
+                w = Math.max(w, probe.advanceWidth(e.text || ""))
             }
             return w
         }

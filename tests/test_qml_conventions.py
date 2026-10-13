@@ -44,3 +44,18 @@ def test_behavior_durations_come_from_the_motion_tokens() -> None:
             if re.search(r"duration:\s*\d", block):
                 bad.append(f"{f.name}: {block.splitlines()[0][:90]}")
     assert not bad, "Behavior с числом вместо токена движения:\n" + "\n".join(bad)
+
+
+def test_text_metrics_are_not_written_from_inside_a_binding() -> None:
+    """Меню лотка мерило имена через `probe.text = …; probe.width` внутри readonly-свойства: запись в
+    TextMetrics из биндинга, который сам от него зависит, — 900 Binding loop в журнале за сутки на каждое
+    открытие меню. Мерить строку в цикле — `FontMetrics.advanceWidth(text)`, чистая функция."""
+    bad = []
+    for f in sorted(ISLAND.glob("*.qml")):
+        text = f.read_text(encoding="utf-8")
+        ids = re.findall(r"TextMetrics\s*\{[^}]*?\bid:\s*(\w+)", text)
+        for name in ids:
+            for ln, line in enumerate(text.splitlines(), 1):
+                if re.search(rf"\b{name}\.text\s*=(?!=)", line):
+                    bad.append(f"{f.name}:{ln}: {line.strip()[:90]}")
+    assert not bad, "TextMetrics пишут изнутри кода — будет Binding loop:\n" + "\n".join(bad)
