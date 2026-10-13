@@ -87,6 +87,7 @@ Item {
              : kind === "window" ? JD.tr("Открытые окна")
              : kind === "file" ? JD.tr("Файлы")
              : kind === "link" ? JD.tr("Ссылка")
+             : kind === "calc" ? JD.tr("Калькулятор")
              : JD.tr("Другое")
     }
 

@@ -116,6 +116,7 @@ Item {
     // какую может принести полоса лотка, поэтому сама она ничего не решает: список спрятанного
     // ведёт человек, и каждый значок в нём виден в настройках.
     readonly property var items: SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
+        .map((i, n) => ({ i, n, r: JD.trayRank(i) })).sort((a, b) => a.r - b.r || a.n - b.n).map(x => x.i)
     readonly property bool empty: items.length === 0
 
     // ───────────── увеличение, как в доке ─────────────

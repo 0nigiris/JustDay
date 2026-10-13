@@ -49,3 +49,19 @@ def test_queue_keeps_network_failures_and_links_sent_meanwhile(monkeypatch, tmp_
     report = transcript.drain(out=tmp_path)
     assert len(report) == 3
     assert transcript.queued() == ["net", "новая"]
+
+
+def test_video_dropped_in_the_inbox_folder_is_transcribed_once(tmp_path, monkeypatch) -> None:
+    """Ролик, скачанный руками, бросают в папку: разобрать и убрать в «Готово», а не слушать каждые три часа."""
+    from justday import transcript
+    inbox = tmp_path / "in"
+    inbox.mkdir()
+    (inbox / "a.mp4").write_bytes(b"x")
+    (inbox / "note.txt").write_text("не видео")
+    monkeypatch.setattr(transcript, "INBOX", inbox)
+    monkeypatch.setattr(transcript, "QUEUE", tmp_path / "q.txt")
+    monkeypatch.setattr(transcript, "run", lambda source, out=None, **kw: tmp_path / "out.md")
+    got = transcript.drain(out=tmp_path)
+    assert len(got) == 1 and "a.mp4" in got[0]
+    assert (inbox / "Готово" / "a.mp4").exists() and not (inbox / "a.mp4").exists()
+    assert (inbox / "note.txt").exists() and transcript.drain(out=tmp_path) == []

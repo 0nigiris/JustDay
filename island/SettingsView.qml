@@ -30,8 +30,9 @@ Item {
             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         }
     }
-    implicitWidth: 940
-    implicitHeight: 640
+    // Шестнадцать пунктов боковой полосы и пять подписей при 640 не влезали: низ и шапка резались краем.
+    implicitWidth: 1000
+    implicitHeight: Math.max(640, Math.min(780, (Screen.height || 900) - 140))
 
     // ───────────── palette ─────────────
     readonly property color bg: "transparent"   // the island itself is the background
@@ -71,6 +72,15 @@ Item {
             l.splice(at, 0, part)
         }
         return l.filter((x, i) => x !== "sep" || (i > 0 && i < l.length - 1 && l[i - 1] !== "sep"))
+    }
+    // Двигает значок лотка и записывает порядок целиком: иначе новые значки перемешались бы с выбранными.
+    function moveTray(index, step) {
+        const names = SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
+            .map((i, n) => ({ k: JD.trayNames(i)[0], n, r: JD.trayRank(i) })).sort((a, b) => a.r - b.r || a.n - b.n).map(x => x.k)
+        const to = index + step
+        if (to < 0 || to >= names.length) return
+        names.splice(to, 0, names.splice(index, 1)[0])
+        set("tray.order", names)
     }
     function set(path, value) {
         const parts = path.split(".")
@@ -367,8 +377,8 @@ Item {
             }
             RowLayout {
                 z: 10
-                anchors { top: parent.top; right: parent.right; topMargin: 16; rightMargin: 18 }
-                spacing: 8
+                anchors { top: parent.top; right: parent.right; topMargin: 18; rightMargin: 20 }
+                spacing: 10
                 RoundIcon { glyph: "house"; onClicked: { JD.settingsOpen = false; JD.expanded = true } }
                 RoundIcon { glyph: "x"; onClicked: JD.closeAll() }
             }
@@ -590,8 +600,8 @@ Item {
         visible: !fine || win.get("ui.settings_simple") === false
         default property alias control: slot.data
         Layout.fillWidth: true
-        // Высота строки 28px (вместо 46), иконки 20px (Р2-29)
-        implicitHeight: Math.max(28, texts.implicitHeight + 8, slot.childrenRect.height + 4)
+        // Строка 28 px (Р2-29) выглядела сжатой и прижатой: опять просторно, как у системных настроек.
+        implicitHeight: Math.max(42, texts.implicitHeight + 18, slot.childrenRect.height + 14)
         Rectangle {  // separator above every row but the first
             visible: row.y > 0
             anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16 }
@@ -616,10 +626,10 @@ Item {
     component RoundIcon: Pressable {
         id: ri
         property string glyph: ""
-        width: 20; height: 20; radius: 10
+        width: 30; height: 30; radius: 15
         pressScale: JD.pressScaleSmall
         color: hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
-        Glyph { anchors.centerIn: parent; name: ri.glyph; size: 12 }
+        Glyph { anchors.centerIn: parent; name: ri.glyph; size: 16 }
     }
 
     component Toggle: Pressable {
@@ -776,23 +786,29 @@ Item {
         id: seg
         property var options: []    // [{value, label}]
         property var current
+        // Одиннадцать провайдеров в одну строку вылезали за карточку и резались слева; длинные ряды переносятся.
+        property real maxWidth: 520
         signal picked(var value)
-        implicitWidth: segRow.implicitWidth + 4
-        implicitHeight: 30
+        readonly property real natural: segFlow.implicitWidth
+        implicitWidth: Math.min(natural, maxWidth) + 4
+        implicitHeight: segFlow.height + 4
         width: implicitWidth
         height: implicitHeight
         radius: 8
         color: win.field
-        RowLayout {
-            id: segRow
-            anchors.centerIn: parent
+        Flow {
+            id: segFlow
+            x: 2; y: 2
+            width: seg.width - 4
             spacing: 2
+            property real implicitWidth: { let w = 0; for (let i = 0; i < children.length; i++) w += children[i].implicitWidth + 2; return w }
             Repeater {
                 model: seg.options
                 Rectangle {
                     required property var modelData
-                    implicitWidth: segText.implicitWidth + 22
-                    implicitHeight: 26
+                    implicitWidth: segText.implicitWidth + 24
+                    width: implicitWidth
+                    height: 28
                     radius: 6
                     color: seg.current === modelData.value ? "#636366" : "transparent"
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
@@ -1185,6 +1201,22 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Что открывает «Пуск» и Meta")
+                    subtitle: JD.tr("Меню — программы по разделам и кнопки питания. Поиск — быстрая строка. Поиск всегда на Alt+Space")
+                    Choice {
+                        key: "island.start_style"
+                        options: [{ value: "menu", label: JD.tr("Меню") }, { value: "search", label: JD.tr("Поиск") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Вид меню приложений")
+                    subtitle: JD.tr("Карточка — компактная, размер тянется за угол. Во весь экран — крупные значки и плитки управления справа")
+                    Choice {
+                        key: "island.menu_style"
+                        options: [{ value: "card", label: JD.tr("Карточка") }, { value: "launchpad", label: JD.tr("Во весь экран") }]
+                    }
+                }
+                Row {
                     title: JD.tr("Монитор")
                     Choice {
                         key: "island.screen"
@@ -1520,6 +1552,25 @@ Item {
                     Choice {
                         key: "tray.align"
                         options: [{ value: "center", label: JD.tr("По центру") }, { value: "start", label: JD.tr("Сверху") }, { value: "end", label: JD.tr("Снизу") }]
+                    }
+                }
+                Row {
+                    title: JD.tr("Порядок значков")
+                    subtitle: JD.tr("Стрелки двигают значок выше или ниже в полосе")
+                    Column {
+                        spacing: 4
+                        Repeater {
+                            model: SystemTray.items.values.filter(i => !!i && JD.trayShows(i))
+                                .map((i, n) => ({ i, n, r: JD.trayRank(i) })).sort((a, b) => a.r - b.r || a.n - b.n)
+                            delegate: RowLayout {
+                                required property var modelData
+                                required property int index
+                                spacing: 6
+                                Text { text: JD.trayNames(modelData.i)[0] || "?"; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.preferredWidth: 150; elide: Text.ElideRight }
+                                RoundIcon { glyph: "chevron-up"; onClicked: win.moveTray(index, -1) }
+                                RoundIcon { glyph: "chevron-down"; onClicked: win.moveTray(index, 1) }
+                            }
+                        }
                     }
                 }
                 Row {

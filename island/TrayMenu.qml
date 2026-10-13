@@ -40,6 +40,9 @@ Item {
         return any ? ({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }) : ({ x: 0, y: 0, w: 0, h: 0 })
     }
 
+    readonly property var sheet0: s0
+    readonly property var sheet1: s1
+    readonly property var sheet2: s2
     readonly property real screenW: JD.screenWidth
     readonly property real screenH: JD.screenHeight
 

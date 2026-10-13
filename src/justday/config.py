@@ -449,6 +449,7 @@ DEFAULTS: dict = {
         "mascot_size": 100,     # насколько крупно показывать зверя, в процентах
         # card — карточка, которую тянут за угол; launchpad — во весь экран: крупная сетка и плитки управления.
         "menu_style": "card",
+        "start_style": "menu",  # что открывает кнопка «Пуск» и Meta: menu | search
         "menu_width": 760,
         "menu_height": 620,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here
@@ -551,7 +552,8 @@ DEFAULTS: dict = {
     # position: left | right; align: center | start | end.
     # hidden — идентификаторы значков, которых в полосе быть не должно. Мост xwayland кладёт в
     # лоток служебное окно, которое человеку не нужно никогда.
-    "tray": {"enabled": True, "position": "left", "align": "center", "icon_size": 22, "reserve": False,
+    "tray": {"enabled": True, "position": "left", "align": "center", "icon_size": 26, "reserve": False,
+             "order": [],  # id значков в том порядке, как их поставил человек
              "autohide": False, "hidden": ["xwayland video bridge"],
              # Увеличение под курсором — то же, что у дока, только повёрнутое на бок. Полоса лотка
              # такая же сплошная поверхность, и отвечать на курсор должна так же: два разных

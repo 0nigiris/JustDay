@@ -13,7 +13,10 @@
 """
 from __future__ import annotations
 
+import ast
 import json
+import operator
+import subprocess
 import time
 
 from . import config, desktop, filesearch, media
@@ -85,6 +88,34 @@ def _score(words: list[str], name: str, extra: list[str]) -> int:
     return best
 
 
+_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
+        ast.Pow: operator.pow, ast.Mod: operator.mod, ast.FloorDiv: operator.floordiv}
+
+
+def calc(text: str) -> str | None:
+    """Посчитать «2+2*3», «(10-3)/4», «2^10». Только числа и знаки: eval здесь не нужен и опасен.
+    Не выражение (просто слово или число) → None, иначе «1» превращалось бы в строку «= 1»."""
+    def walk(n: ast.AST) -> float:
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool):
+            return n.value
+        if isinstance(n, ast.BinOp) and type(n.op) in _OPS:
+            a, b = walk(n.left), walk(n.right)
+            if isinstance(n.op, ast.Pow) and abs(b) > 1000:
+                raise ValueError("слишком большая степень")
+            return _OPS[type(n.op)](a, b)
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
+            return -walk(n.operand) if isinstance(n.op, ast.USub) else walk(n.operand)
+        raise ValueError("не арифметика")
+    src = text.strip().replace("^", "**").replace("×", "*").replace("÷", "/").replace(",", ".").replace(" ", "")
+    if not src or not any(c in src[1:] for c in "+-*/%"):
+        return None
+    try:
+        value = walk(ast.parse(src, mode="eval").body)
+    except (ValueError, SyntaxError, ZeroDivisionError, OverflowError, RecursionError):
+        return None
+    return f"{value:.10g}".replace(".", ",") if isinstance(value, float) else str(value)
+
+
 def items(query: str = "", limit: int = 40, *, windows: bool = True) -> list[dict]:
     """Что показать на запрос. Пустой запрос — недавние, потом остальное по алфавиту.
 
@@ -94,6 +125,9 @@ def items(query: str = "", limit: int = 40, *, windows: bool = True) -> list[dic
         return [{"kind": "link", "id": query.strip(), "name": "Включить по ссылке", "icon": "media-playback-start",
                  "sub": query.strip()}]
     got = _items(query, limit, windows=windows)
+    if (answer := calc(query)) is not None:
+        got.insert(0, {"kind": "calc", "id": answer, "name": f"= {answer}", "icon": "accessories-calculator",
+                       "sub": "Нажмите, чтобы скопировать"})
     if not got and query.strip():
         got = _items(swap_layout(query), limit, windows=windows)
     return got
@@ -192,6 +226,9 @@ def run(kind: str, ident: str, files: list[str] | None = None) -> dict:
     try:
         if kind == "window":
             desktop.windows("focus", ident)
+            return {"ok": True, "kind": kind, "id": ident}
+        if kind == "calc":
+            subprocess.run(["wl-copy", ident], check=True, timeout=5)
             return {"ok": True, "kind": kind, "id": ident}
         if kind == "file":
             got = filesearch.open_path(ident)

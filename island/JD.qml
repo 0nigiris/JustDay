@@ -549,8 +549,8 @@ Singleton {
     property string menuConfirm: ""       // выключение ждёт второго щелчка
     property bool menuSearchMode: false   // Alt+Space Spotlight: узкий поиск, не полное меню
     // «Launchpad»: то же меню, но карточка во весь экран, значки крупнее и справа плитки управления.
-    // Убран: теперь только Spotlight (по Alt+Space) и обычное меню-карточка (по Win).
-    // readonly property bool menuLaunchpad: !menuSearchMode && (island.menu_style || "card") === "launchpad"
+    // Выбирается `island.menu_style`; Spotlight от него не зависит.
+    readonly property bool menuLaunchpad: !menuSearchMode && (island.menu_style || "card") === "launchpad"
 
     readonly property var menuUser: menuCatalog.user || ({})
     readonly property var menuGroups: menuCatalog.groups || []
@@ -608,6 +608,11 @@ Singleton {
         menuConfirm = ""
     }
     function toggleMenu() { menuOpen && !menuSearchMode ? closeMenu() : openMenu() }
+    // Что открывает «Пуск» (кнопка в доке, Meta): меню приложений или поиск. Выбор — в настройках,
+    // потому что поиск без кнопки «Выключить» и без разделов не заменяет меню тем, кому оно нужно.
+    readonly property bool startIsSearch: (island.start_style || "menu") === "search"
+    function openStart() { startIsSearch ? openSearch() : openMenu() }
+    function toggleStart() { startIsSearch ? toggleSearch() : toggleMenu() }
     function toggleSearch() { menuOpen && menuSearchMode ? closeMenu() : openSearch() }
     // Ищет тот же демон, что отвечает и ассистенту: «открой дискорд» голосом и строка в меню
     // находят одно и то же. Поиск шире сетки — в нём есть ещё и открытые окна.
@@ -813,6 +818,12 @@ Singleton {
         const w = String(trayCfg.icon_style || "original").trim().toLowerCase()
         if (["light", "clear", "tinted", "mono"].indexOf(w) < 0 || !item || trayKeepColor(item)) return "none"
         return w
+    }
+    // Свой порядок значков лотка: `tray.order` — список id. Те, кого в списке нет, идут после, как пришли.
+    function trayRank(item) {
+        const order = trayCfg.order || []
+        const i = order.indexOf(trayNames(item)[0])
+        return i < 0 ? order.length : i
     }
     function trayShows(item) {
         const names = trayNames(item)
@@ -1647,8 +1658,8 @@ Singleton {
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
         if (m.menu !== undefined) {
             if (m.menu === "search") toggleSearch()
-            else if (m.menu === "toggle") openSearch()
-            else if (m.menu) openSearch()
+            else if (m.menu === "toggle") toggleStart()
+            else if (m.menu) openStart()
             else closeMenu()
         }
         if (m.catalog !== undefined) {

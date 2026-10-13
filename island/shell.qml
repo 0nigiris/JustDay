@@ -791,13 +791,15 @@ ShellRoot {
                 ComposeView { id: composeView; shown: island.mode === "compose" }
                 // Пока остров держит клавиатуру целиком, клавиши не доходят до окон под ним — об этом надо
                 // сказать глазами, иначе «пропали клавиши» выглядит как поломка.
-                Icon {
+                Rectangle {
                     id: kbGrab
                     readonly property bool held: win.WlrLayershell.keyboardFocus === WlrKeyboardFocus.Exclusive
                     anchors { top: parent.top; right: parent.right; topMargin: 8; rightMargin: 10 }
-                    name: "keyboard"; implicitSize: 13; tint: JD.accentOrange
+                    width: 26; height: 20; radius: 10
+                    color: Qt.rgba(1, 0.62, 0.04, 0.2)
+                    Icon { anchors.centerIn: parent; name: "keyboard"; implicitSize: 14; tint: JD.accentOrange }
                     z: 50
-                    opacity: held ? 0.9 : 0
+                    opacity: held ? 1 : 0
                     visible: opacity > 0
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast } }
                 }
@@ -4653,12 +4655,27 @@ ShellRoot {
             interval: JD.dur(140) + 16
             onTriggered: trayMenuWin.blurLive = trayMenuWin.open
         }
+        // По региону на каждую раскрытую карточку, а не один общий прямоугольник: подменю сдвинуто вбок
+        // и вниз, и рамка вокруг всех карточек размывала пустой экран вокруг меню («блюр вылетел из экрана»).
         BackgroundEffect.blurRegion: Region {
-            x: Math.round(trayMenu.blurRect.x)
-            y: Math.round(trayMenu.blurRect.y)
-            width: trayMenuWin.blurLive && JD.blurOn ? Math.round(trayMenu.blurRect.w) : 0
-            height: trayMenuWin.blurLive && JD.blurOn ? Math.round(trayMenu.blurRect.h) : 0
-            radius: 14
+            Region {
+                x: Math.round(trayMenu.sheet0.cardX); y: Math.round(trayMenu.sheet0.cardY)
+                width: trayMenuWin.blurLive && JD.blurOn && trayMenu.sheet0.visible ? Math.round(trayMenu.sheet0.cardW) : 0
+                height: trayMenuWin.blurLive && JD.blurOn && trayMenu.sheet0.visible ? Math.round(trayMenu.sheet0.cardH) : 0
+                radius: 14
+            }
+            Region {
+                x: Math.round(trayMenu.sheet1.cardX); y: Math.round(trayMenu.sheet1.cardY)
+                width: trayMenuWin.blurLive && JD.blurOn && trayMenu.sheet1.visible ? Math.round(trayMenu.sheet1.cardW) : 0
+                height: trayMenuWin.blurLive && JD.blurOn && trayMenu.sheet1.visible ? Math.round(trayMenu.sheet1.cardH) : 0
+                radius: 14
+            }
+            Region {
+                x: Math.round(trayMenu.sheet2.cardX); y: Math.round(trayMenu.sheet2.cardY)
+                width: trayMenuWin.blurLive && JD.blurOn && trayMenu.sheet2.visible ? Math.round(trayMenu.sheet2.cardW) : 0
+                height: trayMenuWin.blurLive && JD.blurOn && trayMenu.sheet2.visible ? Math.round(trayMenu.sheet2.cardH) : 0
+                radius: 14
+            }
         }
         TrayMenu {
             id: trayMenu
@@ -4857,10 +4874,12 @@ ShellRoot {
             // Верх прибит, едет низ, и карточка не превращается в пустое окно на пол-экрана, когда
             // искать ещё нечего.
             readonly property real wantH: menuBody.item ? menuBody.item.implicitHeight : 86
-width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
-                                      : Math.min(menuWin.width - 24, menuWin.cardW)
+            width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
+                                     : JD.menuLaunchpad ? menuWin.padRect.width
+                                     : Math.min(menuWin.width - 24, menuWin.cardW)
             height: JD.menuSearchMode
                     ? Math.min(menuWin.height - 48, Math.max(86, Math.min(760, wantH)))
+                    : JD.menuLaunchpad ? menuWin.padRect.height
                     : Math.min(menuWin.height - 24, menuWin.cardH)
             Behavior on height {
                 enabled: JD.animOn && JD.menuSearchMode
@@ -4870,6 +4889,7 @@ width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
             // Spotlight — по центру сверху, как macOS Spotlight, а не из дока.
             x: JD.menuSearchMode
                  ? (menuWin.width - width) / 2
+                 : JD.menuLaunchpad ? menuWin.padRect.x
                  : menuWin.fromDock
                  ? Math.max(12, Math.min(menuWin.width - width - 12, menuWin.anchor.x - 64))
                  : menuWin.side === "left" ? 12
@@ -4885,10 +4905,11 @@ width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
                                              ? menuWin.anchor.gap + 10 : 12
             y: JD.menuSearchMode
                  ? Math.min(96, Math.max(24, Math.round(menuWin.height * 0.08)))
+                 : JD.menuLaunchpad ? menuWin.padRect.y
                  : menuWin.fromDock
                  ? (menuWin.atTop ? fromEdge : menuWin.height - height - fromEdge)
                  : (menuWin.atTop ? 12 : menuWin.height - height - 12)
-            radius: JD.menuSearchMode ? 24 : 22
+            radius: JD.menuSearchMode ? 24 : JD.menuLaunchpad ? 30 : 22
             // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
             // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
             // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
@@ -4899,6 +4920,7 @@ width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
 
             // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.
             transformOrigin: JD.menuSearchMode ? Item.Top
+                : JD.menuLaunchpad ? Item.Center
                 : menuWin.atTop
                 ? (menuWin.side === "left" ? Item.TopLeft : menuWin.side === "right" ? Item.TopRight : Item.Top)
                 : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
@@ -4917,7 +4939,7 @@ width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
             // карточку, а она стоит там, откуда её открыли, и стоять обязана.
             Item {
                 id: menuGrip
-                visible: !JD.menuSearchMode
+                visible: !JD.menuSearchMode && !JD.menuLaunchpad
                 readonly property bool atLeft: menuWin.side === "right"
                 readonly property bool atTop: !menuWin.atTop
                 width: 26
@@ -4984,8 +5006,9 @@ width: JD.menuSearchMode ? Math.min(menuWin.width - 48, 720)
                 id: menuBody
                 anchors.fill: parent
                 active: menuWin.alive && menuWin.contentOn
-                sourceComponent: spotlightBody
+                sourceComponent: JD.menuSearchMode ? spotlightBody : menuBodyFull
             }
+            Component { id: menuBodyFull; MenuView {} }
             Component { id: spotlightBody; SpotlightView {} }
         }
     }
