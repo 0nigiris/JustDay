@@ -167,7 +167,7 @@ Item {
                             const item = tv.items[JD.toolsPick] || tv.items[0]
                             if (!item) return
                             if (tv.page === "emoji") JD.useEmoji(item.c)
-                            else JD.useClip(item.id)   // copy + paste (macOS-like)
+                            else JD.useClip(item.id)   // только в буфер: вставляет он сам, Ctrl+V (его выбор 13 окт)
                         }
                         Text {
                             anchors.fill: parent
