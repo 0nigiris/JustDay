@@ -268,7 +268,10 @@ Item {
             node: mx.source
             strong: true
             own: "mic"
-            tint: JD.accentCyan
+            // Цвет говорит, что это: громкость — основной цвет везде, микрофон — оранжевый, как точка
+            // «вас слышат» у Apple. Раньше приложения были фиолетовыми, микрофон бирюзовым, и он не
+            // понимал, чем нижние полосы отличаются от верхней (13 окт) — ничем, кроме имени.
+            tint: JD.accentOrange
             title: mx.source ? (mx.source.description || mx.source.name || "Микрофон") : "Микрофона нет"
             note: "Что слышат остальные"
         }
@@ -324,7 +327,7 @@ Item {
                             title: mx.nameOf(modelData)
                             note: mx.noteOf(modelData)
                             glyph: mx.iconOf(modelData)
-                            tint: JD.accentPurple
+                            tint: JD.accentBlue
                         }
                     }
                     Repeater {
@@ -335,7 +338,7 @@ Item {
                             title: mx.nameOf(modelData)
                             note: "слушает микрофон"
                             own: "mic"
-                            tint: JD.accentCyan
+                            tint: JD.accentOrange
                         }
                     }
                 }
