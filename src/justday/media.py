@@ -718,6 +718,14 @@ def local_track(path: str) -> dict:
             "thumb": "", "color": "", "url": ""}
 
 
+def _title_opt(track: dict) -> str:
+    """Название песни для mpv: он отдаёт его звуковой системе, и микшер подписывает им поток JustDay.
+    Без этого у песни из YouTube подписью шёл хвост адреса googlevideo («mp4&rqh=1&gir=yes&clen=…»).
+    Длина в %n% — в байтах: так mpv не режет название на запятой, разделителе опций."""
+    name = " — ".join(x for x in (track.get("artist"), track.get("title")) if x)
+    return f"force-media-title=%{len(name.encode())}%{name}" if name else ""
+
+
 def track_for(path: str) -> dict:
     return local_track(path)
 
@@ -1079,9 +1087,9 @@ class MusicPlayer:
                 pos = await self.command("get_property", "playlist-pos")
                 count = await self.command("get_property", "playlist-count") or 0
                 if isinstance(pos, int) and 0 <= pos < count - 1:
-                    await self.command("loadfile", t["file"], "insert-at", random.randint(pos + 1, count))
+                    await self.command("loadfile", t["file"], "insert-at", random.randint(pos + 1, count), _title_opt(t))
                     continue
-            await self.command("loadfile", t["file"], flag)
+            await self.command("loadfile", t["file"], flag, -1, _title_opt(t))
         _remember_tracks(self.source, self._tracks)
         if mode == "replace":
             await self.command("set_property", "pause", False)

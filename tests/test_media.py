@@ -26,3 +26,28 @@ def test_остальное_не_музыка_без_выбора(фраза):
 def test_пустая_медиатека_не_уводит_к_мозгу(monkeypatch):
     monkeypatch.setattr(media, "library", lambda *a, **k: [])
     assert media.parse("включи музыку, любую")[0] == "music"
+
+
+def test_микшер_подписывал_песню_из_youtube_хвостом_адреса(monkeypatch):
+    """Поток JustDay в микшере был подписан «mp4&rqh=1&gir=yes&clen=…»: mpv отдаёт звуковой системе
+    имя файла, а у потоковой песни это адрес googlevideo. Название должно уходить в mpv при загрузке,
+    и запятая в нём не должна резать его как разделитель опций."""
+    import asyncio
+    sent = []
+    p = media.MusicPlayer(lambda s: None)
+
+    async def ensure():
+        pass
+
+    async def command(*cmd):
+        sent.append(cmd)
+
+    monkeypatch.setattr(p, "ensure", ensure)
+    monkeypatch.setattr(p, "command", command)
+    monkeypatch.setattr(media, "_remember_tracks", lambda *a: None)
+    t = {"file": "https://rr1.googlevideo.com/videoplayback?mime=audio/mp4&rqh=1",
+         "title": "Привет, мир", "artist": "Кто-то"}
+    asyncio.run(p.load([t]))
+    load = next(c for c in sent if c[0] == "loadfile")
+    name = "Кто-то — Привет, мир"
+    assert load[-1] == f"force-media-title=%{len(name.encode())}%{name}"
