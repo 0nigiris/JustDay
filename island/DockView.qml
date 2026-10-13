@@ -2124,9 +2124,9 @@ Item {
     }
 
     // Пронести n-й значок от from до to за steps шагов и отпустить, ничего не сохраняя. Отдаёт то,
-    // чем жест плох на глаз: наложение соседей, самый большой скачок соседа за шаг (телепорт
-    // виден как скачок в целую ячейку), размер значка в руке (лупа жива — больше 1) и сколько
-    // отпущенному осталось до ячейки, когда всё успокоилось.
+    // чем жест плох на глаз: насколько соседи налезли друг на друга (в точках), самый большой
+    // скачок соседа за шаг (телепорт виден как скачок в целую ячейку), размер значка в руке (лупа
+    // жива — больше 1) и сколько отпущенному осталось до ячейки, когда всё успокоилось.
     function dragWalk(n, from, to, steps) {
         const spots = lane.filter(s => s.t === "app" && s.key)
         const pick = spots[Math.max(0, Math.min(spots.length - 1, n))]
@@ -2145,7 +2145,7 @@ Item {
         const overlaps = (rows) => {
             const r = rows.filter(c => !c.held).sort((a, b) => a.x - b.x)
             let o = 0
-            for (let i = 1; i < r.length; i++) if (r[i].x + 0.5 < r[i - 1].x + r[i - 1].w) o++
+            for (let i = 1; i < r.length; i++) o = Math.max(o, r[i - 1].x + r[i - 1].w - r[i].x)
             return o
         }
         for (let st = 0; st < k; st++) {
@@ -2182,7 +2182,7 @@ Item {
         pointerScene = -99999
         dragSceneX = 0
         wake()
-        return JSON.stringify({ took: pick.key, order: order, overlap: overlap, jump: Math.round(jump),
+        return JSON.stringify({ took: pick.key, order: order, overlap: Math.round(overlap), jump: Math.round(jump),
                                 held: Math.round(held * 100) / 100, landed: Math.round(landed * 10) / 10,
                                 cells: lane.map((s, i) => [s.t, Math.round(settled[i].x), Math.round(settled[i].w)]) })
     }
