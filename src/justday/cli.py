@@ -516,6 +516,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--remove", action="store_true")
     sp = sub.add_parser("history", help="what played lately: «включи то, что я слушал»")
     sp.add_argument("-n", type=int, default=10)
+    sp = sub.add_parser("said", help="past conversation, newest first: «что я тебе говорил про …»")
+    sp.add_argument("words", nargs="*")
+    sp.add_argument("-n", type=int, default=20)
     sp = sub.add_parser("claude", help="Claude Code worker sessions")
     sp.add_argument("action", choices=["start", "send", "result", "list", "stop", "open", "wait"])
     sp.add_argument("args", nargs="*")
@@ -1029,6 +1032,13 @@ def main(argv: list[str] | None = None) -> None:
         for i, r in enumerate(media.library()[: a.n], 1):
             when = time.strftime("%d.%m %H:%M", time.localtime(r.get("played", 0)))
             print(f"{i}. {when} — {r.get('artist') + ' — ' if r.get('artist') else ''}{r['title']}")
+    elif a.cmd == "said":
+        from . import history
+
+        # Мозг начинает разговор заново после паузы и прошлого не помнит; журнал помнит. Почта и
+        # похожее на пароли отсюда не выходят (history.items).
+        for r in history.items(" ".join(a.words), a.n):
+            print(f"{r['ts'][:16].replace('T', ' ')} {'он' if r['who'] == 'you' else 'ты'}: {r['text'][:300]}")
     elif a.cmd == "recent":
         from . import desktop
 
