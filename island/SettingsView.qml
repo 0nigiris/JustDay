@@ -330,10 +330,10 @@ Item {
                             spacing: 10
                             Rectangle {
                                 implicitWidth: 24; implicitHeight: 24; radius: 7
-                                color: modelData.tint
-                                Glyph { anchors.centerIn: parent; name: modelData.icon; size: 14 }
+                                color: modelData.tint || "transparent"
+                                Glyph { anchors.centerIn: parent; name: modelData.icon || ""; size: 14 }
                             }
-                            Text { text: modelData.title; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.fillWidth: true }
+                            Text { text: modelData.title || ""; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.fillWidth: true }
                         }
                         HoverHandler { id: navHover; enabled: !parent.caption; cursorShape: Qt.PointingHandCursor }
                         TapHandler { enabled: !parent.caption; onTapped: win.page = modelData.id }
@@ -2418,6 +2418,7 @@ Item {
                     }
                 }
                 Row {
+                    id: ollama
                     visible: !!mp.info.account
                     readonly property var acc: mp.info.account || ({})
                     title: JD.tr("Аккаунт Ollama")
@@ -2426,31 +2427,31 @@ Item {
                     RowLayout {
                         spacing: 8
                         Btn {
-                            visible: !acc.signed_in && !!acc.signin_url
+                            visible: !ollama.acc.signed_in && !!ollama.acc.signin_url
                             text: JD.tr("Войти"); primary: true
-                            onClicked: Quickshell.execDetached(["xdg-open", acc.signin_url])
+                            onClicked: Quickshell.execDetached(["xdg-open", ollama.acc.signin_url])
                         }
                         Btn {
-                            visible: !acc.signed_in && !!acc.signin_url
+                            visible: !ollama.acc.signed_in && !!ollama.acc.signin_url
                             glyph: "copy"
                             text: JD.tr("Скопировать ссылку")
                             onClicked: {
-                                Quickshell.execDetached(["wl-copy", acc.signin_url])
+                                Quickshell.execDetached(["wl-copy", ollama.acc.signin_url])
                                 win.notify(JD.tr("Ссылка скопирована"))
                             }
                         }
                         Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
                     }
                     Row {
-                        visible: !acc.signed_in && !!acc.signin_url
+                        visible: !ollama.acc.signed_in && !!ollama.acc.signin_url
                         title: JD.tr("Ссылка для входа")
-                        subtitle: acc.signin_url
+                        subtitle: ollama.acc.signin_url || ""
                         RowLayout {
                             Btn {
                                 glyph: "copy"
                                 text: JD.tr("Скопировать")
                                 onClicked: {
-                                    Quickshell.execDetached(["wl-copy", acc.signin_url])
+                                    Quickshell.execDetached(["wl-copy", ollama.acc.signin_url])
                                     win.notify(JD.tr("Ссылка скопирована"))
                                 }
                             }
@@ -2772,14 +2773,14 @@ Item {
                                 onClicked: cyc.editStep(cycleStep.index, cycleStep.modelData.at ? "at" : "every_hours", scheduleField.text.trim())
                             }
                             Btn {
-                                glyph: "arrow-up"
+                                glyph: "chevron-up"
                                 text: ""
                                 implicitWidth: 32
                                 enabled: cycleStep.index > 0 && cyc.editing < 0 && !cyc.running
                                 onClicked: cyc.editStep(cycleStep.index, "order", "up")
                             }
                             Btn {
-                                glyph: "arrow-down"
+                                glyph: "chevron-down"
                                 text: ""
                                 implicitWidth: 32
                                 enabled: cycleStep.index < cyc.cycle.steps.length - 1 && cyc.editing < 0 && !cyc.running
