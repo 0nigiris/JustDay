@@ -69,6 +69,7 @@ SECRETS = re.compile(
     r"""(?x)
     ^(?:
         sk-[A-Za-z0-9_-]{16,}          # OpenAI и совместимые
+      | sk_[A-Za-z0-9_]{16,}           # ElevenLabs, Stripe
       | sk-ant-[A-Za-z0-9_-]{16,}      # Anthropic
       | gh[pousr]_[A-Za-z0-9]{16,}     # GitHub
       | github_pat_[A-Za-z0-9_]{20,}
@@ -99,7 +100,7 @@ def pause(on: bool = True) -> bool:
 # буфера цена ошибки несимметрична. Не запомнили лишнее — человек скопирует ещё раз, это секунда.
 # Запомнили пароль — он лежит на диске, и однажды попадёт в глаза модели вместе с остальной историей.
 PASSWORD_MIN, PASSWORD_MAX = 8, 64
-HEX = re.compile(r"^[0-9a-fA-F]+$")                       # хеш коммита, UUID — это не секреты
+HEX = re.compile(r"^[0-9a-fA-F]+$")                       # хеш коммита — не секрет, длинный ключ — секрет
 STRUCTURED = re.compile(r"^[\w.-]+@|^[a-z]+://|^[~/.]|\.(com|ru|org|net|io|dev)(/|$)|^v?\d+\.\d+")
 
 
@@ -117,6 +118,11 @@ def looks_like_password(body: str) -> bool:
     их копируют постоянно и секретами они не являются."""
     if " " in body or "\n" in body or not (PASSWORD_MIN <= len(body) <= PASSWORD_MAX):
         return False
+    # Длинная шестнадцатеричная строка — уже ключ: ключ ElevenLabs — ровно 64 таких знака, и он
+    # пролежал в истории открытым текстом, пока HEX пропускал всё подряд. Хеш коммита (40 и
+    # короче) остаётся; контрольная сумма sha256 тоже не запомнится — скопировать её ещё раз дёшево.
+    if HEX.match(body) and len(body) >= 32 and len(body) != 40:
+        return True
     if HEX.match(body) or STRUCTURED.search(body):
         return False
     return _classes(body) >= 2

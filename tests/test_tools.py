@@ -79,7 +79,9 @@ def store(tmp_path, monkeypatch):
     ["sk-ant-api03-AbCdEf1234567890xyzAbCdEf1234567890", "ghp_1234567890abcdefghij",
      "AKIAIOSFODNN7EXAMPLE", "xoxb-123456789012-abcdefghijkl",
      "-----BEGIN OPENSSH PRIVATE KEY-----\nabc",
-     "l0v3m3htem3", "Tr0ub4dor&3"],
+     "l0v3m3htem3", "Tr0ub4dor&3",
+     # ключ ElevenLabs пролежал в истории открытым текстом: 64 шестнадцатеричных знака сходили за хеш
+     "0123456789abcdef" * 4, "sk_" + "0123456789abcdef" * 3],
 )
 def test_secrets_never_reach_the_disk(store, secret: str) -> None:
     assert clipboard.store(secret)["ok"] is False
@@ -91,7 +93,7 @@ def test_secrets_never_reach_the_disk(store, secret: str) -> None:
     "ordinary",
     ["обычный текст на русском", "https://github.com/0nigiris/JustDay", "fixkraftmine@gmail.com",
      "~/.config/justday/config.toml", "v2.14.3", "justday clip wipe",
-     "8c41a38f2b1e4d6c9a0b3e5f7d8c1a2b3c4d5e6f"],
+     "8c41a38f2b1e4d6c9a0b3e5f7d8c1a2b3c4d5e6f", "8c41a38f2b1e"],
 )
 def test_ordinary_things_are_remembered(store, ordinary: str) -> None:
     """Хеш коммита, путь и ссылку копируют постоянно — забывать их было бы вредительством."""
