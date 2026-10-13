@@ -51,6 +51,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Сопряжение по QR с компьютера (`justday phone pair`): ссылка
+                 remo32://pair?url=… открывает приложение, адрес меняется после «да». -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="remo32" android:host="pair" />
+            </intent-filter>
         </activity>
 
         <!-- Отдать скачанный файл установщику можно только через провайдер:

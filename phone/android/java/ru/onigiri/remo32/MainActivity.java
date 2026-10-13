@@ -3,6 +3,7 @@ package ru.onigiri.remo32;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -184,6 +185,41 @@ public class MainActivity extends Activity {
         }
 
         web.loadUrl(url());
+        offerPairing(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        offerPairing(intent);
+    }
+
+    /**
+     * Сопряжение по QR: `justday phone pair` на компьютере показывает ссылку
+     * remo32://pair?url=…, камера телефона открывает по ней приложение, и
+     * адрес не надо набирать руками. Меняется он только после «Подключиться»:
+     * иначе любая страница со ссылкой remo32:// могла бы молча увести
+     * приложение на чужой сервер с поддельной формой входа.
+     */
+    private void offerPairing(Intent intent) {
+        Uri data = intent == null ? null : intent.getData();
+        if (data == null || !"remo32".equals(data.getScheme()) || !"pair".equals(data.getHost())) return;
+        intent.setData(null);  // при возврате из недавних не спрашивать второй раз
+        final String value = data.getQueryParameter("url");
+        if (value == null || !(value.startsWith("https://") || value.startsWith("http://"))) {
+            toast("В коде нет адреса компьютера");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Подключиться к компьютеру?")
+                .setMessage(value)
+                .setPositiveButton("Подключиться", (dialog, which) -> {
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_URL, value).apply();
+                    hideError();
+                    web.loadUrl(url());
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
     }
 
     @Override

@@ -427,8 +427,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
     sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
-    sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL | ring")
-    sp.add_argument("action", choices=["list", "notify", "send", "ring", "commands"])
+    sp = sub.add_parser("phone", help="the phone through KDE Connect: list | notify TEXT | send FILE_OR_URL | ring; pair [URL] — QR for the remo32 app")
+    sp.add_argument("action", choices=["list", "notify", "send", "ring", "commands", "pair"])
     sp.add_argument("args", nargs="*")
     sp.add_argument("--to", default="", help="device name, when more than one is paired")
     sp.add_argument("--install", action="store_true",
@@ -1157,6 +1157,15 @@ def main(argv: list[str] | None = None) -> None:
                 _print(phone.ring(a.to))
             elif a.action == "commands":
                 _print(phone.commands(a.install))
+            elif a.action == "pair":
+                from . import qr
+
+                link = phone.pair_link(" ".join(a.args))
+                print(qr.ascii_art(qr.matrix(link)))
+                from urllib.parse import unquote
+
+                print("Наведите камеру телефона с приложением JustDay. Не открылось — введите в нём адрес:\n"
+                      + unquote(link.split("url=", 1)[1]))
             else:
                 what = " ".join(a.args)
                 _print(phone.notify(what, a.to) if a.action == "notify" else phone.send(what, a.to))

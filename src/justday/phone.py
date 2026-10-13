@@ -202,3 +202,24 @@ def commands(install: bool = False) -> dict:
         except OSError as e:
             out["error"] = str(e)
     return out
+
+
+def pair_link(url: str = "") -> str:
+    """Ссылка для QR сопряжения с приложением remo32: `remo32://pair?url=…`.
+
+    Без адреса берётся имя этой машины в Tailscale: приложение ходит сюда через `tailscale serve`, и
+    набирать на телефоне `https://имя.tailXXXX.ts.net/` руками — то место, где чужой человек сдаётся."""
+    from urllib.parse import quote
+
+    if not url:
+        try:
+            out = subprocess.run(["tailscale", "status", "--json"], capture_output=True, text=True, timeout=TIMEOUT)
+            name = (json.loads(out.stdout or "{}").get("Self") or {}).get("DNSName", "").rstrip(".")
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            name = ""
+        if not name:
+            raise RuntimeError("Tailscale не запущен или не вошёл в сеть — дайте адрес сами: justday phone pair https://…")
+        url = f"https://{name}/"
+    if not url.startswith(("https://", "http://")):
+        raise RuntimeError("адрес должен начинаться с https:// или http://")
+    return "remo32://pair?url=" + quote(url, safe="")
