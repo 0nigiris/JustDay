@@ -77,8 +77,12 @@ class Jobs:
         job = self.items.get(jid)
         if not job:
             return ""
+        # Нужны последние строки, а журнал ffmpeg или обучения растёт до сотен мегабайт, и список задач
+        # перечитывал бы каждый целиком на каждый запрос. Хвоста в 64 КБ хватает и на полосы прогресса.
         try:
-            text = open(job["log"], encoding="utf-8", errors="replace").read()  # noqa: SIM115 — read and dropped at once
+            with open(job["log"], "rb") as fh:
+                fh.seek(max(0, fh.seek(0, 2) - 65536))
+                text = fh.read().decode("utf-8", "replace")
         except OSError:
             return ""
         # progress bars rewrite one line with \r: only the last state of each line is worth reading
