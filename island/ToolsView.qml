@@ -64,41 +64,19 @@ Item {
             Layout.fillHeight: false
             spacing: 10
 
-            // Вкладок больше, чем влезает рядом с поиском. Ряд не растягивает карточку:
-            // лишнее уезжает в прокрутку, а не обрезается скруглением.
-            Flickable {
-                id: tabScroll
+            // Все вкладки на виду, а не в прокрутке: прятать половину за краем значило, что
+            // про «Звук» и «Машину» узнавали случайно. Не влезло — ряд переносится.
+            Flow {
+                id: tabRow
                 Layout.fillWidth: true
-                Layout.minimumWidth: 80
-                Layout.preferredHeight: 34
-                implicitWidth: 80
-                implicitHeight: 34
-                clip: true
-                flickableDirection: Flickable.HorizontalFlick
-                boundsBehavior: Flickable.StopAtBounds
-                contentWidth: tabRow.implicitWidth
-                contentHeight: 34
-                function revealCurrent() {
-                    for (let i = 0; i < tabRow.children.length; i++) {
-                        const c = tabRow.children[i]
-                        if (!c || c.on !== true) continue
-                        const left = c.x
-                        const right = c.x + c.width
-                        if (left < contentX) contentX = Math.max(0, left)
-                        else if (right > contentX + width) contentX = right - width
-                        return
-                    }
-                }
-                Row {
-                    id: tabRow
-                    spacing: 8
-                    height: 34
+                Layout.alignment: Qt.AlignTop
+                spacing: 8
                     Repeater {
                         model: [
                             { id: "emoji", name: "Эмодзи", icon: "smile" },
                             { id: "clip", name: "Буфер", icon: "clipboard" },
                             { id: "mixer", name: "Звук", icon: "volume-2" },
-                            { id: "plans", name: "Планы", icon: "clipboard" },
+                            { id: "plans", name: "Планы", icon: "calendar-clock" },
                             { id: "claude", name: "Клод", icon: "code" },
                             { id: "history", name: "История", icon: "message-circle" },
                             { id: "load", name: "Машина", icon: "activity" },
@@ -124,26 +102,11 @@ Item {
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
                                 onTapped: JD.setToolsPage(modelData.id)
                             }
-                            onOnChanged: if (on) Qt.callLater(tabScroll.revealCurrent)
                         }
                     }
-                }
-                Component.onCompleted: Qt.callLater(revealCurrent)
-                // Не влезло — край гаснет, а не режется посреди слова.
-                Rectangle {
-                    anchors.right: parent.right
-                    height: parent.height
-                    width: 24
-                    visible: tabScroll.contentX + tabScroll.width < tabScroll.contentWidth - 1
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: "transparent" }
-                        GradientStop { position: 1; color: JD.ink }
-                    }
-                }
             }
 
-            IconButton { icon: "x"; size: 30; onClicked: JD.closeTools() }
+            IconButton { icon: "x"; size: 30; Layout.alignment: Qt.AlignTop; onClicked: JD.closeTools() }
         }
 
         // Поиск. Фокус берёт сразу: открыли панель — можно печатать, как в Spotlight.
