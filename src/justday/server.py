@@ -81,6 +81,40 @@ def _screens(on: bool) -> bool:
     return _run("kscreen-doctor", f"--dpms={'on' if on else 'off'}")
 
 
+def _ensure_monitors_awake() -> None:
+    """После dpms=on монитор на NVIDIA+DP иногда не просыпается.
+
+    Проблема: kscreen-doctor --dpms=on возвращает успех, система считает монитор включённым,
+    но картинки нет. Единственное, что будит — смена режима.
+    Фикс: для каждого подключенного выхода переключить режим на соседний и обратно.
+    Делаем один раз, осторожно: только для подключенных выходов с >1 режимом.
+    """
+    out = _out("kscreen-doctor", "-j")
+    if not out:
+        return
+    try:
+        data = json.loads(out)
+    except (json.JSONDecodeError, ValueError):
+        return
+
+    for output in data.get("outputs", []):
+        if not output.get("connected") or not output.get("enabled"):
+            continue
+        modes = output.get("modes", [])
+        if len(modes) < 2:
+            continue
+        current = output.get("currentModeId")
+        if not current:
+            continue
+        # Найти соседний режим (не текущий)
+        for mode in modes:
+            if mode["id"] != current:
+                # Переключить на соседний и обратно
+                _run("kscreen-doctor", f"output.{output['id']}.mode.{mode['id']}")
+                _run("kscreen-doctor", f"output.{output['id']}.mode.{current}")
+                break
+
+
 def _mute(on: bool) -> bool:
     return _run("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if on else "0")
 
@@ -360,6 +394,8 @@ def off(resume: bool = True) -> dict:
     """
     was = state()
     out: dict = {"ok": True, "on": False, "screens_on": _screens(True)}
+    # Монитор на NVIDIA+DP иногда не просыпается после dpms=on — пробуем разбудить сменой режима
+    _ensure_monitors_awake()
     if was.get("leds_off"):
         out["leds_on"] = _leds(True)
     _watchdog_off()
