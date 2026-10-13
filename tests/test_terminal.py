@@ -925,3 +925,21 @@ def test_a_silent_turn_at_night_waits_instead_of_spinning_every_minute(monkeypat
     asyncio.run(terminal.night("весь план", hours=0.5, cfg=cfg, dark=False))
 
     assert 300 in slept, "после пустого хода ночь не подождала"
+
+
+def test_opencode_tools_reach_the_night_journal(monkeypatch) -> None:
+    """В журнал ночи не попал ни один инструмент ступени OpenCode: он шлёт `tool_use`, а мы ждали `tool`.
+    Утром было не понять, что она делала, — а ход из одних инструментов ещё и выглядел бы пустым."""
+    import json
+
+    async def fake_run(cmd, env, line, quiet):
+        line(json.dumps({"type": "tool_use", "part": {"type": "tool", "tool": "read", "state": {"status": "completed"}}}))
+        line(json.dumps({"type": "text", "part": {"type": "text", "text": "проба"}}))
+        return [], ""
+
+    seen: list[str] = []
+    monkeypatch.setattr(terminal, "_run", fake_run)
+    monkeypatch.setattr(terminal, "_opencode_cli", lambda: "opencode")
+    said = asyncio.run(terminal.ask_opencode(terminal.Rung("opencode", "ollama/qwen3.5:9b"), "прочти", "",
+                                             {"terminal": {"unattended": True}}, lambda t: None, seen.append))
+    assert seen == ["read"] and said.tools == ["read"] and said.text == "проба"

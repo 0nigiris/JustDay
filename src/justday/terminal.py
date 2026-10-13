@@ -394,7 +394,9 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
         if ev.get("type") == "text" and part.get("text"):
             got.text += part["text"]
             on_text(part["text"])
-        elif ev.get("type") in ("tool", "tool_start") and part.get("tool"):
+        # `opencode run --format json` (1.18) зовёт это tool_use; ждали только tool/tool_start — и ни
+        # один инструмент ступени OpenCode не попадал в журнал ночи (389 вызовов за ночь 13 октября)
+        elif ev.get("type") in ("tool_use", "tool", "tool_start") and part.get("tool"):
             got.tools.append(str(part["tool"]))
             on_tool(str(part["tool"]))
         elif ev.get("type") == "error":
