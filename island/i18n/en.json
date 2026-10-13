@@ -636,5 +636,6 @@
   ". Каждая уходит модели в каждом разговоре. 0 — не предупреждать": ". Each one goes to the model in every conversation. 0 — never warn",
   " строк": " lines",
   "Встали: ": "Stopped: ",
-  "встала": "stopped"
+  "встала": "stopped",
+  "Окна у сессии нет": "The session has no window"
 }

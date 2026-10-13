@@ -318,6 +318,19 @@ class CommandsMixin:
             None, workers_mod.open_terminal, str(req.get("id") or "") or None, None)
         return {"ok": True}
 
+    async def _cmd_session_focus(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Нажатие на карточку сессии — поднять окно её терминала"""
+        from . import desktop
+        from . import sessions as sessions_mod
+
+        def focus() -> bool:
+            wid = sessions_mod.window_of(int(req.get("pid") or 0), desktop.windows("list"))
+            return bool(wid and desktop.windows("focus", wid=wid))
+
+        if await asyncio.get_running_loop().run_in_executor(None, focus):
+            return {"focused": True}
+        return {"focused": False, "error": t("У этой сессии нет окна: она идёт в фоне или в tmux")}
+
     async def _cmd_sessions(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Что делает каждая живая сессия Claude Code"""
         from . import sessions as sessions_mod

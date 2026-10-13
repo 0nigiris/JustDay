@@ -70,3 +70,19 @@ def test_ошибка_после_которой_он_написал_дальше
     meta = json.dumps({"type": "system", "subtype": "turn_duration"})
     _log(tmp_path, monkeypatch, _err("server_error", "API Error: Server error"), later, meta)
     assert sessions.failed("s1") == ""
+
+
+def test_a_click_on_a_session_raises_its_own_terminal_and_never_someone_elses(monkeypatch):
+    """Карточка «ждёт ответа» без перехода заставляла искать нужный терминал среди окон.
+
+    Claude Code — внук окна: kitty → zsh → claude. Окно находится подъёмом по родителям; сессия в
+    фоне или в tmux (родитель — служба или сервер tmux) окна не получает, а не чужое первое попавшееся.
+    """
+    from justday import sessions
+
+    parents = {300: 200, 200: 100, 100: 1, 700: 600, 600: 1}
+    monkeypatch.setattr(sessions, "_parent", lambda pid: parents.get(pid, 0))
+    windows = [{"id": "{kitty}", "pid": 100}, {"id": "{firefox}", "pid": 500}, {"id": "{нет pid}"}]
+    assert sessions.window_of(300, windows) == "{kitty}"
+    assert sessions.window_of(700, windows) == ""
+    assert sessions.window_of(0, windows) == ""

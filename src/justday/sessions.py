@@ -190,6 +190,29 @@ def failed(session_id: str) -> str:
     return ""
 
 
+def _parent(pid: int) -> int:
+    try:
+        # Имя процесса в скобках может содержать пробелы и скобки — поля считаем после последней «)».
+        return int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def window_of(pid: int, windows: list[dict]) -> str:
+    """Окно, в котором идёт сессия: идём от процесса `claude` вверх по родителям до того, у кого есть окно.
+
+    Окно принадлежит терминалу, а не `claude`: между ними оболочка, а то и две. Сессия в tmux или
+    запущенная фоном окна не имеет — тогда "" и честное «окна нет», а не чужое окно."""
+    owners = {int(w["pid"]): str(w["id"]) for w in windows if w.get("pid")}
+    for _ in range(16):
+        if pid <= 1:
+            return ""
+        if pid in owners:
+            return owners[pid]
+        pid = _parent(pid)
+    return ""
+
+
 def model_of(session_id: str) -> str:
     """opus | sonnet | haiku | "" — по последнему ответу ассистента в хвосте стенограммы."""
     hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))

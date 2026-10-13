@@ -115,6 +115,7 @@ EN = {
     "Кому: {to}. Текст: «{body}». Отправить?": "To: {to}. Text: “{body}”. Send it?",
     "Новое письмо от {who}.": "New email from {who}.",
     "{n} новых письма: {who}.": "{n} new emails: {who}.",
+    "У этой сессии нет окна: она идёт в фоне или в tmux": "This session has no window: it runs in the background or in tmux",
 }
 
 

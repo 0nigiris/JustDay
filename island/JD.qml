@@ -1681,6 +1681,7 @@ Singleton {
         }
         if (m.items !== undefined && m.file !== undefined) plans = m.items
         if (m.sessions !== undefined) sessions = m.sessions
+        if (m.focused === false) flash(m.error || tr("Окна у сессии нет"), "terminal", accentOrange)
         if (m.talk !== undefined) talk = m.talk
         if (m.items !== undefined && m.path !== undefined) {
             folderPath = m.path; folderItems = m.items; folderMore = m.more || 0
