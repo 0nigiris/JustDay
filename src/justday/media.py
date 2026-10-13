@@ -472,6 +472,9 @@ def music_dir() -> Path:
     return d
 
 
+DOWNLOAD_RETRY_PAUSE = 5
+
+
 def _progress_lines(proc: subprocess.Popen, progress: Callable[[float], None] | None) -> list[str]:
     out: list[str] = []
     for line in proc.stdout:  # type: ignore[union-attr]
@@ -514,14 +517,23 @@ def _download(entry: dict, kind: str, progress: Callable[[float], None] | None =
            "--progress-template", "download:JDPROG %(progress.downloaded_bytes)s %(progress.total_bytes,progress.total_bytes_estimate)s",
            "--print", "after_move:JDINFO %(.{id,title,channel,uploader,artist,track,duration,filepath,webpage_url})j",
            entry["url"]]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    try:
-        lines = _progress_lines(proc, progress)
-        err = proc.stderr.read()  # type: ignore[union-attr]
-        proc.wait(timeout=600)
-    except BaseException:
-        proc.kill()
-        raise
+    # YouTube иногда отвечает 403 на сами куски видео — у человека так терялись песни из медиатеки
+    # (13 окт, дважды за минуту), а та же ссылка через минуту качалась. Ссылки на куски выдаются заново
+    # при каждом запуске yt-dlp, поэтому одна повторная попытка с паузой и без параллельных кусков
+    # спасает почти всегда; другие ошибки повторять незачем.
+    for attempt in range(2):
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            lines = _progress_lines(proc, progress)
+            err = proc.stderr.read()  # type: ignore[union-attr]
+            proc.wait(timeout=600)
+        except BaseException:
+            proc.kill()
+            raise
+        if not (proc.returncode and "403" in err and attempt == 0):
+            break
+        time.sleep(DOWNLOAD_RETRY_PAUSE)
+        cmd[cmd.index("-N") + 1] = "1"
     got = next((json.loads(line[7:]) for line in lines if line.startswith("JDINFO ")), None)
     if proc.returncode or not got or not Path(got.get("filepath") or "").exists():
         raise RuntimeError((err.strip().splitlines() or ["download failed"])[-1][:300])
