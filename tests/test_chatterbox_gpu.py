@@ -96,3 +96,46 @@ def test_кончились_кредиты_elevenlabs_говорит_silero_а_�
 
     asyncio.run(asyncio.wait_for(run(), 5))
     assert tried == ["elevenlabs"] and played == [10]
+
+
+def test_silero_говорит_фразу_целиком_а_не_молчит(monkeypatch) -> None:
+    """13 октября к ответу прикрутили перебивание: фраза Silero резалась на куски по 80 мс шагом-float,
+    и на каждой падал TypeError — голос молчал совсем. Тесты не видели этого: проверка шла мимо,
+    когда у демона нет cfg. Здесь cfg настоящий, и фраза должна уйти в плеер одним куском."""
+    import asyncio
+
+    import numpy as np
+
+    from justday import config
+    from justday.daemon import Daemon
+
+    d = Daemon.__new__(Daemon)
+    played: list[int] = []
+
+    async def play(pcm, rate):
+        played.append(len(pcm))
+
+    d.cfg = config.load()
+    d.tts = SimpleNamespace(cfg={"engine": "silero"}, rate=48000, synth=lambda s: np.ones(48000, dtype=np.int16))
+    d._neural_cold_until, d._speech_gen, d._synth_ahead = 0.0, 0, {}
+    d.player = SimpleNamespace(play=play)
+    d.brain = SimpleNamespace(busy=False)
+    # Живой микрофон и VAD: в тишине, но на месте, — как у человека, у которого слух включён.
+    d.mic = SimpleNamespace(start=lambda: None, subscribe=lambda cb: None, unsubscribe=lambda cb: None)
+    d.recorder = SimpleNamespace(vad=SimpleNamespace(reset_states=lambda: None, predict=lambda *a, **k: 0.0))
+    monkeypatch.setattr(Daemon, "mic_on", lambda s: True)
+    d._state = "idle"
+    monkeypatch.setattr(Daemon, "state", property(lambda s: s._state, lambda s, v: setattr(s, "_state", v)))
+
+    async def run():
+        d._speech_q = asyncio.Queue()
+        d._speech_q.put_nowait("Привет.")
+        task = asyncio.create_task(d._speech_worker())
+        for _ in range(100):
+            if played:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+
+    asyncio.run(asyncio.wait_for(run(), 5))
+    assert played == [48000]
