@@ -789,6 +789,18 @@ ShellRoot {
                     parent: JD.islandStyle === "bar" ? dropCard : stage
                 }
                 ComposeView { id: composeView; shown: island.mode === "compose" }
+                // Пока остров держит клавиатуру целиком, клавиши не доходят до окон под ним — об этом надо
+                // сказать глазами, иначе «пропали клавиши» выглядит как поломка.
+                Icon {
+                    id: kbGrab
+                    readonly property bool held: win.WlrLayershell.keyboardFocus === WlrKeyboardFocus.Exclusive
+                    anchors { top: parent.top; right: parent.right; topMargin: 8; rightMargin: 10 }
+                    name: "keyboard"; implicitSize: 13; tint: JD.accentOrange
+                    z: 50
+                    opacity: held ? 0.9 : 0
+                    visible: opacity > 0
+                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast } }
+                }
                 View {
                     id: settingsHolder
                     shown: JD.islandStyle === "bar"

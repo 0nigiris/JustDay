@@ -112,7 +112,9 @@ Item {
     }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
     MouseArea {
-        anchors.fill: parent
+        // Тонкая дорожка (6 px) — трудная цель: попадание чуть выше или ниже полоски должно ставить
+        // значение, а не пропадать. Запас по вертикали — половина зазора между строками.
+        anchors { fill: parent; topMargin: -4; bottomMargin: -4 }
         function at(x) { return sl.snap(x / width) }
         onPressed: m => { sl.forceActiveFocus(); sl.dragValue = at(m.x); sl.dragging = true; sl.step() }
         onPositionChanged: m => { if (pressed) { sl.dragValue = at(m.x); sl.step() } }
