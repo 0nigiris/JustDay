@@ -94,8 +94,15 @@ Item {
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         HoverHandler { id: laneHover }
 
+        // Дорожка — от нуля до полутора: усиление видно на самой дорожке, а не торчит за её краем
+        readonly property real ceiling: 1.5
         function setVolume(v) {
-            if (lane.node && lane.node.audio) lane.node.audio.volume = Math.max(0, Math.min(1.5, v))
+            if (lane.node && lane.node.audio) lane.node.audio.volume = Math.max(0, Math.min(ceiling, v))
+        }
+        // С пальца: у ста процентов залипает, чтобы в усиление не проскочить случайно
+        function setFromX(x) {
+            const v = x / track.width * ceiling
+            setVolume(Math.abs(v - 1) < 0.05 ? 1 : v)
         }
 
         RowLayout {
@@ -168,7 +175,7 @@ Item {
                     Rectangle {
                         height: parent.height
                         radius: parent.radius
-                        width: parent.width * Math.max(0, Math.min(1, lane.value))
+                        width: parent.width * Math.max(0, Math.min(1, lane.value)) / lane.ceiling
                         color: lane.silent ? JD.text3 : lane.tint
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     }
@@ -178,9 +185,16 @@ Item {
                         height: parent.height
                         radius: parent.radius
                         visible: lane.value > 1
-                        x: parent.width
-                        width: parent.width * Math.max(0, Math.min(0.5, lane.value - 1))
+                        x: parent.width / lane.ceiling - radius * 2
+                        width: parent.width * (Math.min(lane.ceiling, lane.value) - 1) / lane.ceiling + radius * 2
                         color: JD.accentOrange
+                    }
+                    // метка «сто процентов»: где кончается громкость и начинается усиление
+                    Rectangle {
+                        width: 2; height: parent.height + 6; radius: 1
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: parent.width / lane.ceiling - 1
+                        color: Qt.rgba(1, 1, 1, 0.35)
                     }
                     Rectangle {
                         width: lane.strong ? 15 : 13
@@ -189,7 +203,7 @@ Item {
                         color: "#ffffff"
                         y: (parent.height - height) / 2
                         x: Math.max(0, Math.min(parent.width - width,
-                                    parent.width * Math.max(0, Math.min(1, lane.value)) - width / 2))
+                                    parent.width * Math.max(0, lane.value) / lane.ceiling - width / 2))
                     }
 
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -197,11 +211,11 @@ Item {
                         target: null
                         xAxis.enabled: true
                         yAxis.enabled: false
-                        onCentroidChanged: if (active) lane.setVolume(centroid.position.x / track.width)
+                        onCentroidChanged: if (active) lane.setFromX(centroid.position.x)
                     }
                     TapHandler {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onSingleTapped: e => lane.setVolume(e.position.x / track.width)
+                        onSingleTapped: e => lane.setFromX(e.position.x)
                     }
                     // Двойной щелчок — ровно сто: вернуться к «как было» после усиления
                     TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onDoubleTapped: lane.setVolume(1.0) }

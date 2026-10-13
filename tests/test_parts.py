@@ -632,3 +632,14 @@ def test_assistant_typed_into_the_lock_screen_password_field() -> None:
     ''')
     out = subprocess.run([str(tool), "-c", probe], capture_output=True, text=True, timeout=60)
     assert out.stdout.strip().endswith("ok"), out.stderr[-1500:]
+
+
+def test_mixer_boost_stuck_out_past_the_slider() -> None:
+    """Громкость выше ста в микшере рисовалась оранжевым хвостом за правым краем дорожки, а ручка
+    стояла на ста — «выход за 100%» выглядел поломкой. Дорожка теперь сама от нуля до полутора,
+    и у ста процентов палец залипает, чтобы в усиление не проскочить случайно."""
+    import pathlib
+
+    qml = pathlib.Path("island/MixerView.qml").read_text(encoding="utf-8")
+    assert "x: parent.width\n" not in qml, "хвост усиления снова вынесен за дорожку"
+    assert "function setFromX(" in qml and "Math.abs(v - 1) <" in qml, "пропало залипание у ста процентов"
