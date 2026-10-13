@@ -614,6 +614,12 @@ Singleton {
     // это выглядело как сломанная кнопка. Док эту развилку знал с самого начала, меню — нет.
     function runFromMenu(item) {
         if (!item) return
+        if (item.kind === "tool") {
+            closeMenu()
+            if (item.id === "chat") chatOpen = true
+            else openTools(item.id)
+            return
+        }
         const open = windowsOf(item)
         if (open.length) {
             const up = open.find(w => !w.minimized) || open[0]
@@ -637,7 +643,7 @@ Singleton {
     // Ничего не нашлось — не тупик: строка уходит ассистенту. Ради этого меню и своё.
     function askFromMenu(text) { closeMenu(); send({ cmd: "type", text: text }) }
     function pinFromMenu(item) {
-        if (!item || item.kind === "file" || item.kind === "window") return
+        if (!item || item.kind === "file" || item.kind === "window" || item.kind === "tool") return
         send({ cmd: "apps_pin", kind: item.kind, id: item.id })
         pinRefresh.restart()
     }

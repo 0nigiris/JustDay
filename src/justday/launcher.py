@@ -99,6 +99,16 @@ def items(query: str = "", limit: int = 40, *, windows: bool = True) -> list[dic
     return got
 
 
+# Свои окна JustDay: «чат», «звук» в поиске — сразу туда, без похода по меню островка (Р2-48, п.7d).
+# id — страница инструментов (`JD.openTools`), кроме чата: у него своё окно.
+TOOLS = (("chat", "Чат с ассистентом", "internet-chat", "чат chat переписка написать ассистенту джарвис"),
+         ("mixer", "Звук", "audio-volume-high", "звук микшер громкость mixer volume sound"),
+         ("clip", "Буфер обмена", "edit-paste", "буфер история копирования clipboard"),
+         ("emoji", "Эмодзи", "face-smile", "эмодзи смайлики символы emoji"),
+         ("plans", "Планы", "view-calendar-tasks", "планы задачи дела plans"),
+         ("load", "Нагрузка машины", "utilities-system-monitor", "нагрузка процессор память cpu load"))
+
+
 def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
     words = [w for w in _flat(query).split() if w]
     order = {key: n for n, key in enumerate(recents())}
@@ -119,6 +129,12 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
         rows.append((score, APP, order.get(f"app:{app['id']}", 999), _flat(name),
                      {"kind": "app", "id": app["id"], "name": name, "icon": app.get("icon", ""),
                       "sub": app.get("generic", "")}))
+
+    for ident, name, icon, words_of in TOOLS if words else ():
+        score = _score(words, name, words_of.split())
+        if score < 99:
+            rows.append((score, APP, order.get(f"tool:{ident}", 999), _flat(name),
+                         {"kind": "tool", "id": ident, "name": name, "icon": icon, "sub": "JustDay"}))
 
     for game in desktop.list_games():
         score = _score(words, game["name"], [game.get("source", "")]) if words else 0
