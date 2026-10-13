@@ -59,7 +59,7 @@ Item {
     })
 
     readonly property var now: states[dizzy ? "dizzy" : mood] || states["idle"]
-    readonly property string eyeShape: emote !== "" && emotes[emote] ? emotes[emote] : now.eye
+    readonly property string eyeShape: purring ? "happy" : emote !== "" && emotes[emote] ? emotes[emote] : now.eye
     readonly property color accent: now.tint || JD.accentBlue
     readonly property bool awake: visible && mood !== "sleeping"
 
@@ -244,6 +244,28 @@ Item {
         else if (pokes === 2) emote = "annoyed"
         me.poked()
     }
+    // ───────────── поглаживание ─────────────
+    // Тычок злит, а водить по нему курсором — это гладить: щурится и урчит, пока гладят, и тычки
+    // до этого прощены. Гладят, а не проехали мимо, — когда курсор намотал над ним два его роста
+    // быстрее, чем путь остывает (рост с четвертью в секунду).
+    property real stroke: 0
+    property point strokeAt: Qt.point(-1, -1)
+    readonly property bool purring: stroke > size * 2 && !dizzy
+    onPurringChanged: if (purring) pokes = 0
+    Timer { interval: 120; repeat: true; running: me.stroke > 0; onTriggered: me.stroke = Math.max(0, me.stroke - me.size * 0.15) }
+    function strokeTo(pt) {
+        if (strokeAt.x >= 0) stroke = Math.min(size * 4, stroke + Math.hypot(pt.x - strokeAt.x, pt.y - strokeAt.y))
+        strokeAt = pt
+    }
+    property real rumble: 0
+    SequentialAnimation on rumble {
+        running: me.purring && me.visible && JD.animOn
+        loops: Animation.Infinite
+        NumberAnimation { to: 0.35; duration: 40 }
+        NumberAnimation { to: -0.35; duration: 40 }
+        onRunningChanged: if (!running) me.rumble = 0
+    }
+
     SequentialAnimation {
         id: jump
         loops: 2
@@ -268,7 +290,7 @@ Item {
         width: me.size
         height: me.size
         y: (me.hop + me.bob * 0.5) * me.size * 0.22 - me.stretch * me.size * 0.06
-        x: me.shiver * me.size * 0.03
+        x: (me.shiver + me.rumble) * me.size * 0.03
         rotation: (me.dizzy ? wobble.value : 0) + me.lean * 11 + (me.now.tilt || 0) * 40
 
         QtObject { id: wobble; property real value: 0 }
@@ -579,7 +601,11 @@ Item {
         }
     }
 
-    HoverHandler { cursorShape: Qt.PointingHandCursor }
+    HoverHandler {
+        cursorShape: Qt.PointingHandCursor
+        onPointChanged: if (hovered) me.strokeTo(point.position)
+        onHoveredChanged: if (!hovered) me.strokeAt = Qt.point(-1, -1)
+    }
     TapHandler {
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: me.poke()
