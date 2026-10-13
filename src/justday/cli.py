@@ -653,6 +653,9 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("transcript", help="видео → текст → выжимка: ссылка или файл, текст ложится в docs/видео/")
     sp.add_argument("source", help="ссылка (YouTube, Instagram…) или путь к файлу")
     sp.add_argument("--no-summary", action="store_true", help="только текст, без выжимки местной моделью")
+    sp = sub.add_parser("cycle", help="цикл ассистента: список шагов | run ИМЯ (выполнить сейчас) | log [ГГГГ-ММ-ДД]")
+    sp.add_argument("action", nargs="?", default="list", choices=["list", "run", "log"])
+    sp.add_argument("arg", nargs="?", default="")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -1042,6 +1045,20 @@ def main(argv: list[str] | None = None) -> None:
             if word != getpass.getpass("Ещё раз: "):
                 sys.exit("пароли не совпали")
         _print(portable.init(a.where, keys, word))
+    elif a.cmd == "cycle":
+        from . import cycle
+
+        if a.action == "run":
+            sys.exit(cycle.run(a.arg))
+        if a.action == "log":
+            print(cycle.journal(a.arg) or "в этот день цикл ничего не делал")
+            return
+        seen = cycle.last()
+        for st in cycle.steps():
+            when = f"в {st['at']}" if st.get("at") else f"раз в {st.get('every_hours') or 24} ч"
+            ran = time.strftime("%d.%m %H:%M", time.localtime(seen[st["name"]])) if st.get("name") in seen else "ещё не было"
+            print(f"{'●' if st.get('on', True) else '○'} {st.get('name')}: {st.get('run')} — {when}"
+                  f"{', без него' if st.get('away') else ''}; последний раз: {ran}")
     elif a.cmd == "server":
         from . import server as server_mod
 

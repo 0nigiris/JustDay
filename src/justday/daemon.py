@@ -1565,6 +1565,7 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
                 # возвращается сам по себе, и ждать с ним до разговора незачем.
                 await self._try_home()
                 await self._diary_maybe()
+                await self._cycle_maybe()
                 if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
                     self._last_cal = time.monotonic()
                     try:
@@ -1680,6 +1681,20 @@ class Daemon(CommandsMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, Vi
         events.save_state(memory_said=time.time())
         self.notify(t("Память разрослась: {n} строк в указателе. Загляни в настройки и убери лишнее.")
                     .format(n=st["index_lines"]), icon="dialog-information")
+
+    async def _cycle_maybe(self) -> None:
+        """Цикл ассистента: следующий созревший шаг — отдельной службой, и только когда он свободен.
+
+        Свободен — не разговор, не игра; шаг с away ещё и ждёт, пока человек отойдёт от машины."""
+        if not (self.cfg.get("cycle") or {}).get("enabled") or self.state != "idle" or getattr(self, "_game_seen", None):
+            return
+        from . import cycle, server
+
+        loop = asyncio.get_running_loop()
+        step = cycle.next_due(self.cfg, server.here())
+        if step and not await loop.run_in_executor(None, cycle.running):
+            ok = await loop.run_in_executor(None, cycle.launch, step["name"])
+            log.info("цикл: %s — %s", step["name"], "запущен" if ok else "не запустился")
 
     async def _diary_maybe(self) -> None:
         """Страница дня в Obsidian, вечером и сама.
