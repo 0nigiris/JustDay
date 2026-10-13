@@ -624,8 +624,12 @@ Item {
         visible: !fine || win.get("ui.settings_simple") === false
         default property alias control: slot.data
         Layout.fillWidth: true
+        // Управление шире, чем оставляет место тексту, — уходит под текст. Иначе подпись сжималась до
+        // одной буквы в ширину и шла столбиком на всю высоту страницы (шаги цикла: восемь кнопок справа).
+        readonly property bool stacked: width > 0 && slot.width > width - 16 - 16 - 12 - 200
         // Строка 28 px (Р2-29) выглядела сжатой и прижатой: опять просторно, как у системных настроек.
-        implicitHeight: Math.max(42, texts.implicitHeight + 18, slot.childrenRect.height + 14)
+        implicitHeight: stacked ? texts.implicitHeight + slot.height + 26
+                                : Math.max(42, texts.implicitHeight + 18, slot.height + 14)
         Rectangle {  // separator above every row but the first
             visible: row.y > 0
             anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16 }
@@ -634,14 +638,17 @@ Item {
         }
         ColumnLayout {
             id: texts
-            anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter; right: slot.left; rightMargin: 16 }
+            x: 16
+            y: row.stacked ? 9 : Math.round((row.height - implicitHeight) / 2)
+            width: row.stacked ? row.width - 32 : slot.x - 16 - 16
             spacing: 0
             Text { text: row.title; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
             Text { visible: !!row.subtitle; text: row.subtitle; color: win.t2; font.family: win.font; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
         }
         Item {
             id: slot
-            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+            x: row.stacked ? 16 : row.width - 12 - width
+            y: row.stacked ? texts.y + texts.implicitHeight + 8 : Math.round((row.height - height) / 2)
             width: childrenRect.width
             height: childrenRect.height
         }
@@ -2086,7 +2093,8 @@ Item {
                 property bool recording: false
                 property string heard: ""
                 property string result: ""
-                function refresh() { win.run(["voiceprint", "status"], v => vpGroup.st = v) }
+                // Ответ приходит и после ухода со страницы: группы уже нет, и запись в неё падала TypeError.
+                function refresh() { win.run(["voiceprint", "status"], v => { if (vpGroup) vpGroup.st = v }) }
                 function start() {
                     steps = st.wake_phrases.map((p, i) => ({ kind: "wake", index: i, secs: 2.5, text: p }))
                               .concat(st.phrases.map((p, i) => ({ kind: "phrase", index: i, secs: 5, text: p })))
