@@ -570,9 +570,9 @@ Item {
     }
 
     component CardForm: Rectangle {
-        // Общий компонент формы карточки с правильным клиппингом
-        // скруглённых углов (как у плеера в CardView/ClippingRectangle).
-        // Использует clip: true для правильного обрезания контента по углам.
+        // Одна форма для всех карточек настроек (Р2-29). clip режет прямоугольником, а не по
+        // скруглению: годится, пока строки сами ничего не заливают. Появится заливка строки при
+        // наведении — её углы вылезут за радиус, тогда маскировать слоем (layer + MultiEffect).
         default property alias content: rows.data
         Layout.fillWidth: true
         implicitHeight: rows.implicitHeight
