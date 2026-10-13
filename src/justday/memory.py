@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import os
 import time
 
@@ -202,3 +203,91 @@ def unpin(phrase: str) -> bool:
 def resolve(query: str) -> str:
     """Запрос целиком совпал с закреплённым словом → закреплённый запрос; иначе без изменений."""
     return pins().get(_key(query), query)
+
+
+# ─────────────── deduplication ───────────────
+#
+# Находит похожие записи в памяти (по заголовку и описанию) и предлагает их объединить.
+# Пункт 17.9: «чистка дублей».
+
+
+def _title(path) -> str:
+    """Извлечь заголовок из memory note (metadata.name)."""
+    try:
+        head = path.read_text(encoding="utf-8")[:500]
+    except OSError:
+        return ""
+    import re
+    m = re.search(r"^\s*name:\s*(.+)", head, re.M)
+    return m.group(1).strip() if m else ""
+
+
+def _description(path) -> str:
+    """Извлечь описание из memory note (metadata.description)."""
+    try:
+        head = path.read_text(encoding="utf-8")[:500]
+    except OSError:
+        return ""
+    import re
+    m = re.search(r"^\s*description:\s*(.+)", head, re.M)
+    return m.group(1).strip() if m else ""
+
+
+def find_duplicates(threshold: float = 0.85) -> list[dict]:
+    """Найти пары похожих записей в памяти.
+
+    Сравнивает заголовки и описания через difflib.SequenceMatcher.
+    Возвращает список пар с коэффициентом схожести.
+    """
+    base = folder()
+    items = []
+    try:
+        for name in os.listdir(base):
+            if not name.endswith(".md") or name in (INDEX, LONG):
+                continue
+            path = base / name
+            title = _title(path)
+            desc = _description(path)
+            if title:
+                items.append({"file": name, "path": path, "title": title, "desc": desc})
+    except OSError:
+        return []
+
+    dupes = []
+    for i, a in enumerate(items):
+        for b in items[i + 1:]:
+            # Сравниваем заголовки
+            title_ratio = difflib.SequenceMatcher(None, a["title"].lower(), b["title"].lower()).ratio()
+            # Сравниваем описания, если есть
+            desc_ratio = 0.0
+            if a["desc"] and b["desc"]:
+                desc_ratio = difflib.SequenceMatcher(None, a["desc"].lower(), b["desc"].lower()).ratio()
+            # Берём максимум
+            ratio = max(title_ratio, desc_ratio)
+            if ratio >= threshold:
+                dupes.append({
+                    "file_a": a["file"],
+                    "file_b": b["file"],
+                    "title_a": a["title"],
+                    "title_b": b["title"],
+                    "similarity": round(ratio, 3),
+                    "reason": "title" if title_ratio >= desc_ratio else "description",
+                })
+    # Сортируем по убыванию схожести
+    dupes.sort(key=lambda x: -x["similarity"])
+    return dupes
+
+
+def deduplicate_report(threshold: float = 0.85) -> str:
+    """Текстовый отчёт о дубликатах для показа человеку."""
+    dupes = find_duplicates(threshold)
+    if not dupes:
+        return f"Дубликатов не найдено (порог схожести {threshold:.0%})."
+    lines = [f"Найдено {len(dupes)} пар похожих записей (порог {threshold:.0%}):"]
+    for d in dupes[:15]:  # ограничиваем вывод
+        lines.append("  {:.0%} [{}]  {}  ↔  {}".format(
+            d["similarity"], d["reason"], d["title_a"][:50], d["title_b"][:50]))
+    if len(dupes) > 15:
+        lines.append(f"  ... и ещё {len(dupes) - 15} пар")
+    lines.append("\nДля объединения: `justday memory merge ФАЙЛ1 ФАЙЛ2`")
+    return "\n".join(lines)

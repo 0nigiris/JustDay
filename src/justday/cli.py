@@ -400,9 +400,10 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("test", help="test one component")
     sp.add_argument("component", choices=sorted(TESTS))
     sp = sub.add_parser("memory", help="show where JustDay's memory lives / print it")
-    sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new", "tidy"],
+    sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new", "tidy", "dupes"],
                     default="show")
-    sp.add_argument("target", nargs="?", help="memory file for `forget`")
+    sp.add_argument("target", nargs="?", help="memory file for `forget` or second file for `merge`")
+    sp.add_argument("--threshold", type=float, default=0.85, help="similarity threshold for `dupes` (0.0-1.0)")
 
     # helpers used by the brain
     sp = sub.add_parser("apps", help="find/launch desktop applications")
@@ -861,6 +862,11 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"  → {line.strip()}")
             for line in r["moved_in"]:
                 print(f"  ← {line.strip()}")
+        elif a.action == "dupes":
+            from . import memory
+
+            threshold = a.threshold if hasattr(a, "threshold") else 0.85
+            print(memory.deduplicate_report(threshold))
         elif a.action == "path":
             print(f"profile: {BRAIN_DIR / 'CLAUDE.md'}\nauto-memory: {mem}")
         elif a.action == "edit":
