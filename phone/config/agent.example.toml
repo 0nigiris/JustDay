@@ -145,6 +145,22 @@ argv = ["bash", "-l"]
 icon = "⌨️"
 group = "Разработка"
 
+# Запуск оболочки JustDay в отдельной tmux-сессии: нажмите действие, затем
+# откройте её из карточки «Терминал». Ввод и ход работы остаются на экране
+# при обрыве телефона. Сам веб-терминал остаётся закрыт, пока его отдельно
+# не разрешили в terminal.enabled в конфиге агента И terminal_enabled
+# в конфиге контроллера; вход также должен быть свежим.
+[[actions]]
+id = "justday-terminal"
+name = "JustDay Terminal"
+description = "Открыть очередь задач и ход работы JustDay на этом компьютере"
+kind = "tmux"
+session = "justday-terminal"
+workdir = "~/JustDay"
+argv = ["justday", "terminal"]
+icon = "panel-top"
+group = "JustDay"
+
 # --- Игры и стрим -----------------------------------------------------------
 
 [[actions]]

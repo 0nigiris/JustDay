@@ -22,7 +22,7 @@ addEventListener("DOMContentLoaded", () => {
   for (const node of document.querySelectorAll("[data-screen]")) {
     if (node.dataset.screen !== want) node.remove();
   }
-  const titles = { jarvis: "JustDay", deck: "Пульт", pcs: "Компьютеры" };
+  const titles = { jarvis: "JustDay", deck: "Стримдек", pcs: "Компьютеры" };
   document.body.dataset.route = want;
   document.getElementById("page-title").textContent = titles[want] || "JustDay";
   document.getElementById("page-title-sm").textContent = titles[want] || "JustDay";

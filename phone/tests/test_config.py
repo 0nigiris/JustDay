@@ -161,3 +161,22 @@ def test_secrets_never_appear_in_example_configs() -> None:
         assert not leaked, f"в {name} заполнены секреты: {leaked}"
         # Заодно убеждаемся, что туда не попал хэш пароля.
         assert "$argon2" not in (root / "config" / name).read_text(encoding="utf-8")
+
+
+def test_justday_remote_action_uses_tmux_and_keeps_terminal_opt_in() -> None:
+    """Телефон может открыть оболочку JustDay, но пример не включает удалённый терминал."""
+    import tomllib
+
+    root = Path(__file__).resolve().parent.parent
+    agent = tomllib.loads((root / "config" / "agent.example.toml").read_text(encoding="utf-8"))
+    controller_path = root / "config" / "controller.example.toml"
+    controller = tomllib.loads(controller_path.read_text(encoding="utf-8"))
+    action = next(item for item in agent["actions"] if item["id"] == "justday-terminal")
+
+    assert (action["kind"], action["session"], action["argv"]) == (
+        "tmux",
+        "justday-terminal",
+        ["justday", "terminal"],
+    )
+    assert agent["terminal"]["enabled"] is False
+    assert controller["pcs"][0]["terminal_enabled"] is False

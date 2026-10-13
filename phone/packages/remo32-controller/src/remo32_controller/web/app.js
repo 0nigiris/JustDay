@@ -598,7 +598,7 @@ async function registerPasskey() {
    она отдаёт родителю. */
 
 const ROUTES = {
-  deck: { title: "Пульт", view: () => viewDeck() },
+  deck: { title: "Стримдек", view: () => viewDeck() },
   pcs: { title: "Компьютеры", view: () => viewPcs() },
   jarvis: { title: "JustDay", view: () => viewJarvis() },
   schedule: { title: "Расписание", view: () => viewSchedule() },
@@ -956,7 +956,7 @@ function deckStage(pc, pages, dots) {
     <aside class="deck-side">
       <div class="deck-brand">${icon("panel-top", "sm")} JustDay</div>
       <div class="deck-pc"><span class="dot ${esc(pc.state)}"></span><span>${esc(pc.name)}</span></div>
-      <div class="deck-title" id="deck-title">${esc(pages.length ? "Избранное" : "Пульт")}</div>
+      <div class="deck-title" id="deck-title">${esc(pages.length ? "Избранное" : "Стримдек")}</div>
       ${line}
       <div class="dots" id="dots">${dots}</div>
       <button class="icon-btn" data-refresh="1" aria-label="Обновить">${icon("refresh-cw", "sm")} Обновить</button>
@@ -2269,6 +2269,31 @@ function viewJarvisOffline(pc) {
   ${plansCard()}`;
 }
 
+function justdayTerminalCard(pc) {
+  const action = (pc.actions || []).find((item) => item.id === "justday-terminal");
+  if (!action) {
+    return `<section class="card">
+      <div class="card-head"><h2>Работа на компьютере</h2></div>
+      <div class="meta">Добавьте действие JustDay Terminal — оно сохранит работу в tmux,
+        а телефон подключится к той же сессии.</div>
+      <div class="row"><button class="btn" data-setup-justday-terminal>Настроить действие</button></div>
+    </section>`;
+  }
+  const enabled = pc.terminal_supported && action.available !== false;
+  const hint = !pc.terminal_supported
+    ? "Нужно разрешить терминал отдельно в настройках контроллера и агента."
+    : action.available === false
+      ? "На этом компьютере команда justday пока недоступна."
+      : "Сессия переживает обрыв связи; можно продолжить ввод с этого телефона.";
+  return `<section class="card">
+    <div class="card-head"><h2>Работа на компьютере</h2><span class="meta">JustDay Terminal</span></div>
+    <div class="meta">${esc(hint)}</div>
+    <div class="row"><button class="btn primary" data-justday-terminal="${esc(pc.id)}" ${enabled ? "" : "disabled"}>
+      ${icon("terminal")} ${enabled ? "Открыть и продолжить" : "Терминал выключен"}
+    </button></div>
+  </section>`;
+}
+
 function viewJarvis() {
   const pc = activePc();
   if (!pc) return `<div class="empty">ПК не настроены</div>`;
@@ -2280,7 +2305,8 @@ function viewJarvis() {
   if (jd && jd.available === false) {
     return `<section class="card"><div class="card-head"><h2>JustDay не запущен</h2></div>
       <div class="meta">На «${esc(pc.name)}» не видно ассистента. Он поднимается службой
-      <code>justday</code> — проверьте её на самом компьютере.</div></section>`;
+      <code>justday</code> — проверьте её на самом компьютере.</div></section>
+      ${justdayTerminalCard(pc)}`;
   }
 
   const now = nowPlaying(jd);
@@ -2311,6 +2337,8 @@ function viewJarvis() {
     ${heard ? `<div class="jarvis-answer heard">${esc(heard)}</div>` : ""}
     ${answer ? `<div class="jarvis-answer">${esc(answer)}</div>` : ""}
   </section>
+
+  ${justdayTerminalCard(pc)}
 
   ${playerCard(pc, now)}
 
@@ -2719,9 +2747,9 @@ function viewMore() {
 function viewHelp() {
   return `
   <section class="card">
-    <div class="card-head"><h2>Пульт</h2></div>
+    <div class="card-head"><h2>Стримдек</h2></div>
     <div class="help">
-      <p>Главный экран. Крупные кнопки, которые листаются пальцем влево-вправо:
+      <p>Отдельная вкладка Stream Deck. Крупные кнопки листаются пальцем влево-вправо:
       сначала <b>Избранное</b>, потом по странице на каждую группу действий,
       в конце — <b>Питание</b>.</p>
       <p><b>Долгое нажатие на кнопке кладёт её в избранное</b> и убирает обратно.
@@ -3081,6 +3109,21 @@ document.addEventListener("click", async (event) => {
   /* --- JustDay --- */
   if (d.mic) {
     return dict.on ? dictStop() : dictStart();
+  }
+  if (d.justdayTerminal) {
+    const pc = state.pcs.find((item) => item.id === d.justdayTerminal);
+    const action = pc?.actions?.find((item) => item.id === "justday-terminal");
+    if (!pc || !action || !pc.terminal_supported || action.available === false) {
+      return toast("Терминал JustDay не настроен на этом компьютере", "err");
+    }
+    buzz(8);
+    return run(button,
+      () => api(`/api/pcs/${encodeURIComponent(pc.id)}/actions/${encodeURIComponent(action.id)}`, { method: "POST" }),
+      () => openTerminal(pc.id, action.session));
+  }
+  if (d.setupJustdayTerminal) {
+    location.hash = "#/buttons";
+    return;
   }
   if (d.refresh) {
     return run(button, () => render(true));

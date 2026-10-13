@@ -4,8 +4,11 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -62,6 +65,7 @@ public class MainActivity extends Activity {
     private FrameLayout root;
     private View errorView;
     private boolean updateChecked;
+    private boolean retryAfterTailscale;
 
     /** Просьба страницы о микрофоне, отложенная до ответа системы. */
     private PermissionRequest micRequest;
@@ -172,10 +176,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Экран не гаснет, пока приложение открыто: пульт держат в руке и
-        // смотрят на него, а не листают — системный таймер гасил бы его
-        // прямо посреди нажатия.
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        updateScreenOnPolicy();
 
         if (Build.VERSION.SDK_INT >= 28) {
             getWindow().getAttributes().layoutInDisplayCutoutMode =
@@ -183,6 +184,36 @@ public class MainActivity extends Activity {
         }
 
         web.loadUrl(url());
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        updateScreenOnPolicy();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (retryAfterTailscale && web != null) {
+            // Tailscale does not expose an external switch API: the owner enables its VPN in that app
+            // and confirms Android's system prompt. Returning here retries the saved private URL.
+            retryAfterTailscale = false;
+            hideError();
+            web.reload();
+        }
+    }
+
+    /** Keep the display awake only for the sideways Stream Deck, not normal browsing. */
+    private void updateScreenOnPolicy() {
+        boolean streamDeck = getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE
+                && getResources().getConfiguration().screenHeightDp <= 500;
+        if (streamDeck) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
 
     /**
@@ -288,6 +319,22 @@ public class MainActivity extends Activity {
         field.setTextColor(Color.parseColor("#E6E9EF"));
         field.setSingleLine(true);
 
+        Intent tailscale = getPackageManager().getLaunchIntentForPackage("com.tailscale.ipn");
+        Button openTailscale = null;
+        if (tailscale != null) {
+            openTailscale = new Button(this);
+            openTailscale.setText("Открыть Tailscale и вернуться");
+            openTailscale.setOnClickListener(v -> {
+                retryAfterTailscale = true;
+                try {
+                    startActivity(tailscale);
+                } catch (ActivityNotFoundException error) {
+                    retryAfterTailscale = false;
+                    toast("Не удалось открыть Tailscale");
+                }
+            });
+        }
+
         Button retry = new Button(this);
         retry.setText("Сохранить и открыть");
         retry.setOnClickListener(v -> {
@@ -306,6 +353,7 @@ public class MainActivity extends Activity {
         box.addView(title);
         box.addView(hint);
         box.addView(field);
+        if (openTailscale != null) box.addView(openTailscale);
         box.addView(retry);
         box.addView(update);
 
