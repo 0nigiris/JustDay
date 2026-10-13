@@ -601,5 +601,7 @@
   "Карточка — компактная, размер тянется за угол. Во весь экран — крупные значки и плитки управления справа": "Card is compact, resize it by the corner. Full screen has large icons and control tiles on the right",
   "Во весь экран": "Full screen",
   "Поиск": "Search",
-  "Узкий поиск программ, файлов и окон; не нашлось — уходит ассистенту": "A narrow search for apps, files and windows; nothing found — it goes to the assistant"
+  "Узкий поиск программ, файлов и окон; не нашлось — уходит ассистенту": "A narrow search for apps, files and windows; nothing found — it goes to the assistant",
+  "Корзина": "Trash",
+  "Лоток": "Tray"
 }

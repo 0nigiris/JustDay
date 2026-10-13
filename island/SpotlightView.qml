@@ -139,13 +139,6 @@ Item {
                     }
                 }
 
-                Label2 {
-                    visible: !field.text
-                    text: "Alt Space"
-                    color: JD.text3
-                    opacity: 0.6
-                    font.pixelSize: 12
-                }
             }
         }
 
@@ -189,9 +182,21 @@ Item {
             currentIndex: {
                 for (let i = 0; i < sp.lines.length; i++)
                     if (sp.lines[i].row && sp.lines[i].at === JD.menuPick) return i
-                return 0
+                return -1
             }
-            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+            onCurrentIndexChanged: if (currentIndex >= 0) positionViewAtIndex(currentIndex, ListView.Contain)
+            // Одна подсветка на весь список, а не своя у каждой строки: раньше старая
+            // гасла, новая зажигалась, и выбор прыгал (Р2-18). Теперь она едет за ним.
+            highlightFollowsCurrentItem: true
+            highlightMoveDuration: JD.animOn ? JD.durFast : 0
+            highlightResizeDuration: 0
+            highlight: Item {
+                Rectangle {
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 2; bottomMargin: 2 }
+                    radius: 14
+                    color: Qt.rgba(1, 1, 1, 0.10)
+                }
+            }
             topMargin: 6
             bottomMargin: 6
 
@@ -219,8 +224,7 @@ Item {
                     visible: !line.caption
                     anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 2; bottomMargin: 2 }
                     radius: 14
-                    color: line.on ? Qt.rgba(1, 1, 1, 0.10)
-                         : hover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
+                    color: !line.on && hover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
                     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                     scale: line.on ? 1.015 : 1
                     Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
