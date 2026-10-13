@@ -232,6 +232,8 @@ DEFAULTS: dict = {
     "cycle": {"enabled": True, "steps": [
         {"name": "Обновить JustDay", "run": "justday update", "at": "05:00", "away": True, "on": True},
         {"name": "Проверить части", "run": "justday doctor --quick", "at": "05:30", "away": True, "on": True},
+        {"name": "Расшифровать присланные видео", "run": "justday transcript --queue", "every_hours": 3,
+         "away": True, "on": True},
     ]},
     # name_candidate: имя в речи ищет Whisper, но только в отрывке, где openWakeWord хоть раз дал этот балл;
     # иначе он гонялся на всякую речь в комнате и не отпускал видеопамять (Р-30). 0 = на любую речь.

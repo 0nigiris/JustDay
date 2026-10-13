@@ -130,3 +130,4 @@ Detailed recipes are in the justday plugin skills: desktop, discord, browser, cl
 - Before launching an app again check `pgrep -af <name>` or `justday windows list`: it may just be slow to open.
 - A web page changed: re-read the page instead of repeating old clicks.
 - Give up only when truly blocked. Then say in one sentence what's in the way and what you need from the user.
+- A video link "for later" or "what is in this video" — `justday transcript --later LINK`: the cycle transcribes it while they are away; text and summary land in `docs/видео/`. Right now only when asked (it takes minutes: via `justday job`).

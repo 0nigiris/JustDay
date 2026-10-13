@@ -16,6 +16,9 @@ from pathlib import Path
 from . import config
 
 OUT = Path(__file__).resolve().parents[2] / "docs" / "видео"
+# Ссылки, присланные «на потом»: ролик качается и слушается минутами, и делать это при нём незачем —
+# цикл ассистента разбирает очередь, когда за машиной никого (шаг «Расшифровать присланные видео»).
+QUEUE = config.DATA_DIR / "видео-очередь.txt"
 
 # Инстаграм и прочие отдают ролик только после входа. Обходить вход мы не будем (ни чужих куки, ни
 # «скачивалок»), поэтому эту беду надо узнать и сказать словами, а не вывалить трассировку yt-dlp.
@@ -94,3 +97,41 @@ def run(source: str, *, out: Path = OUT, with_summary: bool = True) -> Path:
     path = out / f"{day.isoformat()}-{slug(title)}.md"
     path.write_text(page(title, source, text, summary, day), encoding="utf-8")
     return path
+
+
+def enqueue(source: str) -> int:
+    """Положить ссылку или путь в очередь (повтор не дублируется). → сколько в очереди."""
+    have = queued()
+    if source not in have:
+        QUEUE.parent.mkdir(parents=True, exist_ok=True)
+        with QUEUE.open("a", encoding="utf-8") as f:
+            f.write(source + "\n")
+        have.append(source)
+    return len(have)
+
+
+def queued() -> list[str]:
+    try:
+        return [ln.strip() for ln in QUEUE.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    except OSError:
+        return []
+
+
+def drain(*, out: Path = OUT) -> list[str]:
+    """Разобрать очередь. Готовое и безнадёжное (нужен вход) уходит из неё, сбой сети остаётся на
+    следующий круг. → строки отчёта, по одной на ссылку."""
+    report, left = [], []
+    taken = queued()
+    for source in taken:
+        try:
+            report.append(f"готово: {source} → {run(source, out=out)}")
+        except NeedsLogin as e:
+            report.append(f"не скачать без входа: {source} ({e})")
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            report.append(f"не вышло, попробую позже: {source} ({e})")
+            left.append(source)
+    # разбор идёт минутами: присланное за это время не должно пропасть при перезаписи
+    left += [s for s in queued() if s not in taken and s not in left]
+    if QUEUE.exists():
+        QUEUE.write_text("".join(f"{s}\n" for s in left), encoding="utf-8")
+    return report

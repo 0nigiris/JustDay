@@ -27,3 +27,25 @@ def test_page_lands_without_local_model(monkeypatch, tmp_path):
     assert path.name.endswith("-как-убрать-нейрослоп.md")
     body = Path(path).read_text(encoding="utf-8")
     assert "Вторая мысль." in body and "## Выжимка" in body
+
+
+def test_queue_keeps_network_failures_and_links_sent_meanwhile(monkeypatch, tmp_path):
+    """Цикл разбирает присланные ролики без него: сбой сети не должен терять ссылку, «нужен вход» не
+    должен крутиться каждые три часа, а ссылка, присланная во время разбора, не должна пропасть."""
+    monkeypatch.setattr(transcript, "QUEUE", tmp_path / "очередь.txt")
+    for link in ("ok", "login", "net", "ok"):
+        transcript.enqueue(link)
+    assert transcript.queued() == ["ok", "login", "net"]
+
+    def fake_run(source, out):
+        if source == "ok":
+            transcript.enqueue("новая")  # пришла с телефона, пока качался ролик
+            return out / "готово.md"
+        if source == "login":
+            raise transcript.NeedsLogin("вход")
+        raise RuntimeError("нет сети")
+
+    monkeypatch.setattr(transcript, "run", fake_run)
+    report = transcript.drain(out=tmp_path)
+    assert len(report) == 3
+    assert transcript.queued() == ["net", "новая"]

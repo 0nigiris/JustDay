@@ -651,8 +651,10 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--wifi", metavar="ИМЯ_СЕТИ", help="код для подключения к Wi-Fi")
     sp.add_argument("--hidden", action="store_true", help="сеть скрытая")
     sp = sub.add_parser("transcript", help="видео → текст → выжимка: ссылка или файл, текст ложится в docs/видео/")
-    sp.add_argument("source", help="ссылка (YouTube, Instagram…) или путь к файлу")
+    sp.add_argument("source", nargs="?", help="ссылка (YouTube, Instagram…) или путь к файлу")
     sp.add_argument("--no-summary", action="store_true", help="только текст, без выжимки местной моделью")
+    sp.add_argument("--later", action="store_true", help="не сейчас: положить в очередь, цикл разберёт без него")
+    sp.add_argument("--queue", action="store_true", help="разобрать очередь (это делает шаг цикла)")
     sp = sub.add_parser("cycle", help="цикл ассистента: список | run ИМЯ | log | edit НОМЕР ПОЛЕ ЗНАЧЕНИЕ")
     sp.add_argument("action", nargs="?", default="list", choices=["list", "run", "log", "edit"])
     sp.add_argument("arg", nargs="?", default="")
@@ -787,6 +789,15 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "transcript":
         from . import transcript
 
+        if a.queue:
+            print("\n".join(transcript.drain()) or "очередь видео пуста")
+            return
+        if not a.source:
+            print("\n".join(transcript.queued()) or "очередь видео пуста")
+            return
+        if a.later:
+            print(f"в очереди: {transcript.enqueue(a.source)}")
+            return
         try:
             print(transcript.run(a.source, with_summary=not a.no_summary))
         except (transcript.NeedsLogin, RuntimeError) as e:
