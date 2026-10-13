@@ -567,7 +567,7 @@ def memory_files() -> dict:
     mem = memory_dir()
     files = []
     for f in sorted(mem.glob("*.md")) if mem.exists() else []:
-        if f.name == "MEMORY.md":
+        if f.name in ("MEMORY.md", "ДОЛГАЯ.md"):  # указатели, а не записи
             continue
         text = f.read_text(encoding="utf-8", errors="replace")
         body = text.split("---", 2)[-1].strip() if text.startswith("---") else text
@@ -611,8 +611,9 @@ def trash(path: str) -> dict:
 def forget_memory(path: Path) -> dict:
     """Trash a memory note and drop its line from the MEMORY.md index, so the model is not pointed at a missing file."""
     r = trash(str(path))
-    index = path.parent / "MEMORY.md"
-    if r["ok"] and index.exists():
+    for index in (path.parent / "MEMORY.md", path.parent / "ДОЛГАЯ.md"):  # строка могла уехать в долгую
+        if not (r["ok"] and index.exists()):
+            continue
         lines = index.read_text(encoding="utf-8").splitlines(keepends=True)
         kept = [line for line in lines if f"]({path.name})" not in line]
         if len(kept) != len(lines):

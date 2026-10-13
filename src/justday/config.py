@@ -234,6 +234,8 @@ DEFAULTS: dict = {
         {"name": "Проверить части", "run": "justday doctor --quick", "at": "05:30", "away": True, "on": True},
         {"name": "Расшифровать присланные видео", "run": "justday transcript --queue", "every_hours": 3,
          "away": True, "on": True},
+        # не трогает модель и подписку: только переносит строки указателя между двумя файлами
+        {"name": "Свести память", "run": "justday memory tidy", "at": "05:15", "away": True, "on": True},
     ]},
     # name_candidate: имя в речи ищет Whisper, но только в отрывке, где openWakeWord хоть раз дал этот балл;
     # иначе он гонялся на всякую речь в комнате и не отпускал видеопамять (Р-30). 0 = на любую речь.

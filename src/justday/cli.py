@@ -398,7 +398,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("test", help="test one component")
     sp.add_argument("component", choices=sorted(TESTS))
     sp = sub.add_parser("memory", help="show where JustDay's memory lives / print it")
-    sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new"],
+    sp.add_argument("action", nargs="?", choices=["path", "show", "edit", "list", "forget", "clear-journal", "read", "write", "new", "tidy"],
                     default="show")
     sp.add_argument("target", nargs="?", help="memory file for `forget`")
 
@@ -847,7 +847,16 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 _print(manage.trash(str(config.EVENTS_FILE)))
             return
-        if a.action == "path":
+        if a.action == "tidy":
+            from . import memory
+
+            r = memory.tidy()
+            print(f"в долгую: {len(r['moved_out'])}, обратно в оперативную: {len(r['moved_in'])}")
+            for line in r["moved_out"]:
+                print(f"  → {line.strip()}")
+            for line in r["moved_in"]:
+                print(f"  ← {line.strip()}")
+        elif a.action == "path":
             print(f"profile: {BRAIN_DIR / 'CLAUDE.md'}\nauto-memory: {mem}")
         elif a.action == "edit":
             subprocess.Popen(["xdg-open", str(mem if mem.exists() else BRAIN_DIR)])

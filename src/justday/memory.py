@@ -20,6 +20,14 @@ import time
 from . import config
 
 INDEX = "MEMORY.md"
+LONG = "ДОЛГАЯ.md"  # указатель долгой памяти: лежит рядом, но сам в разговор не читается
+# Сколько дней запись о текущем деле держится в оперативной. Его слова: оперативная — «то, что нужно
+# прямо сейчас, в пределах недели»; две недели — запас на дело, которое просто стояло на паузе.
+HOT_DAYS = 14
+# Переезжают только записи о делах и ссылки: они стареют. Его предпочтения и поправки («не говорить
+# брат») нужны в каждом разговоре, сколько бы их ни трогали, — они остаются горячими всегда.
+AGING = {"project", "reference"}
+LONG_LINK = f"- [Долгая память]({LONG}) — старые дела и рецепты; загляни, если разговор о прошлом или что-то сломалось снова"
 # Сколько строк указателя — уже много. Взято не с потолка: строка указателя это примерно 20 токенов,
 # и сорок строк — около восьмисот токенов в начале **каждого** разговора.
 BUSY_LINES = 40
@@ -45,7 +53,7 @@ def entries() -> list[dict]:
         return out
     now = time.time()
     for name in names:
-        if not name.endswith(".md") or name == INDEX:
+        if not name.endswith(".md") or name in (INDEX, LONG):
             continue
         path = base / name
         try:
@@ -92,6 +100,62 @@ def summary(st: dict | None = None) -> str:
     if st["busy"]:
         line += " Указатель читается в каждом разговоре — его стоит проредить."
     return line
+
+
+def _kind(path) -> str:
+    import re
+
+    try:
+        head = path.read_text(encoding="utf-8")[:600]
+    except OSError:
+        return ""
+    m = re.search(r"^\s*type:\s*(\w+)", head, re.M)
+    return m.group(1) if m else ""
+
+
+def tidy(now: float | None = None) -> dict:
+    """Свести память: остывшие дела — из оперативной в долгую, тронутые снова — обратно.
+
+    Ничего не удаляется: строка указателя переезжает между MEMORY.md и ДОЛГАЯ.md, файл записи на месте.
+    ponytail: «давность» — время последней правки, не чтения; atime не годится, его сбивает экран
+    памяти в настройках (он читает все записи разом). Дело, которое только читают, уедет в долгую — и
+    вернётся, как только мозг его поправит.
+    """
+    import re
+
+    now = time.time() if now is None else now
+    base = folder()
+    hot_path, long_path = base / INDEX, base / LONG
+    if not hot_path.exists():
+        return {"moved_out": [], "moved_in": []}
+    hot = hot_path.read_text(encoding="utf-8").splitlines()
+    cold = long_path.read_text(encoding="utf-8").splitlines() if long_path.exists() else []
+
+    def cooled(line: str) -> bool | None:
+        """True — остыла, False — горячая, None — не запись (заголовок, ссылка на долгую, нет файла)."""
+        m = re.match(r"\s*-\s*\[.*?\]\(([^)/]+\.md)\)", line)
+        if not m or m.group(1) in (INDEX, LONG):
+            return None
+        path = base / m.group(1)
+        try:
+            age = (now - path.stat().st_mtime) / 86400
+        except OSError:
+            return None
+        return _kind(path) in AGING and age >= HOT_DAYS
+
+    out = [ln for ln in hot if cooled(ln)]
+    back = [ln for ln in cold if cooled(ln) is False]
+    if not out and not back:
+        return {"moved_out": [], "moved_in": []}
+    hot = [ln for ln in hot if ln not in out and ln != LONG_LINK] + back
+    cold = [ln for ln in cold if ln not in back] + out
+    if any(cooled(ln) for ln in cold):
+        hot.append(LONG_LINK)
+    for path, lines in ((long_path, cold), (hot_path, hot)):
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text("\n".join(lines).strip("\n") + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+    return {"moved_out": out, "moved_in": back}
 
 
 # ─────────────── «раз и навсегда»: жёсткие предпочтения ───────────────
