@@ -884,12 +884,21 @@ def queue_next(text: str) -> dict:
 
 
 def take_next() -> list[str]:
-    """Забрать всё, что пришло с телефона, по порядку; забранное с диска уходит."""
+    """Забрать всё, что пришло с телефона, по порядку; забранное с диска уходит.
+
+    Берут двое — ночь и открытое днём окно оболочки. Прочитать-потом-удалить давало бы обоим одну
+    задачу, и её сделали бы дважды; переименование атомарно, и выигрывает ровно один."""
     got = []
     for path in sorted(NEXT_DIR.glob("[!.]*.txt")) if NEXT_DIR.exists() else []:
+        mine = path.with_name(f".{path.stem}.{os.getpid()}.взято")
+        try:
+            os.rename(path, mine)
+        except OSError:
+            continue
         with contextlib.suppress(OSError):
-            got.append(path.read_text(encoding="utf-8").strip())
-            path.unlink()
+            got.append(mine.read_text(encoding="utf-8").strip())
+        with contextlib.suppress(OSError):
+            mine.unlink()
     return [t for t in got if t]
 
 

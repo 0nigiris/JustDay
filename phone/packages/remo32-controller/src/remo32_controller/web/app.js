@@ -691,7 +691,7 @@ document.addEventListener("submit", async (event) => {
       await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/work`,
         { method: "POST", body: JSON.stringify({ text }) });
       toast(state.work?.running ? "Ночь возьмёт это следующим кругом"
-        : "Ночь сейчас не идёт — задача подождёт следующей", "ok");
+        : "Возьмёт открытое окно JustDay Terminal, а если его нет — следующая ночь", "ok");
     } catch (error) {
       toast(error.message, "err");
     }

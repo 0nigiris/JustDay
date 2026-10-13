@@ -125,6 +125,19 @@ class Shell(App):
         log.write("[#8d8d99]/help — что умеет это окно[/]\n")
         self.refresh_status()
         self.query_one("#ask", Ask).focus()
+        self.set_interval(5, self.from_phone)
+
+    def from_phone(self) -> None:
+        """Задача с телефона, пока окно открыто: «дописал в приложении — работа продолжилась на
+        компьютере». Раньше её брала только ночь, и днём она лежала, пока окно ждало ввода."""
+        for text in terminal.take_next():
+            self.query_one("#log", RichLog).write("[#8d8d99]С телефона:[/]")
+            if self.busy:
+                self.queue.append(text)
+                self.query_one("#log", RichLog).write(f"[#8d8d99]В очереди №{len(self.queue)}: {text}[/]")
+                self.refresh_status("думает")
+            else:
+                self.start(text)
 
     def refresh_status(self, doing: str = "") -> None:
         bits = [self.work.now.label]

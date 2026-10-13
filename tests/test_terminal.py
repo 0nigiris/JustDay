@@ -1003,3 +1003,30 @@ def test_a_wrong_task_from_the_phone_can_be_taken_back_before_the_night_does_it(
     assert terminal.drop_next(waiting[0]["id"]) == {"ok": True, "queued": 1}
     assert terminal.drop_next(waiting[0]["id"])["ok"] is False, "снятую дважды — не молча"
     assert terminal.take_next() == ["почини звук в доке"]
+
+
+def test_a_task_from_the_phone_reaches_the_open_window_not_only_the_night() -> None:
+    """Днём окно оболочки ждало ввода, а задача с телефона лежала в очереди до ночи.
+
+    И брать её должен ровно один: ночь и окно читали бы один файл, и задачу сделали бы дважды."""
+    pytest.importorskip("textual", reason="нет textual — окно не ставилось")
+    from justday import terminal_ui
+
+    async def go() -> tuple[str, list]:
+        app = terminal_ui.Shell()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.work.rungs = app.work.all = rungs("claude:opus")
+            app.work.engines = {"claude": engine([terminal.Said(text="сделал")])}
+            terminal.queue_next("почини звук в доке")
+            app.from_phone()
+            for _ in range(40):
+                await pilot.pause()
+                if not app.busy:
+                    break
+            log = "\n".join(str(line) for line in app.query_one("#log").lines)
+        return log, terminal.take_next()
+
+    log, left = asyncio.run(go())
+    assert "почини звук в доке" in log and "сделал" in log, log
+    assert left == [], "задача осталась в очереди — ночь сделала бы её второй раз"
