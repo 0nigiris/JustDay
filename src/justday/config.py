@@ -332,7 +332,9 @@ DEFAULTS: dict = {
         # обновления ядра и утёкшую память драйверов — это не катастрофа, но однажды становится ею,
         # и всегда не вовремя. Напоминаем, а не перезагружаем: за компьютером может идти работа,
         # которой ассистент не видит. 0 — не напоминать.
-        "reboot_reminder_days": 7,"notifications": True, "face": "auto"},
+        "reboot_reminder_days": 7,"notifications": True, "face": "auto",
+        # В окне настроек прятать тонкую подстройку (пружины, черты, отступы): их слишком много.
+        "settings_simple": True},
     # «Я ушёл» closes the open applications and remembers them; «я вернулся» opens them again.
     # keep: what is never closed (a substring of the window class or the application name).
     # История буфера обмена для панели на островке. Пароли в неё не попадают: то, что программа

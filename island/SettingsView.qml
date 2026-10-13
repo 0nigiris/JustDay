@@ -577,6 +577,10 @@ Item {
         id: row
         property string title: ""
         property string subtitle: ""
+        // Тонкая подстройка (пружины, черты, отступы): «в настройках слишком много ненужного». Прячется,
+        // пока включено «Только главное» в Общих; строку, у которой свой visible, так не пометить.
+        property bool fine: false
+        visible: !fine || win.get("ui.settings_simple") === false
         default property alias control: slot.data
         Layout.fillWidth: true
         implicitHeight: Math.max(46, texts.implicitHeight + 20, slot.childrenRect.height + 16)
@@ -866,6 +870,13 @@ Item {
         ColumnLayout {
             spacing: 6
             PageTitle { title: JD.tr("Общие"); subtitle: JD.tr("Как с ним говорить, язык и запуск") }
+            Group {
+                Row {
+                    title: JD.tr("Только главное")
+                    subtitle: JD.tr("Прячет тонкую подстройку: пружины, черты, отступы, мониторы OSD")
+                    Toggle { checked: win.get("ui.settings_simple") !== false; onToggled: v => win.set("ui.settings_simple", v) }
+                }
+            }
             GroupTitle { text: JD.tr("КАК ОБЩАТЬСЯ") }
             Group {
                 Row {
@@ -1149,6 +1160,7 @@ Item {
                 Row { title: JD.tr("Звуки интерфейса"); subtitle: JD.tr("Тихие, из одной гаммы; в играх молчат"); Toggle { checked: win.get("island.ui_sounds") !== false; onToggled: v => win.set("island.ui_sounds", v) } }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
+                    fine: true
                     title: JD.tr("Отступ сверху")
                     subtitle: JD.tr("Если панель стоит у верхнего края — опустите остров под неё, и панель останется под курсором")
                     SSlider { key: "island.top_margin"; from: 0; to: 120; step: 2; decimals: 0; unit: JD.tr(" точек") }
@@ -1206,6 +1218,7 @@ Item {
                     }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Отступ сверху")
                     subtitle: JD.tr("На сколько опустить островок от края экрана. Вырез и сплошная полоса остаются прижатыми")
                     SSlider { key: "island.top_margin"; from: 0; to: 64; step: 1; decimals: 0; unit: JD.tr(" точек"); fallback: 8 }
@@ -1285,6 +1298,7 @@ Item {
                 }
                 Row { title: JD.tr("Увеличивать под курсором"); subtitle: JD.tr("Ближний значок вырастает, соседи подхватывают волну и расступаются — полоса при этом расширяется. Кошка и часы не увеличиваются: цифру от этого труднее прочитать"); Toggle { checked: win.get("dock.magnify") !== false; onToggled: v => win.set("dock.magnify", v) } }
                 Row {
+                    fine: true
                     title: JD.tr("Как движется увеличение")
                     subtitle: win.get("dock.animation") === "instant" ? JD.tr("Без пружины: размеры меняются сразу")
                             : win.get("dock.animation") === "smooth" ? JD.tr("Пружина без отскока")
@@ -1296,11 +1310,13 @@ Item {
                     }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Жёсткость пружины")
                     subtitle: JD.tr("Больше — быстрее доезжает до размера")
                     SSlider { key: "dock.spring"; from: 40; to: 500; step: 10; decimals: 0 }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Затухание")
                     subtitle: JD.tr("Меньше — сильнее отскок. Единица — без отскока вовсе")
                     SSlider { key: "dock.damping"; from: 0.3; to: 1.0; step: 0.05; decimals: 2 }
@@ -1310,6 +1326,7 @@ Item {
                     SSlider { key: "dock.magnify_scale"; from: 0; to: 120; step: 5; decimals: 0; unit: JD.tr("%") }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Ширина волны")
                     subtitle: JD.tr("Сколько соседей подхватывает увеличение")
                     SSlider { key: "dock.magnify_spread"; from: 80; to: 500; step: 20; decimals: 0; unit: JD.tr("%") }
@@ -1335,6 +1352,7 @@ Item {
                 }
                 Row { title: JD.tr("Показывать открытые программы"); subtitle: JD.tr("Те, что не закреплены, — за отдельной чертой"); Toggle { checked: win.get("dock.show_running") !== false; onToggled: v => win.set("dock.show_running", v) } }
                 Row {
+                    fine: true
                     title: JD.tr("Зона вызова у края")
                     subtitle: JD.tr("Насколько высоко от края экрана док слышит курсор")
                     SSlider { key: "dock.reveal_zone"; from: 2; to: 120; step: 2; decimals: 0; unit: JD.tr(" точек") }
@@ -1361,6 +1379,7 @@ Item {
                     Toggle { checked: win.get("dock.wheel") === true; onToggled: v => win.set("dock.wheel", v) }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Сила щелчка")
                     subtitle: JD.tr("Насколько заметен толчок при переходе на соседнюю защёлку")
                     SSlider { key: "dock.detent"; from: 0; to: 200; step: 10; decimals: 0; unit: JD.tr("%") }
@@ -1383,19 +1402,23 @@ Item {
                     }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Место под черту")
                     subtitle: JD.tr("Ноль — столько же, сколько между значками")
                     SSlider { key: "dock.separator_room"; from: 0; to: 80; step: 2; decimals: 0; unit: JD.tr(" точек") }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Толщина черты")
                     SSlider { key: "dock.separator_width"; from: 1; to: 6; step: 1; decimals: 0; unit: JD.tr(" точек") }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Высота черты")
                     SSlider { key: "dock.separator_height"; from: 10; to: 100; step: 5; decimals: 0; unit: JD.tr("%") }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Заметность черты")
                     SSlider { key: "dock.separator_opacity"; from: 0; to: 60; step: 2; decimals: 0; unit: JD.tr("%") }
                 }
@@ -1413,6 +1436,7 @@ Item {
                     Toggle { checked: win.get("dock.cat") !== false; onToggled: v => win.set("dock.cat", v) }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Кошка засыпает ниже")
                     subtitle: JD.tr("Ноль — не спит никогда. Спящий кадр есть только у кадров виджета CatWalk")
                     SSlider { key: "dock.cat_sleep_below"; from: 0; to: 30; step: 1; decimals: 0; unit: JD.tr("%") }
@@ -1508,6 +1532,7 @@ Item {
                     Toggle { checked: win.get("dock.tray_button") === true; onToggled: v => win.set("dock.tray_button", v) }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Рамка при наведении")
                     subtitle: JD.tr("Обводит значок, на который навели. Выключите — останутся одни значки, без рамки")
                     Toggle { checked: win.get("tray.hover_frame") !== false; onToggled: v => win.set("tray.hover_frame", v) }
@@ -1533,6 +1558,7 @@ Item {
                     SSlider { key: "tray.magnify_scale"; from: 0; to: 150; step: 5; decimals: 0; unit: JD.tr("%") }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Ширина волны")
                     subtitle: JD.tr("Сколько соседей подхватывает увеличение")
                     SSlider { key: "tray.magnify_spread"; from: 80; to: 500; step: 20; decimals: 0; unit: JD.tr("%") }
@@ -1743,6 +1769,7 @@ Item {
                     Toggle { checked: win.get("island.show_osd") !== false; onToggled: v => win.set("island.show_osd", v) }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Монитор OSD")
                     subtitle: JD.tr("На каком экране показывать системный HUD. «У острова» — тот же монитор, что у пилюли")
                     Choice {
@@ -1755,6 +1782,7 @@ Item {
                     }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Положение OSD")
                     subtitle: JD.tr("Угол или край — как у Noctalia; по умолчанию сверху по центру у острова")
                     Choice {
@@ -2390,11 +2418,13 @@ Item {
                     Field { key: "brain.fallbacks"; placeholderText: "openrouter, ollama" }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Через сколько начать проверять")
                     subtitle: JD.tr("Не раньше этого времени ассистент начнёт спрашивать верхнего, вернулся ли лимит. 0 — не возвращаться самому")
                     SSlider { key: "brain.fallback_back_after_hours"; from: 0; to: 24; step: 1; decimals: 0; unit: JD.tr(" ч") }
                 }
                 Row {
+                    fine: true
                     title: JD.tr("Как часто спрашивать")
                     subtitle: JD.tr("Один крошечный вопрос, не разговор. Ответил — поднимаемся обратно, молчит — работаем дальше там, где работаем")
                     SSlider { key: "brain.fallback_check_minutes"; from: 5; to: 120; step: 5; decimals: 0; unit: JD.tr(" мин") }
