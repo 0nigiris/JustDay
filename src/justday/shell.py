@@ -24,8 +24,11 @@ from . import config, providers
 # с февраля 2026 Anthropic разрешает такой вход только своим Claude Code и claude.ai, а с апреля
 # закрывает его и технически. Подписка остаётся там, где она разрешена, — в самом Claude Code,
 # которым и думает сам Джарвис.
+# opencode/openai: вход через OAuth (ChatGPT Go), не через API-ключ. Проверка reachable
+# смотрит auth.json (logged_in) и наличие opencode CLI.
 KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
-        "groq": "GROQ_API_KEY", "nvidia": "NVIDIA_API_KEY"}
+        "groq": "GROQ_API_KEY", "nvidia": "NVIDIA_API_KEY",
+        "openai": "OPENAI_API_KEY", "opencode": "OPENCODE_API_KEY"}
 AUTH = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "opencode" / "auth.json"
 LOCAL = {"ollama", "lmstudio", "llamacpp", "local"}
 CONF_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "opencode"
@@ -204,6 +207,10 @@ def can_enter(provider: str) -> bool:
     вопроса уже расходились."""
     if not provider or provider in LOCAL or provider in logged_in():
         return True
+    # opencode: вход через OAuth (ChatGPT Go). Если opencode CLI установлен и в auth.json есть хоть
+    # один провайдер — считаем, что войти можно (opencode сам управляет токенами).
+    if provider in ("opencode", "openai"):
+        return bool(shutil.which("opencode") or (Path.home() / ".opencode" / "bin" / "opencode").exists()) and bool(logged_in())
     name = KEYS.get(provider)
     # Ключ лежит и в окружении (его кладёт `justday shell`), и в связке (она всегда). Смотреть одно
     # окружение значило бы объявить мёртвой ступень, ключ к которой у человека есть.

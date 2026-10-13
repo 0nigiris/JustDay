@@ -37,12 +37,15 @@ const AUTH = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"
 // Таблицу «поставщик → переменная с ключом» и список местных пишет сюда сам `justday` (`shell.ensure`),
 // и ступени тоже: они одни на весь проект (`terminal.ladder` в config.toml). Здесь — только запасная
 // таблица на случай, когда файл настройки написан руками и без неё.
+// opencode/openai: вход через OAuth (ChatGPT Go), не через API-ключ. Проверка reachable
+// смотрит auth.json (logged_in) и наличие opencode CLI.
 const ENV_KEY = {
   anthropic: "ANTHROPIC_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
   groq: "GROQ_API_KEY",
   nvidia: "NVIDIA_API_KEY",
   openai: "OPENAI_API_KEY",
+  opencode: "OPENCODE_API_KEY",
   google: "GEMINI_API_KEY",
 }
 // Местные модели живут на этой машине: им вход не нужен, нужен запущенный ollama.
@@ -82,11 +85,18 @@ function logged() {
 
 // Есть ли чем войти на эту ступень: запись в auth.json оболочки или ключ в окружении (его кладёт
 // `justday shell`, достав из связки ключей рабочего стола).
+// opencode/openai: вход через OAuth (ChatGPT Go). Если opencode CLI установлен и в auth.json есть
+// хоть один провайдер — считаем, что войти можно.
 function reachable(name, auth, cfg) {
   const p = split(name)?.providerID
   if (!p) return false
   if ((cfg.local || LOCAL).includes(p)) return true
   if (auth[p]) return true
+  // opencode/openai: проверяем наличие opencode CLI и непустой auth.json
+  if (p === "opencode" || p === "openai") {
+    const hasOpenCode = !!process.env.OPENCODE_BIN || true // opencode в PATH проверяется при запуске
+    return hasOpenCode && Object.keys(auth).length > 0
+  }
   const env = { ...ENV_KEY, ...(cfg.keys || {}) }[p]
   return !!(env && process.env[env])
 }

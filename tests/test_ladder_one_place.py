@@ -16,7 +16,9 @@ def conf(tmp_path, monkeypatch):
     for name, rel in (("CONF_DIR", ""), ("PLUGIN", "plugin/justday-ladder.js"), ("LADDER", "justday-ladder.json"),
                       ("SETTINGS", "opencode.json"), ("RULES", "ПРАВИЛА.md")):
         monkeypatch.setattr(shell, name, tmp_path / rel)
-    monkeypatch.setattr(shell, "AUTH", tmp_path / "auth.json")
+    auth_file = tmp_path / "auth.json"
+    auth_file.write_text('{"openai": {"type": "oauth"}}', encoding="utf-8")
+    monkeypatch.setattr(shell, "AUTH", auth_file)
     monkeypatch.setattr(shell, "CLAUDE_HOME", tmp_path / "claude")
     monkeypatch.setattr(shell.providers, "secret_get", lambda name: "")
     for var in shell.KEYS.values():
@@ -36,13 +38,15 @@ def test_the_plugin_ladder_came_from_the_one_in_config_toml(conf, monkeypatch):
 
 
 def test_a_rung_with_a_key_in_the_environment_was_alive_in_one_check_and_dead_in_another(conf, monkeypatch):
-    """nvidia: терминал её знал, плагин OpenCode — нет, и лестница OpenCode ходила мимо неё."""
+    """nvidia: терминал её знал, плагин OpenCode — нет, и лестница OpenCode ходила мимо неё.
+    opencode free models: теперь доступны, если opencode CLI установлен и auth.json не пуст."""
     monkeypatch.setattr(terminal.shutil, "which", lambda name: "/usr/bin/" + name)
     rung = terminal.parse_rung("opencode:nvidia/nvidia/nemotron")
     assert not terminal.reachable(rung)
     monkeypatch.setenv("NVIDIA_API_KEY", "x")
     assert terminal.reachable(rung)
-    assert not terminal.reachable(terminal.parse_rung("opencode:opencode/nemotron-3.5-lightning-free"))
+    # opencode free models теперь доступны при наличии opencode CLI и входа (auth.json)
+    assert terminal.reachable(terminal.parse_rung("opencode:opencode/nemotron-3.5-lightning-free"))
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="нет node")
