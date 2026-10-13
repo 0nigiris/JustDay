@@ -542,6 +542,9 @@ DEFAULTS: dict = {
         "separator_opacity": 16,  # насколько она заметна, в процентах
         # Палитра поверх значков дока: original | light | clear | tinted | mono
         "icon_style": "original", "icon_tint": "#7AC8FF",
+        # Классы окон, которые получают отдельную ячейку в доке на каждое окно (а не на приложение).
+        # По умолчанию — пусто, можно добавить через настройки: justday config set dock.separate_instances '["octium"]'
+        "separate_instances": [],
     },
     # Трей: чужие значки (те, что кладут в системный лоток) отдельной полосой у бокового края.
     # position: left | right; align: center | start | end.

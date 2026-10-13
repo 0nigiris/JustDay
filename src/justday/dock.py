@@ -50,8 +50,26 @@ SKIP: tuple[str, ...] = ("xwaylandvideobridge", "quickshell", "plasmashell", "or
 ALIAS_CLASSES: dict[str, str] = {
     "octium": "octobrowser",
 }
+
+
+def _separate_instances() -> frozenset[str]:
+    """Классы окон, которые получают отдельную ячейку в доке на каждое окно.
+    Читает из config.toml: dock.separate_instances (список строк)."""
+    try:
+        cfg = config.load()
+        inst = cfg.get("dock", {}).get("separate_instances") or []
+        return frozenset(str(x).lower() for x in inst)
+    except Exception:
+        return frozenset()
+
+
 # Running windows with these classes get one dock slot per window (not per app).
-SEPARATE_INSTANCES: frozenset[str] = frozenset({"octium"})
+# Обратная совместимость: если в конфиге пусто, используем старый хардкод для octium.
+def _get_separate_instances() -> frozenset[str]:
+    inst = _separate_instances()
+    if not inst:
+        return frozenset({"octium"})
+    return inst
 
 _FLATPAK = re.compile(r"\b([A-Za-z][\w-]*(?:\.[\w-]+){2,})\b")
 
@@ -520,7 +538,7 @@ def slot_apps() -> list[dict]:
     pinned_items = list(cat.get("items") or [])
     match = cat.get("match") or {}
     skip = {s.lower() for s in (cat.get("skip") or list(SKIP))}
-    separate = set(SEPARATE_INSTANCES) | {str(x).lower() for x in (cat.get("separate") or [])}
+    separate = set(_get_separate_instances()) | {str(x).lower() for x in (cat.get("separate") or [])}
 
     # Group live windows like DockView.grouped
     by: dict[str, dict] = {}
@@ -735,7 +753,7 @@ def catalog() -> dict:
         soft = dict(parent_hit)
         soft["key"] = f"win:{child}"          # not parent key — no hard merge
         soft["alias_of"] = parent_hit["key"]
-        soft["separate"] = child in SEPARATE_INSTANCES
+        soft["separate"] = child in _get_separate_instances()
         match.setdefault(child, soft)
 
     launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
@@ -753,7 +771,7 @@ def catalog() -> dict:
             short["icon"] = _resolve_icon(short["icon"], theme)
     out = {"launcher": launcher, "cat": cat_frames(), "items": items,
            "pinned": [k for k in want if k in known], "match": match, "skip": list(SKIP),
-           "separate": sorted(SEPARATE_INSTANCES), "trash_full": trash_full()}
+           "separate": sorted(_get_separate_instances()), "trash_full": trash_full()}
     if want and not items:
         prev = None
         try:
