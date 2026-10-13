@@ -47,7 +47,14 @@ def no_live_machine(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     работы, ставил музыку на паузу и заводил сторожа — «как только ты что-то начинаешь, у меня
     блокируется экран». Теперь внешние команды режима подменены всем тестам сразу.
     """
-    from justday import cycle, server
+    from justday import config, cycle, server
+
+    # Тот же домашний круг писал в настоящий state.json: после 23:00 pytest отмечал «дневник за сегодня
+    # записан» — и настоящий демон вечернюю страницу дня уже не делал.
+    monkeypatch.setattr(config, "STATE_DIR", tmp_path / "state-live")
+    monkeypatch.setattr(config, "STATE_FILE", tmp_path / "state-live" / "state.json")
+    monkeypatch.setattr(config, "EVENTS_FILE", tmp_path / "state-live" / "events.jsonl")
+    monkeypatch.setitem(config.DEFAULTS["notes"], "diary_hour", 0)  # и саму страницу в его Obsidian не писал
 
     # Пустая комната ниже — это «шаги без него созрели»: тест домашнего круга демона заводил живую
     # службу justday-cycle, и pytest сам сводил человеку память и мог запустить `justday update`.
