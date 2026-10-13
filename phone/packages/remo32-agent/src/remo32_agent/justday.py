@@ -194,6 +194,11 @@ async def work() -> dict[str, Any]:
     return await call("work")
 
 
+async def work_next(text: str) -> dict[str, Any]:
+    """Задача на следующий круг ночи. Только текст — ночь читает его как просьбу человека."""
+    return await call("work_next", text=text)
+
+
 async def plans(only_open: bool = True) -> dict[str, Any]:
     """Планы из хранилища Obsidian."""
     return await call("plan_list", open=only_open)

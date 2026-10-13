@@ -863,6 +863,41 @@ KEEP_GOING = (
     "Подтверждений нет: прав не обходить."
 )
 
+# Следующая задача с телефона: «лёг спать, вспомнил — дописал в приложении, ночь взяла». Каждая —
+# отдельным файлом: пишет демон, забирает ночь (другой процесс), и файл целиком или есть, или нет —
+# ни половины строки, ни потерянной дописки посреди чтения.
+NEXT_DIR = NIGHT_DIR / "дальше"
+NEXT_MAX = 4000
+
+
+def queue_next(text: str) -> dict:
+    """Положить задачу на следующий круг ночи. Только текст: ночь читает его как просьбу человека."""
+    text = str(text or "").strip()
+    if not text or len(text) > NEXT_MAX:
+        return {"ok": False, "error": f"задача пустая или длиннее {NEXT_MAX} знаков"}
+    NEXT_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"{time.time_ns()}.txt"
+    tmp = NEXT_DIR / f".{name}"
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, NEXT_DIR / name)
+    return {"ok": True, "queued": len(list(NEXT_DIR.glob("[!.]*.txt")))}
+
+
+def take_next() -> list[str]:
+    """Забрать всё, что пришло с телефона, по порядку; забранное с диска уходит."""
+    got = []
+    for path in sorted(NEXT_DIR.glob("[!.]*.txt")) if NEXT_DIR.exists() else []:
+        with contextlib.suppress(OSError):
+            got.append(path.read_text(encoding="utf-8").strip())
+            path.unlink()
+    return [t for t in got if t]
+
+
+def from_phone(asks: list[str]) -> str:
+    return ("Человек написал с телефона, что делать дальше:\n" + "\n".join(f"- {a}" for a in asks)
+            + "\nЭто важнее очереди плана: сделай это первым и запиши в ПЕРЕДАЧА.md, потом продолжай "
+            "очередь. Подтверждений нет: прав не обходить.")
+
 
 def asks_back(text: str) -> bool:
     """Кончился ли ход вопросом к человеку.
@@ -957,7 +992,10 @@ async def night(task: str, hours: float = 8.0, tell: bool = False, cfg: dict | N
                 await asyncio.sleep(300)
             rounds += 1
             note(f"Круг {rounds}: прежний ход кончился, срок ещё не вышел — продолжаю.")
-            said = await work.send(KEEP_GOING, on_text=lambda t: write(t), on_note=note,
+            asks = take_next()
+            for ask in asks:
+                note(f"С телефона: {ask}")
+            said = await work.send(from_phone(asks) if asks else KEEP_GOING, on_text=lambda t: write(t), on_note=note,
                                    on_pick=picked, on_tool=lambda name: write(f"\n· {name}\n", "\n"))
     finally:
         # Режим сервера нарочно не выключается по концу работы: она может кончиться в три часа
@@ -1077,8 +1115,9 @@ def work_view(lines: int = 40) -> dict:
                     if "нужно от него" in ln.lower()][-8:]
     except (OSError, subprocess.SubprocessError):
         pass
+    queued = len(list(NEXT_DIR.glob("[!.]*.txt"))) if NEXT_DIR.exists() else 0
     return {"ok": True, "running": st["running"], "log": st["log"], "tail": tail, "need": need,
-            "server_mode": bool((st.get("server_mode") or {}).get("on"))}
+            "queued": queued, "server_mode": bool((st.get("server_mode") or {}).get("on"))}
 
 
 def nightly_stop() -> dict:

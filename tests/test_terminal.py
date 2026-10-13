@@ -965,3 +965,23 @@ def test_the_phone_sees_night_progress_and_what_waits_for_him(monkeypatch, tmp_p
     assert got["tail"] == ["— Круг 1", "сделал тест"], "пустые строки съели экран телефона"
     assert got["need"] == ["Нужно от него: поставить APK"]
     assert got["running"] and got["server_mode"]
+
+
+def test_a_task_written_from_the_phone_is_what_the_next_night_round_does(monkeypatch) -> None:
+    """«Лёг спать, вспомнил — дописал с телефона, а работа продолжилась на компьютере». Без этого
+    ночь крутила своё «продолжай очередь» до утра, а написанное с телефона ждало человека."""
+    from justday import server
+
+    monkeypatch.setattr(server, "awake", lambda why="": 0)
+    cfg = {"terminal": {"ladder": ["claude:opus"], "night_nudges": 0}, "brain": {}}
+    work = terminal.Work(cfg, rungs=rungs("claude:opus"), engines={"claude": engine([])})
+    said_to_it = expire_after_first_turn(work)
+    monkeypatch.setattr(terminal, "Work", lambda *a, **kw: work)
+    assert terminal.queue_next("")["ok"] is False
+    assert terminal.queue_next("почини звук в доке")["queued"] == 1
+
+    asyncio.run(terminal.night("весь план", hours=0.5, cfg=cfg, dark=False))
+
+    assert "почини звук в доке" in said_to_it[1], "ночь не взяла задачу с телефона"
+    assert terminal.take_next() == [], "взятая задача осталась бы и повторялась каждый круг"
+    assert terminal.work_view()["queued"] == 0

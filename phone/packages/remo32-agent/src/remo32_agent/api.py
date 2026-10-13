@@ -90,6 +90,10 @@ class JustDayInbox(BaseModel):
     )
 
 
+class JustDayNext(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class JustDayPlan(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     note: str = Field("", max_length=120)
@@ -442,6 +446,20 @@ def build_router(ctx: AgentContext) -> APIRouter:
     )
     async def justday_work(request_id: RequestId) -> ApiResponse[dict[str, Any]]:
         return ApiResponse[dict[str, Any]].success(await justday.work(), request_id)
+
+    @router.post(
+        "/api/justday/work",
+        dependencies=[auth],
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        summary="Задача на следующий круг ночи",
+    )
+    async def justday_work_next(
+        command: JustDayNext, request_id: RequestId
+    ) -> ApiResponse[dict[str, Any]]:
+        return ApiResponse[dict[str, Any]].success(
+            await justday.work_next(command.text), request_id
+        )
 
     @router.get(
         "/api/justday/plans",

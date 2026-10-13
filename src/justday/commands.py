@@ -345,6 +345,12 @@ class CommandsMixin:
         return await asyncio.get_running_loop().run_in_executor(
             None, terminal.work_view, min(int(req.get("lines") or 40), 200))
 
+    async def _cmd_work_next(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Задача с телефона на следующий круг ночи"""
+        from . import terminal
+
+        return terminal.queue_next(req.get("text", ""))
+
     async def _cmd_inbox_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "items": inbox.recent(int(req.get("limit") or 20)),
                 "pending": len(inbox.pending())}

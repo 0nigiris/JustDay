@@ -160,6 +160,10 @@ class JustDayInbox(BaseModel):
     created: float | None = None
 
 
+class JustDayNext(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class JustDayPlan(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     note: str = Field("", max_length=120)
@@ -194,6 +198,17 @@ async def justday_work(
     """Ход ночной работы: телефон только смотрит, ничего не запускает."""
     return ApiResponse[dict[str, Any]].success(
         await _registry(request).get(pc_id).client.justday_work(), request_id
+    )
+
+
+@router.post("/{pc_id}/justday/work", response_model=ApiResponse[dict[str, Any]], tags=["JustDay"])
+async def justday_work_next(
+    pc_id: str, payload: JustDayNext, request: Request, _session: Session, request_id: RequestId
+) -> ApiResponse[dict[str, Any]]:
+    """Следующая задача ночи: ложится текстом в очередь, ночь берёт её на следующем круге."""
+    log.info("задача ночи с телефона", pc_id=pc_id)
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_work_next(payload.text), request_id
     )
 
 

@@ -679,6 +679,25 @@ document.addEventListener("submit", async (event) => {
     jarvisAsk(text);
     return;
   }
+  if (event.target.id === "work-form") {
+    event.preventDefault();
+    const field = el("work-text");
+    const text = field.value.trim();
+    const pc = activePc();
+    if (!text || !pc) return;
+    field.value = "";
+    field.blur();
+    try {
+      await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/work`,
+        { method: "POST", body: JSON.stringify({ text }) });
+      toast(state.work?.running ? "Ночь возьмёт это следующим кругом"
+        : "Ночь сейчас не идёт — задача подождёт следующей", "ok");
+    } catch (error) {
+      toast(error.message, "err");
+    }
+    await render(true);
+    return;
+  }
   if (event.target.id === "plan-form") {
     event.preventDefault();
     const field = el("plan-text");
@@ -2279,7 +2298,12 @@ function workBlock() {
       w.server_mode ? " · экраны погашены" : ""}</div>
     ${tail.length ? `<div class="work-tail">${esc(tail.join("\n"))}</div>` : ""}
     ${(w.need || []).length ? `<div class="list">${w.need.map((line) =>
-      `<div class="step"><div><b>${esc(line)}</b></div></div>`).join("")}</div>` : ""}`;
+      `<div class="step"><div><b>${esc(line)}</b></div></div>`).join("")}</div>` : ""}
+    <form id="work-form" class="jarvis-form">
+      <input type="text" id="work-text" placeholder="Что делать дальше" autocomplete="off" enterkeyhint="send">
+      <button class="btn primary" type="submit" aria-label="Передать ночи">${icon("chevron-right")}</button>
+    </form>
+    ${w.queued ? `<div class="meta">Ждут следующего круга: ${w.queued}</div>` : ""}`;
 }
 
 function justdayTerminalCard(pc) {

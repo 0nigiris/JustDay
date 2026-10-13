@@ -322,6 +322,12 @@ class AgentClient:
         got: dict[str, Any] = await self._request("GET", "/api/justday/work", timeout=15.0)
         return got
 
+    async def justday_work_next(self, text: str) -> dict[str, Any]:
+        got: dict[str, Any] = await self._request(
+            "POST", "/api/justday/work", json={"text": text}, timeout=15.0
+        )
+        return got
+
     async def justday_plans(self, closed: bool = False) -> dict[str, Any]:
         got: dict[str, Any] = await self._request(
             "GET", "/api/justday/plans", params={"closed": str(closed).lower()}, timeout=15.0

@@ -62,6 +62,11 @@ def no_live_machine(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     monkeypatch.setattr(cycle, "running", lambda: False)
     monkeypatch.setattr(cycle, "DIR", tmp_path / "цикл")
     monkeypatch.setattr(cycle, "LAST", tmp_path / "цикл" / "last.json")
+    # Папки ночи тоже считаются при импорте: без подмены тест клал «задачу с телефона» в настоящую
+    # очередь, и живая ночь брала её как просьбу человека.
+    from justday import terminal
+    monkeypatch.setattr(terminal, "NIGHT_DIR", tmp_path / "ночь")
+    monkeypatch.setattr(terminal, "NEXT_DIR", tmp_path / "ночь" / "дальше")
     monkeypatch.setattr(server, "_run", lambda *cmd, timeout=10: False)
     monkeypatch.setattr(server, "_out", lambda *cmd, timeout=10: "")
     monkeypatch.setattr(server, "_keep_awake", lambda why: 0)

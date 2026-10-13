@@ -202,3 +202,41 @@ class TestХодНочи:
         assert anon.post("/api/auth/login", json={"password": TEST_PASSWORD}).status_code == 200
         data = anon.get("/api/pcs/testpc/justday/work").json()["data"]
         assert data["need"] == ["поставить APK"]
+
+
+class TestЗадачаНочи:
+    """«Писать следующую задачу, и чтобы работа продолжалась на компьютере» — только текстом."""
+
+    def test_задача_уходит_текстом_и_ничем_больше(self, agent_client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        видел: dict[str, Any] = {}
+
+        async def fake(command: str, **payload: Any) -> dict[str, Any]:
+            видел.update(cmd=command, **payload)
+            return {"ok": True, "queued": 1}
+
+        monkeypatch.setattr("remo32_agent.justday.call", fake)
+        data = agent_client.post("/api/justday/work", json={"text": "почини звук"}).json()["data"]
+        assert data["queued"] == 1
+        assert видел == {"cmd": "work_next", "text": "почини звук"}
+
+    def test_пустую_и_огромную_не_принимаем(self, agent_client) -> None:  # type: ignore[no-untyped-def]
+        assert agent_client.post("/api/justday/work", json={"text": ""}).status_code == 422
+        assert agent_client.post("/api/justday/work", json={"text": "а" * 4001}).status_code == 422
+
+    def test_контроллер_пересылает_задачу(self, anon, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        from conftest import TEST_PASSWORD
+
+        видел: list[str] = []
+
+        async def fake(self: object, text: str) -> dict[str, Any]:
+            видел.append(text)
+            return {"ok": True, "queued": 1}
+
+        monkeypatch.setattr(
+            "remo32_controller.agent_client.AgentClient.justday_work_next", fake, raising=True
+        )
+        assert anon.post("/api/pcs/testpc/justday/work", json={"text": "x"}).status_code == 401
+        assert anon.post("/api/auth/login", json={"password": TEST_PASSWORD}).status_code == 200
+        got = anon.post("/api/pcs/testpc/justday/work", json={"text": "почини звук"})
+        assert got.status_code == 200
+        assert видел == ["почини звук"]
