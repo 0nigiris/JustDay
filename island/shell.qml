@@ -2145,6 +2145,7 @@ ShellRoot {
                 markA: pl.loopB > pl.loopA && pl.p.duration > 0 ? pl.loopA / pl.p.duration : -1
                 markB: pl.loopB > pl.loopA && pl.p.duration > 0 ? pl.loopB / pl.p.duration : -1
                 onMarkMoved: (which, frac) => pl.moveMark(which, frac * (pl.p.duration || 0))
+                onMarkCleared: { pl.loopA = -1; pl.loopB = -1 }
                 onMoved: frac => { const to = frac * (pl.p.duration || 0); JD.media("seek", to); pl.optimistic({ pos: to }) }
             }
             RowLayout {
@@ -2493,6 +2494,7 @@ ShellRoot {
                             if (which === "A") JD.loopA = Math.max(0, Math.min(sec, JD.loopB - 1))
                             else JD.loopB = Math.min(player.duration / 1000, Math.max(sec, JD.loopA + 1))
                         }
+                        onMarkCleared: { JD.loopA = -1; JD.loopB = -1 }
                         onMoved: frac => { player.position = frac * player.duration; vv.ended = false }
                     }
                     RowLayout {

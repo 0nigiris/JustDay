@@ -23,6 +23,7 @@ Item {
     property real markA: -1
     property real markB: -1
     signal markMoved(string which, real frac)
+    signal markCleared()                // двойной щелчок по зоне — так он и просил сбрасывать отрезок
     readonly property real shown: Math.max(from, Math.min(to, dragging ? dragValue : value))
     readonly property real fraction: to > from ? (shown - from) / (to - from) : 0
     readonly property bool active: hover.hovered || dragging
@@ -127,6 +128,10 @@ Item {
         // Потеря захвата — незавершённый жест: не коммитим seek и не оставляем живую громкость
         // ждать старого таймера, а возвращаем отображение к последнему значению извне.
         onCanceled: { throttle.stop(); throttle.pending = NaN; sl.dragging = false }
+        onDoubleClicked: m => {
+            const f = m.x / width
+            if (sl.markA >= 0 && sl.markB > sl.markA && f >= sl.markA && f <= sl.markB) sl.markCleared()
+        }
     }
     function step() {
         if (!live) return
