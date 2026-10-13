@@ -41,3 +41,11 @@ def test_hints_people_read_are_not_set_in_faint() -> None:
     css = CSS.read_text(encoding="utf-8")
     for rule in (".deck-hint {", ".field .hint {", ".toast .rid {", ".crumbs {", ".divider {"):
         assert "text-faint" not in css[css.index(rule):].split("}")[0], rule
+
+
+def test_drop_button_stands_beside_the_task_not_under_it() -> None:
+    """Крестик «снять задачу» (ход ночи) и «убрать» (ждут отправки) падал под текст:
+    у строки `.step` был промежуток, но не было самого ряда."""
+    css = CSS.read_text(encoding="utf-8")
+    rules = [r for r in css.split("}") if ".list .step {" in r]
+    assert any("display: flex" in r for r in rules)

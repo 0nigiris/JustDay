@@ -1247,7 +1247,9 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
 .list-row .chev { flex: none; color: var(--text-faint); font-size: 17px; }
 /* Шаги мультидействия: строка списка с тремя маленькими кнопками справа.
    Кнопки не растягиваются — иначе название шага съедается ими на узком экране. */
-.list .step { gap: 9px; }
+.list .step { display: flex; align-items: center; gap: 9px; }
+.list .step > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.list .step b { display: block; font-size: 15px; font-weight: 500; }
 .list .step .body { margin-right: 4px; }
 .btn.tiny {
   flex: none;
@@ -1271,6 +1273,8 @@ body[data-mode="deck"] .banner { margin: 0 0 8px; font-size: 12.5px; padding: 8p
 .plan:last-child { border-bottom: none; }
 .plan b { font-size: 15px; font-weight: 500; display: block; }
 .plan .meta { font-size: 12px; }
+/* Без flex крестик «снять задачу» падал под текст, а не вставал справа: правило про
+   промежуток было, а самого ряда не было (видно на стенде preview.html). */
 .list .step { justify-content: space-between; padding: 10px 13px; border-bottom: 1px solid var(--hair); }
 .list .step:last-child { border-bottom: none; }
 
