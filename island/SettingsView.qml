@@ -559,18 +559,25 @@ Item {
         font.weight: Font.DemiBold
     }
 
-    component Group: Rectangle {
+    component CardForm: Rectangle {
+        // Общий компонент формы карточки с правильным клиппингом
+        // скруглённых углов (как у плеера в CardView/ClippingRectangle).
+        // Использует clip: true для правильного обрезания контента по углам.
         default property alias content: rows.data
         Layout.fillWidth: true
         implicitHeight: rows.implicitHeight
-        radius: 12
         color: win.card
+        radius: 12
+        clip: true
         ColumnLayout {
             id: rows
             anchors.left: parent.left
             anchors.right: parent.right
             spacing: 0
         }
+    }
+
+    component Group: CardForm {
     }
 
     component Row: Item {
@@ -583,7 +590,8 @@ Item {
         visible: !fine || win.get("ui.settings_simple") === false
         default property alias control: slot.data
         Layout.fillWidth: true
-        implicitHeight: Math.max(46, texts.implicitHeight + 20, slot.childrenRect.height + 16)
+        // Высота строки 28px (вместо 46), иконки 20px (Р2-29)
+        implicitHeight: Math.max(28, texts.implicitHeight + 8, slot.childrenRect.height + 4)
         Rectangle {  // separator above every row but the first
             visible: row.y > 0
             anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16 }
@@ -593,13 +601,13 @@ Item {
         ColumnLayout {
             id: texts
             anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter; right: slot.left; rightMargin: 16 }
-            spacing: 2
+            spacing: 0
             Text { text: row.title; color: win.t1; font.family: win.font; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
             Text { visible: !!row.subtitle; text: row.subtitle; color: win.t2; font.family: win.font; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
         }
         Item {
             id: slot
-            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+            anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
             width: childrenRect.width
             height: childrenRect.height
         }
@@ -608,10 +616,10 @@ Item {
     component RoundIcon: Pressable {
         id: ri
         property string glyph: ""
-        width: 30; height: 30; radius: 15
+        width: 20; height: 20; radius: 10
         pressScale: JD.pressScaleSmall
         color: hovered ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
-        Glyph { anchors.centerIn: parent; name: ri.glyph; size: 15 }
+        Glyph { anchors.centerIn: parent; name: ri.glyph; size: 12 }
     }
 
     component Toggle: Pressable {
