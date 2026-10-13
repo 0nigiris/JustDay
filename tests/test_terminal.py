@@ -403,12 +403,50 @@ def test_the_morning_must_not_start_with_music_at_three_in_the_night(monkeypatch
     cfg = {"terminal": {"ladder": ["claude:opus"], "night_nudges": 0}, "brain": {}}
     work = terminal.Work(cfg, rungs=rungs("claude:opus"),
                          engines={"claude": engine([terminal.Said(text="сделал")])})
+    expire_after_first_turn(work)
     monkeypatch.setattr(terminal, "Work", lambda *a, **kw: work)
     monkeypatch.setattr(terminal, "NIGHT_DIR", Path("/tmp") / "justday-тест-ночь")
 
     asyncio.run(terminal.night("почини док", hours=0.5, cfg=cfg, dark=True))
 
     assert not done, "работа кончилась — и разбудила человека светом и музыкой"
+
+
+def expire_after_first_turn(work) -> list[str]:
+    """Заставить ночь кончиться после первого хода и записывать, что ей говорили."""
+    said_to_it: list[str] = []
+    real = work.send
+
+    async def send(text, **kw):
+        said_to_it.append(text)
+        got = await real(text, **kw)
+        if len(said_to_it) >= 2:
+            work.wait_until = 0.0
+        return got
+
+    work.send = send
+    return said_to_it
+
+
+def test_the_night_used_to_end_in_46_minutes_because_the_model_said_it_was_done(monkeypatch) -> None:
+    """Ночная смена кончалась, когда модель сама решала «всё», — а он просил работать до лимита.
+
+    Пока срок не вышел, после законченного хода идёт следующий: «продолжай очередь».
+    """
+    from justday import server
+
+    monkeypatch.setattr(server, "on", lambda why, hours=0.0: {"ok": True})
+    monkeypatch.setattr(server, "awake", lambda why="": 0)
+    cfg = {"terminal": {"ladder": ["claude:opus"], "night_nudges": 0}, "brain": {}}
+    work = terminal.Work(cfg, rungs=rungs("claude:opus"), engines={"claude": engine(
+        [terminal.Said(text="сделал"), terminal.Said(text="ещё сделал")])})
+    heard = expire_after_first_turn(work)
+    monkeypatch.setattr(terminal, "Work", lambda *a, **kw: work)
+    monkeypatch.setattr(terminal, "NIGHT_DIR", Path("/tmp") / "justday-тест-ночь")
+
+    asyncio.run(terminal.night("весь план", hours=0.5, cfg=cfg, dark=False))
+
+    assert heard == ["весь план", terminal.KEEP_GOING], "после «сделал» ночь остановилась"
 
 
 def test_a_question_asked_at_night_used_to_stop_the_work_till_morning() -> None:

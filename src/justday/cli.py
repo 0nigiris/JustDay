@@ -449,7 +449,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("night", help="«я спать»: задача уходит работать на ночь в отдельную "
                                      "службу, машина переходит в режим сервера, утром — письмо")
     sp.add_argument("task", nargs="*", help="что сделать за ночь")
-    sp.add_argument("--hours", type=float, default=8.0, help="сколько часов на это есть")
+    sp.add_argument("--hours", type=float, default=12.0, help="сколько часов на это есть")
     sp.add_argument("--here", action="store_true",
                     help="работать в этом окне, а не в службе (окно нельзя будет закрыть)")
     sp.add_argument("--light", action="store_true",
