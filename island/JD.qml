@@ -1647,8 +1647,8 @@ Singleton {
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
         if (m.menu !== undefined) {
             if (m.menu === "search") toggleSearch()
-            else if (m.menu === "toggle") toggleMenu()
-            else if (m.menu) openMenu()
+            else if (m.menu === "toggle") openSearch()
+            else if (m.menu) openSearch()
             else closeMenu()
         }
         if (m.catalog !== undefined) {

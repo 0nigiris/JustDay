@@ -1882,7 +1882,7 @@ Item {
         if (ctxEntry) { closeCtx(); return }
         closeCtx()
         closeStack()
-        if (e.t === "launcher") { JD.toggleMenu(); return }
+        if (e.t === "launcher") { JD.openSearch(); return }
         if (JD.menuOpen) JD.closeMenu()
         if (e.t === "trash") { Quickshell.execDetached(["xdg-open", "trash:///"]); return }
         if (e.t === "tray") { JD.trayToggle(); return }
@@ -1905,7 +1905,7 @@ Item {
 
     function doCtx(what) {
         const e = ctxEntry, wins = ctxWins
-        if (what === "menu") JD.toggleMenu()
+        if (what === "menu") JD.openSearch()
         else if (what === "settings") JD.openSettings("dock")
         else if (what === "trash") Quickshell.execDetached(["xdg-open", "trash:///"])
         else if (what === "empty") JD.send({ cmd: "trash_empty" })

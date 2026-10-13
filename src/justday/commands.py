@@ -795,8 +795,8 @@ class CommandsMixin:
         return session.run(str(req.get("what", "")), confirm=bool(req.get("confirm")))
 
     async def _cmd_menu(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        """Открыть меню приложений (клавиша Windows, `justday menu`)"""
-        self.publish(menu="toggle" if req.get("toggle") else bool(req.get("open", True)))
+        """Открыть Spotlight (клавиша Windows, `justday menu`)"""
+        self.publish(menu="search")
         return {"ok": True}
 
     async def _cmd_clip_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
