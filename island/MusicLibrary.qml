@@ -34,10 +34,12 @@ ColumnLayout {
             IconButton { visible: field.text !== ""; icon: "edit-clear"; size: 20; onClicked: field.text = "" }
         }
     }
-    Row {
+    Flow {
+        Layout.fillWidth: true
         spacing: 6
         Repeater {
-            model: [{ v: "recent", l: JD.tr("Недавние") }, { v: "title", l: JD.tr("По названию") }, { v: "artist", l: JD.tr("По исполнителю") }]
+            model: [{ v: "recent", l: JD.tr("Недавние") }, { v: "title", l: JD.tr("По названию") }, { v: "artist", l: JD.tr("По исполнителю") },
+                    { v: "downloaded", l: JD.tr("Добавлено") }, { v: "duration", l: JD.tr("Длина") }]
             Rectangle {
                 required property var modelData
                 width: sortText.implicitWidth + 20; height: 24; radius: 12

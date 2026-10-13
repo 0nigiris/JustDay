@@ -615,8 +615,13 @@ def library_view(sort: str = "recent") -> list[dict]:
             continue
         rows.append({"file": str(f), "title": rec.get("title") or f.stem, "artist": rec.get("artist", ""),
                      "duration": rec.get("duration", 0), "thumb": rec.get("thumb", ""), "size": st.st_size,
-                     "added": max(st.st_mtime, rec.get("played", 0))})
-    key = {"title": lambda r: _abc(r["title"]), "artist": lambda r: _abc(r["artist"] or "я")}.get(sort)
+                     "added": max(st.st_mtime, rec.get("played", 0)), "downloaded": st.st_mtime})
+    # «Недавние» — что играл или скачал последним; «Добавлено» — только когда файл появился: песню,
+    # скачанную в августе и игранную вчера, он ищет в двух разных местах (п.6 плана 13 октября).
+    key = {"title": lambda r: _abc(r["title"]), "artist": lambda r: _abc(r["artist"] or "я"),
+           "downloaded": lambda r: -r["downloaded"],
+           # длина неизвестна (0) — в конец, а не первой строкой
+           "duration": lambda r: (not r["duration"], r["duration"])}.get(sort)
     return sorted(rows, key=key) if key else sorted(rows, key=lambda r: -r["added"])
 
 
