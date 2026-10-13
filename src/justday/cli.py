@@ -1047,8 +1047,9 @@ def main(argv: list[str] | None = None) -> None:
             _print(terminal.nightly_stop())
         else:
             task = " ".join(a.task).strip()
-            if not task:
-                sys.exit("Ночью нужна задача: justday night \"что сделать\"")
+            if not task:  # «я спать» без слов: продолжать очередь, как делает день
+                task = ("Прочитай ПЕРЕДАЧА.md и docs/ПЛАН.md в корне проекта и продолжай очередь с того места, "
+                        "где остановились. То, что требует человека, откладывай одной строкой в ПЕРЕДАЧА.md.")
             if a.here:
                 import asyncio
                 sys.exit(asyncio.run(terminal.night(task, hours=a.hours, tell=not a.no_letter,
