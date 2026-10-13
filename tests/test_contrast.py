@@ -27,3 +27,16 @@ def test_captions_are_readable_on_every_window_surface() -> None:
     for name, bg in surfaces.items():
         bg = tuple(c / 255 for c in bg)
         assert _contrast(_over(rgb, alpha, bg), bg) >= 4.5, name
+
+
+def test_every_accent_he_can_pick_stays_readable() -> None:
+    """Выбор основного цвета не должен дать кнопку, на которой не прочесть белую надпись,
+    или ползунок, сливающийся с тёмной карточкой: жёлтый и зелёный так и делали бы."""
+    jd = Path("island/JD.qml").read_text(encoding="utf-8")
+    m = re.search(r"property var accents: \(\{(.+?)\}\)", jd)
+    assert m, "палитра акцентов больше не задана одной строкой — поправь разбор"
+    card = (0x1c / 255, 0x1c / 255, 0x1e / 255)
+    for name, hexc in re.findall(r'(\w+): "#([0-9a-f]{6})"', m.group(1)):
+        c = tuple(int(hexc[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        assert _contrast((1, 1, 1), c) >= 3, f"{name}: белый текст на нём"
+        assert _contrast(c, card) >= 3, f"{name}: на карточке"

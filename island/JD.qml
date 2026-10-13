@@ -1443,7 +1443,12 @@ Singleton {
     readonly property color menuFill3: Qt.rgba(1, 1, 1, 0.26)
     readonly property color fill1: Qt.rgba(1, 1, 1, 0.08)
     readonly property color fill2: Qt.rgba(1, 1, 1, 0.14)
-    readonly property color accentBlue: "#0a84ff"
+    // Основной цвет — на его выбор (Настройки → Остров). Имя осталось accentBlue: им зовут «основной»
+    // в восьмидесяти местах. Красного, оранжевого и зелёного в выборе нет: они уже значат ошибку,
+    // «думаю» и «включено». Каждый держит 3:1 и белым текстом на нём, и сам на тёмной карточке —
+    // это проверяет tests/test_contrast.py.
+    readonly property var accents: ({ blue: "#0a84ff", indigo: "#5e5ce6", purple: "#bf5af2", pink: "#ff375f", graphite: "#8e8e93" })
+    readonly property color accentBlue: accents[(settings.island || {}).accent] || accents.blue
     readonly property color accentCyan: "#64d2ff"
     readonly property color accentGreen: "#30d158"
     readonly property color accentOrange: "#ff9f0a"

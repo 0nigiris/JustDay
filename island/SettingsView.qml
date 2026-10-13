@@ -42,7 +42,7 @@ Item {
     readonly property color t1: "#f5f5f7"
     readonly property color t2: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.6)
     readonly property color t3: Qt.rgba(235 / 255, 235 / 255, 245 / 255, 0.3)
-    readonly property color blue: "#0a84ff"
+    readonly property color blue: JD.accentBlue
     readonly property string font: JD.fontFamily
     readonly property string icons: Quickshell.shellDir + "/icons/"
 
@@ -1085,6 +1085,26 @@ Item {
                         options: [{ value: "spring", label: JD.tr("Пружинные") }, { value: "smooth", label: JD.tr("Плавные") }, { value: "off", label: JD.tr("Выкл") }]
                         current: win.get("island.animations")
                         onPicked: v => win.set("island.animations", v)
+                    }
+                }
+                Row {
+                    title: JD.tr("Основной цвет")
+                    subtitle: JD.tr("Кнопки, ползунки, выделение — везде, где был синий")
+                    RowLayout {
+                        spacing: 10
+                        Repeater {
+                            model: ["blue", "indigo", "purple", "pink", "graphite"]
+                            Pressable {
+                                required property string modelData
+                                readonly property bool on: (win.get("island.accent") || "blue") === modelData
+                                implicitWidth: 22; implicitHeight: 22; radius: 11
+                                pressScale: JD.pressScaleSmall
+                                color: JD.accents[modelData]
+                                border.width: on ? 2 : 0
+                                border.color: win.t1
+                                onClicked: win.set("island.accent", modelData)
+                            }
+                        }
                     }
                 }
                 Row {
