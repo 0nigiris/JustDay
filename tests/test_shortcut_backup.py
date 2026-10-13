@@ -23,3 +23,19 @@ def test_uninstall_left_services_running() -> None:
     assert "ls justday*.service justday*.socket" in script
     assert all(u.name.startswith("justday") for u in pathlib.Path("systemd").iterdir()), "юнит не под маской"
     assert "secret-tool clear service justday 2>" in script
+
+
+def test_purge_left_the_cache_of_what_he_watched() -> None:
+    """Политика обещает: `--purge` удаляет всё сразу. А `~/.cache/justday` (обложки и до 3 ГБ видео острова,
+    по ним видно, что он смотрел и слушал) оставался. Каждая XDG-папка, куда пишет программа, — в чистке."""
+    import pathlib
+    import re
+
+    script = pathlib.Path("uninstall.sh").read_text(encoding="utf-8")
+    purge = script.split("if ((PURGE))", 1)[1]
+    used = set(re.findall(r"XDG_(\w+?)_HOME", "".join(p.read_text(encoding="utf-8")
+                                                       for p in pathlib.Path("src/justday").glob("*.py")
+                                                       if p.name != "portable.py")))
+    assert used >= {"CONFIG", "DATA", "STATE", "CACHE"}
+    for kind in used:
+        assert f"${{XDG_{kind}_HOME:-" in purge, kind

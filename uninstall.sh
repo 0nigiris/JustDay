@@ -24,7 +24,8 @@ rm -rf "$APP_DIR/.venv"
 if ((PURGE)); then
   brain="${XDG_DATA_HOME:-$HOME/.local/share}/justday/brain"
   rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/justday" "${XDG_DATA_HOME:-$HOME/.local/share}/justday" \
-         "${XDG_STATE_HOME:-$HOME/.local/state}/justday" "$HOME/.claude/projects/$(echo "$brain" | sed 's/[^A-Za-z0-9]/-/g')"
+         "${XDG_STATE_HOME:-$HOME/.local/state}/justday" "$HOME/.claude/projects/$(echo "$brain" | sed 's/[^A-Za-z0-9]/-/g')" \
+         "${XDG_CACHE_HOME:-$HOME/.cache}/justday"  # обложки и видео острова: по ним видно, что он смотрел и слушал
   providers_secrets
   echo "Purged config, models (incl. the local LLM), memory, logs and stored keys."
 fi
