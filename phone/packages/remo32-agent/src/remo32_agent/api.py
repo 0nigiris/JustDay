@@ -406,6 +406,7 @@ def build_router(ctx: AgentContext) -> APIRouter:
 
     @router.post(
         "/api/justday/inbox",
+        dependencies=[auth],
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],
         summary="Оставить сообщение ассистенту",
@@ -424,6 +425,7 @@ def build_router(ctx: AgentContext) -> APIRouter:
 
     @router.get(
         "/api/justday/inbox",
+        dependencies=[auth],
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],
         summary="Что уже передано и доложено",
@@ -433,6 +435,7 @@ def build_router(ctx: AgentContext) -> APIRouter:
 
     @router.get(
         "/api/justday/work",
+        dependencies=[auth],
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],
         summary="Ход ночной работы",
@@ -442,6 +445,7 @@ def build_router(ctx: AgentContext) -> APIRouter:
 
     @router.get(
         "/api/justday/plans",
+        dependencies=[auth],
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],
         summary="Планы из Obsidian",
@@ -453,6 +457,7 @@ def build_router(ctx: AgentContext) -> APIRouter:
 
     @router.post(
         "/api/justday/plans",
+        dependencies=[auth],
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],
         summary="Добавить или закрыть пункт плана",

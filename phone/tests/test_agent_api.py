@@ -24,6 +24,25 @@ def test_health_requires_token(agent_app) -> None:  # type: ignore[no-untyped-de
         assert body["error"]["code"] == "unauthorized"
 
 
+
+def test_every_route_but_ping_requires_token(agent_app) -> None:  # type: ignore[no-untyped-def]
+    """Проверку токена каждый маршрут подключает сам — и входящие, планы и ход ночи её забыли:
+    любой процесс на машине без токена читал и дописывал его планы и сообщения ассистенту.
+    Новый маршрут без `dependencies=[auth]` теперь падает здесь, а не у человека."""
+    from fastapi.testclient import TestClient
+
+    # Список берём из схемы: в этой версии FastAPI app.routes отдаёт обёртки, а не маршруты, и
+    # обход по нему молча проверял пустоту.
+    paths = agent_app.openapi()["paths"]
+    assert "/api/justday/work" in paths
+    with TestClient(agent_app) as client:
+        for path, methods in paths.items():
+            if path == "/ping":
+                continue
+            for method in methods:
+                got = client.request(method.upper(), path.replace("{", "").replace("}", ""))
+                assert got.status_code == 401, f"{method.upper()} {path} пускает без токена"
+
 def test_wrong_token_rejected(agent_app) -> None:  # type: ignore[no-untyped-def]
     from fastapi.testclient import TestClient
 

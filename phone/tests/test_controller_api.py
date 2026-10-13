@@ -52,6 +52,28 @@ def test_every_endpoint_requires_login(anon: TestClient, method: str, path: str)
     assert response.json()["error"]["code"] == "unauthorized"
 
 
+
+# Открыто нарочно: без них не войти. Всё прочее — только после входа.
+PUBLIC = {
+    ("GET", "/api/health"),
+    ("GET", "/api/auth/status"),
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/logout"),
+    ("POST", "/api/auth/passkey/login/options"),
+    ("POST", "/api/auth/passkey/login/verify"),
+}
+
+
+def test_no_new_endpoint_slips_past_login(controller_app, anon: TestClient) -> None:  # type: ignore[no-untyped-def]
+    """Ручной список выше новые маршруты не видит; у агента так трое ходили без токена.
+    Здесь обходится вся схема: маршрут, забывший про вход, падает тут."""
+    for path, methods in controller_app.openapi()["paths"].items():
+        for method in methods:
+            if (method.upper(), path) in PUBLIC:
+                continue
+            got = anon.request(method.upper(), path.replace("{", "").replace("}", ""))
+            assert got.status_code == 401, f"{method.upper()} {path} открыт без входа"
+
 def test_health_is_public_but_reveals_little(anon: TestClient) -> None:
     data = anon.get("/api/health").json()["data"]
     assert data["pcs_total"] == 2
