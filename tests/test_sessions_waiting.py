@@ -50,3 +50,23 @@ def test_правка_без_результата_это_ожидание_раз
     _log2 = tmp_path / ".claude" / "projects" / "p" / "s1.jsonl"
     _log2.write_text(edit("b", fresh) + "\n")
     assert sessions.asking("s1") == ""            # только что начала — это ещё работа
+
+
+def _err(kind, text):
+    return json.dumps({"type": "assistant", "isApiErrorMessage": True, "error": kind,
+                       "message": {"content": [{"type": "text", "text": text}]}})
+
+
+def test_упёршаяся_в_лимит_сессия_не_выглядит_спокойно_ждущей(tmp_path, monkeypatch):
+    """Сессия упиралась в лимит посреди работы, а `claude agents` показывал её «idle» — как закончившую.
+    Человек думал, что дело сделано (Р2-39 «упала»)."""
+    user = json.dumps({"type": "user", "message": {"content": "продолжай"}})
+    _log(tmp_path, monkeypatch, user, _err("rate_limit", "You've hit your session limit · resets 2:30am (Europe/Madrid)"))
+    assert sessions.failed("s1") == "упёрлась в лимит · до 2:30am"
+
+
+def test_ошибка_после_которой_он_написал_дальше_уже_история(tmp_path, monkeypatch):
+    later = json.dumps({"type": "user", "message": {"content": "давай ещё раз"}})
+    meta = json.dumps({"type": "system", "subtype": "turn_duration"})
+    _log(tmp_path, monkeypatch, _err("server_error", "API Error: Server error"), later, meta)
+    assert sessions.failed("s1") == ""

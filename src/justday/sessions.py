@@ -154,6 +154,42 @@ def asking(session_id: str) -> str:
                  if n in ASKING_TOOLS or (n in EDIT_TOOLS and at and now - at > PERMISSION_AFTER)), "")
 
 
+# Почему сессия встала, по-человечески. Claude Code пишет обрыв в стенограмму сам (`isApiErrorMessage`), а
+# `claude agents` показывает такую сессию просто «idle» — неотличимо от закончившей работу.
+FAILED = {
+    "rate_limit": "упёрлась в лимит",
+    "authentication_failed": "не вошла — нужен вход",
+    "server_error": "оборвалась на ошибке сервера",
+    "invalid_request": "запрос отклонён",
+}
+
+
+def failed(session_id: str) -> str:
+    """Почему сессия остановилась на ошибке API, или "" — если не на ней.
+
+    Считается только последняя запись разговора: ошибка, после которой человек уже написал дальше,
+    — история, а не нынешнее состояние."""
+    hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
+    if not hits:
+        return ""
+    for line in reversed(_tail(max(hits, key=lambda p: p.stat().st_mtime))):
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if obj.get("type") not in ("user", "assistant"):
+            continue
+        if not obj.get("isApiErrorMessage"):
+            return ""
+        why = FAILED.get(str(obj.get("error") or ""), "остановилась на ошибке")
+        content = (obj.get("message") or {}).get("content")
+        text = str((content[0] or {}).get("text", "")) if isinstance(content, list) and content else str(content or "")
+        # «resets 2:30am» — единственное в тексте, что человеку нужно: когда можно продолжить.
+        when = text.split("resets", 1)[1].split("(")[0].strip() if "resets" in text else ""
+        return f"{why} · до {when}" if when else why
+    return ""
+
+
 def model_of(session_id: str) -> str:
     """opus | sonnet | haiku | "" — по последнему ответу ассистента в хвосте стенограммы."""
     hits = list((HOME / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
@@ -196,6 +232,7 @@ def live(claude: str = "claude") -> list[dict]:
             continue
         steps = steps_of(sid)
         waits = asking(sid)
+        broke = "" if waits else failed(sid)
         started = float(a.get("startedAt") or 0) / 1000
         out.append({
             "id": sid,
@@ -204,14 +241,15 @@ def live(claude: str = "claude") -> list[dict]:
             "cwd": str(a.get("cwd") or ""),
             "where": os.path.basename(str(a.get("cwd") or "")) or "/",
             "status": a.get("status") or "",
-            "busy": a.get("status") == "busy" and not waits,
+            "busy": a.get("status") == "busy" and not waits and not broke,
             "waiting": bool(waits),
+            "failed": broke,
             "pid": a.get("pid"),
             "model": model_of(sid),
             "minutes": round((now - started) / 60, 1) if started else 0,
             "now": steps[-1] if steps else None,
             "steps": steps,
         })
-    # Ждущие человека первыми, потом занятые: про них и спрашивают. Внутри — кто дольше работает, тот выше.
-    out.sort(key=lambda s: (not s["waiting"], not s["busy"], -s["minutes"]))
+    # Ждущие человека первыми, за ними вставшие на ошибке, потом занятые: про них и спрашивают.
+    out.sort(key=lambda s: (not s["waiting"], not s["failed"], not s["busy"], -s["minutes"]))
     return out

@@ -634,5 +634,7 @@
   "Предупреждать, когда указатель разросся": "Warn when the index grows",
   "Сейчас строк: ": "Lines now: ",
   ". Каждая уходит модели в каждом разговоре. 0 — не предупреждать": ". Each one goes to the model in every conversation. 0 — never warn",
-  " строк": " lines"
+  " строк": " lines",
+  "Встали: ": "Stopped: ",
+  "встала": "stopped"
 }

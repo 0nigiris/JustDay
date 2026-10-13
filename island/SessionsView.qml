@@ -42,6 +42,7 @@ Item {
                 Layout.fillWidth: true
                 text: sv.all.length === 0 ? JD.tr("Сессий нет")
                     : sv.all.some(s => s && s.waiting) ? JD.tr("Ждёт тебя: ") + sv.all.filter(s => s && s.waiting).length
+                    : sv.all.some(s => s && s.failed) ? JD.tr("Встали: ") + sv.all.filter(s => s && s.failed).length
                     : sv.busy.length ? JD.tr("Работают: ") + sv.busy.length + JD.tr(" из ") + sv.all.length
                     : JD.tr("Все ждут: ") + sv.all.length
             }
@@ -95,6 +96,7 @@ Item {
                         color: Qt.rgba(1, 1, 1, 0.05)
                         border.width: 1
                         border.color: modelData.waiting ? Qt.rgba(JD.accentOrange.r, JD.accentOrange.g, JD.accentOrange.b, 0.6)
+                                    : modelData.failed ? Qt.rgba(JD.accentRed.r, JD.accentRed.g, JD.accentRed.b, 0.55)
                                     : modelData.busy ? Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.35)
                                                      : Qt.rgba(1, 1, 1, 0.07)
 
@@ -152,20 +154,22 @@ Item {
                             // Что делает сейчас — крупнее всего остального: за этим сюда и приходят.
                             RowLayout {
                                 Layout.fillWidth: true
-                                visible: !!card.step.verb || card.modelData.waiting
+                                visible: !!card.step.verb || card.modelData.waiting || !!card.modelData.failed
                                 spacing: 7
                                 Label2 {
-                                    color: card.modelData.waiting ? JD.accentOrange : card.modelData.busy ? JD.accentBlue : JD.text2
+                                    color: card.modelData.waiting ? JD.accentOrange : card.modelData.failed ? JD.accentRed
+                                         : card.modelData.busy ? JD.accentBlue : JD.text2
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
-                                    text: card.modelData.waiting ? JD.tr("ждёт ответа") : (card.step.verb || "")
+                                    text: card.modelData.waiting ? JD.tr("ждёт ответа") : card.modelData.failed ? JD.tr("встала")
+                                        : (card.step.verb || "")
                                 }
                                 Label2 {
                                     Layout.fillWidth: true
                                     font.pixelSize: 12
                                     color: JD.text1
                                     elide: Text.ElideRight
-                                    text: card.step.what || ""
+                                    text: card.modelData.failed || card.step.what || ""
                                 }
                             }
 
