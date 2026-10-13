@@ -650,6 +650,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("text", nargs="*")
     sp.add_argument("--wifi", metavar="ИМЯ_СЕТИ", help="код для подключения к Wi-Fi")
     sp.add_argument("--hidden", action="store_true", help="сеть скрытая")
+    sp = sub.add_parser("transcript", help="видео → текст → выжимка: ссылка или файл, текст ложится в docs/видео/")
+    sp.add_argument("source", help="ссылка (YouTube, Instagram…) или путь к файлу")
+    sp.add_argument("--no-summary", action="store_true", help="только текст, без выжимки местной моделью")
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
@@ -776,6 +779,13 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(_launch_cmd(" ".join(a.query), show=a.list))
     elif a.cmd == "load":
         sys.exit(_load_cmd(as_json=a.json, watch=a.watch))
+    elif a.cmd == "transcript":
+        from . import transcript
+
+        try:
+            print(transcript.run(a.source, with_summary=not a.no_summary))
+        except (transcript.NeedsLogin, RuntimeError) as e:
+            sys.exit(f"не вышло: {e}")
     elif a.cmd == "qr":
         from . import qr
 
