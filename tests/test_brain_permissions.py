@@ -8,7 +8,7 @@ import fnmatch
 import json
 from pathlib import Path
 
-SETTINGS = json.loads((Path(__file__).parents[1] / "brain" / "settings.json").read_text(encoding="utf-8"))
+SETTINGS = json.loads((Path(__file__).parents[1] / "src" / "justday" / "brain" / "settings.json").read_text(encoding="utf-8"))
 
 
 def _hits(kind: str, command: str) -> bool:

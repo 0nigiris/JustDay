@@ -7,11 +7,12 @@ and put into that file's {character} slot.
 """
 from __future__ import annotations
 
-from . import config
+from pathlib import Path
 
 PRESETS = ("jarvis", "friend", "calm", "custom")
 DEFAULT_ADDRESS = ("сэр", "брат", "sir", "bro", "")   # what the presets set: anything else was chosen by hand
-DIR = config.REPO_DIR / "brain" / "characters"
+BRAIN_DIR = Path(__file__).parent / "brain"
+DIR = BRAIN_DIR / "characters"
 
 EXTRAS = {
     "ru": {

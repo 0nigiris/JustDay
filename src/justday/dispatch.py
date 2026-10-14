@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 
 from . import config, localllm
+
+BRAIN_DIR = Path(__file__).parent / "brain"
 
 log = logging.getLogger("justday.dispatch")
 
@@ -52,7 +55,7 @@ def role_for(model: str) -> str:
     for key, file in _ROLES.items():
         if key in name:
             try:
-                return (config.REPO_DIR / "brain" / "роли" / f"{file}.md").read_text(encoding="utf-8")
+                return (BRAIN_DIR / "роли" / f"{file}.md").read_text(encoding="utf-8")
             except OSError:
                 return ""
     return ""

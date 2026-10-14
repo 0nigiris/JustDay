@@ -214,12 +214,13 @@ def test_jarvis_answered_that_there_was_nothing_to_grab_the_screen_with(monkeypa
 def test_the_brain_restarted_the_window_manager_and_killed_the_session() -> None:
     """Джарвис сделал killall kwin_wayland — стол умер вместе с окнами человека."""
     import json
-    import pathlib
 
-    rules = json.loads(pathlib.Path("brain/settings.json").read_text(encoding="utf-8"))["permissions"]
+    from justday.brain import BRAIN_PKG_DIR
+
+    rules = json.loads((BRAIN_PKG_DIR / "settings.json").read_text(encoding="utf-8"))["permissions"]
     assert "Bash(killall:*)" in rules["ask"] and "Bash(pkill:*)" in rules["ask"], \
         "мозг снова может убить kwin без спроса, а ночью — вообще молча"
-    persona = pathlib.Path("brain/PERSONA.md").read_text(encoding="utf-8")
+    persona = (BRAIN_PKG_DIR / "PERSONA.md").read_text(encoding="utf-8")
     assert "kwin_wayland" in persona, "в правилах мозга не сказано, что перезапуск стола убивает сессию"
 
 

@@ -36,9 +36,13 @@ from . import chats, config, dispatch, events, providers
 from . import persona as persona_mod
 from .i18n import t
 
+BRAIN_PKG_DIR = Path(__file__).parent / "brain"
+BRAIN_DATA_DIR = config.DATA_DIR / "brain"
+
 log = logging.getLogger("justday.brain")
 
-BRAIN_DIR = config.DATA_DIR / "brain"
+BRAIN_PKG_DIR = Path(__file__).parent / "brain"
+BRAIN_DATA_DIR = config.DATA_DIR / "brain"
 
 
 # What a model writes when it means "nothing to say": never read aloud (the daemon plays the "done" chime instead).
@@ -186,9 +190,9 @@ class Brain:
         b = self.cfg["brain"]
         u = self.cfg["user"]
         lang = u.get("language", "ru")
-        persona_file = config.REPO_DIR / "brain" / ("PERSONA.md" if lang == "ru" else f"PERSONA.{lang}.md")
+        persona_file = BRAIN_PKG_DIR / ("PERSONA.md" if lang == "ru" else f"PERSONA.{lang}.md")
         if not persona_file.exists():
-            persona_file = config.REPO_DIR / "brain" / "PERSONA.md"
+            persona_file = BRAIN_PKG_DIR / "PERSONA.md"
         persona = persona_file.read_text(encoding="utf-8")
         names = [u["assistant_name"], *u.get("assistant_aliases", [])]
         persona = persona.replace("{character}", persona_mod.character(self.cfg))  # it has placeholders of its own
@@ -205,7 +209,7 @@ class Brain:
         # Claude in Chrome and the auto-mode classifier need an Anthropic account; other models use the local policy
         extra = {"chrome": None} if b.get("chrome") and claude else {}
         return ClaudeAgentOptions(
-            cwd=str(BRAIN_DIR),
+            cwd=str(BRAIN_PKG_DIR),
             cli_path=shutil.which(b["claude_cli"]) or b["claude_cli"],
             model=b["model"] or None,
             effort=(b.get("effort") or None) if claude else None,
@@ -216,7 +220,7 @@ class Brain:
             # headroom (PreToolUse на каждый Bash), MCP context7. Минус 6–8 тыс. токенов и задержка
             # хука на каждую команду (Р-20). Свои правила мозга — в brain/settings.json, плагин — ниже.
             setting_sources=["project", "local"],
-            settings=str(config.REPO_DIR / "brain" / "settings.json"),
+            settings=str(BRAIN_PKG_DIR / "settings.json"),
             plugins=[{"type": "local", "path": str(config.REPO_DIR / "plugin")}],
             add_dirs=[str(Path.home())],
             # kwin screenshot: full-resolution multi-monitor PNG (slow; `look` instead);
@@ -241,7 +245,7 @@ class Brain:
             await self._start()
 
     async def _start(self) -> None:
-        BRAIN_DIR.mkdir(parents=True, exist_ok=True)
+        BRAIN_DATA_DIR.mkdir(parents=True, exist_ok=True)
         state = events.load_state()
         resume = None
         if self.chat:
@@ -487,7 +491,7 @@ class Brain:
     # ---------- permissions ----------
     @staticmethod
     def _rules(which: str = "ask") -> list[str]:
-        settings = json.loads((config.REPO_DIR / "brain" / "settings.json").read_text(encoding="utf-8"))
+        settings = json.loads((BRAIN_PKG_DIR / "settings.json").read_text(encoding="utf-8"))
         return settings["permissions"].get(which) or []
 
     @staticmethod

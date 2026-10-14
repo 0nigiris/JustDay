@@ -12,7 +12,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from .brain import BRAIN_DIR
+from .brain import BRAIN_PKG_DIR as BRAIN_DIR
 
 # $ за миллион токенов: вход, запись в кэш, чтение из кэша, выход.
 PRICES = {

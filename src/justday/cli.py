@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from . import config
+from .brain import BRAIN_PKG_DIR as BRAIN_DIR
 
 
 def _print(obj) -> None:
@@ -824,7 +825,6 @@ def main(argv: list[str] | None = None) -> None:
         except ValueError:
             sys.exit("justday qr: нечего кодировать — дайте ссылку или текст, либо --wifi ИМЯ")
     elif a.cmd == "memory":
-        from .brain import BRAIN_DIR
 
         mem = memory_dir()
         if a.action in ("list", "forget", "clear-journal", "read", "write", "new"):
