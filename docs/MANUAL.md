@@ -993,6 +993,9 @@ justday inbox clear
 | `src/justday/cli.py` | команда `justday`, doctor, тесты компонентов, скриншоты |
 | `phone/` | телефонная половина: контроллер, агенты, плата-сторож, приложение для Android |
 | `island/shell.qml`, `island/JD.qml` | Dynamic Island на Quickshell: состояния, карточки, меню, анимации |
+| `island/*View.qml` | виды острова по одному на файл (`AnswerView` … `ExpandedView`); общее состояние — `JD.qml` |
+| `island/*Window.qml`, `DockWindows.qml`, `TrayWindows.qml` | отдельные окна, вынесенные из `shell.qml`: тост, OSD, «джинн», док, лоток, меню значка и приложений; в `shell.qml` — окно острова и IPC |
+| `src/justday/background.py`, `housekeeping.py`, `speech_lane.py`, `hearing.py`, `remote_lane.py` | куски демона, вынесенные из `daemon.py` как миксины |
 | `island/SettingsView.qml` | настройки внутри острова |
 | `src/justday/manage.py`, `wizard.py` | данные для настроек, мастер первой настройки |
 | `src/justday/contacts.py` | записная книжка |
