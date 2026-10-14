@@ -259,7 +259,9 @@ def t_software():
 
     if not shutil.which("jii"):
         return "JII not installed (optional, for «установи …»): https://github.com/0nigiris/JII"
-    return subprocess.run(["jii", "--version"], capture_output=True, text=True, timeout=10).stdout.strip()
+    # Первая строка: с 0.1.21 jii печатает на --version ещё и шапку с адресами, и doctor её показывал.
+    out = subprocess.run(["jii", "--version"], capture_output=True, text=True, timeout=10).stdout.strip()
+    return out.splitlines()[0] if out else "jii: версия не ответила"
 
 
 def t_daemon():
