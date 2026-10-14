@@ -14,6 +14,7 @@ character = "jarvis"        # jarvis (a butler, «вы») | friend («ты», jo
 swearing = false            # may swear — in place, like friends talk
 live_speech = false         # pauses, «ну», «э-э», slips and corrections on the fly
 custom = ""                 # the character in your own words, for character = "custom"
+swearing_level = 40         # 0–100: 0 = never, 40 = when fitting, 100 = like a boot
 
 [audio]
 microphone = true           # false = keyboard only (Meta+K): no mic, no wake word, speech recognition never loads
@@ -24,32 +25,66 @@ earcons = true              # short beeps when listening starts
 silence_seconds = 1.0       # pause length that ends an utterance
 followup_seconds = 6        # after the assistant asks a question, listen again without the hotkey (0 = off)
 double_tap_seconds = 0.35   # double press of the talk key (G6) = cancel everything (0 = off)
+# Smart Turn / быстрый конец речи (R2-35): прерывать запись, если модель уверена, что фраза закончена
+smart_turn = true           # enable smart end-of-utterance detection
+smart_turn_after_seconds = 0.5  # silence before asking the model
+# Распознавание на паузе (Р-50): уходит на распознавание, не дожидаясь конца паузы
+speculate_after_seconds = 0.45  # 0 = off; пауза в речи, после которой уходит раннее распознавание
+# Две паузы для конца фразы (R2-35)
+end_guess_seconds = 0.6     # soft limit: при паузе ≥ этого и подтверждении Smart Turn — кончаем сразу
+end_hard_seconds = 3.0      # hard limit: безусловный выход из записи
+# Длинная речь меняет терпение к паузам
+long_after_seconds = 5.0    # после этого секунд речи терпение растёт до silence_long_seconds
+silence_long_seconds = 2.2  # терпение к паузе в длинной речи
+max_utterance_seconds = 60.0  # hard cap on recording length
+no_speech_timeout_seconds = 30.0  # timeout if no speech at all
 
 [stt]
 model = "large-v3-turbo"    # faster-whisper model; "small" for CPU-only machines
 device = "cuda"             # cuda | cpu
 language = "ru"             # "" = auto-detect
+compute_type = "float16"    # float16 | int8_float16 | int8
+beam_size = 5               # beam size for final pass; 1 for fast head
+idle_unload_minutes = 15    # unload model after this many minutes of no transcription
+initial_prompt = ""         # optional prompt to bias the model
 
 [tts]
-engine = "silero"           # qwen (neural voice, scripts/setup-voice.sh) | silero | espeak | none (text-only replies)
-voice = "jarvis"            # neural voice: jarvis, or one you designed/cloned (justday voice list)
+engine = "silero"           # qwen | silero | espeak | chatterbox | elevenlabs | none
+voice = "jarvis"            # neural voice: jarvis, or one you designed/cloned
 neural_quality = "fast"     # fast (0.6B, ~2.5 GB VRAM) | best (1.7B, ~4.5 GB VRAM)
 speaker = "eugene"          # silero ru: aidar, eugene (male); baya, kseniya, xenia (female)
-speed = 1.15                # how fast it talks (0.5–2.0); the neural voice is asked to speak faster, not stretched
-# style = ""                # manner of speech in words: «спокойно, деловито» — the neural voice understands it
+speed = 1.15                # how fast it talks (0.5–2.0)
+# style = ""                # manner of speech in words: «спокойно, деловито»
 numbers = true              # «в 7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
-latin = "auto"              # auto | keep (multilingual voices read English themselves) | translit (Silero, espeak)
+latin = "auto"              # auto | keep | translit
 # ElevenLabs (engine = "elevenlabs"): the key goes to the desktop keyring (`justday secret set elevenlabs`), never here.
-#   justday voice key        — paste the key on stdin
-#   justday voice eleven     — list the voices on the account
-# eleven_voice = "JBFqnCBsd6RMkjVDRZzb"
-# eleven_model = "eleven_flash_v2_5"   # or eleven_multilingual_v2 (richer, slower)
+eleven_voice = ""           # voice ID from ElevenLabs
+eleven_model = "eleven_flash_v2_5"
+# Qwen-TTS
+qwen_model_url = ""
+# Silero
+silero_model_url = ""
+# Chatterbox
+chatterbox_temperature = 0.5
+chatterbox_exaggeration = 0.3
+chatterbox_cfg_weight = 0.3
+# Common
+mute_in_games = true
+muted = false
+previous_engine = ""
+idle_unload_minutes = 10
+sample_rate = 24000
+style = ""
+retry_minutes = 10
+quit_after_minutes = 0
 
 [wakeword]
 enabled = false             # wake without a key — keeps the mic open, audio stays local
 names = true                # «Джарвис, …» / «JustDay, …» (Whisper reads the start of each phrase); off = only "Hey Jarvis"
 threshold = 0.5             # "Hey Jarvis" (English openWakeWord model)
-name_candidate = 0.05        # Whisper hears a name only where openWakeWord scored at least this (0 = on any speech)
+name_candidate = 0.05       # Whisper hears a name only where openWakeWord scored at least this (0 = on any speech)
+model = "hey_jarvis"        # openWakeWord model name (in ~/.local/share/justday/models)
+threshold_while_playing = 0.35  # lower threshold when TTS is playing (hear over own voice)
 
 [voiceprint]                # Settings → Voice → "Tune to my voice" (justday voiceprint enroll)
 mode = "off"                # off | wake (wake word and follow-ups must be you) | always
@@ -59,13 +94,27 @@ mode = "off"                # off | wake (wake word and follow-ups must be you) 
 provider = "claude"         # claude | ollama | openrouter | deepseek | custom
 model = "haiku"             # claude: sonnet, opus…; ollama: qwen3.5:9b; openrouter: vendor/model[:free]
 # base_url = ""             # provider = "custom": any Anthropic-compatible endpoint (LiteLLM, vLLM…)
-# context_tokens = 0        # context window of a non-Claude model (0 = provider default)
+context_tokens = 0          # context window of a non-Claude model (0 = provider default)
 effort = "low"              # low = fast replies; heavy thinking is delegated to Opus subagents/workers
 permission_mode = "auto"    # auto = classifier-reviewed autonomy; risky actions ask you
 chrome = true               # Claude in Chrome browser control (needs claude.ai login)
 resume_within_hours = 12    # keep the conversation across restarts
 tool_search = "on"          # on = tool schemas load on demand (31k start context instead of 111k); auto | off
 context_window = 80000      # conversation ceiling: history is compacted there (0 = let Claude Code decide)
+# auto_model = true         # подбирать модель и усилие под задачу (default: true)
+# auto_effort = true        # подбирать усилие под задачу (default: true)
+# ask_judge = "never"       # never | auto | always — вызывать ли судью для локальных команд
+# tiny_model = "qwen3:0.6b" # крошечная модель для болтовни и простых команд
+# tiny_provider = "ollama"  # провайдер для tiny_model
+# light_model = "haiku"     # модель для лёгких задач
+# strong_model = "sonnet"   # модель для сильных задач
+# huge_model = "opus"       # модель для архитектурных задач
+# home_provider = "claude"  # домашняя модель (используется по умолчанию)
+# fallbacks = ["openrouter/qwen/qwen3-coder", "ollama/qwen3.5:9b"]  # запасные провайдеры при лимите
+# fallback_models = {}      # конкретные модели для фолбэков
+# fallback_back_after_hours = 0  # через сколько часов пытаться вернуться наверх (0 = не пытаться)
+# fallback_check_minutes = 15    # как часто проверять вершину лестницы
+# fresh_after_minutes = 0    # новая сессия вместо рестарта, если прошло минут (0 = откл.)
 
 # Тишина по расписанию: в это время ответы только на экране, вслух не говорит и по имени не будится (кнопка и текст работают). Окно через полночь — так же.
 # [[focus.schedule]]
@@ -77,8 +126,8 @@ context_window = 80000      # conversation ceiling: history is compacted there (
 # Цикл ассистента: его круг дел, пока он свободен (не разговор и не игра). Свои шаги заменяют умолчания
 # (обновить JustDay в 05:00, проверить части в 05:30). Подтверждений нет — необратимого не класть.
 # Журнал: justday cycle log; выполнить сейчас: justday cycle run "Имя".
-# [cycle]
-# enabled = true
+[cycle]
+enabled = true
 # [[cycle.steps]]
 # name = "Обновить JustDay"
 # run = "justday update"     # любая команда оболочки
@@ -98,16 +147,21 @@ context_window = 80000      # conversation ceiling: history is compacted there (
 # say = "Рабочее место готово"        # что сказать вслух (пусто — скажет, что именно сделал)
 
 [notes]
-# diary_hour = 23           # во сколько сама пишется страница дня (0 = не писать)
-# vault = ""                # Obsidian vault for plans and notes ("" = the one Obsidian has open)
-# plans = "Планы.md"        # the checklist file inside it
+diary_hour = 23           # во сколько сама пишется страница дня (0 = не писать)
+vault = ""                # Obsidian vault for plans and notes ("" = the one Obsidian has open)
+plans = "Планы.md"        # the checklist file inside it
 
 [workers]
-model = ""                  # model for Claude Code worker sessions, "" = your Claude Code default
-auto_review = true          # when a worker finishes, JustDay checks its work and reports
+model = ""                # model for Claude Code worker sessions, "" = your Claude Code default
+auto_review = true        # when a worker finishes, JustDay checks its work and reports
+permission_mode = "bypassPermissions"  # default for workers (bypass | acceptEdits | plan)
+poll_seconds = 15         # how often to check for finished workers
 
 [ui]
 notifications = true
+face = false              # pin the island to the current face (don't follow the monitor)
+settings_simple = true    # hide advanced settings rows behind "Только главное" toggle
+reboot_reminder_days = 7  # remind about reboot if uptime > this (0 = off)
 
 [island]                    # Dynamic Island, applied live
 animations = "spring"       # spring | smooth | off
@@ -123,7 +177,7 @@ show_notifications = true   # mirror desktop notifications (they never leave the
 notification_screen = "secondary"  # primary | secondary | island | output name (HDMI-A-1, DP-2…)
 notification_position = "top-right"  # Telegram-style corner; empty = follow position
 show_osd = true                     # volume / layout / brightness HUD (separate from app toasts);
-                                    # when true, mutes Plasma OSD (plasmarc [OSD] Enabled=false + plasmaparc VolumeOsd)
+                                     # when true, mutes Plasma OSD (plasmarc [OSD] Enabled=false + plasmaparc VolumeOsd)
 osd_screen = "island"               # primary | secondary | island | output name
 osd_position = "top-center"         # near island by default; empty = follow island.position
 # system_popups = false     # false = Plasma Do-Not-Disturb (JustDay shows toasts); true = Plasma popups too
@@ -136,6 +190,23 @@ video_volume = 1.0          # how loud that frame is, 0–1 (the wheel over the 
 screen = ""                 # monitor name, e.g. DP-2; empty = top-left one
 position = "top-center"     # top|bottom + -left|-center|-right
 menu_position = "dock"      # dock = the app menu grows out of the dock icon; else a screen corner
+start_style = "hidden"      # hidden | peek | bar
+style = "island"            # island | bar | cutout — вид верхней полосы
+render_loop = "native"      # native | fixed — как отрисовывать (fixed = fixed timestep)
+work_quiet = true           # don't show the island while working in focus mode
+ui_sounds = true            # interface sounds (click, toast, etc.)
+# accent = "blue"           # основной цвет: blue | indigo | purple | pink | graphite
+buddy = false               # show the buddy mascot (legacy, kept for compat)
+mascot = false              # show the mascot (enable in Settings → Остров и анимации)
+mascot_size = 100           # size of the mascot in percent
+bar_autohide = false        # hide the bar when not hovering
+bar_height = 44             # height of the bar in points
+above = false               # island above all windows (always on top)
+notification_server = true  # enable notification mirroring
+player_peek = true          # «что где показывать»: плеер в полоске
+player_expanded = true      # плеер в раскрытом островке
+player_prefer = ""          # preferred MPRIS player (exact name)
+player_ignore = ""          # comma-separated player names to ignore
 
 [dock]                      # the strip of apps along a screen edge
 enabled = true
@@ -159,6 +230,7 @@ hide_on_fullscreen = true   # hide when a window overlaps the dock island (icons
 launcher = "apple"          # apple = the icon theme's start-here (an Apple mark in macOS themes) | grid | any icon name
 cat = true                  # a running cat: the busier the CPU, the faster it runs (CatWalk's frames when installed)
 cat_sleep_below = 0         # below this CPU percentage the cat sleeps; 0 = never
+cat_place = "right"         # left | right — where the cat lives relative to the clock
 clock = false               # a clock in the dock (there is already one above)
 preview = true              # hover: window thumbnail cards; click a card to focus that window
 # What the strip is made of, left to right. Words: launcher, pinned, running, trash, cat, clock,
@@ -168,8 +240,15 @@ separator_room = 0          # room for the hairline in points; 0 = the same as t
 separator_width = 1
 separator_height = 62       # in percent of the icon
 separator_opacity = 16
-icon_style = "original"   # original | light | clear | tinted | mono — wash over dock app icons
-icon_tint = "#7AC8FF"     # HEX used when icon_style = tinted
+icon_style = "original"     # original | light | clear | tinted | mono — wash over dock app icons
+icon_tint = "#7AC8FF"       # HEX used when icon_style = tinted
+tray_button = false         # show a button that toggles the tray strip
+detent = 90                 # detent strength in percent; 0 = no click
+wheel = false               # wheel mode: continuous scroll with detents
+reveal_zone = 28            # height of the edge reveal zone in points
+reveal_flick = 900          # velocity threshold in points/sec for flick reveal (0 = any hover)
+screens = "primary"         # primary | all — on which screens to show the dock
+# separate_instances = []   # list of window classes that get one dock slot per window (e.g., ["octium"])
 
 [tray]                      # other apps' status icons, as their own strip
 enabled = true
@@ -179,43 +258,80 @@ icon_size = 22
 reserve = false
 autohide = false
 hidden = ["xwayland video bridge"]   # tray icons to keep out of the strip, by id
-icon_style = "original"   # original | auto | light | clear | tinted | mono — default sharp; auto lightens black only
-icon_tint = "#7AC8FF"      # HEX used when icon_style = tinted
+icon_style = "original"     # original | auto | light | clear | tinted | mono — default sharp; auto lightens black only
+icon_tint = "#7AC8FF"       # HEX used when icon_style = tinted
+hover_frame = true          # draw a frame around the icon on hover instead of a bubble
+order = []                  # id of icons in the order the user placed them
+magnify = true              # same magnify as dock, rotated
+magnify_scale = 60
+magnify_spread = 160
+# layout = true             # show keyboard layout as first cell (two letters, click toggles)
 
 [updates]
 check = true                # look for a new version on GitHub (git fetch)
 interval_hours = 6
+channel = "stable"          # main | stable — which branch to track
 
 [desktop]
 accessibility = true        # AT-SPI on: Qt/GTK buttons get numbered marks on screenshots → exact clicks
 
 [local_llm]                 # private tasks (mail). Ollama on 127.0.0.1 — scripts/setup-local-llm.sh
 model = "qwen3.5:9b"
-keep_alive = "10m"          # unload after 10 min idle to free VRAM for games
+keep_alive = "1m"           # unload after this much idle to free VRAM for games
+url = ""                    # ollama base URL (empty = 127.0.0.1:11434)
+num_ctx = 16384             # context window for Ollama
+judge_model = "qwen3:0.6b"  # model for the local judge (level, fastpath)
+judge_keep_alive = "1m"     # keep-alive for the judge model
 
 [mail]                      # `justday mail setup` fills address + app password (keyring)
 address = ""
 query = "category:primary is:unread newer_than:7d"   # what counts as important (Gmail search)
 announce = true             # say "новое письмо от …" when important mail arrives
 poll_seconds = 180
+imap_host = "imap.gmail.com"
+smtp_host = "smtp.gmail.com"
+other_query = ""            # additional Gmail query for non-important mail
+max_letters = 5
 
-[media]                     # own player: songs from YouTube are downloaded and play in a background mpv
-video_where = "ask"         # ask | island | window | browser — where "включи видео …" plays by default
-video_where_strict = false  # true = keep that place even when the request says "в островке"
-volume = 70                 # the player's own volume, 0–130
-color = "theme"             # theme = the artwork's colour, and when the artwork says nothing about the music
-                            #         (a character's theme on a black sleeve) the colour of what it is about,
-                            #         asked of the model once per track; cover = the artwork's colour, no questions
-color_web = true            # let that question search the web for tracks the model does not know
-duck = true                 # quieter while the assistant listens or speaks
-show_player = true          # cover + equaliser on the island while music plays
+[observer]
+enabled = false             # «наблюдатель»: раз в минуту смотрит на события/почту/напоминания
+lead_minutes = 20           # за сколько минут до события вмешиваться
+telegram = false            # канал наружу: Telegram (пункт 21)
+travel = false              # считать дорогу до места встречи (OSRM/Nominatim, без аккаунтов)
 
-[studio]                    # local creative studio (justday studio …); found automatically in ~/ai-local/ComfyUI or ~/ComfyUI
-# comfy_dir = "~/ai-local/ComfyUI"
-# python = "~/ai-local/venv/bin/python"
-# url = "http://127.0.0.1:8188"
-# rmbg_dir = "~/pinokio/api/RMBG-2-Studio.git"   # background removal (RMBG-2.0)
-free_after = true           # unload models from VRAM after every job
+[phone]
+# Telnyx
+telnyx = { app_id = "", from = "", language = "en", voice = "en-US", public_key = "" }
+
+[focus]
+# schedule = []             # [[focus.schedule]] — см. выше
+
+[session]
+# server_mode: «я ухожу спать, работай сам»
+server_mode = { enabled = false, hours = 8, lock = true, mute = true, pause_players = true, screens_off = true, leds_off = true, own_desktop = true, desktop_name = "" }
+
+[terminal]
+auto = true                 # подбирать модель и усилие под задачу
+ladder = [
+  "claude:opus",
+  "claude:sonnet",
+  "opencode:openai/gpt-6-luna",
+  "opencode:nvidia/nvidia/nemotron-3-ultra-550b-a55b",
+  "opencode:openrouter/qwen/qwen3-coder",
+  "opencode:ollama/qwen3.5:9b"
+]
+effort = ""                 # low | medium | high; пусто — как решит сам Claude Code
+first_word_seconds = 90     # сколько ждать первого слова от ступени
+probe_minutes = 15          # как часто спрашивать вершину лестницы
+night_nudges = 0            # сколько раз ночью подталкивать вопросом к человеку
+hand_up = true              # разрешить лёгкой модели сказать «это серьёзнее меня»
+models = { tiny = "haiku", light = "haiku", strong = "sonnet", big = "opus" }
+compact_at = 80000          # автосжатие на этом числе токенов (0 = default)
+compact_after_minutes = 0   # новая сессия вместо рестарта (0 = откл.)
+context_window = 80000      # потолок контекста для оболочки
+review = true               # Codex review loop after each task
+review_rounds = 2           # max review rounds
+review_timeout = 120        # timeout per review round
 
 [apps.aliases]              # spoken name → desktop id for instant launches (justday apps find <name> shows ids)
 # "дискорд" = "org.equicord.equibop"
