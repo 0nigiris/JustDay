@@ -186,19 +186,6 @@ class HousekeepingMixin:
             ok = await loop.run_in_executor(None, cycle.launch, step["name"])
             log.info("цикл: %s — %s", step["name"], "запущен" if ok else "не запустился")
 
-    async def _memory_maybe(self) -> None:
-        """Указатель памяти читается в каждом разговоре; когда он разросся, сказать об этом — раз в неделю."""
-        state = events.load_state()
-        if time.time() - float(state.get("memory_said") or 0) < 7 * 86400:
-            return
-        warn = int((self.cfg.get("memory") or {}).get("warn_lines", memory.BUSY_LINES) or 0)
-        st = await asyncio.get_running_loop().run_in_executor(None, memory.state, warn)
-        if not st["busy"]:
-            return
-        events.save_state(memory_said=time.time())
-        self.notify(t("Память разрослась: {n} строк в указателе. Загляни в настройки и убери лишнее.")
-                    .format(n=st["index_lines"]), icon="dialog-information")
-
     async def _duplicates_maybe(self) -> None:
         """Поиск дубликатов в памяти — раз в сутки.
 
@@ -222,6 +209,8 @@ class HousekeepingMixin:
         # Логируем детали для отладки
         for d in dupes[:5]:
             log.info("дубликат: {:.0%} — {} ↔ {}", d["similarity"], d["title_a"][:50], d["title_b"][:50])
+
+    async def _diary_maybe(self) -> None:
         """Страница дня в Obsidian, вечером и сама.
 
         Собирается из фактов — журнала и планов, — поэтому ничего не стоит.
