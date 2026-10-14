@@ -315,9 +315,9 @@ def test_the_dock_and_the_tray_sometimes_forgot_to_hide() -> None:
     """
     import pathlib
 
-    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
+    bars = "".join(pathlib.Path(f"island/{n}.qml").read_text(encoding="utf-8") for n in ("DockWindows", "TrayWindows"))
     edge = pathlib.Path("island/EdgeReveal.qml").read_text(encoding="utf-8")
-    assert shell.count('property: "bodyHovered"') == 2, \
+    assert bars.count('property: "bodyHovered"') == 2, \
         "наведение на док и лоток снова держится на одном событии, без связки"
     assert "id: watchdog" in edge, "сторож за забытым прятаньем пропал"
 
@@ -331,8 +331,8 @@ def test_a_magnified_icon_kept_peeking_out_after_the_dock_hid() -> None:
     import pathlib
     import re
 
-    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
-    away = re.search(r"const away = dockHost\.atTop \? ([^\n]+)", shell)
+    dock = pathlib.Path("island/DockWindows.qml").read_text(encoding="utf-8")
+    away = re.search(r"const away = dockHost\.atTop \? ([^\n]+)", dock)
     assert away, "правило ухода дока за край пропало"
     assert "cardHeight" not in away.group(1), "док снова уезжает на высоту карточки, а не вида"
 
