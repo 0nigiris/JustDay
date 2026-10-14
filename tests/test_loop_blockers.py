@@ -71,11 +71,12 @@ def test_снимок_настроек_не_читает_клавиши_в_ци�
     started = time.monotonic()
     island._hotkeys()  # протухший кэш: ответ сразу, обновление — в фоне
     assert time.monotonic() - started < 0.05
-    for _ in range(100):
-        if manage._HOTKEYS_CACHE["at"]:
+    # Ждём клавишу, а не метку времени: при ошибке чтения фон ставит `at`, но оставляет пустой словарь.
+    for _ in range(250):
+        if "talk" in manage._HOTKEYS_CACHE["value"]:
             break
         time.sleep(0.02)
-    assert island._hotkeys()["talk"] == "Meta+X"
+    assert island._hotkeys().get("talk") == "Meta+X", manage._HOTKEYS_CACHE
     assert island._hotkeys()["talk"] == "Meta+X"  # и дальше — из памяти
 
 
