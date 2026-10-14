@@ -7,6 +7,8 @@ __pycache__/
 # local test artifacts
 *.wav
 !voice/voices/*/ref.wav
+# Звуки интерфейса — часть программы, а не артефакт: без них в установленной копии островок молчал.
+!island/sounds/*.wav
 
 # local agent backups
 *.bak*

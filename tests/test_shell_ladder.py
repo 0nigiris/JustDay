@@ -55,7 +55,7 @@ def ladder(tmp_path):
     auth.mkdir(parents=True)
     (auth / "auth.json").write_text(json.dumps({"anthropic": {"type": "api"},
                                                 "openrouter": {"type": "api"}}), encoding="utf-8")
-    r = subprocess.run(["node", "--input-type=module", "-e", SCRIPT], capture_output=True, text=True,
+    r = subprocess.run([shutil.which("node"), "--input-type=module", "-e", SCRIPT], capture_output=True, text=True,
                        timeout=60, env={"PATH": "/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path),
                                         "PLUGIN": PLUGIN.as_uri(), "HOME": str(tmp_path)})
     assert r.returncode == 0, r.stderr
@@ -211,7 +211,7 @@ const o = { message: {}, parts: [{ type: 'text', text: 'напиши скрип�
 await h['chat.message']({}, o)
 console.log(JSON.stringify({ model: o.message.model.providerID + '/' + o.message.model.modelID, said }))
 """
-    r = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True,
+    r = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script], capture_output=True, text=True,
                        timeout=60, env={"PATH": "/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path),
                                         "PLUGIN": PLUGIN.as_uri(), "HOME": str(tmp_path)})
     assert r.returncode == 0, r.stderr

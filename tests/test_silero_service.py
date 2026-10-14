@@ -8,6 +8,7 @@ import struct
 import threading
 
 import numpy as np
+import pytest
 
 from justday import config
 from justday import tts as tts_mod
@@ -49,6 +50,8 @@ def test_фраза_берётся_из_службы_голоса(tmp_path, monk
 
 
 def test_нет_службы_говорит_демон_сам(tmp_path, monkeypatch) -> None:
+    # Без torch synth уходит в espeak-ng — это уже другой путь, и на чистой машине его нет.
+    pytest.importorskip("torch")
     t = голос(tmp_path, monkeypatch)
 
     class Модель:

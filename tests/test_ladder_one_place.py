@@ -67,5 +67,5 @@ console.log(o.message.model.providerID + '/' + o.message.model.modelID)
         env["NVIDIA_API_KEY"] = "x"
     (conf.parent / "opencode").mkdir(exist_ok=True)
     shutil.copy(shell.LADDER, conf.parent / "opencode" / "justday-ladder.json")
-    out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, timeout=60, env=env)
+    out = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script], capture_output=True, text=True, timeout=60, env=env)
     assert out.stdout.strip() == expect, out.stderr
