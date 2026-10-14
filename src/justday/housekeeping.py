@@ -48,6 +48,7 @@ class HousekeepingMixin:
                 self._publish_focus()
                 await self._reboot_maybe()
                 await self._memory_maybe()
+                await self._duplicates_maybe()
                 await self._welcome_back()
                 # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
                 # возвращается сам по себе, и ждать с ним до разговора незачем.
@@ -185,7 +186,42 @@ class HousekeepingMixin:
             ok = await loop.run_in_executor(None, cycle.launch, step["name"])
             log.info("цикл: %s — %s", step["name"], "запущен" if ok else "не запустился")
 
-    async def _diary_maybe(self) -> None:
+    async def _memory_maybe(self) -> None:
+        """Указатель памяти читается в каждом разговоре; когда он разросся, сказать об этом — раз в неделю."""
+        state = events.load_state()
+        if time.time() - float(state.get("memory_said") or 0) < 7 * 86400:
+            return
+        warn = int((self.cfg.get("memory") or {}).get("warn_lines", memory.BUSY_LINES) or 0)
+        st = await asyncio.get_running_loop().run_in_executor(None, memory.state, warn)
+        if not st["busy"]:
+            return
+        events.save_state(memory_said=time.time())
+        self.notify(t("Память разрослась: {n} строк в указателе. Загляни в настройки и убери лишнее.")
+                    .format(n=st["index_lines"]), icon="dialog-information")
+
+    async def _duplicates_maybe(self) -> None:
+        """Поиск дубликатов в памяти — раз в сутки.
+
+        Находит похожие записи и сообщает о них, если найдено больше порога.
+        Порог схожести и интервал проверки задаются в настройках memory.duplicates_check_hours
+        и memory.duplicates_threshold.
+        """
+        state = events.load_state()
+        interval = int((self.cfg.get("memory") or {}).get("duplicates_check_hours", 24)) * 3600
+        if time.time() - float(state.get("duplicates_checked") or 0) < interval:
+            return
+        threshold = float((self.cfg.get("memory") or {}).get("duplicates_threshold", 0.85))
+        dupes = await asyncio.get_running_loop().run_in_executor(None, memory.find_duplicates, threshold)
+        if not dupes:
+            events.save_state(duplicates_checked=time.time())
+            return
+        # Нашли дубликаты — сообщаем
+        events.save_state(duplicates_checked=time.time())
+        msg = t("Найдено {n} пар похожих записей в памяти (порог {p:.0%}). Загляни в настройки → Память → «Чистка дублей».")
+        self.notify(msg.format(n=len(dupes), p=threshold), icon="dialog-information")
+        # Логируем детали для отладки
+        for d in dupes[:5]:
+            log.info("дубликат: {:.0%} — {} ↔ {}", d["similarity"], d["title_a"][:50], d["title_b"][:50])
         """Страница дня в Obsidian, вечером и сама.
 
         Собирается из фактов — журнала и планов, — поэтому ничего не стоит.
