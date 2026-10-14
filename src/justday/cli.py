@@ -84,6 +84,8 @@ def t_tts(text: str = "Все системы в норме."):  # «сэр» о�
     from .tts import TTS, normalize
 
     tts = TTS(config.load()["tts"])
+    if tts.cfg["engine"] == "none":  # «0.0s audio» с галочкой читалось как «голос работает»
+        return f"выключен — молчит по выбору (вернуть: justday config set tts.engine {tts.cfg.get('previous_engine') or 'silero'})"
     pcm = tts.synth(normalize(text))
     asyncio.run(audio.Player(config.load()["audio"]["output"]).play(pcm, tts.rate))
     fell_back = " (нейросетевого голоса нет, звучит espeak-ng — justday parts add voice)" \
