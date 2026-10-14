@@ -436,8 +436,8 @@ def test_mail_card_showed_sparkles_instead_of_its_own_icon() -> None:
     from justday import island
 
     glyph = _island_glyph()
-    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
-    header = re.search(r"CardHeader \{\s*Layout\.fillWidth: true\s*icon: (.+?)\n\s*tint:", shell, re.S).group(1)
+    card = pathlib.Path("island/CardView.qml").read_text(encoding="utf-8")
+    header = re.search(r"CardHeader \{\s*Layout\.fillWidth: true\s*icon: (.+?)\n\s*tint:", card, re.S).group(1)
     names = set(re.findall(r'[?:]\s*"([a-z0-9-]+)"', header)) | {"view-restore"}
     names |= {island.tool_icon(t, i) for t, i in [("Bash", "justday play x"), ("Bash", "git status"), ("Read", ""),
                                                   ("WebSearch", ""), ("Agent", ""), ("Skill", ""), ("Bash", "steam")]}
@@ -582,8 +582,7 @@ def test_foreign_player_never_showed_its_cover() -> None:
     node = shutil.which("node")
     if not node:
         pytest.skip("нет node, чтобы выполнить выражение островка")
-    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
-    art = re.search(r"component Art: ClippingRectangle \{(.+?)\n    \}", shell, re.S).group(1)
+    art = pathlib.Path("island/Art.qml").read_text(encoding="utf-8")
     expr = re.search(r"id: artImg.+?\n\s*source: (.+?)\n", art, re.S).group(1)
     cases = {"file:///tmp/cover.png": "file:///tmp/cover.png", "/home/oni/a.jpg": "file:///home/oni/a.jpg",
              "https://i.ytimg.com/x.jpg": "https://i.ytimg.com/x.jpg", "": ""}
