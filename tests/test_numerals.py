@@ -67,3 +67,14 @@ class TestЧтоТрогатьНельзя:
 
     def test_пустая_строка(self) -> None:
         assert numerals.spell("") == ""
+
+
+def test_a_number_at_the_end_of_a_sentence_broke_the_voice():
+    """«в 72.» и пункт списка «2.» оставались цифрами: Silero падал ValueError на фразе «2.», и посреди
+    ответа звучал espeak (журнал 5 и 8 октября)."""
+    from justday.tts import normalize, split_sentences
+
+    assert numerals.spell("72.") == "семьдесят два."
+    assert numerals.spell("1. Открой браузер") == "один. Открой браузер"
+    assert not any(c.isdigit() for s in split_sentences(normalize("Шаги:\n1. Открой.\n2.\n3. Готово.")) for c in s)
+    assert numerals.spell("версия 1.2.3") == "версия один точка два точка три"  # точка с цифрой за ней — не конец фразы
