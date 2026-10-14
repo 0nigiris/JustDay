@@ -77,7 +77,7 @@ def t_mic(seconds: float = 3.0):
     return f"source={src or 'default'} samples={len(pcm)} rms={rms:.0f} peak={int(abs(pcm).max())}"
 
 
-def t_tts(text: str = "Все системы в норме, сэр."):
+def t_tts(text: str = "Все системы в норме."):  # «сэр» он просил не говорить
     import asyncio
 
     from . import audio, parts
@@ -111,7 +111,9 @@ def t_stt():
     if not parts.have("speech"):
         return "не ставили — justday parts add speech"
     cfg = config.load()
-    tts = TTS(cfg["tts"])
+    # Фразу никто не слышит — она только идёт в Whisper. С выключенным голосом (`engine = "none"`) она
+    # выходила пустой, и doctor ставил крестик слуху, который был в порядке.
+    tts = TTS({**cfg["tts"], "engine": "silero"} if cfg["tts"]["engine"] == "none" else cfg["tts"])
     phrase = "Джарвис, открой браузер и найди видео про раст."
     pcm = tts.synth(normalize(phrase))
     pcm16k = pcm[:: max(1, tts.rate // 16000)].astype(np.int16)  # 48k → 16k decimation is fine for a smoke test

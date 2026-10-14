@@ -642,3 +642,38 @@ def test_mixer_boost_stuck_out_past_the_slider() -> None:
     qml = pathlib.Path("island/MixerView.qml").read_text(encoding="utf-8")
     assert "x: parent.width\n" not in qml, "хвост усиления снова вынесен за дорожку"
     assert "function setFromX(" in qml and "Math.abs(v - 1) <" in qml, "пропало залипание у ста процентов"
+
+
+def test_doctor_called_hearing_broken_when_the_voice_was_turned_off(monkeypatch) -> None:
+    """С `tts.engine = "none"` проверочная фраза для слуха выходила пустой, и doctor ставил «✘ stt»
+    исправному Whisper — ложная тревога, на которую он жаловался."""
+    import numpy as np
+
+    from justday import cli, config, stt, tts
+
+    engines = []
+
+    class Голос:
+        rate = 16000
+
+        def __init__(self, cfg):
+            engines.append(cfg["engine"])
+
+        def synth(self, text):
+            return np.ones(1600, dtype=np.int16)
+
+    class Слух:
+        def __init__(self, cfg):
+            pass
+
+        def transcribe(self, pcm):
+            return "джарвис открой браузер" if len(pcm) else ""
+
+    cfg = config.load()
+    cfg["tts"]["engine"] = "none"
+    monkeypatch.setattr(config, "load", lambda: cfg)
+    monkeypatch.setattr(parts, "have", lambda name: True)
+    monkeypatch.setattr(tts, "TTS", Голос)
+    monkeypatch.setattr(stt, "STT", Слух)
+    assert cli.t_stt() == "«джарвис открой браузер»"
+    assert engines == ["silero"]
