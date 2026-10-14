@@ -16,6 +16,7 @@ import os
 import pathlib
 import re
 import subprocess
+import time
 
 from . import config, desktop, kde, launcher
 
@@ -221,8 +222,10 @@ def arrange(keys: list[str]) -> dict:
 # «цветом текста» (currentColor), которого разрисовщик Qt не разрешает: на тёмном доке получилось бы
 # чёрное пятно. Поэтому файл перекрашивается один раз и кладётся рядом, а док читает уже копию.
 LAUNCHER_FILE = config.STATE_DIR / "launcher-icon.svg"
+# Последние две — значки flatpak-программ (Discord, Heroic, Flatseal): без них док не находил их файлов.
 ICON_DIRS = (config.HOME / ".local/share/icons", config.HOME / ".icons",
-             pathlib.Path("/usr/share/icons"), pathlib.Path("/usr/local/share/icons"))
+             pathlib.Path("/usr/share/icons"), pathlib.Path("/usr/local/share/icons"),
+             config.HOME / ".local/share/flatpak/exports/share/icons", pathlib.Path("/var/lib/flatpak/exports/share/icons"))
 
 
 def icon_theme() -> str:
@@ -252,24 +255,73 @@ def icon_theme() -> str:
     return ""
 
 
+# Указатель значков: имя → (глубина темы в цепочке, файл). Раньше find_icon обходил всю тему rglob-ом
+# на каждый значок — 321 обход, и catalog() шёл 5–9 секунд на каждое закрепление. И смотрел только в
+# саму тему: MacTahoe-dark наследует hicolor и breeze, и 133 значка из 158 до файла не доходили, а
+# поиск по имени в QML на первых запусках давал прозрачные значки дока.
+# ponytail: указатель живёт 10 минут — новый значок только что поставленной программы виден не сразу.
+_ICON_INDEX: dict[tuple, tuple[float, dict[str, list[tuple[int, pathlib.Path]]]]] = {}
+
+
+def _theme_chain(theme: str) -> list[str]:
+    """Тема и всё, что она наследует (`Inherits=` в index.theme), а последним — hicolor, как велит freedesktop."""
+    chain, todo = [], [theme]
+    while todo:
+        name = todo.pop(0)
+        if name in chain:
+            continue
+        chain.append(name)
+        for root in ICON_DIRS:
+            try:
+                text = (root / name / "index.theme").read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for line in text.splitlines():
+                if line.startswith("Inherits="):
+                    todo += [t.strip() for t in line.partition("=")[2].split(",") if t.strip()]
+            break
+    return [t for t in chain if t != "hicolor"] + ["hicolor"]
+
+
+def _icon_index(theme: str) -> dict[str, list[tuple[int, pathlib.Path]]]:
+    key = (theme, ICON_DIRS)
+    got = _ICON_INDEX.get(key)
+    if got and time.monotonic() - got[0] < 600:
+        return got[1]
+    index: dict[str, list[tuple[int, pathlib.Path]]] = {}
+    for depth, name in enumerate(_theme_chain(theme)):
+        for root in ICON_DIRS:
+            for folder, _, files in os.walk(root / name):
+                for f in files:
+                    stem, ext = os.path.splitext(f)
+                    if ext in (".svg", ".png"):
+                        index.setdefault(stem, []).append((depth, pathlib.Path(folder, f)))
+    _ICON_INDEX[key] = (time.monotonic(), index)
+    return index
+
+
+def _icon_size(p: pathlib.Path) -> int:
+    """Размер по имени каталога: `128`, `128x128`, `32@2x` (= 64)."""
+    for part in reversed(p.parts):
+        m = re.fullmatch(r"(\d+)(?:x\d+)?(?:@(\d+)x)?", part)
+        if m:
+            return int(m[1]) * int(m[2] or 1)
+    return 0
+
+
 def find_icon(name: str, theme: str = "") -> pathlib.Path | None:
-    """Файл значка в выбранном наборе. Крупный предпочтительнее: его потом уменьшат, а не растянут."""
+    """Файл значка в выбранном наборе или в том, что он наследует. Ближняя тема важнее дальней, а внутри
+    неё крупный предпочтительнее: его потом уменьшат, а не растянут."""
     theme = theme or icon_theme()
     if not theme:
         return None
-    found: list[pathlib.Path] = []
-    for root in ICON_DIRS:
-        base = root / theme
-        if base.is_dir():
-            found += list(base.rglob(f"{name}.svg")) + list(base.rglob(f"{name}.png"))
+    found = _icon_index(theme).get(name)
     if not found:
         return None
-    # scalable важнее всех, дальше — по размеру в имени каталога, дальше — svg важнее png
-    def rank(p: pathlib.Path) -> tuple:
-        parts = [q for q in p.parts if q.isdigit()]
-        size = int(parts[-1]) if parts else 0
-        return (0 if "scalable" in p.parts else 1, -size, 0 if p.suffix == ".svg" else 1)
-    return sorted(found, key=rank)[0]
+    near = min(d for d, _ in found)
+    # scalable важнее всех, дальше — по размеру, дальше — svg важнее png
+    return min((p for d, p in found if d == near),
+               key=lambda p: (0 if "scalable" in p.parts else 1, -_icon_size(p), 0 if p.suffix == ".svg" else 1))
 
 
 def launcher_icon(want: str = "apple") -> str:
