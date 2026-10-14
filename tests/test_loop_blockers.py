@@ -62,6 +62,11 @@ def test_снимок_настроек_не_читает_клавиши_в_ци�
     запуски = Запуски(delay=0.05)
     monkeypatch.setattr(manage.subprocess, "run", запуски)
     monkeypatch.setattr(manage, "_shortcut", lambda desktop_id: ["Meta+X"])
+    # Фоновое чтение, запущенное снимком из более раннего теста, дописывало кэш поверх нашего: на CI без
+    # kreadconfig6 оно кладёт пустой словарь — и падало KeyError 'talk'. Дожидаемся его до сброса.
+    for t in threading.enumerate():
+        if t.name == "hotkeys":
+            t.join(5)
     manage._HOTKEYS_CACHE.update(value={}, at=0.0, busy=False)
     started = time.monotonic()
     island._hotkeys()  # протухший кэш: ответ сразу, обновление — в фоне
