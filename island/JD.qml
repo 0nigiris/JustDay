@@ -1244,7 +1244,11 @@ Singleton {
     property string settingsPage: "general"
     function openSettings(page) { settingsPage = page || "general"; settingsOpen = true; expanded = false }
     function closeAll() { settingsOpen = false; expanded = false; composeOpen = false; playerOpen = false; trayMenu = null; closeTools() }
-    function openManual() { Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md"]); closeAll() }
+    // Островок с настройками лежит слоем поверх окон, и браузер (или папка) открывался под карточкой —
+    // а вкладка в уже открытом браузере не поднимала его вовсе. Казалось, что «Войти» не делает ничего
+    // (пункт 17.1). Поэтому всё, что открывается во внешнем окне, убирает островок с дороги.
+    function openExternal(url) { Quickshell.execDetached(["xdg-open", url]); closeAll() }
+    function openManual() { openExternal("https://github.com/0nigiris/JustDay/blob/main/docs/MANUAL.md") }
 
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off
     readonly property var island: settings.island || ({})

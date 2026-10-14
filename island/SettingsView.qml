@@ -860,7 +860,7 @@ Item {
         font.pixelSize: 12
         textFormat: Text.StyledText
         linkColor: "#409cff"
-        onLinkActivated: link => Quickshell.execDetached(["xdg-open", link])
+        onLinkActivated: link => JD.openExternal(link)
     }
 
     // a step-by-step guide that folds open; steps may contain links
@@ -910,7 +910,7 @@ Item {
                         lineHeight: 1.15
                         textFormat: Text.StyledText
                         linkColor: "#409cff"
-                        onLinkActivated: link => Quickshell.execDetached(["xdg-open", link])
+                        onLinkActivated: link => JD.openExternal(link)
                         HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
                     }
                 }
@@ -2460,7 +2460,7 @@ Item {
                         Btn {
                             visible: !ollama.acc.signed_in && !!ollama.acc.signin_url
                             text: JD.tr("Войти"); primary: true
-                            onClicked: Quickshell.execDetached(["xdg-open", ollama.acc.signin_url])
+                            onClicked: JD.openExternal(ollama.acc.signin_url)
                         }
                         Btn {
                             visible: !ollama.acc.signed_in && !!ollama.acc.signin_url
@@ -3027,7 +3027,7 @@ Item {
             RowLayout {
                 Layout.topMargin: 10
                 spacing: 8
-                Btn { glyph: "folder-open"; text: JD.tr("Открыть папку памяти"); onClicked: Quickshell.execDetached(["xdg-open", memp.mem.dir]) }
+                Btn { glyph: "folder-open"; text: JD.tr("Открыть папку памяти"); onClicked: JD.openExternal(memp.mem.dir) }
                 Btn { glyph: "rotate-ccw"; text: JD.tr("Новый разговор"); onClicked: { JD.send({ cmd: "new_session" }); win.notify(JD.tr("Разговор начат заново, память сохранена")) } }
             }
         }
@@ -3046,7 +3046,7 @@ Item {
             Group {
                 Row { title: JD.tr("Метки кнопок на скриншотах"); subtitle: JD.tr("Шина доступности: точные клики в KDE/Qt-приложениях"); Toggle { checked: !!win.get("desktop.accessibility"); onToggled: v => win.set("desktop.accessibility", v) } }
                 Row { title: JD.tr("Управление браузером (Claude in Chrome)"); subtitle: JD.tr("Работает только с моделью Claude"); Toggle { checked: !!win.get("brain.chrome"); onToggled: v => win.set("brain.chrome", v) } }
-                Row { title: JD.tr("Хранение данных у Anthropic"); subtitle: JD.tr("30 дней, если обучение на ваших данных выключено"); Btn { glyph: "external-link"; text: JD.tr("Открыть"); onClicked: Quickshell.execDetached(["xdg-open", "https://claude.ai/settings/data-privacy-controls"]) } }
+                Row { title: JD.tr("Хранение данных у Anthropic"); subtitle: JD.tr("30 дней, если обучение на ваших данных выключено"); Btn { glyph: "external-link"; text: JD.tr("Открыть"); onClicked: JD.openExternal("https://claude.ai/settings/data-privacy-controls") } }
             }
             GroupTitle { text: JD.tr("ОЧИСТКА") }
             Group {
@@ -3124,10 +3124,10 @@ Item {
                 Layout.topMargin: 10
                 Row { title: "Claude Code"; subtitle: win.d.about ? win.d.about.claude : "" }
                 Row { title: JD.tr("Отчёты о сбоях"); subtitle: JD.crashCount > 0 ? String(JD.crashCount) : JD.tr("нет"); Btn { visible: JD.crashCount > 0; text: JD.tr("Собрать архив"); onClicked: Quickshell.execDetached(["justday", "report"]) } }
-                Row { title: JD.tr("Файл настроек"); subtitle: win.d.about ? win.d.about.config : ""; Btn { text: JD.tr("Открыть"); onClicked: Quickshell.execDetached(["xdg-open", win.d.about.config]) } }
+                Row { title: JD.tr("Файл настроек"); subtitle: win.d.about ? win.d.about.config : ""; Btn { text: JD.tr("Открыть"); onClicked: JD.openExternal(win.d.about.config) } }
                 Row { title: JD.tr("Руководство"); subtitle: JD.tr("Как всё устроено, модели, приватность, решение проблем"); Btn { glyph: "file-text"; text: JD.tr("Открыть"); onClicked: JD.openManual() } }
                 Row { title: JD.tr("Лицензия"); subtitle: JD.tr("GNU GPL v3 · © 2026 0nigiris · иконки Lucide (ISC)") }
-                Row { title: JD.tr("Исходный код"); subtitle: "github.com/0nigiris/JustDay"; Btn { glyph: "external-link"; text: "GitHub"; onClicked: Quickshell.execDetached(["xdg-open", "https://github.com/0nigiris/JustDay"]) } }
+                Row { title: JD.tr("Исходный код"); subtitle: "github.com/0nigiris/JustDay"; Btn { glyph: "external-link"; text: "GitHub"; onClicked: JD.openExternal("https://github.com/0nigiris/JustDay") } }
             }
             GroupTitle { text: JD.tr("ОБНОВЛЕНИЯ") }
             Group {
