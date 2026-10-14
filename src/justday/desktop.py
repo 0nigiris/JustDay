@@ -720,8 +720,9 @@ def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
     q(f"/Scripting/Script{sid}", "org.kde.kwin.Script.run")
     q("/Scripting", "org.kde.kwin.Scripting.start")
     out: list[dict] = []
-    for _ in range(20):
-        time.sleep(0.1)
+    # KWin отвечает за 10–30 мс: первая проверка через 0,1 с была чистым ожиданием в каждом запросе.
+    for _ in range(60):
+        time.sleep(0.03)
         log_ = subprocess.run(["journalctl", "--since", since, "--no-pager", "-o", "cat", "-g", tag.strip()],
                               capture_output=True, text=True, timeout=10).stdout
         if f"{tag}END" in log_:

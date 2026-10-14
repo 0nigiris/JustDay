@@ -143,6 +143,19 @@ TOOLS = (("chat", "Чат с ассистентом", "internet-chat", "чат c
          ("load", "Нагрузка машины", "utilities-system-monitor", "нагрузка процессор память cpu load"))
 
 
+_WINDOWS_SEEN: tuple[float, list[dict]] = (-1e9, [])
+
+
+def _open_windows() -> list[dict]:
+    """Список окон на пару секунд. Каждый запрос — это скрипт, загруженный в KWin, и чтение журнала:
+    на каждую букву в поиске выходило 0,13 с и строка в системном журнале, а пока человек печатает,
+    окна не меняются."""
+    global _WINDOWS_SEEN
+    if time.monotonic() - _WINDOWS_SEEN[0] > 3:
+        _WINDOWS_SEEN = (time.monotonic(), desktop.windows("list"))
+    return _WINDOWS_SEEN[1]
+
+
 def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
     words = [w for w in _flat(query).split() if w]
     order = {key: n for n, key in enumerate(recents())}
@@ -186,7 +199,7 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
     # что уже открыто. Поэтому они идут отдельным видом и, при равном совпадении, выше запуска.
     if windows and words:
         try:
-            for win in desktop.windows("list"):
+            for win in _open_windows():
                 title, app = win.get("title", ""), win.get("app", "")
                 score = _score(words, title or app, [app])
                 if score >= 99:
