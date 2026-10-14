@@ -155,6 +155,11 @@ def cloud_account() -> dict:
         return {"signed_in": False, "signin_url": "", "error": "Ollama не запущена (systemctl --user start justday-ollama)"}
 
 
+def ollama_account() -> dict:
+    """Alias for cloud_account() for API compatibility."""
+    return cloud_account()
+
+
 def ensure_cloud_model(model: str) -> None:
     """A `:cloud` model needs its (tiny) manifest in the local Ollama before the Anthropic endpoint accepts it."""
     import json

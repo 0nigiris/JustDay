@@ -33,6 +33,7 @@ from . import (
     mascot,
     media,
     notifications,
+    providers,
     reminders,
     scenes,
     session,
@@ -92,13 +93,15 @@ class CommandsMixin:
             dock_hello = self._dock
         elif isinstance(dock_hello, dict) and (dock_hello.get("items") or []):
             self._dock = dock_hello
+        loop = asyncio.get_running_loop()
         hello = {"state": self.state, "workers": self._workers_active, "settings": island.settings_snapshot(self.cfg),
                  "history": island.recent_history(), "weather": self.weather, "update": self.update_info,
                  "player": self._player_state, "video": self.island_video, "video_last": self.last_video,
                  "reminders": self._reminders_state(), "jobs": self.jobs.state(),
                  "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now(),
                  "game": getattr(self, "_game_seen", "") or "",
-                 "crash": {"count": crashlog.count(), "new": crashlog.unseen()}}
+                 "crash": {"count": crashlog.count(), "new": crashlog.unseen()},
+                 "ollama_account": await loop.run_in_executor(None, providers.ollama_account)}
         try:
             writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
             await writer.drain()
@@ -148,6 +151,12 @@ class CommandsMixin:
                 # Громкость самого ассистента: телефону она нужна, чтобы
                 # показать ползунок там же, где ползунок музыки.
                 "volume": self.player.volume}
+
+    async def _cmd_ollama_account(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Статус аккаунта Ollama Cloud: залогинен ли, и ссылка для входа если нет."""
+        loop = asyncio.get_running_loop()
+        acc = await loop.run_in_executor(None, providers.ollama_account)
+        return {"ok": True, "account": acc}
 
     async def _cmd_new_session(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         await self.brain.new_session()
