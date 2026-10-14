@@ -465,6 +465,9 @@ class Brain:
                 self._last_text = "\n".join(self._pending)
                 self._pending = []
                 await self._speak(self._last_text)
+                # Background memory writing after response (plan 17.9: запись в фоне после ответа)
+                if self.persist and not self.chat:
+                    self._memory_task = asyncio.create_task(self._write_memory_background(self.request, self._last_text))
             self.session_id = msg.session_id
             self._tool_since = None
             if self.persist:
@@ -488,6 +491,133 @@ class Brain:
                 events.emit("session_init", session=msg.data.get("session_id"), mcp=servers)
             elif msg.subtype not in ("status",):
                 events.emit("system", subtype=msg.subtype)
+
+    async def _write_memory_background(self, request: str, response: str) -> None:
+        """Background memory writing after response (plan 17.9: запись в фоне после ответа).
+
+        Analyzes the conversation and writes relevant facts to memory in the background.
+        Runs without blocking the response.
+        """
+        try:
+            # Skip if request/response are too short or trivial
+            if not request or not response or len(request) < 10 or len(response) < 10:
+                return
+
+            # Skip if it's a trivial interaction (greetings, thanks, etc.)
+            trivial_patterns = [
+                r"^(привет|здравствуй|хай|hi|hello|hey)\b",
+                r"^(спасибо|thanks|thank you|благодарю)\b",
+                r"^(пока|до свидания|bye|goodbye)\b",
+                r"^(ок|окей|ok|окей)\b",
+                r"^(да|нет|yes|no)\b",
+            ]
+            import re
+            req_lower = request.lower().strip()
+            for pattern in trivial_patterns:
+                if re.match(pattern, req_lower):
+                    return
+
+            # Use a lightweight model (haiku) to extract key facts from the conversation
+            prompt = f"""Analyze this conversation and extract key facts/preferences that should be saved to long-term memory.
+Return JSON with keys: "facts" (array of fact strings), "preferences" (array of preference strings), "actions" (array of action items).
+
+User request: {request}
+Assistant response: {response}
+
+Only return facts/preferences/actions that are:
+- Specific and actionable (not generic)
+- Likely to be useful in future conversations
+- Not already obvious or temporary
+
+Examples:
+- "User prefers dark mode" (preference)
+- "User's GitHub username is xyz" (fact)
+- "User wants to be notified about GitHub issues" (preference/action)
+- "User's project is at /home/user/project" (fact)
+
+Return empty arrays if nothing significant found."""
+
+            # Run in a separate process to avoid blocking
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._extract_and_write_memory, prompt)
+
+        except Exception:
+            # Silently fail - memory writing is best-effort
+            pass
+
+    def _extract_and_write_memory(self, prompt: str) -> None:
+        """Extract memory facts using a lightweight model and write to memory."""
+        try:
+            import json
+            import os
+            import re
+            import subprocess
+
+            from . import config
+
+            # Use haiku for fast, cheap extraction
+            claude_cli = shutil.which(self.cfg["brain"].get("claude_cli", "claude")) or "claude"
+            model = self.cfg["brain"].get("light_model", "haiku")
+
+            cmd = [
+                claude_cli, "-p", prompt,
+                "--model", model,
+                "--output-format", "json",
+                "--permission-mode", "acceptEdits",
+                "--max-turns", "1"
+            ]
+
+            env = {**os.environ, **providers.env(self.cfg)}
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=env)
+
+            if result.returncode != 0:
+                return
+
+            try:
+                data = json.loads(result.stdout.strip())
+            except (json.JSONDecodeError, ValueError):
+                return
+
+            # Write facts to memory
+            mem_dir = config.HOME / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(config.REPO_DIR / "brain")) / "memory"
+            mem_dir.mkdir(parents=True, exist_ok=True)
+
+            for fact in data.get("facts", []):
+                if not fact or len(fact) < 10:
+                    continue
+                slug = re.sub(r"[^a-z0-9а-яё]+", "-", fact.lower()).strip("-")[:40]
+                if not slug:
+                    continue
+                path = mem_dir / f"auto_{slug}.md"
+                if path.exists():
+                    continue
+                path.write_text(f"---\nname: {slug}\ndescription: Auto-extracted fact\nmetadata:\n  type: auto\n  source: background_extraction\n---\n\n{fact.strip()}\n", encoding="utf-8")
+                # Add to index
+                index = mem_dir / "MEMORY.md"
+                line = f"- [{fact[:60]}]({path.name}) — auto-extracted"
+                old = index.read_text(encoding="utf-8") if index.exists() else ""
+                if path.name not in old:
+                    index.write_text(old.rstrip("\n") + ("\n" if old else "") + line + "\n", encoding="utf-8")
+
+            for pref in data.get("preferences", []):
+                if not pref or len(pref) < 10:
+                    continue
+                slug = re.sub(r"[^a-z0-9а-яё]+", "-", pref.lower()).strip("-")[:40]
+                if not slug:
+                    continue
+                path = mem_dir / f"pref_{slug}.md"
+                if path.exists():
+                    continue
+                path.write_text(f"---\nname: {slug}\ndescription: Auto-extracted preference\nmetadata:\n  type: auto\n  source: background_extraction\n---\n\n{pref.strip()}\n", encoding="utf-8")
+                index = mem_dir / "MEMORY.md"
+                line = f"- [{pref[:60]}]({path.name}) — auto-extracted preference"
+                old = index.read_text(encoding="utf-8") if index.exists() else ""
+                if path.name not in old:
+                    index.write_text(old.rstrip("\n") + ("\n" if old else "") + line + "\n", encoding="utf-8")
+
+        except Exception:
+            pass
 
     # ---------- permissions ----------
     @staticmethod
