@@ -28,7 +28,17 @@ from pathlib import Path
 
 from . import config
 
-ISLAND_DIR: Path = config.REPO_DIR / "island"
+
+def _island_dir() -> Path:
+    """Путь к папке острова: в установленном пакете или в исходниках."""
+    try:
+        import importlib.resources
+        return Path(importlib.resources.files("justday").joinpath("island"))
+    except Exception:
+        # Fallback: исходники в репозитории
+        return config.REPO_DIR / "src" / "justday" / "island"
+
+ISLAND_DIR = _island_dir()
 
 
 def session() -> str:

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from justday import audio, calendar_lane
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent / "src" / "justday"
 
 
 def test_the_speak_button_was_turning_the_voice_off(monkeypatch) -> None:

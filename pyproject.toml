@@ -3,36 +3,29 @@ name = "justday"
 version = "0.2.0"
 description = "JustDay — voice front-end that turns Claude Code into a personal desktop agent for KDE Plasma"
 readme = "README.md"
-# Верхней границы нет нарочно: на чужом компьютере питон такой, какой там стоит (у Fedora 44 это
-# 3.14), и флешка должна заводиться на нём, а не отказываться. Тяжёлые части (слух, голос) сами
-# скажут, если их колёс под этот питон нет, — они необязательные.
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
-# Ядро: мозг, календарь, счёт. ~250 МБ — столько ставится всегда.
 dependencies = [
     "claude-agent-sdk>=0.2.150",
     "numpy>=2.0",
     "icalendar>=6",
     "recurring-ical-events>=3",
-    "segno>=1.6",           # QR-коды для карточки в островке (qr.py), чистый Python
+    "segno>=1.6",
 ]
 
-# Необязательное. Речь и голос — это гигабайты, и они нужны не всем: без микрофона
-# ассистенту диктовать нечего, а без наушников незачем говорить вслух. Установщик
-# спрашивает, что ставить, и `justday parts add speech` доносит остальное потом.
 [project.optional-dependencies]
-speech = [           # распознавание речи и имя ассистента — ~550 МБ
+speech = [
     "faster-whisper>=1.2.1",
     "onnxruntime>=1.20",
     "openwakeword>=0.6.0",
 ]
-voice = [            # нейросетевой голос Silero — ~750 МБ (без него говорит espeak-ng)
+voice = [
     "torch>=2.8",
 ]
-shell = [            # окно своей оболочки в терминале — ~10 МБ (без него оболочка работает строкой)
+shell = [
     "textual>=8",
 ]
-cuda = [             # распознавание речи на видеокарте NVIDIA — ~2.2 ГБ
+cuda = [
     "nvidia-cublas-cu12",
     "nvidia-cudnn-cu12>=9,<10",
 ]
@@ -41,19 +34,70 @@ cuda = [             # распознавание речи на видеокар
 justday = "justday.cli:main"
 
 [tool.uv]
-# openwakeword pins tflite-runtime on Linux, which has no wheels for py3.12; we use its ONNX backend.
-exclude-dependencies = ["tflite-runtime"]
+exclude-dependencies = [
+    "tflite-runtime",
+]
+index = [
+    { name = "pytorch-cpu", url = "https://download.pytorch.org/whl/cpu", explicit = true },
+]
 
-[tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+[tool.uv.sources.torch]
+index = "pytorch-cpu"
 
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
+[tool.hatch.build.targets.wheel.find]
+where = [
+    "src",
+]
+
+[tool.hatch.build.targets.wheel.package-data]
+justday = [
+    "*.py",
+    "brain/*.md",
+    "brain/*.json",
+    "brain/роли/*",
+    "brain/characters/*",
+    "island/*.qml",
+    "island/*.js",
+    "island/icons/*",
+    "island/sounds/*",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+addopts = "-q"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 200
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+]
+ignore = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "E741",
+    "B905",
+    "SIM105",
+    "SIM108",
+]
 
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling",
+]
 build-backend = "hatchling.build"
 
 [dependency-groups]
@@ -61,23 +105,3 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/justday"]
-
-[tool.hatch.build.targets.wheel.package-data]
-"justday" = ["brain/*.md", "brain/*.json", "brain/роли/*", "brain/characters/*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-q"
-asyncio_mode = "auto"
-
-[tool.ruff]
-# The code is written to a wide screen; comments and docstrings are Russian, so ambiguous-unicode is noise.
-line-length = 200
-target-version = "py312"
-
-[tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["RUF001", "RUF002", "RUF003", "E741", "B905", "SIM105", "SIM108"]

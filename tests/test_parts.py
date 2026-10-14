@@ -116,7 +116,7 @@ def test_the_dock_tip_printed_the_app_name_twice() -> None:
     import pathlib
     import re
 
-    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    qml = pathlib.Path("src/justday/island/DockView.qml").read_text(encoding="utf-8")
     adds = re.search(r"readonly property bool winListAdds: \{(.+?)\n        \}", qml, re.S)
     assert adds, "правило «список должен добавлять новое» пропало из подсказки"
     body = adds.group(1)
@@ -130,7 +130,7 @@ def test_the_dock_tip_hung_over_a_dragged_icon() -> None:
     import pathlib
     import re
 
-    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    qml = pathlib.Path("src/justday/island/DockView.qml").read_text(encoding="utf-8")
     want = re.search(r"property bool want: dv\.labelMode(.+?)readonly property string text", qml, re.S)
     assert want, "условие показа подписи пропало"
     assert 'dv.dragKey === ""' in want.group(1), "подпись снова всплывает во время перетаскивания"
@@ -163,7 +163,7 @@ def test_icons_jumped_under_the_hand_while_being_dragged() -> None:
     import pathlib
     import re
 
-    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    qml = pathlib.Path("src/justday/island/DockView.qml").read_text(encoding="utf-8")
     move = re.search(r"function moveDrag\(sceneX\) \{(.+?)\n    \}", qml, re.S)
     assert move, "правило перестановки пропало"
     body = move.group(1)
@@ -182,7 +182,7 @@ def test_the_dock_froze_while_an_icon_was_dragged() -> None:
     import pathlib
     import re
 
-    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    qml = pathlib.Path("src/justday/island/DockView.qml").read_text(encoding="utf-8")
     phys = re.search(r"function stepPhysics\(dt\) \{(.+?)\n    \}", qml, re.S)
     assert phys, "шаг физики пропал"
     assert not re.search(r"dragKey !== \"\" \|\| dropAnim\) \{\s*if \(!slideOn\) return", phys.group(1)), \
@@ -264,7 +264,7 @@ def test_the_top_strip_was_polling_the_network_even_when_it_was_not_shown() -> N
     import pathlib
     import re
 
-    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    jd = pathlib.Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
     probe = re.search(r"readonly property bool linksWanted:([^\n]+)", jd)
     assert probe, "условие «есть кому показывать» пропало — опрос снова идёт всегда"
     assert 'islandStyle === "bar"' in probe.group(1), "опрос не привязан к сплошной полосе"
@@ -281,13 +281,13 @@ def test_the_island_showed_music_only_to_those_who_use_spotify() -> None:
     """
     import pathlib
 
-    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    jd = pathlib.Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
     assert "readonly property var musicPlayer:" in jd, "общий выбор источника музыки пропал"
     assert "playerPrefer" in jd and "playerIgnore" in jd, "порядок и запреты источников пропали"
-    peek = pathlib.Path("island/PeekView.qml").read_text(encoding="utf-8")
+    peek = pathlib.Path("src/justday/island/PeekView.qml").read_text(encoding="utf-8")
     assert "JD.musicPlayer" in peek, "полоска перестала брать общий источник"
     assert "Mpris.players" not in peek, "полоска снова разбирает список MPRIS сама, мимо общего выбора"
-    expanded = pathlib.Path("island/ExpandedView.qml").read_text(encoding="utf-8")
+    expanded = pathlib.Path("src/justday/island/ExpandedView.qml").read_text(encoding="utf-8")
     assert "JD.musicPlayer" in expanded, "карточка перестала брать общий источник"
 
 
@@ -301,7 +301,7 @@ def test_the_player_could_not_be_turned_off_where_it_was_not_wanted() -> None:
     for key in ("player_peek", "player_expanded", "player_prefer", "player_ignore"):
         assert key in island, f"настройка {key} пропала"
     assert island["player_prefer"] == ["spotify"], "порядок источников по умолчанию изменился молча"
-    settings = pathlib.Path("island/SettingsView.qml").read_text(encoding="utf-8")
+    settings = pathlib.Path("src/justday/island/SettingsView.qml").read_text(encoding="utf-8")
     for key in ("island.player_peek", "island.player_expanded", "island.player_prefer", "island.player_ignore"):
         assert key in settings, f"{key} нечем включить в окне настроек"
 
@@ -315,8 +315,8 @@ def test_the_dock_and_the_tray_sometimes_forgot_to_hide() -> None:
     """
     import pathlib
 
-    bars = "".join(pathlib.Path(f"island/{n}.qml").read_text(encoding="utf-8") for n in ("DockWindows", "TrayWindows"))
-    edge = pathlib.Path("island/EdgeReveal.qml").read_text(encoding="utf-8")
+    bars = "".join(pathlib.Path(f"src/justday/island/{n}.qml").read_text(encoding="utf-8") for n in ("DockWindows", "TrayWindows"))
+    edge = pathlib.Path("src/justday/island/EdgeReveal.qml").read_text(encoding="utf-8")
     assert bars.count('property: "bodyHovered"') == 2, \
         "наведение на док и лоток снова держится на одном событии, без связки"
     assert "id: watchdog" in edge, "сторож за забытым прятаньем пропал"
@@ -331,7 +331,7 @@ def test_a_magnified_icon_kept_peeking_out_after_the_dock_hid() -> None:
     import pathlib
     import re
 
-    dock = pathlib.Path("island/DockWindows.qml").read_text(encoding="utf-8")
+    dock = pathlib.Path("src/justday/island/DockWindows.qml").read_text(encoding="utf-8")
     away = re.search(r"const away = dockHost\.atTop \? ([^\n]+)", dock)
     assert away, "правило ухода дока за край пропало"
     assert "cardHeight" not in away.group(1), "док снова уезжает на высоту карточки, а не вида"
@@ -347,7 +347,7 @@ def test_spamming_a_dock_icon_answered_with_open_wait_close_wait() -> None:
     """
     import pathlib
 
-    qml = pathlib.Path("island/DockView.qml").read_text(encoding="utf-8")
+    qml = pathlib.Path("src/justday/island/DockView.qml").read_text(encoding="utf-8")
     assert "function remember(id, minimized)" in qml, "память о своём намерении пропала"
     grouped = qml.split("readonly property var grouped:", 1)[1].split("\n    readonly property", 1)[0]
     assert "mine[String(w.id)]" in grouped, "намерение больше не перекрывает ответ демона"
@@ -420,7 +420,7 @@ def _island_glyph():
     import pathlib
     import re
 
-    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    jd = pathlib.Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
     table = re.search(r"readonly property var glyphs: \(\{(.+?)\}\)", jd, re.S).group(1)
     glyphs = dict(re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', table))
     local = set(re.findall(r'"([^"]+)"', re.search(r"localIcons: \[(.+?)\]", jd, re.S).group(1)))
@@ -435,15 +435,15 @@ def test_mail_card_showed_sparkles_instead_of_its_own_icon() -> None:
     from justday import island
 
     glyph = _island_glyph()
-    card = pathlib.Path("island/CardView.qml").read_text(encoding="utf-8")
+    card = pathlib.Path("src/justday/island/CardView.qml").read_text(encoding="utf-8")
     header = re.search(r"CardHeader \{\s*Layout\.fillWidth: true\s*icon: (.+?)\n\s*tint:", card, re.S).group(1)
     names = set(re.findall(r'[?:]\s*"([a-z0-9-]+)"', header)) | {"view-restore"}
     names |= {island.tool_icon(t, i) for t, i in [("Bash", "justday play x"), ("Bash", "git status"), ("Read", ""),
                                                   ("WebSearch", ""), ("Agent", ""), ("Skill", ""), ("Bash", "steam")]}
     for name in sorted(names):
         got = glyph(name)
-        assert got and pathlib.Path(f"island/icons/{got}.svg").exists(), f"«{name}» рисуется запасными искрами"
-    for svg in pathlib.Path("island/icons").glob("*.svg"):
+        assert got and pathlib.Path(f"src/justday/island/icons/{got}.svg").exists(), f"«{name}» рисуется запасными искрами"
+    for svg in pathlib.Path("src/justday/island/icons").glob("*.svg"):
         assert glyph(svg.stem) == svg.stem, f"значок {svg.stem} лежит в папке, но по имени его не найти"
 
 
@@ -467,7 +467,7 @@ def test_the_solid_bar_never_made_room_on_fedora(tmp_path, monkeypatch) -> None:
     import subprocess
     import sys
 
-    spec = importlib.util.spec_from_file_location("bar_strut", "island/bar_strut.py")
+    spec = importlib.util.spec_from_file_location("bar_strut", "src/justday/island/bar_strut.py")
     strut = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(strut)
     calls = []
@@ -529,7 +529,7 @@ def test_spotlight_jumped_down_and_flashed_while_closing() -> None:
     import pathlib
     import re
 
-    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    jd = pathlib.Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
     close = re.search(r"function closeMenu\(\) \{(.+?)\n    \}", jd, re.S).group(1)
     assert "menuOpen = false" in close
     assert "menuSearchMode" not in close, "закрытие снова переключает Spotlight в меню посреди угасания"
@@ -552,7 +552,7 @@ def test_foreign_player_showed_the_browser_tab_title() -> None:
     node = shutil.which("node")
     if not node:
         pytest.skip("нет node, чтобы выполнить функцию островка")
-    jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
+    jd = pathlib.Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
     fn = re.search(r"(function cleanTitle\(s\) \{.+?\n    \})", jd, re.S).group(1)
     cases = {
         "natori - Absolute Zero - YouTube": "natori — Absolute Zero",
@@ -581,7 +581,7 @@ def test_foreign_player_never_showed_its_cover() -> None:
     node = shutil.which("node")
     if not node:
         pytest.skip("нет node, чтобы выполнить выражение островка")
-    art = pathlib.Path("island/Art.qml").read_text(encoding="utf-8")
+    art = pathlib.Path("src/justday/island/Art.qml").read_text(encoding="utf-8")
     expr = re.search(r"id: artImg.+?\n\s*source: (.+?)\n", art, re.S).group(1)
     cases = {"file:///tmp/cover.png": "file:///tmp/cover.png", "/home/oni/a.jpg": "file:///home/oni/a.jpg",
              "https://i.ytimg.com/x.jpg": "https://i.ytimg.com/x.jpg", "": ""}
@@ -639,7 +639,7 @@ def test_mixer_boost_stuck_out_past_the_slider() -> None:
     и у ста процентов палец залипает, чтобы в усиление не проскочить случайно."""
     import pathlib
 
-    qml = pathlib.Path("island/MixerView.qml").read_text(encoding="utf-8")
+    qml = pathlib.Path("src/justday/island/MixerView.qml").read_text(encoding="utf-8")
     assert "x: parent.width\n" not in qml, "хвост усиления снова вынесен за дорожку"
     assert "function setFromX(" in qml and "Math.abs(v - 1) <" in qml, "пропало залипание у ста процентов"
 

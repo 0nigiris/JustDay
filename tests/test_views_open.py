@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-ISLAND = Path(__file__).resolve().parent.parent / "island"
+ISLAND = Path(__file__).resolve().parent.parent / "src" / "justday" / "island"
 VIEWS = ["MenuView", "ToolsView", "SessionsView", "HistoryView", "PlansView", "MixerView", "TrayView", "QrView",
          "MusicLibrary", "ControlTiles", "DockAudio", "DockClock", "DockCat", "Buddy", "Mascot",
          "DockView", "TrayMenu", "ChatWindow",

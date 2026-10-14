@@ -1,8 +1,8 @@
-"""Звук, названный в JD.qml, но не собранный в island/sounds, просто молчал — ни ошибки, ни тоста."""
+"""Звук, названный в JD.qml, но не собранный в src/justday/island/sounds, просто молчал — ни ошибки, ни тоста."""
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent / "src" / "justday"
 
 
 def test_каждый_звук_из_qml_есть_файлом():
