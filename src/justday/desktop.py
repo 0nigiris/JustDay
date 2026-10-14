@@ -270,6 +270,17 @@ def _vdf_values(text: str, key: str) -> list[str]:
     return re.findall(rf'"{key}"\s+"([^"]*)"', text)
 
 
+def _steam_icon(appid: str) -> str:
+    """Значок игры Steam. Steam кладёт его в hicolor при создании ярлыка — не в выбранную тему, поэтому
+    док искал его в MacTahoe и не находил: у всех игр был общий джойстик (жалоба Hikisey, 5 окт).
+    Отдаём путь к самому крупному: по имени Quickshell находит значок не с первого запуска.
+    Нет файла — общий значок «игра», а не чужой, подобранный по догадке."""
+    found = [f for base in (HOME / ".local/share/icons/hicolor", Path("/usr/share/icons/hicolor"))
+             for f in base.glob(f"*/apps/steam_icon_{appid}.png")]
+    size = lambda f: int(f.parent.parent.name.partition("x")[0] or 0) if f.parent.parent.name[:1].isdigit() else 0  # noqa: E731
+    return str(max(found, key=size)) if found else "applications-games"
+
+
 def list_games() -> list[dict]:
     games: dict[str, dict] = {}
     roots = [HOME / ".local/share/Steam", HOME / ".steam/steam", HOME / ".var/app/com.valvesoftware.Steam/.local/share/Steam"]
@@ -287,7 +298,7 @@ def list_games() -> list[dict]:
             if not appid or re.search(r"Proton|Steam Linux Runtime|Steamworks Common|Redistributable", name):
                 continue
             games[f"steam:{appid}"] = {"source": "steam-flatpak" if str(lib).startswith(str(flatpak_root)) else "steam",
-                                       "id": appid, "name": name}
+                                       "id": appid, "name": name, "icon": _steam_icon(appid)}
     for cfg in (HOME / ".config/heroic", HOME / ".var/app/com.heroicgameslauncher.hgl/config/heroic"):
         for f in list(cfg.glob("legendaryConfig/legendary/installed.json")) + list(cfg.glob("gog_store/installed.json")):
             try:
@@ -298,10 +309,12 @@ def list_games() -> list[dict]:
             for g in items:
                 gid = g.get("app_name") or g.get("appName")
                 if gid:
-                    games[f"heroic:{gid}"] = {"source": "heroic", "id": gid, "name": g.get("title") or gid}
+                    games[f"heroic:{gid}"] = {"source": "heroic", "id": gid, "name": g.get("title") or gid,
+                                              "icon": "applications-games"}
     for app in list_apps():  # hand-made shortcuts (~/Games/*/run.sh, AppImages, launcher scripts …)
         if ("Game" in app["categories"].split(";") or "/Games/" in app["exec"]) and not any(g["name"].lower() == app["name"].lower() for g in games.values()):
-            games[f"desktop:{app['id']}"] = {"source": "desktop", "id": app["id"], "name": app["name"]}
+            games[f"desktop:{app['id']}"] = {"source": "desktop", "id": app["id"], "name": app["name"],
+                                             "icon": app.get("icon") or "applications-games"}
     return sorted(games.values(), key=lambda g: g["name"].lower())
 
 

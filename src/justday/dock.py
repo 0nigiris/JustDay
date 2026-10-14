@@ -689,13 +689,6 @@ def folder_items(path: str) -> dict:
             "items": out[:FOLDER_MAX], "more": max(0, len(out) - FOLDER_MAX)}
 
 
-def _steam_icon(appid: str, theme: str = "") -> str:
-    """Значок игры Steam, который Steam сам кладёт в hicolor при создании ярлыка; нет его — общий
-    значок «игра», а не чужой, подобранный по догадке."""
-    name = f"steam_icon_{appid}"
-    return name if find_icon(name, theme) else "applications-games"
-
-
 def catalog() -> dict:
     """Всё, что доку нужно от этой половины, одним куском.
 
@@ -711,7 +704,7 @@ def catalog() -> dict:
     game_list = desktop.list_games()
     games = {f"game:{g['id']}": {"kind": "game", "id": str(g["id"]), "strong": [], "weak": [],
                                  "name": g["name"],
-                                 "icon": _steam_icon(str(g["id"]), theme) if g["source"].startswith("steam") else "applications-games"}
+                                 "icon": g.get("icon", "applications-games")}
              for g in game_list}
     # Папки-стопки: ключ dir:<путь>, имя — имя папки. Проверять существование здесь обязательно:
     # папку могли удалить или отмонтировать, и значок, ведущий в никуда, хуже отсутствующего.

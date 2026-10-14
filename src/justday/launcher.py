@@ -171,12 +171,16 @@ def _items(query: str, limit: int, *, windows: bool) -> list[dict]:
                          {"kind": "tool", "id": ident, "name": name, "icon": icon, "sub": "JustDay"}))
 
     for game in desktop.list_games():
+        # Игра «desktop» — это тот же ярлык, что уже стоит выше программой: на «steam» Spotlight
+        # показывал Steam дважды подряд.
+        if game["source"] == "desktop":
+            continue
         score = _score(words, game["name"], [game.get("source", "")]) if words else 0
         if score >= 99:
             continue
         rows.append((score, APP, order.get(f"game:{game['id']}", 999), _flat(game["name"]),
                      {"kind": "game", "id": str(game["id"]), "name": game["name"],
-                      "icon": "applications-games", "sub": game.get("source", "")}))
+                      "icon": game.get("icon", "applications-games"), "sub": game.get("source", "")}))
 
     # Открытые окна: «перейти к дискорду» — это не запуск второго дискорда, а переход к тому,
     # что уже открыто. Поэтому они идут отдельным видом и, при равном совпадении, выше запуска.
@@ -331,7 +335,7 @@ def catalog() -> dict:
     rows = [_row(a) for a in desktop.list_apps()]
     for game in desktop.list_games():
         rows.append({"kind": "game", "id": str(game["id"]), "name": game["name"],
-                     "icon": "applications-games", "sub": game.get("source", ""), "cat": "games"})
+                     "icon": game.get("icon", "applications-games"), "sub": game.get("source", ""), "cat": "games"})
     # Steam и flatpak раскладывают одну и ту же вещь дважды: и как программу, и как игру. В меню это
     # две одинаковые плитки подряд — не богатство выбора, а ощущение, что список сломан. Оставляем
     # первую, и порядок ключа делает выбор предсказуемым: программа важнее записи в игровом лаунчере.
