@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -119,6 +120,7 @@ class Said:
 
 # Длиннее этого — рассказ про лимиты, а не лимит.
 LIMIT_SAID = 400
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _limit_in(said: Said, err: str = "") -> None:
@@ -407,7 +409,11 @@ async def ask_opencode(rung: Rung, text: str, session: str, cfg: dict, on_text, 
             got.error = str((e.get("data") or {}).get("message") or e.get("name") or e)[:400]
 
     _, err = await _run(cmd, {**shell.env(), **_marks(cfg)}, line, _quiet_for(cfg))
-    if err.strip():
+    # stderr у OpenCode — ещё и его собственные строки «permission requested … auto-rejecting» с
+    # цветом. Они затирали беду из потока: ночью 13 октября 429 «usage limit» терялся под такой
+    # строкой, лестница писала «не ответила: [93m[1m! …» и не узнавала лимит.
+    err = _ANSI.sub("", err)
+    if err.strip() and not got.error:
         got.error = err.strip()[:400]
     _limit_in(got, err)
     return got

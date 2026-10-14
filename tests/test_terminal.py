@@ -1030,3 +1030,20 @@ def test_a_task_from_the_phone_reaches_the_open_window_not_only_the_night() -> N
     log, left = asyncio.run(go())
     assert "почини звук в доке" in log and "сделал" in log, log
     assert left == [], "задача осталась в очереди — ночь сделала бы её второй раз"
+
+
+def test_opencode_permission_noise_hid_the_usage_limit(monkeypatch) -> None:
+    """Ночь на 13 октября: OpenCode сказал 429 строкой потока, а в stderr написал свою цветную
+    «permission requested … auto-rejecting». stderr затирал беду, и лестница писала «не ответила:
+    [93m[1m! …» вместо «кончился лимит»."""
+    import json
+
+    async def fake_run(cmd, env, line, quiet):
+        line(json.dumps({"type": "error", "error": {"data": {"message": "The usage limit has been reached"}}}))
+        return [], "\x1b[93m\x1b[1m! \x1b[0mpermission requested: external_directory (/tmp/*); auto-rejecting\n"
+
+    monkeypatch.setattr(terminal, "_run", fake_run)
+    monkeypatch.setattr(terminal, "_opencode_cli", lambda: "opencode")
+    said = asyncio.run(terminal.ask_opencode(terminal.Rung("opencode", "openai/gpt-6-luna"), "дальше", "s1",
+                                             {"terminal": {"unattended": True}}, lambda t: None, lambda t: None))
+    assert said.limit and "usage limit" in said.error and "\x1b" not in said.error
