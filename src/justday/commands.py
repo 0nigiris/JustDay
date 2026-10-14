@@ -81,10 +81,11 @@ class CommandsMixin:
 
     async def _serve_subscriber(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """Островок подписался: первый кадр — всё состояние, дальше держим соединение, пока он жив."""
-        self._subs.add(writer)
         # dock from disk cache so the first UI paint has real icon paths (not empty slots)
+        # В потоке: внутри kreadconfig и поиск значка меню по теме — в цикле событий они держали
+        # слух и голос, пока островок подключался.
         try:
-            dock_hello = dock.catalog_cached()
+            dock_hello = await asyncio.get_running_loop().run_in_executor(None, dock.catalog_cached)
         except Exception:
             dock_hello = {}
         # Prefer last in-memory dock if cache somehow has no items (race during rebuild).
@@ -99,6 +100,9 @@ class CommandsMixin:
                  "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now(),
                  "game": getattr(self, "_game_seen", "") or "",
                  "crash": {"count": crashlog.count(), "new": crashlog.unseen()}}
+        # В подписчики — только сейчас: пока док читался в потоке, рассылка успела бы прислать
+        # островку частичное обновление раньше полного кадра.
+        self._subs.add(writer)
         try:
             writer.write((json.dumps(hello, ensure_ascii=False) + "\n").encode())
             await writer.drain()
