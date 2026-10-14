@@ -65,6 +65,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/justday"]
 
+[tool.hatch.build.targets.wheel.package-data]
+"justday" = ["brain/*.md", "brain/*.json", "brain/роли/*", "brain/characters/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
