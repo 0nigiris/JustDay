@@ -69,7 +69,7 @@ flowchart TD
    - **календарь** (`calendar_lane.py`) → «что у меня сегодня», «какие встречи завтра»; тоже локально;
    - мозг занят → новая фраза вливается в текущий ход, прошлая задача не отменяется;
    - иначе → новый ход мозга.
-6. **Мозг.** Постоянная сессия Claude Code (`brain.py`) с персоной `brain/PERSONA.md` (или `PERSONA.en.md` для английского), профилем `CLAUDE.md`, навыками из `plugin/skills` и MCP-серверами. Модель сама решает, какие инструменты вызвать.
+6. **Мозг.** Постоянная сессия Claude Code (`brain.py`) с персоной `src/justday/brain/PERSONA.md` (или `PERSONA.en.md` для английского), профилем `CLAUDE.md`, навыками из `plugin/skills` и MCP-серверами. Модель сама решает, какие инструменты вызвать.
 7. **Ответ.** Вслух произносится только итоговый текст хода. Промежуточные мысли показываются на Dynamic Island. Успешные действия без вопроса проходят молча, с коротким звуком. Отмена в любой момент (даже пока фраза ещё распознаётся) гасит и действие, и ответ.
 8. **Фоновые задачи.** Работу с кодом мозг поручает отдельным сессиям Claude Code (`justday claude start`). Демон каждые 15 с проверяет их состояние и, когда сессия закончила или ждёт вас, отдаёт мозгу событие. Мозг сам смотрит diff и тесты, при необходимости «подпинывает» Claude и докладывает голосом.
 
@@ -108,7 +108,7 @@ flowchart TD
 | Результаты инструментов: вывод команд, прочитанные файлы, скриншоты `look`, веб-страницы | Уходят мозгу. Скриншот попадает в облако только когда мозг сам решил посмотреть на экран. |
 | Код проектов, над которыми работают сессии Claude Code | Уходит в облако (так работает Claude Code) |
 | Журнал событий `events.jsonl`, логи | Только локально |
-| Телеметрия Claude Code (метрики, отчёты об ошибках, опросы, /feedback) | Выключена в `brain/settings.json` |
+| Телеметрия Claude Code (метрики, отчёты об ошибках, опросы, /feedback) | Выключена в `src/justday/brain/settings.json` |
 
 **Сколько Anthropic хранит данные** (по [документации](https://code.claude.com/docs/en/data-usage), тарифы Free/Pro/Max):
 - если в [настройках приватности](https://claude.ai/settings/data-privacy-controls) выключено «использовать мои данные для улучшения моделей», хранение 30 дней;
@@ -764,7 +764,7 @@ systemctl --user restart justday && justday new-session   # применить
 | `custom` | как настроите | как настроите | как настроите | для провайдеров только с OpenAI-API (например, NVIDIA NIM с Nemotron) поставьте [LiteLLM](https://docs.litellm.ai/) как переходник |
 
 ### Что меняется без Claude
-- **Нет классификатора auto-режима.** Работает локальная политика: всё выполняется без вопросов, кроме команд из списка `ask` в `brain/settings.json` (rm -rf, sudo, force-push, удаление пакетов…). Про них JustDay спросит голосом.
+- **Нет классификатора auto-режима.** Работает локальная политика: всё выполняется без вопросов, кроме команд из списка `ask` в `src/justday/brain/settings.json` (rm -rf, sudo, force-push, удаление пакетов…). Про них JustDay спросит голосом.
 - **Claude in Chrome выключен:** расширению нужен аккаунт Anthropic. Браузером управляет kwin (`look`/`act`, горячие клавиши).
 - Фоновые сессии Claude Code получают режим `acceptEdits`: правки файлов принимаются сами, а команды ждут вашего подтверждения.
 - Слабой модели нужна простая формулировка задачи.
@@ -916,7 +916,7 @@ justday inbox clear
 ## 8. Безопасность и разрешения
 
 - **Нет сетевых портов.** Демон слушает только Unix-сокет с правами 0600. Ollama слушает только 127.0.0.1.
-- **Разрешения Claude Code** (`brain/settings.json`):
+- **Разрешения Claude Code** (`src/justday/brain/settings.json`):
   - `allow`: безопасные частые действия идут без проверки, это ускоряет работу. Сюда входят `look`, список окон, `justday apps/windows/games`, `jii search/info/how/list` и `jii install` (только доверенные источники, root через системное окно пароля), `xdg-open`, `playerctl`, громкость и т. п. Команды, через которые можно выполнить произвольный код (`kitty`, `yt-dlp --exec`, `fd -x`), в список не входят.
   - `ask`: `rm -rf`, `sudo`, `dd`, `mkfs`, force-push, `git reset --hard`, удаление пакетов (в том числе `jii remove`), `jii update`, изменение источников JII, файрвол, загрузчик, `systemctl disable`, публикации. JustDay спрашивает голосом и уведомлением с кнопками.
   - `deny`: `~/.ssh`, `~/.gnupg`, `*.key`, связка ключей, `justday mail`, `justday secret`, `secret-tool`.
@@ -999,13 +999,13 @@ justday inbox clear
 | `src/justday/calendar_lane.py` | приватный календарь по iCal-ссылкам |
 | `src/justday/namespot.py` | пробуждение по имени: начало каждой фразы → Whisper, команда в том же вдохе сохраняется |
 | `src/justday/voiceprint.py` | «под мой голос»: отпечаток голоса (CAM++), дообучение «Hey Jarvis», подбор паузы |
-| `src/justday/i18n.py`, `island/i18n/en.json`, `brain/PERSONA.en.md` | английский язык: реплики демона, интерфейс острова, персона |
+| `src/justday/i18n.py`, `island/i18n/en.json`, `src/justday/brain/PERSONA.en.md` | английский язык: реплики демона, интерфейс острова, персона |
 | `plugin/bin/relmouse.py` | виртуальная относительная мышь (uinput) для камеры в играх |
 | `tests/ui/fake_daemon.py`, `tests/ui/island_session.py` | проверка острова без живого демона в виртуальном KWin ([раздел 11](#11-как-расширять)) |
 | `voice/server.py`, `voice/voices/*` | служба нейроголоса, встроенные голоса |
 | `plugin/bin/kwin_live.py` | kwin-mcp, заранее подключённый к рабочему столу, плюс инструменты `look`/`act` с метками |
-| `brain/PERSONA.md` | характер и правила: молчать на действиях, скорость, приватность, безопасность |
-| `brain/settings.json` | разрешения, запреты, отключение телеметрии |
+| `src/justday/brain/PERSONA.md` | характер и правила: молчать на действиях, скорость, приватность, безопасность |
+| `src/justday/brain/settings.json` | разрешения, запреты, отключение телеметрии |
 | `plugin/skills/*/SKILL.md` | рецепты: desktop, discord, browser, claude-code, files, games, software (JII), email, kindle |
 | `install.sh`, `uninstall.sh`, `scripts/*` | установка, миграция, локальная модель, горячие клавиши, профиль |
 
@@ -1026,7 +1026,7 @@ justday inbox clear
 - **MCP-сервер:** только для JustDay — добавьте его в `plugin/.mcp.json`; для всего Claude Code — `claude mcp add --scope user …`.
 - **Мгновенная команда:** синонимы в `[apps.aliases]`, новые шаблоны — в `src/justday/fastpath.py` (`MEDIA`, `SITES`, `RU_NAMES`).
 - **Рецепт для приложения:** скажите «запомни, как зайти в войс: Ctrl+K, восклицательный знак, Enter». JustDay сохранит это в память и в следующий раз сделает сразу.
-- **Характер:** *Настройки → Характер* или `justday persona`; готовые образы лежат в `brain/characters/`, общие правила — в `brain/PERSONA.md` (и `PERSONA.en.md`).
+- **Характер:** *Настройки → Характер* или `justday persona`; готовые образы лежат в `src/justday/brain/characters/`, общие правила — в `src/justday/brain/PERSONA.md` (и `PERSONA.en.md`).
 - **Голос:** Настройки → Голос и звук, или `justday voice design`.
 - **Другое имя:** `[user] assistant_name` и `assistant_aliases`; для лучшего распознавания добавьте имя в `[stt] initial_prompt`.
 - **Перевод:** строки острова — `island/i18n/en.json` (ключ — русский текст, в QML обёрнут в `JD.tr()`), реплики демона — словарь `EN` в `src/justday/i18n.py`. Новый язык добавляется ещё одним таким файлом и словарём.
@@ -1123,7 +1123,7 @@ journalctl --user -u justday-ollama -f
 | Модель Ollama не качается (TLS) | блокировка R2: `scripts/setup-local-llm.sh` (обход через Hugging Face) или VPN |
 | Почта: «не удалось войти» | нужен именно пароль приложения, а не основной; IMAP в Gmail включён по умолчанию |
 | Кликает мимо | попросите «посмотри на экран»; для Qt-приложений проверьте `[desktop] accessibility = true`; Electron-приложения (Discord, браузеры) меток не дают — там горячие клавиши |
-| Говорит лишнее | `brain/PERSONA.md`, затем `justday new-session` |
+| Говорит лишнее | `src/justday/brain/PERSONA.md`, затем `justday new-session` |
 | Голос роботизированный или молчит | Настройки → Голос и звук: движок «Нейросетевой»; `systemctl --user status justday-voice`; не хватает видеопамяти при запущенной игре — временно Silero |
 | Остров не виден | `justday doctor` скажет, что сейчас на экране и почему; дальше `systemctl --user status justday-ui` и `journalctl --user -u justday-ui`. Нужны `quickshell`, шрифт Inter и сеанс Wayland — на X11 вместо острова полоска |
 | Не реагирует на мой голос / «Голос не узнан» | Настройки → Голос и звук → «Заново» (перезапись профиля в тихой комнате) или режим «Нет»; `justday voiceprint reset` |

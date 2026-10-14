@@ -36,13 +36,14 @@ from . import chats, config, dispatch, events, providers
 from . import persona as persona_mod
 from .i18n import t
 
-BRAIN_PKG_DIR = Path(__file__).parent / "brain"
-BRAIN_DATA_DIR = config.DATA_DIR / "brain"
-
 log = logging.getLogger("justday.brain")
 
+# Два разных места, их нельзя путать. BRAIN_DIR — данные человека: рабочая папка мозга, его профиль
+# CLAUDE.md и ключ памяти Claude Code (~/.claude/projects/-home-…-justday-brain). Запусти мозг из
+# папки пакета — и Джарвис проснётся без профиля и без памяти о человеке. BRAIN_PKG_DIR — то, что
+# едет с программой: PERSONA, характеры, роли, settings.json.
+BRAIN_DIR = config.DATA_DIR / "brain"
 BRAIN_PKG_DIR = Path(__file__).parent / "brain"
-BRAIN_DATA_DIR = config.DATA_DIR / "brain"
 
 
 # What a model writes when it means "nothing to say": never read aloud (the daemon plays the "done" chime instead).
@@ -209,7 +210,7 @@ class Brain:
         # Claude in Chrome and the auto-mode classifier need an Anthropic account; other models use the local policy
         extra = {"chrome": None} if b.get("chrome") and claude else {}
         return ClaudeAgentOptions(
-            cwd=str(BRAIN_PKG_DIR),
+            cwd=str(BRAIN_DIR),
             cli_path=shutil.which(b["claude_cli"]) or b["claude_cli"],
             model=b["model"] or None,
             effort=(b.get("effort") or None) if claude else None,
@@ -245,7 +246,7 @@ class Brain:
             await self._start()
 
     async def _start(self) -> None:
-        BRAIN_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        BRAIN_DIR.mkdir(parents=True, exist_ok=True)
         state = events.load_state()
         resume = None
         if self.chat:

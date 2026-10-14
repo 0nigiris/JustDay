@@ -561,7 +561,7 @@ def local_models() -> list[str]:
 
 
 def memory_files() -> dict:
-    from .brain import BRAIN_PKG_DIR as BRAIN_DIR
+    from .brain import BRAIN_DIR
     from .cli import memory_dir
 
     mem = memory_dir()

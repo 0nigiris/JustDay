@@ -51,7 +51,7 @@ justday justday-ui`. Это описано в этом же файле как н
 (удаление, оплата, отправка наружу, системные настройки), а не наши собственные службы.
 
 Чего не делать никогда, даже когда очень мешает: `--dangerously-skip-permissions`,
-`permission_mode=bypassPermissions`, правка `brain/settings.json` ради тишины. Снятая защита — не
+`permission_mode=bypassPermissions`, правка `src/justday/brain/settings.json` ради тишины. Снятая защита — не
 забота об удобстве человека, а снятая с него защита. На это есть тест
 (`tests/test_terminal.py`), и он упадёт.
 

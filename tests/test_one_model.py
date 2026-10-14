@@ -18,6 +18,21 @@ def test_the_voice_brain_carried_the_developers_skills_and_hooks(tmp_path, monke
     assert opts.settings.endswith("brain/settings.json")
 
 
+
+def test_brain_woke_up_without_his_profile_and_memory(tmp_path, monkeypatch):
+    """Мозг запускали из папки пакета (src/justday/brain): Claude Code не видел профиль CLAUDE.md и
+    искал память под другим ключом — Джарвис просыпался, ничего не зная о человеке. Рабочая папка —
+    данные (~/.local/share/justday/brain), PERSONA и settings.json — из пакета."""
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+
+    async def nobody(*a):
+        return False
+
+    opts = brain_mod.Brain(config.load(), on_text=nobody, approver=nobody, asker=nobody)._options(None)
+    assert opts.cwd == str(config.DATA_DIR / "brain")
+    assert (brain_mod.BRAIN_PKG_DIR / "PERSONA.md").exists()
+    assert (brain_mod.BRAIN_PKG_DIR / "settings.json").exists()
+
 def test_each_turn_reconnected_the_brain_twice(tmp_path, monkeypatch):
     """sonnet в конфиге + auto_model: ход уходил на haiku, после ответа возвращался на sonnet —
     два `claude --resume` и холодный кэш промпта на каждом ходу (513 подключений на 303 запуска)."""
