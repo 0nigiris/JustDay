@@ -282,13 +282,12 @@ def test_the_island_showed_music_only_to_those_who_use_spotify() -> None:
     import pathlib
 
     jd = pathlib.Path("island/JD.qml").read_text(encoding="utf-8")
-    shell = pathlib.Path("island/shell.qml").read_text(encoding="utf-8")
     assert "readonly property var musicPlayer:" in jd, "общий выбор источника музыки пропал"
     assert "playerPrefer" in jd and "playerIgnore" in jd, "порядок и запреты источников пропали"
-    peek = shell.split("component PeekView:", 1)[1].split("component ", 1)[0]
+    peek = pathlib.Path("island/PeekView.qml").read_text(encoding="utf-8")
     assert "JD.musicPlayer" in peek, "полоска перестала брать общий источник"
     assert "Mpris.players" not in peek, "полоска снова разбирает список MPRIS сама, мимо общего выбора"
-    expanded = shell.split("component ExpandedView:", 1)[1].split("component ", 1)[0]
+    expanded = pathlib.Path("island/ExpandedView.qml").read_text(encoding="utf-8")
     assert "JD.musicPlayer" in expanded, "карточка перестала брать общий источник"
 
 

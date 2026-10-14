@@ -30,5 +30,3 @@ Item {
         }
     }
 }
-
-// ▶ / ❚❚ drawn in any colour (theme icons are light-only)

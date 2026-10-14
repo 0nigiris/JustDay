@@ -22,5 +22,3 @@ Pressable {
         Text { anchors.centerIn: parent; text: mb.badge; color: "black"; font.family: JD.fontFamily; font.pixelSize: 9; font.weight: Font.Bold }
     }
 }
-
-// the big player: cover, title, progress, shuffle · prev · play · next · repeat, the queue

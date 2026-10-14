@@ -207,5 +207,3 @@ View {
         }
     }
 }
-
-// a control-center toggle: a round icon that lights up, the name and its state

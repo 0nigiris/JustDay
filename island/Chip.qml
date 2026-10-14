@@ -20,5 +20,3 @@ Pressable {
         Label1 { text: chip.label; font.pixelSize: 12; font.weight: Font.Medium }
     }
 }
-
-// one row of the sound card: icon (a tap mutes) · name · a track to drag or click · the level

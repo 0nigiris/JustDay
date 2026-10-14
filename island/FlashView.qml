@@ -27,5 +27,3 @@ View {
         }
     }
 }
-
-// a small round button that takes the click for itself (the rest of the notification opens the app)

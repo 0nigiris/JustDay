@@ -123,6 +123,3 @@ View {
         }
     }
 }
-
-// A timer or an alarm going off. One thing to read (what and when), one thing to press (Выключить):
-// Live Activities › Offering interactivity — "prefer limiting it to a single element".

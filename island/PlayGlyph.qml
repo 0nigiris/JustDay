@@ -33,5 +33,3 @@ Item {
         }
     }
 }
-
-// the live activity: cover · title · bars (a click opens the player)

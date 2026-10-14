@@ -35,5 +35,3 @@ ClippingRectangle {
         Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(260); easing.type: JD.easeOut } }
     }
 }
-
-// equaliser bars in the cover's colour; they settle down when the music pauses
