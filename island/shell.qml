@@ -605,22 +605,6 @@ ShellRoot {
                     parent: JD.islandStyle === "bar" ? dropCard : stage
                 }
                 ComposeView { id: composeView; shown: island.mode === "compose" }
-                // Пока остров держит клавиатуру целиком, клавиши не доходят до окон под ним — об этом надо
-                // сказать глазами, иначе «пропали клавиши» выглядит как поломка.
-                // Посередине верхнего края, тихим серым: оранжевая капсула справа сверху садилась на крестик
-                // инструментов и стрелку плеера («иконка клавы выглядит хуёво»). Верхняя полоса в 16 px
-                // свободна у всех трёх видов, которые держат клавиатуру (инструменты, compose, медиатека).
-                Icon {
-                    id: kbGrab
-                    readonly property bool held: win.WlrLayershell.keyboardFocus === WlrKeyboardFocus.Exclusive
-                    parent: JD.islandStyle === "bar" && island.mode === "tools" ? dropCard : stage
-                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 3 }
-                    name: "keyboard"; implicitSize: 11; tint: JD.text3
-                    z: 50
-                    opacity: held ? 1 : 0
-                    visible: opacity > 0
-                    Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast } }
-                }
                 View {
                     id: settingsHolder
                     shown: JD.islandStyle === "bar"
@@ -1047,6 +1031,9 @@ ShellRoot {
                 anchors.fill: parent
                 z: -1
                 onClicked: {}
+                // Двойное нажатие по пустому месту карточки — выход, как Escape: на полосе карточка
+                // не внутри острова, и его обработчик двойного нажатия сюда не дотягивался.
+                onDoubleClicked: { JD.answerOpen = false; JD.closeAll() }
             }
         }
 
