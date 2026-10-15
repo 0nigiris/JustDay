@@ -18,7 +18,7 @@ def _over(fg: tuple, alpha: float, bg: tuple) -> tuple:
 
 
 def test_captions_are_readable_on_every_window_surface() -> None:
-    jd = Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
+    jd = Path("island/JD.qml").read_text(encoding="utf-8")
     m = re.search(r"property color text3: Qt\.rgba\((\d+) / 255, (\d+) / 255, (\d+) / 255, ([\d.]+)\)", jd)
     assert m, "text3 больше не задан через Qt.rgba — поправь разбор"
     rgb, alpha = tuple(int(m.group(i)) / 255 for i in (1, 2, 3)), float(m.group(4))
@@ -32,7 +32,7 @@ def test_captions_are_readable_on_every_window_surface() -> None:
 def test_every_accent_he_can_pick_stays_readable() -> None:
     """Выбор основного цвета не должен дать кнопку, на которой не прочесть белую надпись,
     или ползунок, сливающийся с тёмной карточкой: жёлтый и зелёный так и делали бы."""
-    jd = Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
+    jd = Path("island/JD.qml").read_text(encoding="utf-8")
     m = re.search(r"property var accents: \(\{(.+?)\}\)", jd)
     assert m, "палитра акцентов больше не задана одной строкой — поправь разбор"
     card = (0x1c / 255, 0x1c / 255, 0x1e / 255)

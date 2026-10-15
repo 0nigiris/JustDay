@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-ISLAND = Path(__file__).resolve().parent.parent / "src" / "justday" / "island"
+ISLAND = Path(__file__).resolve().parent.parent / "island"
 PAGES = ["general", "character", "model", "dock", "notifications", "voice", "media", "mail", "people",
          "buttons", "memory", "cycle", "privacy", "about"]
 

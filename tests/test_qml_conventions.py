@@ -4,7 +4,7 @@
 import re
 from pathlib import Path
 
-ISLAND = Path(__file__).resolve().parent.parent / "src" / "justday" / "island"
+ISLAND = Path(__file__).resolve().parent.parent / "island"
 
 
 def behaviors(text: str):

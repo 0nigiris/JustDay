@@ -1,6 +1,6 @@
 """Трей на сплошной полосе мигал и терял значки: список строили фильтром заново на каждое событие, и все значки
 заново плыли из прозрачности. Теперь полоса держит весь список, а что остаётся на ней и что уходит под шеврон,
-решает `src/justday/island/barTray.js` — его и проверяем настоящим Node."""
+решает `island/barTray.js` — его и проверяем настоящим Node."""
 import json
 import shutil
 import subprocess
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-JS = Path(__file__).resolve().parent.parent / "src" / "justday" / "island" / "barTray.js"
+JS = Path(__file__).resolve().parent.parent / "island" / "barTray.js"
 
 pytestmark = pytest.mark.skipif(not shutil.which("node"), reason="нужен node")
 

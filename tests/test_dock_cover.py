@@ -161,7 +161,7 @@ def test_dragging_a_window_did_not_rebuild_the_dock() -> None:
     node = shutil.which("node")
     if not node:
         pytest.skip("нет node, чтобы выполнить функции островка")
-    jd = Path("src/justday/island/JD.qml").read_text(encoding="utf-8")
+    jd = Path("island/JD.qml").read_text(encoding="utf-8")
     src = "\n".join(re.search(r"(    function " + name + r"\(.+?\n    \})", jd, re.S).group(1) for name in ("windowShape", "setWindows"))
     win = {"id": "1", "app": "kate", "title": "a", "minimized": False, "active": True, "x": 0, "y": 0, "w": 800, "h": 600}
     js = """

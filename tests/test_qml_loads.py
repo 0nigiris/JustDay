@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-ISLAND = Path(__file__).resolve().parent.parent / "src" / "justday" / "island"
+ISLAND = Path(__file__).resolve().parent.parent / "island"
 
 CHECK = """import QtQuick
 import Quickshell

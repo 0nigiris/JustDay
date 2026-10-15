@@ -6,7 +6,7 @@ from pathlib import Path
 
 from justday import config
 
-ISLAND = Path(__file__).resolve().parent.parent / "src" / "justday" / "island"
+ISLAND = Path(__file__).resolve().parent.parent / "island"
 
 
 def test_menu_stays_a_card_unless_the_person_chooses_launchpad() -> None:
