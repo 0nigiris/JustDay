@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 SR = 44100
+LOWPASS_HZ = 1800.0
 OUT = Path(__file__).resolve().parent.parent / "island" / "sounds"
 
 # Eb-мажорная пентатоника: Eb F G Bb C. Любая комбинация консонантна.
@@ -38,17 +39,19 @@ def env(n: int, attack: float, decay: float) -> np.ndarray:
     return a * np.exp(-t / decay)
 
 
-def tone(freq: float, sec: float, decay: float, attack: float = 0.004, glass: float = 0.35) -> np.ndarray:
-    """Стеклянный тон: основа плюс две негармонические обертоны с более быстрым спадом."""
+def tone(freq: float, sec: float, decay: float, attack: float = 0.012, glass: float = 0.35) -> np.ndarray:
+    """Тёплый тон: основа и две гармоники (2f, 3f) с более быстрым спадом, как у marimba/деревянного
+    колокола. Стеклянные негармонические обертоны (2.76f, 5.4f) звенели и кололи слух — убраны.
+    `glass` теперь — сила первой гармоники."""
     t = t_axis(sec)
     n = len(t)
     y = np.sin(2 * np.pi * freq * t) * env(n, attack, decay)
-    y += glass * 0.5 * np.sin(2 * np.pi * freq * 2.76 * t) * env(n, attack, decay * 0.35)
-    y += glass * 0.25 * np.sin(2 * np.pi * freq * 5.4 * t) * env(n, attack, decay * 0.15)
+    y += glass * 0.4 * np.sin(2 * np.pi * freq * 2 * t) * env(n, attack, decay * 0.5)
+    y += glass * 0.12 * np.sin(2 * np.pi * freq * 3 * t) * env(n, attack, decay * 0.3)
     return y
 
 
-def tick(sec: float = 0.03, centre: float = 3200.0) -> np.ndarray:
+def tick(sec: float = 0.03, centre: float = 700.0) -> np.ndarray:
     """Короткий шумовой щелчок, срезанный по частоте: даёт ощущение касания, а не писк."""
     rng = np.random.default_rng(7)
     n = int(SR * sec)
@@ -78,30 +81,36 @@ def place(parts: list[tuple[float, np.ndarray]], tail: float = 0.05) -> np.ndarr
 
 def finish(y: np.ndarray, peak_db: float) -> np.ndarray:
     """Нормировка по пику и короткое затухание в конце, чтобы не было щелчка на обрыве."""
+    # Потолок частот: всё выше ~2 кГц гасится плавно, чтобы ни один звук не мог выйти писклявым,
+    # что бы ни написали в таблице ниже. Так «высокие тона запрещены» держится кодом, а не вниманием.
+    spec = np.fft.rfft(y)
+    f = np.fft.rfftfreq(len(y), 1 / SR)
+    y = np.fft.irfft(spec / np.sqrt(1 + (f / LOWPASS_HZ) ** 8), len(y))
     y = y / (np.max(np.abs(y)) or 1.0) * 10 ** (peak_db / 20)
     fade = min(len(y), int(SR * 0.01))
     y[-fade:] *= np.linspace(1, 0, fade)
     return y
 
 
+# Основы — в октавах 3–5 (155–620 Гц): низ и середина. Выше пятой октавы не берём.
 SOUNDS = {
     # (функция, пик в dBFS) — тише всего то, что звучит чаще всего
-    "hover":       (lambda: place([(0, tone(hz("C", 6), 0.05, 0.012, 0.15))]), -26),
-    "click":       (lambda: place([(0, tick(0.025) * 0.9), (0, tone(hz("G", 5), 0.07, 0.016))]), -16),
-    "select":      (lambda: place([(0, tick(0.02, 2600) * 0.6), (0, tone(hz("Bb", 5), 0.11, 0.03))]), -17),
-    "toggle_on":   (lambda: place([(0, tone(hz("G", 5), 0.09, 0.02)), (0.05, tone(hz("C", 6), 0.13, 0.035))]), -17),
-    "toggle_off":  (lambda: place([(0, tone(hz("C", 6), 0.08, 0.02)), (0.05, tone(hz("G", 5), 0.12, 0.03))]), -19),
-    "drag_start":  (lambda: place([(0, sweep(hz("Bb", 4), hz("Bb", 5), 0.09, 0.05) * 0.7), (0, tick(0.015, 2000) * 0.5)]), -20),
-    "drop":        (lambda: place([(0, tone(hz("Eb", 4), 0.14, 0.04, 0.1)), (0, tick(0.02, 1500) * 0.8)]), -15),
-    "open":        (lambda: place([(0, sweep(hz("Eb", 5), hz("Bb", 5), 0.16, 0.07) * 0.6), (0.02, tone(hz("Bb", 5), 0.12, 0.04, glass=0.2) * 0.5)]), -19),
-    "close":       (lambda: place([(0, sweep(hz("Bb", 5), hz("Eb", 5), 0.14, 0.05) * 0.6)]), -21),
-    "notify":      (lambda: place([(0, tone(hz("G", 5), 0.3, 0.09)), (0.11, tone(hz("Bb", 5), 0.4, 0.13))]), -16),
-    "success":     (lambda: place([(0, tone(hz("Eb", 5), 0.2, 0.05)), (0.07, tone(hz("G", 5), 0.2, 0.06)), (0.14, tone(hz("Bb", 5), 0.34, 0.12))]), -15),
-    "error":       (lambda: place([(0, tone(hz("Bb", 4), 0.14, 0.05, glass=0.1)), (0.09, tone(hz("F", 4), 0.22, 0.09, glass=0.1))]), -15),
-    "listen":      (lambda: place([(0, tone(hz("G", 5), 0.1, 0.03)), (0.06, tone(hz("Bb", 5), 0.16, 0.05))]), -17),
-    "listen_end":  (lambda: place([(0, tone(hz("Bb", 5), 0.09, 0.025)), (0.06, tone(hz("G", 5), 0.14, 0.04))]), -20),
-    "faceid_scan": (lambda: place([(i * 0.11, tone(hz("Eb", 6), 0.05, 0.012, glass=0.1) * (0.5 + 0.1 * i)) for i in range(4)]), -24),
-    "faceid_ok":   (lambda: place([(0, tone(hz("G", 5), 0.2, 0.05)), (0.08, tone(hz("C", 6), 0.5, 0.2, glass=0.5))]), -15),
+    "hover":       (lambda: place([(0, tone(hz("C", 4), 0.06, 0.016, 0.2))]), -28),
+    "click":       (lambda: place([(0, tick(0.03, 600) * 0.8), (0, tone(hz("G", 4), 0.09, 0.025))]), -17),
+    "select":      (lambda: place([(0, tick(0.025, 500) * 0.5), (0, tone(hz("Bb", 4), 0.13, 0.04))]), -18),
+    "toggle_on":   (lambda: place([(0, tone(hz("G", 4), 0.11, 0.03)), (0.06, tone(hz("C", 5), 0.16, 0.05))]), -18),
+    "toggle_off":  (lambda: place([(0, tone(hz("C", 5), 0.1, 0.03)), (0.06, tone(hz("G", 4), 0.15, 0.045))]), -20),
+    "drag_start":  (lambda: place([(0, sweep(hz("Bb", 3), hz("Bb", 4), 0.1, 0.06) * 0.7), (0, tick(0.02, 500) * 0.4)]), -21),
+    "drop":        (lambda: place([(0, tone(hz("Eb", 3), 0.16, 0.05, 0.15)), (0, tick(0.025, 400) * 0.9)]), -16),
+    "open":        (lambda: place([(0, sweep(hz("Eb", 3), hz("Bb", 3), 0.18, 0.08) * 0.6), (0.03, tone(hz("Bb", 3), 0.15, 0.05, glass=0.2) * 0.5)]), -19),
+    "close":       (lambda: place([(0, sweep(hz("Bb", 3), hz("Eb", 3), 0.16, 0.06) * 0.6)]), -21),
+    "notify":      (lambda: place([(0, tone(hz("G", 4), 0.35, 0.11)), (0.13, tone(hz("Bb", 4), 0.45, 0.16))]), -17),
+    "success":     (lambda: place([(0, tone(hz("Eb", 4), 0.22, 0.06)), (0.08, tone(hz("G", 4), 0.22, 0.07)), (0.16, tone(hz("Bb", 4), 0.4, 0.14))]), -16),
+    "error":       (lambda: place([(0, tone(hz("Bb", 2), 0.16, 0.06, glass=0.1)), (0.1, tone(hz("F", 2), 0.26, 0.1, glass=0.1))]), -16),
+    "listen":      (lambda: place([(0, tone(hz("G", 4), 0.12, 0.035)), (0.07, tone(hz("Bb", 4), 0.18, 0.06))]), -18),
+    "listen_end":  (lambda: place([(0, tone(hz("Bb", 4), 0.1, 0.03)), (0.07, tone(hz("G", 4), 0.16, 0.05))]), -21),
+    "faceid_scan": (lambda: place([(i * 0.12, tone(hz("Eb", 4), 0.06, 0.015, glass=0.1) * (0.5 + 0.1 * i)) for i in range(4)]), -26),
+    "faceid_ok":   (lambda: place([(0, tone(hz("G", 4), 0.22, 0.06)), (0.09, tone(hz("C", 5), 0.55, 0.22, glass=0.5))]), -16),
 }
 
 

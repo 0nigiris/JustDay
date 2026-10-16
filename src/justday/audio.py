@@ -380,21 +380,24 @@ class Stretcher:
         return rest if self.passthrough else timestretch(rest, self.speed, self.rate)
 
 
+def _warm(hz: float, sec: float, rate: int, decay: float) -> np.ndarray:
+    """Тёплая нота: основа и две гармоники, мягкая атака. Чистый синус в 880–1300 Гц, как был здесь
+    раньше, колол слух; ноты держатся ниже 600 Гц, как и звуки острова (scripts/ui_sounds.py)."""
+    t = np.arange(int(rate * sec)) / rate
+    env = np.minimum(1, t / 0.012) * np.exp(-t / decay)
+    y = np.sin(2 * np.pi * hz * t) + 0.4 * np.sin(4 * np.pi * hz * t) * np.exp(-t / (decay * 0.5)) \
+        + 0.12 * np.sin(6 * np.pi * hz * t) * np.exp(-t / (decay * 0.3))
+    return y * env
+
+
 def earcon(kind: str, rate: int = 48000) -> np.ndarray:
     """Short synthesized UI tones: 'listen' (rising), 'done' (falling), 'error' (low), 'alarm' (a chime)."""
-    if kind == "alarm":  # a timer or an alarm going off: three bell-like notes, softly rung twice
+    if kind == "alarm":  # a timer or an alarm going off: bell-like notes, softly rung twice
         out = []
-        for hz in (1174, 880, 1174, 880):
-            t = np.arange(int(rate * 0.22)) / rate
-            env = np.exp(-t * 7) * np.minimum(1, t * 400)
-            tone = 0.32 * (np.sin(2 * np.pi * hz * t) + 0.35 * np.sin(4 * np.pi * hz * t)) * env
-            out.append(tone)
+        for hz in (587, 440, 587, 440):
+            out.append(0.4 * _warm(hz, 0.3, rate, 0.12))
             out.append(np.zeros(int(rate * 0.06)))
         return (np.concatenate(out) * 32767).astype(np.int16)
-    notes = {"listen": [880, 1320], "done": [1320, 880], "error": [330, 220]}[kind]
-    out = []
-    for hz in notes:
-        t = np.arange(int(rate * 0.07)) / rate
-        env = np.minimum(1, np.minimum(t, t[::-1]) * 60)
-        out.append(0.25 * np.sin(2 * np.pi * hz * t) * env)
+    notes = {"listen": [392, 523], "done": [523, 392], "error": [233, 175]}[kind]
+    out = [0.3 * _warm(hz, 0.16, rate, 0.06) for hz in notes]
     return (np.concatenate(out) * 32767).astype(np.int16)

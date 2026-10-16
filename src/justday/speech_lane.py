@@ -210,5 +210,10 @@ class SpeechMixin:
             await asyncio.sleep(0.1)
 
     async def earcon(self, kind: str) -> None:
+        # Остров сам играет «слушаю», «готово» и «ошибка» (island/sounds). Раньше то же самое играл и
+        # демон своим писком — два звука разом, вразнобой. Будильник остаётся за демоном: острова
+        # может не быть.
+        if kind != "alarm" and self.cfg["island"].get("ui_sounds", True):
+            return
         if self.cfg["audio"]["earcons"]:
             await self.player.play(audio.earcon(kind), 48000)

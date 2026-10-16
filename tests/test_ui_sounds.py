@@ -1,12 +1,29 @@
-"""Звук, названный в JD.qml, но не собранный в island/sounds, просто молчал — ни ошибки, ни тоста."""
-import re
+"""Звуки интерфейса были писклявыми и играли вдвое: он потребовал мягкие, без высоких тонов."""
+import wave
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import numpy as np
+
+from justday import audio
+
+SOUNDS = Path(__file__).resolve().parent.parent / "island" / "sounds"
 
 
-def test_каждый_звук_из_qml_есть_файлом():
-    qml = (ROOT / "island" / "JD.qml").read_text()
-    names = re.search(r'id: sfxBank\s+model: \[(.*?)\]', qml, re.S).group(1)
-    for name in re.findall(r'"(\w+)"', names):
-        assert (ROOT / "island" / "sounds" / f"{name}.wav").stat().st_size > 1000, name
+def _high_share(y: np.ndarray, sr: int) -> float:
+    spec = np.abs(np.fft.rfft(y)) ** 2
+    return spec[np.fft.rfftfreq(len(y), 1 / sr) > 2000].sum() / spec.sum()
+
+
+def test_island_sounds_have_no_shrill_highs():
+    files = sorted(SOUNDS.glob("*.wav"))
+    assert files
+    for f in files:
+        with wave.open(str(f)) as w:
+            y = np.frombuffer(w.readframes(w.getnframes()), "<i2").astype(float)
+            assert _high_share(y, w.getframerate()) < 0.01, f.name
+
+
+def test_daemon_earcons_stay_low_and_soft():
+    for kind in ("listen", "done", "error", "alarm"):
+        y = audio.earcon(kind).astype(float)
+        assert _high_share(y, 48000) < 0.02, kind

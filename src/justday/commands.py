@@ -113,6 +113,15 @@ class CommandsMixin:
         writer.close()
 
     async def _cmd_toggle(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        # Кнопка мыши «говорить»: одно нажатие зовёт, двойное — как Escape (отмена и закрыть всё,
+        # в том числе окно ввода Meta+K). Первое нажатие уже включило слух, второе его гасит.
+        now = time.monotonic()
+        double = now - getattr(self, "_toggle_at", 0.0) < 0.45
+        self._toggle_at = 0.0 if double else now
+        if double:
+            await self.cancel_all()
+            self.publish(kind="close_all")
+            return {"ok": True, "result": "cancelled"}
         return {"ok": True, "result": await self.toggle()}
 
     async def _cmd_listen(self, req: dict, writer: asyncio.StreamWriter) -> dict:

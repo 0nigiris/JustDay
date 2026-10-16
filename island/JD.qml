@@ -1860,6 +1860,7 @@ Singleton {
             notifications = [Object.assign({ ts: Qt.formatTime(new Date(), "HH:mm") }, m.notification)].concat(notifications).slice(0, 8)
             break
         case "compose": openCompose(m.text, m.context); break
+        case "close_all": answerOpen = false; closeAll(); break
         case "video_cmd": videoCommand(m.action); break
         case "card_close": card = null; break
         case "alarm_close": alarm = null; break
@@ -1878,24 +1879,25 @@ Singleton {
     // Звуки интерфейса (scripts/ui_sounds.py). Играют только когда это не мешает: не в игре и
     // не при выключенных звуках.
     readonly property bool sfxOn: island.ui_sounds !== false && !gameMode
+    // Один «голос» на все звуки: прежде на каждый звук был свой pw-play, и щелчок, открытие и
+    // «слушаю» накладывались друг на друга кашей. Теперь новый звук обрывает прежний, а наведение
+    // (hover) уступает всему, что уже звучит.
+    property string sfxNext: ""
     function sfx(name) {
         if (!sfxOn) return
-        for (let i = 0; i < sfxBank.count; i++) {
-            const e = sfxBank.objectAt(i)
-            if (e && e.name === name) { e.play(); return }
+        if (sfxVoice.running) {
+            if (name === "hover") return
+            sfxNext = name
+            sfxVoice.running = false
+            return
         }
+        sfxVoice.command = ["pw-play", "--volume=0.7", Qt.resolvedUrl("sounds/" + name + ".wav").toString().replace("file://", "")]
+        sfxVoice.running = true
     }
-    Instantiator {
-        id: sfxBank
-        model: ["hover", "click", "select", "toggle_on", "toggle_off", "drag_start", "drop", "open", "close",
-                "notify", "success", "error", "listen", "listen_end", "faceid_scan", "faceid_ok"]
+    Process {
+        id: sfxVoice
         // pw-play, а не SoundEffect: QSoundEffect в qs не декодирует даже правильный wav.
-        delegate: Process {
-            required property string modelData
-            readonly property string name: modelData
-            function play() { if (!running) running = true }
-            command: ["pw-play", "--volume=0.7", Qt.resolvedUrl("sounds/" + modelData + ".wav").toString().replace("file://", "")]
-        }
+        onRunningChanged: if (!running && jd.sfxNext !== "") { const n = jd.sfxNext; jd.sfxNext = ""; jd.sfx(n) }
     }
 
     function flash(textValue, iconName, color, act) {
