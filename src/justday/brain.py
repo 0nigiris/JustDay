@@ -185,6 +185,7 @@ class Brain:
         self._context = 0               # сколько токенов история весила в последнем шаге
         self.cancelled = False
         self._spoke_in_turn = False
+        self._used_tools = False
 
     # ---------- lifecycle ----------
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
@@ -317,6 +318,11 @@ class Brain:
         now would wait at least that long, since Claude reads it only between steps."""
         return time.monotonic() - self._tool_since if self._tool_since and self.busy else 0.0
 
+    def can_merge(self) -> bool:
+        """Ход ещё ничем не оброс: ни слова вслух, ни одного инструмента. Тогда новую фразу честнее
+        склеить с прошлой и спросить заново, чем вкидывать вторым сообщением к недодуманному ответу."""
+        return self.busy and not self._spoke_in_turn and not self._used_tools
+
     def note(self, text: str) -> None:
         """Context to prepend to the next message (e.g. what the instant path already did)."""
         self._notes.append(text)
@@ -379,6 +385,7 @@ class Brain:
         self._pending = []
         self._turn_started = time.monotonic()
         self._spoke_in_turn = False
+        self._used_tools = False
 
     async def _speak(self, text: str) -> None:
         if SILENCE.match(text) or dispatch.hands_up(text):  # «НУЖНА: opus» — просьба к демону, не речь
@@ -446,6 +453,7 @@ class Brain:
                         events.emit("narration_suppressed", text=" ".join(self._pending)[:300])
                     self._pending = []
                     self._tool_since = time.monotonic()
+                    self._used_tools = True
                     self.tool_label = humanize_tool(block.name, block.input)
                     events.emit("tool", name=block.name, input=json.dumps(block.input, ensure_ascii=False)[:2000],
                                 desc=describe_tool(block.name, block.input), label=self.tool_label)

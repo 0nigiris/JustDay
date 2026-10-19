@@ -159,6 +159,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self._clip_seen: dict = {}       # что видели в буфере на X11, где нет наблюдателя
         self._clip_procs: list = []      # запущенные wl-paste --watch
         self._spoken = 0
+        self._turn_text = ""   # просьба хода, который идёт: к ней клеится следующая реплика, если мозг ещё молчит
         self._discard_recording = False
         self._last_toggle = 0.0
         self._holding = False
@@ -496,6 +497,14 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             return
         if (local := await self.handle_local(text, source)) is not None:
             return local
+        if self.brain.busy and source in ("voice", "text") and self._turn_text and self.brain.can_merge():
+            # «найди идеи… — а ещё постройки»: он ещё думает и молчит — две реплики становятся одной просьбой
+            text = f"{self._turn_text} {text}"
+            self._cancel_gen += 1   # старый ход молча дойдёт до конца: ни «готово», ни дослушивания
+            await self.brain.interrupt()
+            events.emit("merged", text=text)
+            spawn(self.run_turn(text, source))
+            return
         if self.brain.busy:
             if self.brain.waiting_on_tool() >= SIDE_AFTER_S:
                 # the main session sits inside a long command (an upgrade, a build): an injected message would
@@ -781,6 +790,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
 
     async def run_turn(self, text: str, source: str = "voice") -> str:
         self.state = "thinking"
+        self._turn_text = text
         spoken_before = self._spoken
         gen = self._cancel_gen
         if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again
