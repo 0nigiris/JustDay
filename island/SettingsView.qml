@@ -1210,6 +1210,7 @@ Item {
                     subtitle: JD.tr("У нарисованного тела своя плотность: кот с большой головой читается мельче шарика")
                     SSlider { key: "island.mascot_size"; from: 60; to: 260; step: 10; decimals: 0; unit: JD.tr("%") }
                 }
+                Row { title: JD.tr("Шары состояний"); subtitle: JD.tr("Слушаю, думаю, ищу — живым шаром вместо кольца"); Toggle { checked: win.get("island.orbs") !== false; onToggled: v => win.set("island.orbs", v) } }
                 Row { title: JD.tr("Звуки интерфейса"); subtitle: JD.tr("Тихие, из одной гаммы; в играх молчат"); Toggle { checked: win.get("island.ui_sounds") !== false; onToggled: v => win.set("island.ui_sounds", v) } }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {

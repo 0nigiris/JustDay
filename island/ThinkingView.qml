@@ -21,7 +21,12 @@ View {
         spacing: 10
         Item {
             implicitWidth: 20; implicitHeight: 20
-            Ring { anchors.fill: parent; size: 20; visible: !JD.activityIcon }
+            Orb {
+                anchors.fill: parent; size: 20
+                visible: JD.orbsOn && !JD.activityIcon
+                orbState: JD.searchingNow ? "searching" : JD.workers > 0 ? "working" : "solving"
+            }
+            Ring { anchors.fill: parent; size: 20; visible: !JD.orbsOn && !JD.activityIcon }
             Icon { anchors.centerIn: parent; name: JD.activityIcon; implicitSize: 18; visible: !!JD.activityIcon }
         }
         Label1 {
