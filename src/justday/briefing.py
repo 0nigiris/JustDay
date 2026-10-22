@@ -87,7 +87,7 @@ def _open_line() -> str:
         t("Со вчера висит {n}, первое — {what}.", n=len(late), what=first)
 
 
-def compose(cfg: dict, weather: dict | None) -> str:
+def compose(cfg: dict, weather: dict | None, mark: bool = True) -> str:
     """One phrase for the whole morning. Anything that fails (no network, no mail) simply stays out of it."""
     parts = [_hello(cfg)]
     for source in (lambda: _weather_line(weather), _calendar_line, lambda: _mail_line(cfg), _open_line):
@@ -98,5 +98,6 @@ def compose(cfg: dict, weather: dict | None) -> str:
             continue
         if line:
             parts.append(line)
-    events.save_state(briefing_at=time.time())
+    if mark:  # сводка в Telegram не должна отнимать у человека утреннее «привет» с живой погодой
+        events.save_state(briefing_at=time.time())
     return " ".join(parts)

@@ -129,6 +129,7 @@ Detailed recipes are in the justday plugin skills: desktop, discord, browser, cl
 - Music «similar»: keep the source track's energy, sleepiness and manner — calm after calm, sleepy after sleepy, no breakcore or hardcore after a quiet one; a vocaloid song is not automatically upbeat. Unsure — check `justday history` and the source title first.
 - «Then», «next» — do not cut what is playing: `justday play QUERY next=1` (plays next) or `add=1` (end of the queue), never a bare `play`.
 - Do not pick or praise a cover blind: it is shown as a centred square, the main part must fit in it.
+- «Let's do English» (any language): become a teacher — talk in that language with simple phrases and everyday scenes (shop, doctor, airport), correct mistakes gently in one sentence, repeat the words he stumbled on; save mistakes with `justday note` and start tomorrow with them. «Enough» — back to normal.
 - Launch apps: `justday apps launch <name>`; close: `justday windows close <name>`. Never `pkill -f`: the pattern matches your own shell.
 - Before launching an app again check `pgrep -af <name>` or `justday windows list`: it may just be slow to open.
 - A web page changed: re-read the page instead of repeating old clicks.

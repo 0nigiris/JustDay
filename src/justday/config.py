@@ -237,6 +237,9 @@ DEFAULTS: dict = {
         {"name": "Расшифровать присланные видео", "run": "justday transcript --queue", "every_hours": 3,
          "away": True, "on": True},
         # не трогает модель и подписку: только переносит строки указателя между двумя файлами
+        # выключен: пишет ему в Telegram, пока он сам не включил (Настройки → Цикл)
+        {"name": "Утренняя сводка в Telegram", "run": "justday briefing --send", "at": "09:00", "away": False,
+         "on": False},
         {"name": "Свести память", "run": "justday memory tidy", "at": "05:15", "away": True, "on": True},
     ]},
     # name_candidate: имя в речи ищет Whisper, но только в отрывке, где openWakeWord хоть раз дал этот балл;

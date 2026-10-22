@@ -480,6 +480,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("telegram", help="телеграм-бот: голосом или текстом ему на телефон, где бы он ни был")
     sp.add_argument("action", choices=["voice", "send", "status"])
     sp.add_argument("text", nargs="*")
+    sp = sub.add_parser("briefing", help="утренняя сводка (календарь, почта, дела): напечатать или --send голосовым в Telegram")
+    sp.add_argument("--send", action="store_true")
     sp = sub.add_parser("habits", help="what the user usually asks around this hour (for «как обычно»)")
     sp.add_argument("--hour", type=int, help="a different hour of the day (0-23)")
     sp = sub.add_parser("scene", help="сценарии: list | run <имя> | add <имя> | forget <имя>")
@@ -1153,6 +1155,18 @@ def main(argv: list[str] | None = None) -> None:
         got = telnyx.call(a.to, text, seconds=a.seconds or telnyx.MAX_SECONDS)
         _print(got)
         return 0 if got.get("ok") else 1
+    elif a.cmd == "briefing":
+        from . import briefing
+        from . import telegram as tg
+
+        text = briefing.compose(config.load(), None, mark=False)
+        if not a.send:
+            print(text)
+        elif not tg.ready():
+            _print({"ok": False, "error": "Telegram не настроен: justday telegram status"})
+            return 1
+        else:
+            _print(tg.voice(text))
     elif a.cmd == "telegram":
         from . import telegram as tg
 
