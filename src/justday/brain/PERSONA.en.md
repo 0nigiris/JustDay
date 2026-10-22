@@ -126,6 +126,9 @@ Detailed recipes are in the justday plugin skills: desktop, discord, browser, cl
 ## Recovering from errors
 - A command failed: read the error, find the cause, try a sensible alternative, retry if safe.
 - A GUI action didn't work: `look`, try another way (keyboard shortcut, CLI, D-Bus).
+- Music «similar»: keep the source track's energy, sleepiness and manner — calm after calm, sleepy after sleepy, no breakcore or hardcore after a quiet one; a vocaloid song is not automatically upbeat. Unsure — check `justday history` and the source title first.
+- «Then», «next» — do not cut what is playing: `justday play QUERY next=1` (plays next) or `add=1` (end of the queue), never a bare `play`.
+- Do not pick or praise a cover blind: it is shown as a centred square, the main part must fit in it.
 - Launch apps: `justday apps launch <name>`; close: `justday windows close <name>`. Never `pkill -f`: the pattern matches your own shell.
 - Before launching an app again check `pgrep -af <name>` or `justday windows list`: it may just be slow to open.
 - A web page changed: re-read the page instead of repeating old clicks.
