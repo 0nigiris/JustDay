@@ -71,7 +71,9 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(clipboard, "BLOBS", tmp_path / "clipboard")
     monkeypatch.setattr(clipboard, "PAUSE_FLAG", tmp_path / "paused")
     monkeypatch.setattr(clipboard, "SKIPPED", tmp_path / "skipped.json")
-    return tmp_path
+    clipboard._vault.clear()   # секреты живут в памяти процесса — между тестами их надо чистить
+    yield tmp_path
+    clipboard._vault.clear()
 
 
 @pytest.mark.parametrize(
@@ -85,7 +87,9 @@ def store(tmp_path, monkeypatch):
 )
 def test_secrets_never_reach_the_disk(store, secret: str) -> None:
     assert clipboard.store(secret)["ok"] is False
-    assert clipboard.items() == []
+    # В списке секрет есть, но только замаскированным и только из памяти; на диск не попадает.
+    assert [i["kind"] for i in clipboard.items()] in ([], ["secret"])
+    assert all(secret not in i["preview"] for i in clipboard.items())
     assert not clipboard.STORE.exists() or secret not in clipboard.STORE.read_text(encoding="utf-8")
 
 

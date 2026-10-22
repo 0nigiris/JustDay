@@ -69,7 +69,8 @@ View {
 
         RowLayout {
             spacing: 12
-            Ring { size: 22; Layout.alignment: Qt.AlignTop; Layout.topMargin: 3 }
+            Orb { visible: JD.orbsOn; main: true; size: 22; Layout.alignment: Qt.AlignTop; Layout.topMargin: 3 }
+            Ring { size: 22; visible: !JD.orbsOn; Layout.alignment: Qt.AlignTop; Layout.topMargin: 3 }
             Flickable {
                 id: fieldFlick
                 Layout.fillWidth: true
@@ -122,6 +123,7 @@ View {
                     }
                 }
             }
+            LayoutChip { Layout.alignment: Qt.AlignTop; Layout.topMargin: 4 }
             IconButton {
                 visible: JD.micOn
                 Layout.alignment: Qt.AlignTop

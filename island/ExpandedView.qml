@@ -45,7 +45,8 @@ View {
         // ── header: who, what it is doing · time, date, weather · settings
         RowLayout {
             spacing: 14
-            Ring { size: 36 }
+            Orb { visible: JD.orbsOn; main: true; size: 36 }
+            Ring { size: 36; visible: !JD.orbsOn }
             // the status takes whatever width is left and elides: a long request (plus «Стоп») used to
             // push the whole menu past the island's right edge
             ColumnLayout {

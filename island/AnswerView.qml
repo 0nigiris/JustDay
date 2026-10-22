@@ -11,7 +11,8 @@ View {
         spacing: 12
         RowLayout {
             spacing: 10
-            Ring { size: 18 }
+            Orb { visible: JD.orbsOn; main: true; size: 18 }
+            Ring { size: 18; visible: !JD.orbsOn }
             Label1 { text: JD.assistantName; Layout.fillWidth: true }
             Label2 {
                 text: JD.dstate === "speaking" ? JD.tr("говорит")

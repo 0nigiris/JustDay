@@ -127,9 +127,11 @@ Item {
         required property int at
         readonly property bool on: at === JD.menuPick
         width: sp.tileW
-        height: 84
+        height: 94
         radius: JD.radiusRow
-        color: on ? Qt.rgba(1, 1, 1, 0.10) : (hovered ? JD.menuFill1 : "transparent")
+        color: on ? Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.28) : (hovered ? JD.menuFill1 : "transparent")
+        border.width: on ? 1 : 0
+        border.color: Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.55)
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Accessible.role: Accessible.Button
         Accessible.name: app.name
@@ -149,14 +151,14 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 name: tile.app.icon
                 fallback: "application-x-executable"
-                implicitSize: 36
-                renderSize: 72
+                implicitSize: 44
+                renderSize: 88
                 theme: true
             }
             Label2 {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: 11
+                font.pixelSize: 12
                 color: JD.text1
                 elide: Text.ElideRight
                 text: tile.app.name
@@ -302,6 +304,7 @@ Item {
                         text: JD.tr("Поиск")
                     }
                 }
+                LayoutChip { }
 
             }
         }
@@ -354,10 +357,10 @@ Item {
 
                                 Label2 {
                                     visible: !!rowItem.modelData.caption
-                                    topPadding: 6
-                                    leftPadding: 4
+                                    topPadding: 12
+                                    leftPadding: 6
                                     color: JD.text3
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     font.capitalization: Font.AllUppercase
                                     font.letterSpacing: 0.6
@@ -377,17 +380,17 @@ Item {
                                             required property int index
                                             readonly property bool current: index === sp.catIndex
                                             implicitWidth: Math.max(64, catLabel.implicitWidth + 28)
-                                            implicitHeight: 28
-                                            radius: 14
-                                            color: current ? JD.accentBlue : (hovered ? JD.menuFill1 : "transparent")
+                                            implicitHeight: 30
+                                            radius: 15
+                                            color: current ? JD.accentBlue : (hovered ? JD.menuFill2 : JD.fill1)
                                             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                                             Accessible.role: Accessible.Button
                                             Accessible.name: modelData.name
                                             Label2 {
                                                 id: catLabel
                                                 anchors.centerIn: parent
-                                                font.pixelSize: 12
-                                                color: catBtn.current ? JD.text1 : JD.text3
+                                                font.pixelSize: 13
+                                                color: catBtn.current ? "#ffffff" : JD.text2
                                                 text: catBtn.modelData.name
                                             }
                                             onClicked: sp.catIndex = index

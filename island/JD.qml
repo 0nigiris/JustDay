@@ -833,6 +833,7 @@ Singleton {
     }
     // Раскладка клавиатуры: демон узнаёт о смене сигналом плазмы и присылает уже готовое.
     property var layout: null
+    property int layoutTick: 0        // растёт на каждую смену раскладки: по нему вспыхивает LayoutChip
     readonly property string layoutShort: layout ? String(layout.id || "").toUpperCase().slice(0, 2) : ""
     function layoutNext() { send({ cmd: "layout_next" }) }
     // Спрашиваем при подключении: демон сам присылает только смены, а островок мог подключиться
@@ -1708,6 +1709,7 @@ Singleton {
             const prev = layout ? String(layout.id || "") : ""
             layout = m.layout
             const cur = layout ? String(layout.id || "") : ""
+            if (prev && cur && prev !== cur) layoutTick++
             if (prev && cur && prev !== cur)
                 showOsd("layout", 0, (layoutShort || cur).toUpperCase(), "keyboard", false)
         }

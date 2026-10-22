@@ -44,8 +44,9 @@ View {
         scale: pv.hoverScale * pv.squeeze
         transformOrigin: Item.Center
         HoverHandler { id: midHover; enabled: JD.islandStyle === "bar" }
+        Orb { visible: !JD.buddyOn && JD.orbsOn; main: true; size: 18 }
         Ring {
-            visible: !JD.buddyOn
+            visible: !JD.buddyOn && !JD.orbsOn
             size: 18
             tint: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.accentCyan
             spinning: JD.workers > 0

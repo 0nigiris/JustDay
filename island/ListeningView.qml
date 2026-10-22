@@ -10,7 +10,7 @@ View {
         anchors.leftMargin: 12
         anchors.rightMargin: 16
         spacing: 10
-        Orb { visible: JD.orbsOn; orbState: "listening"; size: 20 }
+        Orb { visible: JD.orbsOn; orbState: "listening"; size: 20; voice: JD.level }
         Ring { size: 20; visible: !JD.orbsOn }
         Label1 { text: JD.tr("Слушаю"); Layout.fillWidth: true }
         Waveform { Layout.preferredWidth: 46; Layout.preferredHeight: 22 }

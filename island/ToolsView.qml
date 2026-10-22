@@ -26,6 +26,24 @@ Item {
     readonly property string page: JD.toolsPage
     readonly property var items: JD.toolsItems || []
     readonly property var load: JD.load
+    property string bigImage: ""
+
+    // Крупный просмотр снимка из буфера: поверх списка, пока курсор на миниатюре.
+    Rectangle {
+        z: 10
+        visible: tv.bigImage !== ""
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 80, 640); height: Math.min(parent.height - 80, 440)
+        radius: 16
+        color: Qt.rgba(0.04, 0.04, 0.05, 0.97)
+        border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.14)
+        Image {
+            anchors.fill: parent; anchors.margins: 10
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            source: tv.bigImage ? "file://" + tv.bigImage : ""
+        }
+    }
 
     // Поле поиска нужно двум страницам из трёх: у нагрузки искать нечего.
     readonly property bool searchable: page === "emoji" || page === "clip" || page === "history"
@@ -329,7 +347,7 @@ Item {
                 readonly property bool editing: JD.clipEditing === modelData.id
                 readonly property bool selected: !editing && index === JD.toolsPick
                 implicitHeight: editing ? Math.max(120, editBox.implicitHeight + 58)
-                                        : (isImage ? 72 : 46)
+                                        : (isImage ? 112 : 46)
                 radius: 10
                 clip: true
                 color: editing || selected || rowHover.hovered ? JD.fill1 : "transparent"
@@ -349,22 +367,24 @@ Item {
                     // Миниатюра снимка вместо подписи «screenshot copied» / «картинка, N КБ».
                     Rectangle {
                         visible: row.isImage && !row.editing
-                        Layout.preferredWidth: 56
-                        Layout.preferredHeight: 56
+                        Layout.preferredWidth: 140
+                        Layout.preferredHeight: 98
                         radius: 8
                         color: JD.fill2
                         clip: true
+                        // Наведение раскрывает снимок крупно (tv.bigImage): мелкой миниатюры мало, чтобы понять, что там.
+                        HoverHandler { id: thumbHover; onHoveredChanged: tv.bigImage = hovered ? row.modelData.file : "" }
                         Image {
                             anchors.fill: parent
                             anchors.margins: 1
-                            fillMode: Image.PreserveAspectCrop
+                            fillMode: Image.PreserveAspectFit
                             asynchronous: true
                             source: row.modelData.file ? ("file://" + row.modelData.file) : ""
                         }
                     }
                     Icon {
                         visible: !row.isImage && !row.editing
-                        name: "file-text"
+                        name: row.modelData.kind === "secret" ? "lock" : "file-text"
                         implicitSize: 15
                         tint: JD.text3
                     }

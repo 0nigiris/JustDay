@@ -162,6 +162,32 @@ def _forget_blob(item: dict) -> None:
         Path(item["file"]).unlink(missing_ok=True)
 
 
+# Секреты (ключ API, пароль) на диск не идут никогда, но и терять их совсем нельзя: скопировал ключ,
+# потом ещё что-то, и вставлять нечего — идти за ключом обратно на сайт. Поэтому они живут только в
+# памяти демона: до 5 штук и 30 минут, после перезапуска их нет. В списке видны замаскированными.
+VAULT_MAX, VAULT_TTL = 5, 30 * 60
+_vault: dict[str, dict] = {}
+
+
+def _vault_live() -> list[dict]:
+    now = time.time()
+    for k in [k for k, v in _vault.items() if now - v["at"] > VAULT_TTL]:
+        del _vault[k]
+    return sorted(_vault.values(), key=lambda v: -v["at"])
+
+
+def _vault_add(body: str) -> None:
+    digest = hashlib.sha256(body.encode()).hexdigest()[:16]
+    _vault[digest] = {"id": digest, "at": time.time(), "kind": "secret", "size": len(body), "text": body}
+    for extra in _vault_live()[VAULT_MAX:]:
+        _vault.pop(extra["id"], None)
+
+
+def _mask(body: str) -> str:
+    body = body.strip()
+    return f"{body[:3]}{'•' * 8}{body[-2:]}" if len(body) > 8 else "•" * len(body)
+
+
 def store(text: str = "", *, image: bytes = b"", kind: str = "") -> dict:
     """Запомнить то, что попало в буфер. Ответ говорит, запомнили ли и почему нет."""
     if paused():
@@ -188,7 +214,8 @@ def store(text: str = "", *, image: bytes = b"", kind: str = "") -> dict:
             return {"ok": False, "why": "слишком длинно"}
         if looks_secret(body):
             _count_skipped()
-            return {"ok": False, "why": "похоже на пароль или ключ — не запоминаем"}
+            _vault_add(body)
+            return {"ok": False, "why": "похоже на пароль или ключ — не пишем на диск, держим в памяти"}
         digest = hashlib.sha256(body.encode()).hexdigest()[:16]
         entry = {"id": digest, "at": time.time(), "kind": kind or "text", "size": len(body),
                  "text": body}
@@ -233,6 +260,8 @@ def skipped() -> dict:
 
 def preview(item: dict) -> str:
     """Одна строка про запись — то, что видно в списке (у картинок подпись под миниатюрой)."""
+    if item.get("kind") == "secret":
+        return f"ключ или пароль · {_mask(str(item.get('text', '')))}"
     if item.get("kind") == "image":
         kb = max(1, int(item.get("size", 0)) // 1024)
         return f"снимок · {kb} КБ"
@@ -247,8 +276,10 @@ def items(limit: int = 60, query: str = "") -> list[dict]:
     к файлу для миниатюры), а полное содержимое нужно только в момент вставки или правки."""
     words = [w for w in query.lower().split() if w]
     out = []
-    for item in _sorted(_read()):
-        if words and not all(w in str(item.get("text", "")).lower() for w in words):
+    # Секреты ищутся только по слову «ключ»/«пароль»: искать по их тексту значило бы подсказывать его.
+    secrets = [v for v in _vault_live() if not words or all(w in "ключ пароль secret key" for w in words)]
+    for item in secrets + _sorted(_read()):
+        if item.get("kind") != "secret" and words and not all(w in str(item.get("text", "")).lower() for w in words):
             continue
         out.append({"id": item["id"], "at": item["at"], "kind": item.get("kind", "text"),
                     "size": item.get("size", 0), "preview": preview(item),
@@ -264,13 +295,16 @@ def get(which: str) -> dict | None:
     all_items = _read()
     if which.isdigit() and 1 <= int(which) <= len(all_items):
         return all_items[int(which) - 1]
-    return next((i for i in all_items if i["id"] == which or i["id"].startswith(which)), None)
+    return next((i for i in all_items + _vault_live() if i["id"] == which or i["id"].startswith(which)), None)
 
 
 def forget(which: str) -> bool:
     item = get(which)
     if not item:
         return False
+    if item.get("kind") == "secret":
+        _vault.pop(item["id"], None)
+        return True
     _forget_blob(item)
     _write([i for i in _read() if i["id"] != item["id"]])
     return True
@@ -278,7 +312,8 @@ def forget(which: str) -> bool:
 
 def wipe() -> int:
     """Забыть всё. Картинки удаляются с диска, а не просто теряют строку в истории."""
-    count = len(_read())
+    count = len(_read()) + len(_vault)
+    _vault.clear()
     if BLOBS.is_dir():
         shutil.rmtree(BLOBS, ignore_errors=True)
     STORE.unlink(missing_ok=True)
