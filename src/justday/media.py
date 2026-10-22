@@ -540,6 +540,9 @@ def _download(entry: dict, kind: str, progress: Callable[[float], None] | None =
     title, artist = split_title(got.get("title") or entry["title"], got.get("channel") or got.get("uploader") or "",
                                 got.get("artist") or "", got.get("track") or "")
     thumb = THUMBS / f"{got['id']}.jpg"
+    if kind == "music":
+        thumb.with_suffix(".art").unlink(missing_ok=True)  # yt-dlp только что снова положил кадр из клипа
+        album_art(thumb, title, artist)
     track = {"id": got["id"], "kind": kind, "title": title, "artist": artist, "duration": int(got.get("duration") or 0),
              "file": got["filepath"], "thumb": str(thumb) if thumb.exists() else "",
              "url": got.get("webpage_url") or entry["url"], "played": time.time()}
@@ -553,6 +556,37 @@ def cached_track(entry: dict, kind: str = "music") -> dict | None:
     """The already downloaded track for this video, if the file is still there."""
     got = _load_index().get(f"{kind}:{entry['id']}")
     return got if got and Path(got.get("file", "")).exists() else None
+
+
+def album_art(path: str | Path, title: str, artist: str) -> None:
+    """Replaces the YouTube frame at `path` with the real square album art (iTunes search, no key).
+
+    Беда 22 окт.: «Kanaria — BRAIN» показывалась обрезкой кадра из клипа — лицо с белым фоном вместо
+    обложки. Ищем студийную обложку по исполнителю и названию; берём её, только если совпало и то и
+    другое, иначе остаётся кадр. Наружу уходят лишь название и исполнитель песни."""
+    import urllib.parse
+    import urllib.request
+
+    path = Path(path)
+    mark = path.with_suffix(".art")
+    if not path.exists() or mark.exists() or not title:
+        return
+    mark.touch()  # одна попытка на песню: не нашлось сейчас — не найдётся и через минуту
+    q = urllib.parse.urlencode({"term": f"{artist} {title}".strip(), "media": "music", "entity": "song", "limit": 5})
+    try:
+        with urllib.request.urlopen(f"https://itunes.apple.com/search?{q}", timeout=6) as r:
+            hits = json.loads(r.read()).get("results", [])
+        norm = lambda x: re.sub(r"\W+", "", x.lower())  # noqa: E731
+        hit = next((h for h in hits if norm(title) in norm(h.get("trackName", ""))
+                    and (not artist or norm(artist) in norm(h.get("artistName", "")))), None)
+        if not hit or not hit.get("artworkUrl100"):
+            return
+        with urllib.request.urlopen(hit["artworkUrl100"].replace("100x100", "600x600"), timeout=8) as r:
+            data = r.read()
+        if len(data) > 2000:
+            path.write_bytes(data)
+    except (OSError, ValueError):
+        return
 
 
 def fetch_thumb(entry: dict) -> str:
@@ -584,6 +618,7 @@ def stream_track(entry: dict) -> dict:
         raise RuntimeError((r.stderr.strip().splitlines() or ["cannot open the stream"])[-1][:300])
     title, artist = split_title(entry["title"], entry["channel"])
     thumb = fetch_thumb(entry)
+    album_art(thumb, title, artist)
     return {"id": entry["id"], "kind": "music", "title": title, "artist": artist,
             "duration": int(entry.get("duration") or 0), "file": url[0], "thumb": thumb,
             "color": thumb_color(thumb) if thumb else "", "url": entry["url"], "streaming": True}
