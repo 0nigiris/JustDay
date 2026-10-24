@@ -22,7 +22,7 @@ UNITS = {"сек": 1, "секунд": 1, "минут": 60, "мин": 60, "час
 _WORD_NUM = {"полминуты": 30, "полчаса": 1800, "полтора часа": 5400, "полторы минуты": 90,
              "час": 3600, "часик": 3600, "минуту": 60, "минутку": 60, "минуточку": 60, "секунду": 1}
 _SPAN = re.compile(r"(\d+(?:[.,]\d+)?)\s*(сек\w*|мин\w*|час\w*|second\w*|sec\b|minute\w*|min\b|hour\w*|\bh\b|\bm\b|\bs\b)", re.I)
-_AT = re.compile(r"\b(?:в|к|на|at)\s+([01]?\d|2[0-3])[:.]([0-5]\d)\b"
+_AT = re.compile(r"\b(?:в|к|на|at)\s+([01]?\d|2[0-3])(?:[:.]|\s+|-)([0-5]\d)\b(?!\s*(?:сек|мин|час|second|minute|hour))"
                  r"|\b(?:в|к|на|at)\s+([01]?\d|2[0-3])\s*(?:час\w*|o'?clock|(?=\s*(?:утра|вечера|дня|ночи|am|pm)))", re.I)
 _DAYPART = re.compile(r"\b(утра|вечера|дня|ночи|am|pm)\b", re.I)
 
@@ -160,13 +160,36 @@ def digits(text: str) -> str:
     return _NUMWORD.sub(sub, text)
 
 
+_ORD = {"первого": 1, "второго": 2, "третьего": 3, "четвёртого": 4, "четвертого": 4, "пятого": 5, "шестого": 6,
+        "седьмого": 7, "восьмого": 8, "девятого": 9, "десятого": 10, "одиннадцатого": 11, "двенадцатого": 12}
+_HALF = re.compile(r"\b(?:в |на |к )?(?:пол|половин\w*)\s*(" + "|".join(_ORD) + r")\b", re.I)
+_WITHOUT = re.compile(r"\b(?:в |на |к )?без\s+(\d+|пяти|десяти|пятнадцати|двадцати)\s*(?:минут\w*)?\s+(\d{1,2})\b", re.I)
+_WITHOUT_N = {"пяти": 5, "десяти": 10, "пятнадцати": 15, "двадцати": 20}
+_BARE_HOUR = re.compile(r"\b(?:в|на|к|at)\s+([01]?\d|2[0-3])\b(?!\s*[:.\d]|\s*(?:сек|мин|час|раз|штук|second|minute|hour))", re.I)
+
+
+def clock_words(text: str) -> str:
+    """«половину седьмого» → «на 6:30», «без пятнадцати семь» → «на 6:45»: колонка понимает так, и человек
+    так говорит чаще, чем «шесть тридцать»."""
+    def half(m: re.Match) -> str:
+        h = _ORD[m[1].lower()]
+        return f"на {(h - 1) or 12}:30"
+
+    def without(m: re.Match) -> str:
+        mins = _WITHOUT_N.get(m[1].lower()) or int(m[1])
+        h = int(m[2])
+        return f"на {(h - 1) or 12}:{60 - mins:02d}"
+    return _WITHOUT.sub(without, _HALF.sub(half, text))
+
+
 _SPAN_FIRST = re.compile(r"\b(мин\w*|час\w*|сек\w*)\s+(?:на\s+)?(\d+)\b", re.I)
 _START_WORDS = re.compile(r"\b(засеки|засекай|отсчитай|засечь)\b", re.I)
 
 
 def parse(text: str) -> dict | None:
     """One spoken line → what to do: {action: set|cancel|list, ...}. None when it is not about time at all."""
-    text = _SPAN_FIRST.sub(lambda m: f"{m[2]} {m[1]}", digits(text.strip()))
+    text = re.sub(r"(?<=\w)-ка\b", "", text.strip())     # «включи-ка» — частица, а не часть названия
+    text = clock_words(_SPAN_FIRST.sub(lambda m: f"{m[2]} {m[1]}", digits(clock_words(text))))
     low = text.lower()
     if _START_WORDS.search(low) and not TIMER_WORDS.search(low):
         # «засеки две минуты» — это таймер, хоть слова «таймер» и нет
@@ -182,6 +205,8 @@ def parse(text: str) -> dict | None:
     if LEFT_WORDS.search(low) and THING_WORDS.search(low):
         return {"action": "list"}
     at = parse_time(low)
+    if at is None and wants_alarm and (b := _BARE_HOUR.search(low)):       # «будильник на 7»: ровно семь часов
+        at = parse_time(f"на {b[1]}:00 {low[b.end():b.end() + 12]}")
     span = None if at else parse_span(low)
     if at is None and span is None:
         return None
@@ -197,7 +222,7 @@ _LABEL_CUT = re.compile(
     r"напомни|напоминание|разбуди( меня)?|будильник|таймер|мне|на|через|в|к|set|start|a|an|the|remind( me)?|timer|alarm|wake me( up)?)\b",
     re.I)
 _LABEL_STRIP = re.compile(r"\b(на|через|в|к|at|in|for)?\s*\d+(?:[.,]\d+)?\s*(сек\w*|мин\w*|час\w*|second\w*|minute\w*|hour\w*)\b|"
-                          r"\b(?:в|к|на|at)\s+\d{1,2}(?:[:.]\d{2})?\s*(?:утра|вечера|дня|ночи|am|pm|час\w*)?\b|"
+                          r"\b(?:в|к|на|at)\s+\d{1,2}(?:(?:[:.]|\s+|-)[0-5]\d\b)?\s*(?:утра|вечера|дня|ночи|am|pm|час\w*)?\b|"
                           r"\b(полчаса|полтора часа|полторы минуты|полминуты|часик|час|минуточку|минутку|минуту|секунду)\b", re.I)
 
 
