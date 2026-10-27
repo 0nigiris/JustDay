@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import urllib.request
+from typing import ClassVar
 
 import numpy as np
 
@@ -290,6 +291,8 @@ class TTS:
     ELEVEN_RATE = 24000
     ELEVEN_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream?output_format=pcm_24000&optimize_streaming_latency=3"
 
+    _eleven_dead: ClassVar[dict[str, float]] = {}   # ключ → до какого времени считаем его кончившимся
+
     def eleven_key(self) -> str:
         return config.secret("ELEVENLABS_API_KEY")
 
@@ -302,29 +305,40 @@ class TTS:
         import urllib.error
         import urllib.request
 
-        key = self.eleven_key()
-        if not key:
+        keys = [k for k in config.secrets("ELEVENLABS_API_KEY") if self._eleven_dead.get(k, 0) < time.time()]
+        if not keys:
             raise OSError("no ElevenLabs key (justday voice key)")
         speed = max(0.7, min(1.2, self.speed))   # the API's own range; the rest is done by timestretch
         body = jsonlib.dumps({"text": sentence, "model_id": self.cfg.get("eleven_model", "eleven_flash_v2_5"),
                               "voice_settings": {"stability": 0.45, "similarity_boost": 0.75, "speed": speed}},
                              ensure_ascii=False).encode()
-        req = urllib.request.Request(self.ELEVEN_URL.format(voice=self.cfg.get("eleven_voice", "")), data=body,
-                                     headers={"xi-api-key": key, "content-type": "application/json"})
+        url = self.ELEVEN_URL.format(voice=self.cfg.get("eleven_voice", ""))
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue(maxsize=32)
 
         def pump() -> None:
-            try:
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    while True:
-                        chunk = r.read(8192)
-                        if not chunk:
-                            break
-                        loop.call_soon_threadsafe(queue.put_nowait, chunk)
-                loop.call_soon_threadsafe(queue.put_nowait, None)
-            except (urllib.error.URLError, OSError, ValueError) as e:
-                loop.call_soon_threadsafe(queue.put_nowait, e)
+            err: BaseException = OSError("no key")
+            for key in keys:
+                req = urllib.request.Request(url, data=body, headers={"xi-api-key": key, "content-type": "application/json"})
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as r:
+                        while True:
+                            chunk = r.read(8192)
+                            if not chunk:
+                                break
+                            loop.call_soon_threadsafe(queue.put_nowait, chunk)
+                    loop.call_soon_threadsafe(queue.put_nowait, None)
+                    return
+                except urllib.error.HTTPError as e:
+                    err = e
+                    if e.code in (401, 402, 429):   # ключ кончился или не принят: час не трогаем, пробуем следующий
+                        self._eleven_dead[key] = time.time() + 3600
+                        continue
+                    break
+                except (urllib.error.URLError, OSError, ValueError) as e:
+                    err = e
+                    break
+            loop.call_soon_threadsafe(queue.put_nowait, err)
 
         await asyncio.to_thread(lambda: None)  # keep the thread pool warm
         task = loop.run_in_executor(None, pump)

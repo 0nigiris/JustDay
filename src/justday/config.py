@@ -47,6 +47,17 @@ def secret(name: str) -> str:
     return _mcp_secret(name)
 
 
+def secrets(name: str) -> list[str]:
+    """Ключ и его запасные: NAME, NAME_2, NAME_3… Свой кончился (лимит ElevenLabs) — берут следующий, например
+    ключ друга. Пустые пропускаются, повторы тоже."""
+    out: list[str] = []
+    for n in [name] + [f"{name}_{i}" for i in range(2, 6)]:
+        v = secret(n)
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
 _KEYRING_CACHE: dict[str, str] = {}
 
 
