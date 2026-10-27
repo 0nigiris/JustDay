@@ -687,6 +687,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("version")
     sp = sub.add_parser("update", help="update JustDay from GitHub (git pull + install.sh); --check only looks")
     sp.add_argument("--check", action="store_true")
+    sp.add_argument("--back", action="store_true", help="вернуть версию, что стояла до последнего обновления")
 
     a = p.parse_args(argv)
 
@@ -1321,6 +1322,27 @@ def main(argv: list[str] | None = None) -> None:
         from . import manage
 
         _print(manage.autostart(None if a.state == "status" else a.state))
+    elif a.cmd == "update" and a.back:
+        # Откат: ветка возвращается на версию, записанную перед прошлым обновлением. Следующее `justday update`
+        # снова пойдёт вперёд (pull --ff-only), так что откат сам ничего не теряет.
+        from . import parts
+
+        prev = config.STATE_DIR / "previous-version"
+        sha = prev.read_text().strip() if prev.exists() else ""
+        if not re.fullmatch(r"[0-9a-f]{7,40}", sha):
+            sys.exit("нет записанной прошлой версии: обновления ещё не было")
+        repo = str(config.REPO_DIR)
+        if subprocess.run(["git", "-C", repo, "status", "--porcelain", "--untracked-files=no"],
+                          capture_output=True, text=True).stdout.strip():
+            sys.exit("в папке JustDay есть ваши изменения — откат остановлен, чтобы их не потерять")
+        branch = subprocess.run(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],
+                                capture_output=True, text=True).stdout.strip()
+        if subprocess.run(["git", "-C", repo, "checkout", "--quiet", "-B", branch, sha]).returncode != 0:
+            sys.exit("откат не удался")
+        print(f"Вернул версию {sha[:7]}")
+        env = {**os.environ, "JUSTDAY_SETUP": "0", "JUSTDAY_YES": "1", "JUSTDAY_KEEP_UI": "1",
+               "JUSTDAY_PARTS": ",".join(parts.installed()) or "-"}
+        sys.exit(subprocess.run([str(config.REPO_DIR / "install.sh")], env=env).returncode)
     elif a.cmd == "update":
         from . import manage
 
@@ -1334,6 +1356,9 @@ def main(argv: list[str] | None = None) -> None:
         if st["local_changes"]:
             sys.exit("в папке JustDay есть ваши изменения — обновление остановлено, чтобы их не потерять (git stash)")
         print(f"Обновляю: {st['behind']} изменений\n  " + "\n  ".join(st["changes"]))
+        here = subprocess.run(["git", "-C", str(config.REPO_DIR), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        if here:     # откат `update --back` вернётся именно сюда
+            (config.STATE_DIR / "previous-version").write_text(here + "\n")
         git_run = lambda *g: subprocess.run(["git", "-C", str(config.REPO_DIR), *g]).returncode  # noqa: E731
         ch = st["branch"]
         if st.get("on") != ch:      # ставились из main, а канал другой: переезжаем на него целиком

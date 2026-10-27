@@ -993,7 +993,7 @@ class CommandsMixin:
 
         if self._peer_is_ai(writer):
             return {"ok": False, "error": "обновляет человек: кнопкой"}
-        return await asyncio.get_running_loop().run_in_executor(None, modules.update_in_background)
+        return await asyncio.get_running_loop().run_in_executor(None, modules.update_in_background, bool(req.get("back")))
 
     async def _cmd_parts_install(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Этап 2 установки из острова: доставить выбранные части в фоне. Качает гигабайты: решает человек."""

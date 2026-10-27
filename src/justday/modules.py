@@ -59,7 +59,7 @@ def restart(mid: str) -> dict:
     return {"ok": done.returncode == 0, "how": "restart", "error": done.stderr.strip()[:200]}
 
 
-def update_in_background() -> dict:
+def update_in_background(back: bool = False) -> dict:
     """`justday update` отдельной службой systemd: она переживает рестарт демона, который сама и вызывает,
     и ничего не открывает на экране. Остров не перезапускается (`JUSTDAY_KEEP_UI`), QML подхватится сам.
     По окончании приходит обычное уведомление."""
@@ -69,8 +69,9 @@ def update_in_background() -> dict:
     if _systemctl("is-active", f"{UPDATE_UNIT}.service").stdout.strip() == "active":
         return {"ok": True, "already": True}
     notify = ("notify-send -a JustDay -i software-update-available JustDay "
-              "\"$( [ $rc = 0 ] && echo 'Обновление готово' || echo 'Обновление не удалось: justday update' )\"")
-    script = f'{cli} update >"{config.STATE_DIR}/update.log" 2>&1; rc=$?; {notify}'
+              "\"$( [ $rc = 0 ] && echo '%s' || echo 'Не удалось: justday update%s' )\"" % (
+                  ("Прошлая версия возвращена", " --back") if back else ("Обновление готово", "")))
+    script = f'{cli} update{" --back" if back else ""} >"{config.STATE_DIR}/update.log" 2>&1; rc=$?; {notify}'
     done = subprocess.run(
         ["systemd-run", "--user", "--collect", f"--unit={UPDATE_UNIT}", "--setenv=JUSTDAY_KEEP_UI=1",
          "--description=JustDay: обновление", "bash", "-c", script],
