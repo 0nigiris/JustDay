@@ -582,6 +582,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("module", help="отдельные части JustDay: list | restart ID (остров только перерисовывается, док остаётся)")
     sp.add_argument("action", choices=["list", "restart"])
     sp.add_argument("id", nargs="?", default="")
+    sub.add_parser("ladders", help="лестницы: кто работает сейчас и кто подхватит (нейросеть, голос)")
     sp = sub.add_parser("suitcase", help="чемодан: перенос настроек и ключей на другой ПК одним файлом под паролем (export ФАЙЛ | import ФАЙЛ)")
     sp.add_argument("action", choices=["export", "import"])
     sp.add_argument("file")
@@ -1419,6 +1420,8 @@ def main(argv: list[str] | None = None) -> None:
         from . import modules
 
         _print(modules.listing() if a.action == "list" else modules.restart(a.id))
+    elif a.cmd == "ladders":
+        _print(control("ladders"))
     elif a.cmd == "suitcase":
         import getpass
 

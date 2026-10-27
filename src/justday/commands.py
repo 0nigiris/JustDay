@@ -967,6 +967,10 @@ class CommandsMixin:
         variants = self._spotter.variants if self._spotter else namespot.spellings(self._wake_names(self.cfg))
         self.publish(kind="wake_check", heard=text, matched=bool(text) and namespot.split_name(text, variants)[0])
 
+    async def _cmd_ladders(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        from . import ladders
+        return {"ok": True, "cards": await asyncio.to_thread(ladders.cards, self.cfg)}
+
     async def _cmd_modules(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         from . import modules
 

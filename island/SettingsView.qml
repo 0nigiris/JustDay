@@ -3151,6 +3151,21 @@ Item {
                     }
                 }
             }
+            GroupTitle { text: JD.tr("ЛЕСТНИЦЫ") }
+            Group {
+                id: ladGroup
+                property var cards: []
+                // Одна строка на модуль: «● работает сейчас → следующий → запасной»; ступень без ключа помечена.
+                function chain(c) {
+                    return c.rungs.map(r => (r.now ? "● " : "") + r.name + (r.model ? " (" + r.model + ")" : "") + (r.ready ? "" : " — " + r.note)).join("  →  ")
+                }
+                function load() { win.run(["ladders"], v => { ladGroup.cards = (v && v.cards) || [] }) }
+                Component.onCompleted: load()
+                Repeater {
+                    model: ladGroup.cards
+                    Row { required property var modelData; title: modelData.title; subtitle: ladGroup.chain(modelData) }
+                }
+            }
             GroupTitle { text: JD.tr("ОБНОВЛЕНИЯ") }
             Group {
                 id: updGroup
