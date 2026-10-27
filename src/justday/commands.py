@@ -410,7 +410,16 @@ class CommandsMixin:
         return {"ok": True}
 
     async def _cmd_chat_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        await asyncio.to_thread(chats.sweep, self.cfg["brain"].get("chat_keep_days", 7))
         return {"ok": True, "chats": await asyncio.to_thread(chats.listing, str(req.get("query", "")))}
+
+    async def _cmd_chat_pin(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Закрепить (pinned=true) или открепить задачу: закреплённая не уходит в архив по сроку."""
+        cid = str(req.get("id", ""))
+        if not await asyncio.to_thread(chats.exists, cid):
+            return {"ok": False, "error": "no chat"}
+        await asyncio.to_thread(chats.set_meta, cid, pinned=bool(req.get("pinned", True)))
+        return {"ok": True}
 
     async def _cmd_chat_new(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "id": await asyncio.to_thread(chats.create)}

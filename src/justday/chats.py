@@ -125,9 +125,24 @@ def listing(query: str = "") -> list[dict]:
         msgs = [r for r in rows if not r.get("meta")]
         if query and query.lower() not in (m.get("title", "") + " ".join(r["text"] for r in msgs)).lower():
             continue
-        out.append({"id": p.stem, "title": m.get("title") or "Новый чат",
+        out.append({"id": p.stem, "title": m.get("title") or "Новый чат", "pinned": bool(m.get("pinned")),
                     "ts": msgs[-1]["ts"] if msgs else m.get("created", 0)})
     return sorted(out, key=lambda c: -c["ts"])
+
+
+def sweep(keep_days: float) -> int:
+    """Большие задачи живут keep_days дней после последнего слова, закреплённые — всегда. Старые не удаляются, а
+    уезжают в chats/архив/: передумал — вернул файл на место. 0 дней — не убирать ничего."""
+    if keep_days <= 0:
+        return 0
+    old = time.time() - keep_days * 86400
+    moved = 0
+    for c in listing():
+        if c["ts"] < old and not meta(c["id"]).get("pinned"):
+            (chats_dir() / "архив").mkdir(exist_ok=True)
+            _path(c["id"]).replace(chats_dir() / "архив" / f"{c['id']}.jsonl")
+            moved += 1
+    return moved
 
 
 def delete(chat_id: str) -> bool:

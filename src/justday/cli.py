@@ -366,6 +366,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("approve", help="allow the action JustDay is asking about")
     sub.add_parser("deny", help="deny the action JustDay is asking about")
     sub.add_parser("chat", help="открыть окно чата с ассистентом (ответы в нём не озвучиваются)")
+    sp = sub.add_parser("chats", help="отдельные задачи-чаты: find ТЕКСТ (есть ли готовая) | pin ID | unpin ID (закреплённые не уходят в архив)")
+    sp.add_argument("action", choices=["find", "pin", "unpin"])
+    sp.add_argument("arg", nargs="*")
     sp = sub.add_parser("compose", help="keyboard shortcut: open the island's text field (takes the selected text along)")
     sp.add_argument("text", nargs="*")
     sp.add_argument("--no-selection", action="store_true")
@@ -706,6 +709,11 @@ def main(argv: list[str] | None = None) -> None:
         _print(control(a.cmd))
     elif a.cmd == "chat":
         control("chat_open")
+    elif a.cmd == "chats":
+        if a.action == "find":
+            _print(control("chat_list", query=" ".join(a.arg)))
+        else:
+            _print(control("chat_pin", id=" ".join(a.arg), pinned=a.action == "pin"))
     elif a.cmd == "compose":
         _print(control("compose", text=" ".join(a.text), context={} if a.no_selection else _screen_context()))
     elif a.cmd == "status":
