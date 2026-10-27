@@ -13,3 +13,6 @@ __pycache__/
 # local agent backups
 *.bak*
 *.bak-*
+
+# сборка пакета
+dist/
