@@ -16,3 +16,35 @@ __pycache__/
 
 # сборка пакета
 dist/
+
+# Только для разработки: лежат у владельца на диске, пользователю в репозитории не нужны
+ПЕРЕДАЧА.md
+CLAUDE.md
+AGENTS.md
+.claude
+.qmllint-baseline
+docs/archive
+docs/reports
+docs/ссылки
+docs/ЕГО-ЗАДАЧИ.md
+docs/ЕГО-СЛОВА.md
+docs/ИЗ-ВИДЕО-16-октября.md
+docs/ОЧИСТКА-СПИСОК.md
+docs/ПЛАН-СЕЙЧАС.md
+docs/ПЛАН.md
+docs/ПОЛОМКА-studio-edit.md
+docs/ПРАВИЛА.md
+docs/РЕВИЗИЯ-2.md
+docs/РЕВИЗИЯ.md
+docs/РЕПОРТ_музыка_и_обложки.md
+docs/ЧТО-СДЕЛАНО.md
+docs/COUCOU.md
+docs/логотип.json
+docs/assets/снимки-7-октября
+scripts/promote-stable.sh
+scripts/qmllint-ratchet.sh
+scripts/shot.sh
+scripts/snapshot.sh
+scripts/stop-check.sh
+scripts/verification-loop.sh
+.pre-commit-config.yaml
