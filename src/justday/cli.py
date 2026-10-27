@@ -634,7 +634,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("parts", help="необязательные части окружения (речь, голос, CUDA): "
                                      "`justday parts` показывает, что стоит; add/remove доставляет и убирает")
-    sp.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove"])
+    sp.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove", "json"])
     sp.add_argument("names", nargs="*", help="speech | voice | cuda")
     # ─── панель управления: эмодзи, буфер обмена, нагрузка ───
     sp = sub.add_parser("emoji", help="выбиралка эмодзи: поиск по-русски, вставка в то окно, где курсор "
@@ -1918,6 +1918,10 @@ def _parts_cmd(action: str, names: list[str]) -> int:
     """Необязательные части окружения: посмотреть, доставить, убрать."""
     from . import parts
 
+    if action == "json":     # для настроек острова
+        _print([{"name": n, "size": p.size, "what": p.what, "without": p.without, "have": parts.have(n)}
+                for n, p in parts.PARTS.items()])
+        return 0
     if action == "list":
         print("Части JustDay\n")
         for name, part in parts.PARTS.items():

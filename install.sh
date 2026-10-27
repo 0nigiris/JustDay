@@ -7,6 +7,7 @@
 #   --everything        speech recognition, the neural voice and NVIDIA acceleration
 #   --setup             ask again on an existing install (parts, screen, model, voice)
 #   --no-gpu            the same without the 2.2 GB of CUDA libraries
+#   --island            stage one only: the island and nothing else (no downloads); the rest is added from its settings
 #   --text-only         no microphone, no voice: 250 MB, commands typed
 #   --parts a,b,c       exactly these: speech, voice, cuda
 #   --yes               do not ask anything, take what fits this computer
@@ -38,11 +39,12 @@ DEBUG=${JUSTDAY_DEBUG:-0}
 ASK=1; [[ "${JUSTDAY_YES:-}" == 1 ]] && ASK=0
 CHANNEL=""                     # пусто = стабильная, если она есть; --beta / --stable выбирают явно
 WANT="${JUSTDAY_PARTS-}"       # пусто = ещё не выбрано; "-" = ничего необязательного
-usage() { sed -n '2,20p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,21p' "${BASH_SOURCE[0]:-$0}" | sed 's/^# \{0,1\}//'; exit 0; }
 while (($#)); do
   case "$1" in
     --everything|--all|--full) WANT="speech,voice,cuda"; ASK=0 ;;
     --no-gpu|--cpu)           WANT="speech,voice"; ASK=0 ;;
+    --island)                 WANT="-"; SCREEN=island; ASK=0 ;;
     --text-only|--minimal)    WANT="-"; ASK=0 ;;
     --parts)                  WANT="${2:-}"; ASK=0; shift ;;
     --parts=*)                WANT="${1#*=}"; ASK=0 ;;

@@ -76,3 +76,25 @@ def update_in_background() -> dict:
          "--description=JustDay: обновление", "bash", "-c", script],
         capture_output=True, text=True, timeout=15)
     return {"ok": done.returncode == 0, "error": done.stderr.strip()[:200]}
+
+
+def parts_in_background(names: list[str]) -> dict:
+    """Доставить необязательные части (речь, голос, CUDA) службой systemd: этап 2 установки идёт в фоне, пока
+    человек уже пользуется островом. Имена проверяются по списку: в командную строку попадает только известное."""
+    from . import parts
+
+    bad = [n for n in names if n not in parts.PARTS]
+    cli = shutil.which("justday")
+    if bad or not names:
+        return {"ok": False, "error": f"неизвестные части: {', '.join(bad) or 'не названы'}"}
+    if not cli or not shutil.which("systemd-run"):
+        return {"ok": False, "error": "нет justday или systemd-run"}
+    if _systemctl("is-active", "justday-parts.service").stdout.strip() == "active":
+        return {"ok": True, "already": True}
+    notify = ("notify-send -a JustDay JustDay "
+              "\"$( [ $rc = 0 ] && echo 'Части установлены' || echo 'Часть не поставилась: justday parts' )\"")
+    script = f'{cli} parts add {" ".join(names)} >"{config.STATE_DIR}/parts.log" 2>&1; rc=$?; {notify}'
+    done = subprocess.run(["systemd-run", "--user", "--collect", "--unit=justday-parts",
+                           "--description=JustDay: доставка частей", "bash", "-c", script],
+                          capture_output=True, text=True, timeout=15)
+    return {"ok": done.returncode == 0, "error": done.stderr.strip()[:200]}

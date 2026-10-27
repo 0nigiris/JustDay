@@ -17,3 +17,13 @@ def test_island_restart_is_a_touch_not_a_kill(tmp_path, monkeypatch):
 
 def test_unknown_module_is_refused():
     assert modules.restart("rm -rf")["ok"] is False
+
+
+def test_unknown_part_is_refused_before_systemd(monkeypatch):
+    """Этап 2 установки качает гигабайты по команде из острова: чужое имя части не должно дойти до командной строки."""
+    from justday import modules
+
+    ran = []
+    monkeypatch.setattr(modules.subprocess, "run", lambda *a, **k: ran.append(a))
+    got = modules.parts_in_background(["speech; rm -rf ~"])
+    assert not got["ok"] and not ran

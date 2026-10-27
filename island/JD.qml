@@ -204,6 +204,7 @@ Singleton {
 
     property var nextEvent: null      // calendar event starting within 2 hours
     property var update: null      // {behind, changes} when GitHub has a newer version
+    function installParts(names) { send({ cmd: "parts_install", names: names }) }
     function runUpdate() { send({ cmd: "update_run" }); closeAll() }
 
     // ── Режим сервера из меню пуска ──

@@ -3151,6 +3151,27 @@ Item {
                     }
                 }
             }
+            GroupTitle { text: JD.tr("ЧАСТИ") }
+            Group {
+                id: partsGroup
+                property var list: []
+                property string busyId: ""
+                function load() { win.run(["parts", "json"], v => { partsGroup.list = v || [] }) }
+                Component.onCompleted: load()
+                Repeater {
+                    model: partsGroup.list
+                    Row {
+                        required property var modelData
+                        title: modelData.name + " · " + modelData.size
+                        subtitle: modelData.have ? modelData.what : modelData.what + ". " + JD.tr("Без неё: ") + modelData.without
+                        Btn {
+                            visible: !modelData.have
+                            glyph: "download"; text: JD.tr("Поставить"); busy: partsGroup.busyId === modelData.name
+                            onClicked: { partsGroup.busyId = modelData.name; JD.installParts([modelData.name]) }
+                        }
+                    }
+                }
+            }
             GroupTitle { text: JD.tr("ЛЕСТНИЦЫ") }
             Group {
                 id: ladGroup

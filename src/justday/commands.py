@@ -995,6 +995,15 @@ class CommandsMixin:
             return {"ok": False, "error": "обновляет человек: кнопкой"}
         return await asyncio.get_running_loop().run_in_executor(None, modules.update_in_background)
 
+    async def _cmd_parts_install(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Этап 2 установки из острова: доставить выбранные части в фоне. Качает гигабайты: решает человек."""
+        from . import modules
+
+        if self._peer_is_ai(writer):
+            return {"ok": False, "error": "ставит человек: кнопкой"}
+        names = [str(n) for n in (req.get("names") or [])]
+        return await asyncio.get_running_loop().run_in_executor(None, modules.parts_in_background, names)
+
     async def _cmd_terminal_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Показать одно из заранее известных действий в окне терминала (обновление, журнал, голос)."""
         if self._peer_is_ai(writer):
