@@ -576,6 +576,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("key", nargs="?")
     sp.add_argument("value", nargs="?")
     sub.add_parser("restart", help="restart the daemon and start a fresh conversation (after model changes)")
+    sp = sub.add_parser("module", help="отдельные части JustDay: list | restart ID (остров только перерисовывается, док остаётся)")
+    sp.add_argument("action", choices=["list", "restart"])
+    sp.add_argument("id", nargs="?", default="")
     sp = sub.add_parser("secret", help="store an API key / password in the desktop keyring")
     sp.add_argument("action", choices=["set", "check"])
     sp.add_argument("name", help="openrouter | deepseek | custom | mail")
@@ -1401,6 +1404,10 @@ def main(argv: list[str] | None = None) -> None:
         r = control("confirm_message", timeout=140, to=a.to, via=a.via, text=a.text)
         print(r.get("result") if r.get("ok") else f"error: {r.get('error')}")
         sys.exit(0 if r.get("ok") else 1)
+    elif a.cmd == "module":
+        from . import modules
+
+        _print(modules.listing() if a.action == "list" else modules.restart(a.id))
     elif a.cmd == "restart":
         subprocess.run(["systemctl", "--user", "restart", "justday.service"], check=True)
         for _ in range(60):

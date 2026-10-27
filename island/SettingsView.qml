@@ -3130,6 +3130,27 @@ Item {
                 Row { title: JD.tr("Лицензия"); subtitle: JD.tr("GNU GPL v3 · © 2026 0nigiris · иконки Lucide (ISC)") }
                 Row { title: JD.tr("Исходный код"); subtitle: "github.com/0nigiris/JustDay"; Btn { glyph: "external-link"; text: "GitHub"; onClicked: JD.openExternal("https://github.com/0nigiris/JustDay") } }
             }
+            GroupTitle { text: JD.tr("МОДУЛИ") }
+            Group {
+                id: modGroup
+                property var list: []
+                property string busyId: ""
+                function load() { win.run(["module", "list"], v => { modGroup.list = v || [] }) }
+                Component.onCompleted: load()
+                Repeater {
+                    model: modGroup.list
+                    Row {
+                        required property var modelData
+                        title: modelData.title
+                        subtitle: modelData.active ? JD.tr("работает") : JD.tr("не запущен")
+                        Btn {
+                            glyph: "refresh-cw"; text: modelData.id === "island" ? JD.tr("Перерисовать") : JD.tr("Перезапустить")
+                            busy: modGroup.busyId === modelData.id
+                            onClicked: { modGroup.busyId = modelData.id; win.run(["module", "restart", modelData.id], v => { modGroup.busyId = ""; modGroup.load() }) }
+                        }
+                    }
+                }
+            }
             GroupTitle { text: JD.tr("ОБНОВЛЕНИЯ") }
             Group {
                 id: updGroup

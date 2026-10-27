@@ -958,6 +958,30 @@ class CommandsMixin:
         variants = self._spotter.variants if self._spotter else namespot.spellings(self._wake_names(self.cfg))
         self.publish(kind="wake_check", heard=text, matched=bool(text) and namespot.split_name(text, variants)[0])
 
+    async def _cmd_modules(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        from . import modules
+
+        return {"ok": True, "modules": await asyncio.get_running_loop().run_in_executor(None, modules.listing)}
+
+    async def _cmd_module_restart(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        from . import modules
+
+        if self._peer_is_ai(writer):
+            return {"ok": False, "error": "модули перезапускает человек: кнопкой в настройках"}
+        mid = str(req.get("id", ""))
+        # Демон перезапускает сам себя: ответ уходит раньше, чем systemd его остановит.
+        if mid == "daemon":
+            asyncio.get_running_loop().call_later(0.5, modules.restart, mid)
+            return {"ok": True, "how": "restart"}
+        return await asyncio.get_running_loop().run_in_executor(None, modules.restart, mid)
+
+    async def _cmd_update_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        from . import modules
+
+        if self._peer_is_ai(writer):
+            return {"ok": False, "error": "обновляет человек: кнопкой"}
+        return await asyncio.get_running_loop().run_in_executor(None, modules.update_in_background)
+
     async def _cmd_terminal_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Показать одно из заранее известных действий в окне терминала (обновление, журнал, голос)."""
         if self._peer_is_ai(writer):

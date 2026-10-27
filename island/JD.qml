@@ -204,7 +204,7 @@ Singleton {
 
     property var nextEvent: null      // calendar event starting within 2 hours
     property var update: null      // {behind, changes} when GitHub has a newer version
-    function runUpdate() { send({ cmd: "terminal_run", what: "update" }); closeAll() }
+    function runUpdate() { send({ cmd: "update_run" }); closeAll() }
 
     // ── Режим сервера из меню пуска ──
     // Он просил включать его оттуда: «дал задачу и лёг спать» не должно начинаться с терминала.

@@ -680,7 +680,11 @@ face_service() {
   done
   systemctl --user daemon-reload
   systemctl --user enable justday-ui.service
-  systemctl --user restart justday-ui.service
+  # Обновление из острова (`JUSTDAY_KEEP_UI=1`) лицо не перезапускает: Quickshell сам перечитывает QML,
+  # а перезапуск убирал док с экрана на несколько секунд.
+  if [[ "${JUSTDAY_KEEP_UI:-}" == 1 ]] && systemctl --user is-active --quiet justday-ui.service; then :; else
+    systemctl --user restart justday-ui.service
+  fi
 }
 services() {
   mkdir -p "$UNIT_DIR"
