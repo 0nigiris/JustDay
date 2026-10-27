@@ -579,6 +579,9 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("module", help="отдельные части JustDay: list | restart ID (остров только перерисовывается, док остаётся)")
     sp.add_argument("action", choices=["list", "restart"])
     sp.add_argument("id", nargs="?", default="")
+    sp = sub.add_parser("suitcase", help="чемодан: перенос настроек и ключей на другой ПК одним файлом под паролем (export ФАЙЛ | import ФАЙЛ)")
+    sp.add_argument("action", choices=["export", "import"])
+    sp.add_argument("file")
     sp = sub.add_parser("secret", help="store an API key / password in the desktop keyring")
     sp.add_argument("action", choices=["set", "check"])
     sp.add_argument("name", help="openrouter | deepseek | custom | mail")
@@ -1408,6 +1411,20 @@ def main(argv: list[str] | None = None) -> None:
         from . import modules
 
         _print(modules.listing() if a.action == "list" else modules.restart(a.id))
+    elif a.cmd == "suitcase":
+        import getpass
+
+        from . import suitcase
+
+        # Пароль только с клавиатуры (или JUSTDAY_SUITCASE_PASS для скриптов), не аргументом: он остался бы в истории.
+        pw = os.environ.get("JUSTDAY_SUITCASE_PASS") or getpass.getpass("Пароль чемодана: ")
+        try:
+            if a.action == "export":
+                print(f"Чемодан собран: {suitcase.save(a.file, pw)}")
+            else:
+                print(suitcase.unpack(__import__("pathlib").Path(a.file).expanduser().read_bytes(), pw))
+        except (ValueError, RuntimeError, OSError) as e:
+            sys.exit(f"Не вышло: {e}")
     elif a.cmd == "restart":
         subprocess.run(["systemctl", "--user", "restart", "justday.service"], check=True)
         for _ in range(60):

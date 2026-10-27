@@ -105,12 +105,56 @@ def set_secret(name: str, value: str) -> None:
     """Put a key into the desktop keyring (or drop it when value is empty), and out of secrets.env."""
     _KEYRING_CACHE.pop(name, None)
     base = ["service", "justday", "key", _keyring_name(name)]
-    if value:
-        subprocess.run(["secret-tool", "store", "--label", f"JustDay: {_keyring_name(name)}", *base],
-                       input=value, text=True, check=True, timeout=10)
-    else:
-        subprocess.run(["secret-tool", "clear", *base], check=False, timeout=10)
+    try:
+        if value:
+            subprocess.run(["secret-tool", "store", "--label", f"JustDay: {_keyring_name(name)}", *base],
+                           input=value, text=True, check=True, timeout=10)
+        else:
+            subprocess.run(["secret-tool", "clear", *base], check=False, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        # Школьный или чужой компьютер: связки ключей нет (нет secret-tool или сеанс без неё), а ставили без
+        # sudo. Ключ тогда лежит в secrets.env с правами 0600 — хуже связки, но лучше, чем без ключа.
+        return _put_in_file(name, value)
     _drop_from_file(name)
+
+
+def _put_in_file(name: str, value: str) -> None:
+    try:
+        lines = SECRETS_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    lines = [ln for ln in lines if ln.partition("=")[0].strip() != name]
+    if value:
+        lines.append(f"{name}={value}")
+    SECRETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    write_private(SECRETS_FILE, "".join(ln + "\n" for ln in lines))
+
+
+def list_secrets() -> dict[str, str]:
+    """Все ключи, что есть у человека: имя в связке (или в secrets.env) → значение. Нужно только для переноса
+    на другой компьютер (`suitcase`); наружу значения не уходят нигде, кроме зашифрованного файла."""
+    out: dict[str, str] = {}
+    try:
+        r = subprocess.run(["secret-tool", "search", "--all", "service", "justday"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        r = None
+    if r and r.returncode == 0:
+        value = ""
+        for line in r.stdout.splitlines():
+            if line.startswith("secret = "):
+                value = line[9:]
+            elif line.startswith("attribute.key = ") and value:
+                out[line[16:].strip()] = value
+                value = ""
+    try:
+        for line in SECRETS_FILE.read_text(encoding="utf-8").splitlines():
+            key, _, val = line.partition("=")
+            if key.strip() and val.strip():
+                out.setdefault(_keyring_name(key.strip()), val.strip().strip("'\""))
+    except OSError:
+        pass
+    return out
 
 
 def _drop_from_file(name: str) -> None:
