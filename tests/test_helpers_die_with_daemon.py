@@ -22,7 +22,9 @@ def _alive(pid: int) -> bool:
     try:
         with open(f"/proc/{pid}/stat") as f:
             return f.read().split(")")[-1].split()[0] != "Z"
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
+        # процесс может исчезнуть между open и read: для /proc это ProcessLookupError,
+        # и это как раз тот исход, которого тест ждёт, а не сбой
         return False
 
 
