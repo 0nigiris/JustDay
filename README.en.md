@@ -25,6 +25,15 @@
 
 **JustDay** is an AI assistant for Linux that **acts**, not just answers: it opens apps and sites, presses buttons in windows, installs software, writes messages and mail, draws pictures, edits video, plays games and hands coding to Claude Code. Talk to it or type — the answer shows up in a **Dynamic Island** at the top of the screen.
 
+JustDay is long past a voice helper. It is a desktop built around one island: dock, tray, menu, Spotlight, player, video, mail, an editing studio and tasks in separate chats. Every part has a fallback: when one model or key runs out, the next one carries on. Each part restarts on its own, and updates run in the background with no terminal and no vanishing dock.
+
+**What's new**
+- **Install without admin rights.** Everything goes to your home folder; `bash scripts/check-pc.sh` tells you before installing what will work on this computer.
+- **Suitcase.** `justday suitcase export file` packs settings and keys into one file under your password; `import` unpacks it on another computer.
+- **Several keys.** An ElevenLabs key and a spare (`ELEVENLABS_API_KEY_2`): when the first runs out, the voice takes the second.
+- **Per-part restart.** `justday module list` and `justday module restart ID`; the island only redraws.
+- **Tasks in separate chats.** A big job lives in its own chat for a week (configurable); a pinned chat is never archived.
+
 ## Install
 
 ```bash
