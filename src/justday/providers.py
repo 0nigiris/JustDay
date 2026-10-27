@@ -29,6 +29,13 @@ PROVIDERS: dict[str, dict] = {
                    "desc": "сотни моделей, есть бесплатные (суффикс :free, 50 запросов в день); ключ на openrouter.ai/keys"},
     "deepseek": {"base_url": "https://api.deepseek.com/anthropic", "secret": "deepseek",
                  "desc": "DeepSeek напрямую; ключ на platform.deepseek.com"},
+    # Адреса взяты из документации самих сервисов (Claude Code ходит только по Anthropic-протоколу). Модель не
+    # подставляется: названия у них меняются, человек называет её сам (`justday model use ПОСТАВЩИК МОДЕЛЬ`);
+    # пока модели нет, ступень лестницы пропускается.
+    "minimax": {"base_url": "https://api.minimax.io/anthropic", "secret": "minimax",
+                "desc": "MiniMax напрямую; ключ на platform.minimax.io (для Китая адрес api.minimaxi.com через custom)"},
+    "moonshot": {"base_url": "https://api.moonshot.ai/anthropic", "secret": "moonshot",
+                 "desc": "Kimi (Moonshot) напрямую; ключ на platform.moonshot.ai"},
     "custom": {"secret": "custom", "desc": "любой Anthropic-совместимый адрес (brain.base_url), например LiteLLM"},
 }
 

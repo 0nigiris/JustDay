@@ -588,7 +588,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("file")
     sp = sub.add_parser("secret", help="store an API key / password in the desktop keyring")
     sp.add_argument("action", choices=["set", "check"])
-    sp.add_argument("name", help="openrouter | deepseek | custom | mail")
+    sp.add_argument("name", help="openrouter | deepseek | minimax | moonshot | custom | mail")
     sp.add_argument("--stdin", action="store_true", help="read the value from stdin (for the Settings window)")
     sp = sub.add_parser("mail", help="private mail lane (local model): setup | check | read N")
     sp.add_argument("action", choices=["setup", "check", "test"])

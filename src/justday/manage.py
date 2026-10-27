@@ -33,6 +33,8 @@ MODELS = {  # suggested models per provider (any id works)
     "openrouter": ["openrouter/free", "nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free",
                    "google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-lightning:free"],
     "deepseek": ["deepseek-v4-pro", "deepseek-flash"],
+    "minimax": [],        # название модели называет человек: у сервиса оно меняется
+    "moonshot": [],
     "custom": [],
 }
 
