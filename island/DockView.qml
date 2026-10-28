@@ -724,23 +724,7 @@ Item {
         TapHandler {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             gesturePolicy: TapHandler.ReleaseWithinBounds
-            onTapped: { JD.editMode = false; dv.closeCtx(); dv.closeStack() }
-        }
-
-        // Удержание в любом месте полосы включает режим правки, как на iPhone. DragThreshold нужен,
-        // чтобы обычное перетаскивание значка не принималось за удержание.
-        TapHandler {
-            acceptedButtons: Qt.LeftButton
-            gesturePolicy: TapHandler.DragThreshold
-            longPressThreshold: 0.8
-            onLongPressed: JD.editMode = true
-        }
-
-        // Забытый режим сам не остаётся: через две минуты без дела он выключается.
-        Timer {
-            interval: 120000
-            running: JD.editMode
-            onTriggered: JD.editMode = false
+            onTapped: { dv.closeCtx(); dv.closeStack() }
         }
 
         // Курсор берём в координатах сцены нарочно: в координатах карточки он «двигался» бы сам,
@@ -876,26 +860,6 @@ Item {
                     y: mid - draw / 2 + (dv.atTop ? slot.dragLift : -slot.dragLift) + slot.bounce
                     opacity: slot.dragged ? (dv.dragOut ? 0.35 : 0.86) : (slotTap.pressed ? 0.88 : 1)
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-
-                    // Режим правки: дрожание, у соседей чуть разное по времени, иначе выглядит строем.
-                    // Тот, кто выключил анимации, дрожания не получает: вместо него рамка вокруг значка.
-                    property real wiggle: 0
-                    readonly property bool editing: JD.editMode && slot.e.t !== "sep"
-                    rotation: editing && JD.animOn && !slot.dragged ? wiggle : 0
-                    SequentialAnimation on wiggle {
-                        running: art.editing && JD.animOn
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 2.4; duration: 95 + (index % 3) * 18; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: -2.4; duration: 95 + (index % 3) * 18; easing.type: Easing.InOutSine }
-                    }
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: art.editing && !JD.animOn
-                        color: "transparent"
-                        radius: width * 0.22
-                        border.width: 2
-                        border.color: JD.accentBlue
-                    }
 
                     // Значок меню. Сетка из точек — то, что у этого значка значит «все программы»
                     // на любом рабочем столе; цвета — островка, чтобы он не выглядел чужим.
@@ -1148,9 +1112,6 @@ Item {
                     // бывает случай, когда увеличено одно, а запускается другое, — а этого не
                     // должно быть никогда.
                     onTapped: {
-                        // В режиме правки нажатие по значку не запускает программу: человек здесь
-                        // переставляет, и случайный запуск посреди этого — самая досадная ошибка.
-                        if (JD.editMode) return
                         const e = dv.wheel && dv.committed >= 0 && dv.committed < dv.lane.length
                                 ? dv.lane[dv.committed] : slot.e
                         dv.press(e, e.wins || [])
@@ -1236,7 +1197,7 @@ Item {
     // shell.qml mask + EdgeReveal.keepVisible need these from outside DockView.
     readonly property Item tipItem: tip
     readonly property bool tipHovered: tipHover.hovered
-    readonly property bool dockUiActive: engaged || tipHovered || tipShown || !!ctxEntry || JD.editMode
+    readonly property bool dockUiActive: engaged || tipHovered || tipShown || !!ctxEntry
     Timer { id: tipWait; interval: 480; onTriggered: dv.tipShown = true }
     onFocusedChanged: {
         const key = focused ? (focused.key || focused.t) : ""
