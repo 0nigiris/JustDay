@@ -821,6 +821,11 @@ class CommandsMixin:
         self.publish(menu="toggle" if req.get("toggle") else bool(req.get("open", True)))
         return {"ok": True}
 
+    async def _cmd_edit(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Режим правки в островке: значки дрожат и переставляются (`justday edit`)"""
+        self.publish(edit="toggle" if req.get("toggle") else bool(req.get("on", True)))
+        return {"ok": True}
+
     async def _cmd_clip_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "clip": clipboard.items(int(req.get("limit") or 60),
                                                     req.get("query", "")),

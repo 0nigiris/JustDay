@@ -1674,6 +1674,9 @@ Singleton {
         if (m.jobs !== undefined) jobs = m.jobs || []
         // ── панель инструментов ──
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
+        // Режим правки командой `justday edit`: без неё включить его можно только удержанием мыши,
+        // а голосом, с горячей клавиши и из проверок оболочки до него не дотянуться.
+        if (m.edit !== undefined) editMode = m.edit === "toggle" ? !editMode : !!m.edit
         if (m.menu !== undefined) {
             if (m.menu === "search") toggleSearch()
             else if (m.menu === "toggle") toggleStart()

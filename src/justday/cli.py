@@ -656,6 +656,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", nargs="?", default="show", choices=["show", "free"])
     sp = sub.add_parser("menu", help="меню приложений в островке (клавиша Windows)")
     sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "open", "close"])
+    sp = sub.add_parser("edit", help="режим правки: значки дрожат и переставляются (toggle | on | off)")
+    sp.add_argument("action", nargs="?", default="toggle", choices=["toggle", "on", "off"])
     sp = sub.add_parser("popups", help="чьи всплывашки с уведомлениями: island (только остров) | system (ещё и плазмы)")
     sp.add_argument("where", nargs="?", default="show", choices=["show", "island", "system"])
     sp = sub.add_parser("dock", help="док: список, pin/unpin, go N (Meta+N — N-я программа слева направо)")
@@ -794,6 +796,10 @@ def main(argv: list[str] | None = None) -> None:
               + (f" · видеопамять {gpu['mem_used']} / {gpu['mem_total']} МБ" if gpu.get("mem_total") else ""))
     elif a.cmd == "menu":
         got = control("menu", open=a.action != "close", toggle=a.action == "toggle", timeout=5)
+        if not got.get("ok"):
+            sys.exit(got.get("error") or "островок не отвечает")
+    elif a.cmd == "edit":
+        got = control("edit", on=a.action != "off", toggle=a.action == "toggle", timeout=5)
         if not got.get("ok"):
             sys.exit(got.get("error") or "островок не отвечает")
     elif a.cmd == "popups":

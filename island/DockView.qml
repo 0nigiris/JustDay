@@ -1236,7 +1236,7 @@ Item {
     // shell.qml mask + EdgeReveal.keepVisible need these from outside DockView.
     readonly property Item tipItem: tip
     readonly property bool tipHovered: tipHover.hovered
-    readonly property bool dockUiActive: engaged || tipHovered || tipShown || !!ctxEntry
+    readonly property bool dockUiActive: engaged || tipHovered || tipShown || !!ctxEntry || JD.editMode
     Timer { id: tipWait; interval: 480; onTriggered: dv.tipShown = true }
     onFocusedChanged: {
         const key = focused ? (focused.key || focused.t) : ""
