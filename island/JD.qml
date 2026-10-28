@@ -1262,6 +1262,10 @@ Singleton {
     property string game: ""          // имя запущенной игры от демона, "" — нет
     readonly property bool gameMode: game !== "" && fullscreen
     readonly property bool animOn: animStyle !== "off" && !gameMode
+    // Режим правки: значки дрожат, их можно переставлять. Только в памяти оболочки и нарочно не в
+    // конфиге: забытый включённым режим превращал бы каждое нажатие по доку в перестановку, а
+    // после перезапуска человек не поймёт, почему всё трясётся. Сам гаснет по таймеру в DockView.
+    property bool editMode: false
     readonly property real springK: animStyle === "smooth" ? 7.5 : 4.2
     readonly property real springDamping: animStyle === "smooth" ? 1.0 : 0.36
     // Fixed-duration OutCubic reads clean at high Hz; soft springs sample like ~60 fps.
