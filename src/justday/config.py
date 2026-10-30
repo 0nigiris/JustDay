@@ -461,6 +461,10 @@ DEFAULTS: dict = {
         # bar сидит вплотную к краю и красится той же заливкой, что и меню из неё.
         # bar_autohide — уезжает, пока не подвести курсор; иначе висит всегда.
         # Полноэкранное окно прячет полосу само, отдельно от bar_autohide.
+        # Что стоит в полоске и в каком порядке: assistant, cat, clock, date, player, event, timer, muted,
+        # focus, weather. Виджет, которого нет в списке, не рисуется; тот, что не к месту (нет трека, нет
+        # таймера), скрывается сам.
+        "peek": ["assistant", "cat", "clock", "date", "player", "event", "timer", "muted", "focus", "weather"],
         "style": "island",
         "bar_autohide": False,
         "bar_height": 44,  # толщина сплошной полосы в точках; карточка растёт вниз от неё

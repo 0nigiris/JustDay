@@ -1255,6 +1255,9 @@ Singleton {
 
     // animation style from settings: spring (bouncy), smooth (no overshoot) or off
     readonly property var island: settings.island || ({})
+    // Что и в каком порядке стоит в полоске островка (`island.peek`); пусто или нет — порядок по умолчанию.
+    readonly property var peekLayout: Array.isArray(island.peek) && island.peek.length ? island.peek
+        : ["assistant", "cat", "clock", "date", "player", "event", "timer", "muted", "focus", "weather"]
     readonly property string animStyle: island.animations || "spring"
     // Игровой режим (Р2-46): игра на весь экран — оболочка не анимирует ничего. Все Behavior и
     // таймеры уже гасятся через animOn, так что одно условие снимает с видеокарты и процессора
