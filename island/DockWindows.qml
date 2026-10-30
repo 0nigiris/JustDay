@@ -138,6 +138,24 @@ Variants {
                           live: dockWin.shown })
             }
 
+            // Плашка с ползунком громкости и контекстное меню торчат над картой дока. Меню «Пуск» закрывает экран
+            // слоем с дырками, и без дырки под них они были картинкой: ползунок виден, а нажать нельзя.
+            Binding {
+                target: JD
+                when: dockHost.primary
+                property: "dockPopRects"
+                value: {
+                    const out = []
+                    for (const it of [dock.tipItem, dock.ctxItem]) {
+                        if (!it || !it.visible || it.opacity < 0.05 || it.width < 1) continue
+                        void (it.x + it.y + dock.x + dock.y)   // mapToItem не следит за положением: подписываемся на него сами
+                        const p = it.mapToItem(null, 0, 0)
+                        out.push({ x: p.x, y: p.y, w: it.width, h: it.height })
+                    }
+                    return out
+                }
+            }
+
             function probe(x) { return dock.probe(x) }
             function dragProbe(n, x) { return dock.dragProbe(n, x) }
             function dragHold(n, x) { return dock.dragHold(n, x) }

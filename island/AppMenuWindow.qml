@@ -106,10 +106,26 @@ PanelWindow {
         height: r && r.live ? r.h : 0
     }
 
+    // Две дырки на плашку и меню дока (ползунок громкости над значком): больше двух одновременно не бывает.
+    Item {
+        id: popHole0
+        visible: false
+        readonly property var r: JD.dockPopRects.length > 0 ? JD.dockPopRects[0] : null
+        x: r ? r.x : 0; y: r ? r.y : 0; width: r ? r.w : 0; height: r ? r.h : 0
+    }
+    Item {
+        id: popHole1
+        visible: false
+        readonly property var r: JD.dockPopRects.length > 1 ? JD.dockPopRects[1] : null
+        x: r ? r.x : 0; y: r ? r.y : 0; width: r ? r.w : 0; height: r ? r.h : 0
+    }
+
     mask: Region {
         item: menuBackdrop
         Region { item: dockHole; intersection: Intersection.Subtract }
         Region { item: trayHole; intersection: Intersection.Subtract }
+        Region { item: popHole0; intersection: Intersection.Subtract }
+        Region { item: popHole1; intersection: Intersection.Subtract }
     }
 
     // Тень. Без неё карточка лежит на обоях, а не над ними, и никакая раскраска этого не

@@ -40,6 +40,25 @@ Item {
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var source: Pipewire.defaultAudioSource
 
+    // ───────────── что скрыто ─────────────
+    // Лишние строки человек убирает крестиком: десять программ с неживыми ручьями (браузер, Steam,
+    // уведомления) превращали микшер в простыню, а нужны были две. Список лежит в конфиге, а не в
+    // оболочке, чтобы пережить перезапуск.
+    readonly property var hidden: ((JD.settings.audio || ({})).mixer_hidden || [])
+    property bool showHidden: false
+    function keyOf(node) {
+        const p = (node && node.properties) || ({})
+        return String(p["application.name"] || (node && node.name) || "").toLowerCase()
+    }
+    function isHidden(key) { return !!key && hidden.indexOf(key) >= 0 }
+    function setHidden(key, on) {
+        if (!key) return
+        const rest = hidden.filter(k => k !== key)
+        JD.setConfig("audio.mixer_hidden", on ? rest.concat([key]) : rest)
+    }
+    readonly property var shownStreams: streams.filter(n => !isHidden(keyOf(n)))
+    readonly property var shownInputs: inputs.filter(n => !isHidden(keyOf(n)))
+
     // Подписываемся на все узлы, а не на отобранные. Иначе выходит круг: отобрать ручьи можно
     // только по их свойствам, свойства приходят по подписке, а подписываемся мы на отобранное —
     // и половина ручьёв не появляется никогда. Панель живёт, только пока её смотрят, так что
@@ -83,6 +102,7 @@ Item {
         property string own: "volume-2"     // наш штриховой — на случай, если не назвала
         property bool strong: false        // выход и микрофон — крупнее прочих
         property color tint: JD.accentBlue
+        property string hideKey: ""        // непусто — у строки есть крестик «убрать из микшера»
 
         readonly property real value: node && node.audio ? node.audio.volume : 0
         readonly property bool silent: !!node && !!node.audio && node.audio.muted
@@ -153,6 +173,14 @@ Item {
                         font.features: ({ "tnum": 1 })
                         color: lane.silent ? JD.text3 : JD.text2
                         text: Math.round(lane.value * 100) + "%"
+                    }
+                    Rectangle {
+                        visible: !!lane.hideKey && laneHover.hovered
+                        implicitWidth: 20; implicitHeight: 20; radius: 10
+                        color: hideHover.hovered ? JD.fill2 : "transparent"
+                        Icon { anchors.centerIn: parent; name: "x"; implicitSize: 12; tint: JD.text2 }
+                        HoverHandler { id: hideHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: mx.setHidden(lane.hideKey, true) }
                     }
                 }
 
@@ -265,6 +293,8 @@ Item {
             }
         }
         Lane {
+            visible: !mx.isHidden("__mic")
+            hideKey: "__mic"
             node: mx.source
             strong: true
             own: "mic"
@@ -293,7 +323,7 @@ Item {
             Column {
                 anchors.centerIn: parent
                 spacing: 8
-                visible: mx.streams.length === 0 && mx.inputs.length === 0
+                visible: mx.shownStreams.length === 0 && mx.shownInputs.length === 0
                 Icon {
                     anchors.horizontalCenter: parent.horizontalCenter
                     name: "volume-x"
@@ -320,9 +350,10 @@ Item {
                     spacing: 8
 
                     Repeater {
-                        model: mx.streams
+                        model: mx.shownStreams
                         delegate: Lane {
                             required property var modelData
+                            hideKey: mx.keyOf(modelData)
                             node: modelData
                             title: mx.nameOf(modelData)
                             note: mx.noteOf(modelData)
@@ -331,15 +362,46 @@ Item {
                         }
                     }
                     Repeater {
-                        model: mx.inputs
+                        model: mx.shownInputs
                         delegate: Lane {
                             required property var modelData
+                            hideKey: mx.keyOf(modelData)
                             node: modelData
                             title: mx.nameOf(modelData)
                             note: "слушает микрофон"
                             own: "mic"
                             tint: JD.accentOrange
                         }
+                    }
+                }
+            }
+        }
+
+        // ───────────── скрытое ─────────────
+        // Строка видна, только если что-то скрыто: у человека, который ничего не убирал, её нет вовсе.
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 6
+            visible: mx.hidden.length > 0
+            Label2 {
+                color: JD.text2
+                text: (mx.showHidden ? "Скрыто — нажмите, чтобы вернуть" : "Скрыто: " + mx.hidden.length + " · показать")
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: mx.showHidden = !mx.showHidden }
+            }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: mx.showHidden
+                Repeater {
+                    model: mx.hidden
+                    delegate: Rectangle {
+                        required property string modelData
+                        height: 26; width: hiddenText.implicitWidth + 20; radius: 13
+                        color: Qt.rgba(1, 1, 1, 0.1)
+                        Label2 { id: hiddenText; anchors.centerIn: parent; font.pixelSize: 12; color: JD.text2
+                                 text: modelData === "__mic" ? "Микрофон" : modelData }
+                        TapHandler { onTapped: mx.setHidden(modelData, false) }
                     }
                 }
             }

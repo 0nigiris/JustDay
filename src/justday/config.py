@@ -201,6 +201,9 @@ DEFAULTS: dict = {
              "language": "ru"},  # ru | en — assistant replies, voice lines and the island
     "audio": {
         # Substring of a PipeWire source node name; empty = system default source.
+        # Что скрыто в микшере (имя программы в нижнем регистре; «__mic» — строка микрофона). Лишние строки
+        # человек убирает сам крестиком, вернуть можно из «Скрыто» внизу микшера.
+        "mixer_hidden": [],
         "microphone": True,  # false = keyboard only: no mic, no wake word, speech recognition never loads
         "input": "",
         "output": "",
