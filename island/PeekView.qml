@@ -44,6 +44,25 @@ View {
         assistant: cAssistant, cat: cCat, clock: cClock, date: cDate, player: cPlayer, event: cEvent,
         timer: cTimer, muted: cMuted, focus: cFocus, weather: cWeather
     })
+    readonly property var names: ({ assistant: "Ассистент", cat: "Кошка", clock: "Часы", date: "Дата", player: "Плеер",
+        event: "Событие", timer: "Таймер", muted: "Без звука", focus: "Фокус", weather: "Погода" })
+    readonly property var allParts: Object.keys(parts)
+    // d = 0 убирает виджет, ±1 сдвигает. Пишем в конфиг целиком: список там один.
+    function edit(id, d) {
+        const l = JD.peekLayout.slice(), i = l.indexOf(id)
+        if (i < 0) return
+        if (d === 0) l.splice(i, 1)
+        else { const j = i + d; if (j < 0 || j >= l.length) return; l[i] = l[j]; l[j] = id }
+        JD.setConfig("island.peek", l)
+    }
+    // Удержание включает режим правки, как на iPhone; забытый режим гаснет через две минуты.
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        gesturePolicy: TapHandler.DragThreshold
+        longPressThreshold: 0.8
+        onLongPressed: JD.editMode = true
+    }
+    Timer { interval: 120000; running: JD.editMode; onTriggered: JD.editMode = false }
     RowLayout {
         id: peekRow
         anchors.centerIn: parent
@@ -62,7 +81,60 @@ View {
                 sourceComponent: pv.parts[modelData] || null
                 visible: status === Loader.Ready && !!item && item.shown
                 onLoaded: if (modelData === "cat") pv.cat = item.catItem
+
+                // Режим правки: дрожание (у соседей чуть разное по времени, иначе строем), без анимаций
+                // вместо него рамка. Стрелки двигают виджет, крестик убирает.
+                property real wiggle: 0
+                rotation: JD.editMode && JD.animOn ? wiggle : 0
+                SequentialAnimation on wiggle {
+                    running: JD.editMode && JD.animOn && slot.visible
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 2.4; duration: 95 + (slot.index % 3) * 18; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -2.4; duration: 95 + (slot.index % 3) * 18; easing.type: Easing.InOutSine }
+                }
+                Rectangle {
+                    anchors.fill: parent; anchors.margins: -4
+                    visible: JD.editMode && !JD.animOn
+                    color: "transparent"; radius: 8
+                    border.width: 1; border.color: JD.accentBlue
+                }
+                Row {
+                    visible: JD.editMode
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.top; anchors.bottomMargin: -2
+                    spacing: 2
+                    Repeater {
+                        model: [
+                            { g: "‹", d: -1, ok: slot.index > 0 },
+                            { g: "×", d: 0, ok: true },
+                            { g: "›", d: 1, ok: slot.index < JD.peekLayout.length - 1 }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            visible: modelData.ok
+                            width: 16; height: 16; radius: 8; color: JD.fill2
+                            Label2 { anchors.centerIn: parent; font.pixelSize: 12; color: JD.text1; text: parent.modelData.g }
+                            TapHandler { onTapped: pv.edit(slot.modelData, parent.modelData.d) }
+                        }
+                    }
+                }
             }
+        }
+        // Убранные виджеты: нажатие возвращает на место в конец.
+        Repeater {
+            model: JD.editMode ? pv.allParts.filter(k => JD.peekLayout.indexOf(k) < 0) : []
+            delegate: Rectangle {
+                required property string modelData
+                height: 22; width: addText.implicitWidth + 16; radius: 11; color: JD.fill2
+                Label2 { id: addText; anchors.centerIn: parent; font.pixelSize: 12; color: JD.text2; text: "+ " + (pv.names[modelData] || modelData) }
+                TapHandler { onTapped: JD.setConfig("island.peek", JD.peekLayout.concat([parent.modelData])) }
+            }
+        }
+        Rectangle {
+            visible: JD.editMode
+            height: 22; width: doneText.implicitWidth + 16; radius: 11; color: JD.accentBlue
+            Label2 { id: doneText; anchors.centerIn: parent; font.pixelSize: 12; color: "white"; text: JD.tr("Готово") }
+            TapHandler { onTapped: JD.editMode = false }
         }
     }
 
