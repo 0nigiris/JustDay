@@ -1172,6 +1172,11 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Править островок")
+                    subtitle: JD.tr("Двигать виджеты перетаскиванием, убирать и добавлять. То же — удержание на островке")
+                    Btn { text: JD.tr("Править"); onClicked: { JD.closeAll(); JD.editMode = true } }
+                }
+                Row {
                     title: JD.tr("Свой цвет")
                     subtitle: JD.tr("Шесть цифр после #, например #0060df. Пусто — цвет из списка выше")
                     Field { key: "island.accent_custom"; placeholderText: "#0060df"; implicitWidth: 120 }
