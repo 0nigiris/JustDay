@@ -513,8 +513,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("title")
     sp.add_argument("text", nargs="*")
     sp.add_argument("--folder", default="", help="подкаталог внутри хранилища")
-    sp = sub.add_parser("inbox", help="сообщения, оставленные с телефона: list | add | clear")
-    sp.add_argument("action", nargs="?", choices=["list", "add", "clear"], default="list")
+    sp = sub.add_parser("inbox", help="сообщения, оставленные с телефона: list | add | reply ID текст | clear")
+    sp.add_argument("action", nargs="?", choices=["list", "add", "reply", "clear"], default="list")
     sp.add_argument("text", nargs="*")
     sp = sub.add_parser("wake", help="кто будит ассистента и сколько раз впустую")
     sp.add_argument("--days", type=int, default=3)
@@ -1008,6 +1008,8 @@ def main(argv: list[str] | None = None) -> None:
 
         if a.action == "add":
             _print(control("inbox_add", text=" ".join(a.text), source="cli"))
+        elif a.action == "reply":
+            _print(control("inbox_reply", id=a.text[0] if a.text else "", text=" ".join(a.text[1:])))
         elif a.action == "clear":
             _print({"ok": True, "removed": inbox.clear()})
         else:

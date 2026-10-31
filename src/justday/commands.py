@@ -383,6 +383,10 @@ class CommandsMixin:
 
         return terminal.drop_next(req.get("id", ""))
 
+    async def _cmd_inbox_reply(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        ok = inbox.reply(str(req.get("id", "")), req.get("text", ""))
+        return {"ok": ok} if ok else {"ok": False, "error": "нет такого поручения или пустой ответ"}
+
     async def _cmd_inbox_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         return {"ok": True, "items": inbox.recent(int(req.get("limit") or 20)),
                 "pending": len(inbox.pending())}

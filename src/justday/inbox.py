@@ -78,6 +78,22 @@ def recent(limit: int = 20) -> list[dict[str, Any]]:
     return _read()[-limit:]
 
 
+def reply(item_id: str, text: str) -> bool:
+    """Ответ Джарвиса на поручение: что сделано или почему нет.
+
+    Облачный ассистент передаёт дело на ПК и без этого поля не узнает, чем оно кончилось:
+    очередь шла только в одну сторону. Читает ответ через `justday inbox list`."""
+    text = str(text or "").strip()[:MAX_TEXT]
+    items = _read()
+    for item in items:
+        if item.get("id") == item_id and text:
+            item["reply"] = text
+            item["replied"] = time.time()
+            _write(items)
+            return True
+    return False
+
+
 def clear() -> int:
     items = _read()
     _write([])
@@ -89,5 +105,5 @@ def summary(items: list[dict[str, Any]]) -> str:
     lines = []
     for item in items:
         when = time.strftime("%d.%m %H:%M", time.localtime(item.get("created") or item.get("received", 0)))
-        lines.append(f"— {when}: {item['text']}")
+        lines.append(f"— {when} [id {item['id']}]: {item['text']}")
     return "\n".join(lines)
