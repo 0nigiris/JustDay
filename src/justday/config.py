@@ -430,6 +430,8 @@ DEFAULTS: dict = {
     "island": {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off
         "accent": "blue",  # основной цвет: blue | indigo | purple | pink | graphite (JD.accents)
+        "accent_custom": "",  # свой цвет «#rrggbb»; главнее accent
+        "font": "",           # свой шрифт; пусто — Inter
         "orbs": True,       # шары состояний (island/Orb.qml) вместо кольца
         "ui_sounds": True,  # тихие звуки интерфейса (island/sounds, собирает scripts/ui_sounds.py)
         "hover_reveal": True,  # hover the top edge to show the island

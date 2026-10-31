@@ -1484,14 +1484,22 @@ Singleton {
     // «думаю» и «включено». Каждый держит 3:1 и белым текстом на нём, и сам на тёмной карточке —
     // это проверяет tests/test_contrast.py.
     readonly property var accents: ({ blue: "#0a84ff", indigo: "#5e5ce6", purple: "#bf5af2", pink: "#ff375f", graphite: "#8e8e93" })
-    readonly property color accentBlue: accents[(settings.island || {}).accent] || accents.blue
+    // Свой цвет (island.accent_custom, «#rrggbb») главнее выбора из пяти: пять — это то, что проверено
+    // на контраст, а свой цвет человек берёт на себя. Кривая запись (не шесть hex-цифр) молча игнорируется,
+    // чтобы опечатка не красила всё в чёрное.
+    readonly property string accentCustom: {
+        const c = String((settings.island || {}).accent_custom || "").trim()
+        return /^#[0-9a-fA-F]{6}$/.test(c) ? c : ""
+    }
+    readonly property color accentBlue: accentCustom || accents[(settings.island || {}).accent] || accents.blue
     readonly property color accentCyan: "#64d2ff"
     readonly property color accentGreen: "#30d158"
     readonly property color accentOrange: "#ff9f0a"
     readonly property color accentRed: "#ff453a"
     readonly property color accentPurple: "#bf5af2"
     readonly property color accentPink: "#fc3c44"
-    readonly property string fontFamily: "Inter"
+    // Свой шрифт (island.font); пусто — Inter. Нет такого в системе — Qt сам подставит запасной.
+    readonly property string fontFamily: String((settings.island || {}).font || "").trim() || "Inter"
 
     // ───────────── icons ─────────────
     // The island draws its own set (lucide, one white stroke) so the menu never mixes

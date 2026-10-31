@@ -1172,6 +1172,16 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Свой цвет")
+                    subtitle: JD.tr("Шесть цифр после #, например #0060df. Пусто — цвет из списка выше")
+                    Field { key: "island.accent_custom"; placeholderText: "#0060df"; implicitWidth: 120 }
+                }
+                Row {
+                    title: JD.tr("Шрифт")
+                    subtitle: JD.tr("Название шрифта, который есть в системе. Пусто — Inter")
+                    Field { key: "island.font"; placeholderText: "Inter"; implicitWidth: 180 }
+                }
+                Row {
                     title: JD.tr("Где висит остров")
                     subtitle: JD.tr("Пилюля горизонтальная, поэтому «слева» и «справа» — это край по горизонтали")
                     Choice {
