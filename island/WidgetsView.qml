@@ -51,22 +51,22 @@ Item {
                         readonly property bool on: wv.has(modelData.id)
                         width: col.width; height: 48; radius: 14
                         color: rowHover.hovered ? JD.fill2 : JD.fill1
-                        RowLayout {
-                            anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14
-                            spacing: 10
-                            ColumnLayout {
-                                Layout.fillWidth: true; spacing: 0
-                                Label1 { text: JD.tr(modelData.name) }
-                                Label2 { color: JD.text2; font.pixelSize: 12; text: JD.tr(modelData.hint) }
-                            }
+                        // Без RowLayout: переключатель там уезжал вслед за длиной текста.
+                        Column {
+                            anchors.left: parent.left; anchors.leftMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            Label1 { text: JD.tr(modelData.name) }
+                            Label2 { color: JD.text2; font.pixelSize: 12; text: JD.tr(modelData.hint) }
+                        }
+                        Rectangle {
+                            anchors.right: parent.right; anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 40; height: 24; radius: 12
+                            color: on ? JD.accentBlue : JD.fill2
                             Rectangle {
-                                width: 40; height: 24; radius: 12
-                                color: on ? JD.accentBlue : JD.fill2
-                                Rectangle {
-                                    width: 20; height: 20; radius: 10; y: 2; color: "white"
-                                    x: on ? 18 : 2
-                                    Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                                }
+                                width: 20; height: 20; radius: 10; y: 2; color: "white"
+                                x: on ? 18 : 2
+                                Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                             }
                         }
                         HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
