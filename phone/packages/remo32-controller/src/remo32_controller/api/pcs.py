@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
@@ -365,6 +366,7 @@ async def justday_art(
 # Голос, надиктованный в браузере: файл идёт сквозь контроллер к агенту без разбора и
 # без записи на диск — распознаёт его сам ассистент на компьютере.
 DICTATE_LIMIT = 8 * 1024 * 1024
+PHOTO_LIMIT = 12 * 1024 * 1024
 
 
 @router.post("/{pc_id}/justday/dictate", response_model=ApiResponse[dict[str, Any]])
@@ -388,6 +390,27 @@ async def justday_dictate(
         await _registry(request)
         .get(pc_id)
         .client.justday_dictate(audio, suffix, to_inbox=inbox, created=created),
+        request_id,
+    )
+
+
+@router.post("/{pc_id}/justday/photo", response_model=ApiResponse[dict[str, Any]])
+async def justday_photo(
+    pc_id: str,
+    request: Request,
+    _session: Session,
+    request_id: RequestId,
+    suffix: str = Query(".jpg", max_length=8, pattern=r"^\.(jpg|jpeg|png|webp)$"),
+) -> ApiResponse[dict[str, Any]]:
+    """Фото-доказательство с телефона: уезжает на ПК, где его смотрит ассистент."""
+    image = await request.body()
+    if not image:
+        raise ActionInvalidError("пустое фото")
+    if len(image) > PHOTO_LIMIT:
+        raise ActionInvalidError("фото слишком большое")
+    log.info("фото ассистенту", pc_id=pc_id, bytes=len(image))
+    return ApiResponse[dict[str, Any]].success(
+        await _registry(request).get(pc_id).client.justday_photo(image, suffix, time.time()),
         request_id,
     )
 

@@ -239,6 +239,19 @@ class AgentClient:
         )
         return got
 
+    async def justday_photo(
+        self, image: bytes, suffix: str = ".jpg", created: float = 0.0
+    ) -> dict[str, Any]:
+        """Фото уезжает на компьютер как есть: контроллер его не хранит."""
+        got: dict[str, Any] = await self._request(
+            "POST",
+            "/api/justday/photo",
+            content=image,
+            params={"suffix": suffix, "created": created},
+            timeout=60.0,
+        )
+        return got
+
     async def binary(self, path: str, *, timeout: float = 30.0) -> tuple[bytes, str]:
         """Картинка от агента как есть: снимок экрана, обложка.
 

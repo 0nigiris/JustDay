@@ -180,6 +180,21 @@ async def inbox_add(text: str, created: float = 0.0) -> dict[str, Any]:
     return await call("inbox_add", text=text, source="phone", created=created)
 
 
+async def inbox_photo(
+    image: bytes, suffix: str = ".jpg", created: float = 0.0
+) -> dict[str, Any]:
+    """Фото-доказательство с телефона. Файл живёт ровно столько, сколько идёт вызов:
+    демон сам делает копию в своём состоянии, поэтому здесь его удаляем."""
+    fd, path = tempfile.mkstemp(prefix="justday-photo-", suffix=suffix)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(image)
+        return await call("inbox_photo", path=path, created=created)
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+
+
 async def inbox_list(limit: int = 20) -> dict[str, Any]:
     return await call("inbox_list", limit=limit)
 

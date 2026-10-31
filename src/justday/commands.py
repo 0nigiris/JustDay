@@ -383,6 +383,15 @@ class CommandsMixin:
 
         return terminal.drop_next(req.get("id", ""))
 
+    async def _cmd_inbox_photo(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        try:
+            rec = inbox.add_photo(str(req.get("path", "")), float(req.get("created") or 0))
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        events.emit("inbox_add", source=rec["source"], text="фото")
+        self._inbox_soon()
+        return {"ok": True, "id": rec["id"]}
+
     async def _cmd_inbox_reply(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         ok = inbox.reply(str(req.get("id", "")), req.get("text", ""))
         return {"ok": ok} if ok else {"ok": False, "error": "нет такого поручения или пустой ответ"}

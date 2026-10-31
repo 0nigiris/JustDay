@@ -526,6 +526,28 @@ def build_router(ctx: AgentContext) -> APIRouter:
         )
 
     @router.post(
+        "/api/justday/photo",
+        response_model=ApiResponse[dict[str, Any]],
+        tags=["JustDay"],
+        dependencies=[auth],
+    )
+    async def justday_photo(
+        request: Request,
+        request_id: RequestId,
+        suffix: str = Query(".jpg", max_length=8, pattern=r"^\.(jpg|jpeg|png|webp)$"),
+        created: float = Query(0.0, description="Когда снято на телефоне (unix-время)"),
+    ) -> ApiResponse[dict[str, Any]]:
+        """Фото-доказательство («домашка сделана»): в очередь поручений, смотрит ассистент."""
+        image = await request.body()
+        if not image:
+            raise ActionInvalidError("пустое фото")
+        if len(image) > 12 * 1024 * 1024:
+            raise ActionInvalidError("фото слишком большое")
+        return ApiResponse[dict[str, Any]].success(
+            await justday.inbox_photo(image, suffix, created), request_id
+        )
+
+    @router.post(
         "/api/justday/session/{action}",
         response_model=ApiResponse[dict[str, Any]],
         tags=["JustDay"],

@@ -2259,9 +2259,10 @@ function plansCard() {
    пропадало: ответ Джарвиса (`justday inbox reply`) виден только здесь. */
 function tasksCard() {
   const items = (state.inbox?.items || []).slice(-5).reverse();
-  if (!items.length) return "";
   return `<section class="card">
-    <div class="card-head"><h2>Поручения</h2><span class="meta">${items.length}</span></div>
+    <div class="card-head"><h2>Поручения</h2><span class="meta">${items.length || ""}</span></div>
+    <label class="btn">${icon("camera")} Фото для ассистента
+      <input type="file" id="proof-file" accept="image/*" capture="environment" hidden></label>
     <div class="list">${items.map((item) => `<div class="step">
       <div><b>${esc(item.text)}</b>
         <span class="meta">${item.reply ? esc(item.reply) : "ещё без ответа"} · ${esc(ago(Date.now() / 1000 - (item.created || item.received)))}</span></div>
@@ -3133,7 +3134,27 @@ for (const done of ["pointerup", "pointercancel"]) {
   });
 }
 
+/* Фото-доказательство («домашка сделана»): уходит на ПК, смотрит ассистент. Своего хранилища на
+   телефоне нет: нет связи — просто не отправится, и об этом сказано. */
+async function sendProof(file) {
+  const pc = activePc();
+  if (!pc || !file) return;
+  const ext = (file.name.match(/\.(jpe?g|png|webp)$/i) || [".jpg"])[0].toLowerCase();
+  try {
+    await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/photo?suffix=${encodeURIComponent(ext)}`,
+      { method: "POST", body: file, raw: true });
+    toast("Фото передал ассистенту", "ok");
+  } catch (err) {
+    toast(err.message || "фото не ушло", "err");
+  }
+}
+
 document.addEventListener("change", async (event) => {
+  if (event.target.id === "proof-file") {
+    await sendProof(event.target.files?.[0]);
+    event.target.value = "";
+    return;
+  }
   const box = event.target.closest?.(".slider");
   if (box) {
     state.sliding = false;

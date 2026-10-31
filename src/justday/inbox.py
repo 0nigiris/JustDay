@@ -54,6 +54,29 @@ def add(text: str, source: str = "phone", created: float = 0.0) -> dict[str, Any
     return item
 
 
+PHOTOS = config.STATE_DIR / "proofs"
+PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_PHOTO = 12 * 1024 * 1024
+
+
+def add_photo(src: str, created: float = 0.0) -> dict[str, Any]:
+    """Фото с телефона (доказательство «домашка сделана»): копия в состоянии, в очередь — строка с путём.
+
+    Смотрит на снимок и решает, верить ли, сам ассистент: путь в тексте поручения, а картинку он
+    открывает как любой файл. Копия, а не ссылка: временный файл агента удаляется сразу."""
+    import shutil
+    from pathlib import Path
+
+    p = Path(src)
+    if p.suffix.lower() not in PHOTO_TYPES or not p.is_file() or p.stat().st_size > MAX_PHOTO:
+        raise ValueError("не фото или слишком большое")
+    PHOTOS.mkdir(parents=True, exist_ok=True)
+    dest = PHOTOS / f"{uuid.uuid4().hex[:10]}{p.suffix.lower()}"
+    shutil.copyfile(p, dest)
+    dest.chmod(0o600)
+    return add(f"Фото с телефона: {dest}", "phone-photo", created)
+
+
 def pending() -> list[dict[str, Any]]:
     """Что ещё не доложено хозяину."""
     return [i for i in _read() if i.get("state") == "new"]
