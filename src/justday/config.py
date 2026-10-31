@@ -706,6 +706,10 @@ DEFAULTS: dict = {
                  # «Успеете ли»: если он отдал боту живую геопозицию, срок напоминания растёт на дорогу. Адрес
                  # встречи уходит в Nominatim, две точки — в OSRM (оба OpenStreetMap, без аккаунтов); false — не ходить.
                  "travel": True},
+    # Присмотр (`guardian.py`): игра в фокусе дольше after_minutes → один вопрос в день про дело.
+    # Он сам попросил (25 окт); выключить: `justday config set watch.enabled false`.
+    "watch": {"enabled": True, "apps": ["roblox"], "after_minutes": 10,
+              "question": "Уже давно в игре. Домашка сделана? Скинь фото, если да."},
     # Local model for private data (mail). Ollama listens on localhost only.
     "local_llm": {"url": "http://127.0.0.1:11434", "model": "qwen3.5:9b", "num_ctx": 16384,
                   "keep_alive": "10m",

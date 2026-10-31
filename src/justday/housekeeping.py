@@ -11,6 +11,7 @@ from . import (
     calendar_lane,
     desktop,
     events,
+    guardian,
     island,
     memory,
     sysload,
@@ -65,6 +66,12 @@ class HousekeepingMixin:
                 if time.monotonic() - getattr(self, "_last_observe", 0) > 60 and calendar_lane.urls():
                     self._last_observe = time.monotonic()
                     spawn(self._observe())
+                if time.monotonic() - getattr(self, "_last_guard", 0) > 60:
+                    self._last_guard = time.monotonic()
+                    try:
+                        await guardian.tick(self._windows or [], self._nudge, self.cfg)
+                    except Exception as e:
+                        log.info("присмотр: %s", type(e).__name__)
                 isl = self.cfg["island"]
                 if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
                     last_weather, self._weather_city = time.monotonic(), isl["city"]
