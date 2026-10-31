@@ -155,6 +155,7 @@ const state = {
   online: true,          // отвечает ли контроллер
   syncedAt: 0,           // когда в последний раз получили настоящие данные
   plans: null,           // планы из Obsidian на активном ПК
+  inbox: null,           // поручения, переданные ассистенту, и его ответы
   files: { path: "", listing: null, error: "" },   // где мы в файлах компьютера
 };
 
@@ -2254,6 +2255,20 @@ function plansCard() {
   </section>`;
 }
 
+/* Поручения ассистенту и чем они кончились. Без этого дело, переданное на ПК,
+   пропадало: ответ Джарвиса (`justday inbox reply`) виден только здесь. */
+function tasksCard() {
+  const items = (state.inbox?.items || []).slice(-5).reverse();
+  if (!items.length) return "";
+  return `<section class="card">
+    <div class="card-head"><h2>Поручения</h2><span class="meta">${items.length}</span></div>
+    <div class="list">${items.map((item) => `<div class="step">
+      <div><b>${esc(item.text)}</b>
+        <span class="meta">${item.reply ? esc(item.reply) : "ещё без ответа"} · ${esc(ago(Date.now() / 1000 - (item.created || item.received)))}</span></div>
+    </div>`).join("")}</div>
+  </section>`;
+}
+
 /* Что написано без связи и ещё не доставлено. Здесь же видно, что именно
    ассистент прочитает, когда компьютер проснётся. */
 function outboxCard() {
@@ -2388,6 +2403,7 @@ function viewJarvis() {
   ${playerCard(pc, now)}
 
   ${outboxCard()}
+  ${tasksCard()}
   ${plansCard()}
 
   <section class="card">
@@ -2894,6 +2910,7 @@ async function render(force = false) {
     if (current === "jarvis" && pc && pc.state === "online") {
       state.plans = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/plans`).catch(() => state.plans);
       state.work = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/work`).catch(() => null);
+      state.inbox = await api(`/api/pcs/${encodeURIComponent(pc.id)}/justday/inbox`).catch(() => null);
       await flushOutbox(pc.id);  // всё, что записали в дороге, уходит при первой встрече
     }
     rememberState();
