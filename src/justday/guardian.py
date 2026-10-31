@@ -71,3 +71,13 @@ async def tick(windows: list[dict], deliver: Callable[[str], Awaitable[None]], c
     text = f"{who.capitalize()}, {text[0].lower()}{text[1:]}" if who else text
     await deliver(text)
     return text
+
+
+def done(cfg: dict, now: float | None = None, path: Path = STATE) -> list[str]:
+    """Дело на сегодня сделано (фото принято): до завтра про него не спрашивать."""
+    day = dt.date.fromtimestamp(now or time.time()).isoformat()
+    apps = [str(a) for a in (cfg.get("watch") or {}).get("apps") or []]
+    st = load(path)
+    st.setdefault("told", {}).update({a: day for a in apps})
+    save(st, path)
+    return apps

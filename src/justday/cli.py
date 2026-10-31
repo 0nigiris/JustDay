@@ -516,6 +516,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("inbox", help="сообщения, оставленные с телефона: list | add | reply ID текст | clear")
     sp.add_argument("action", nargs="?", choices=["list", "add", "reply", "clear"], default="list")
     sp.add_argument("text", nargs="*")
+    sp = sub.add_parser("watch", help="присмотр: done — дело на сегодня сделано, до завтра не спрашивать")
+    sp.add_argument("action", nargs="?", choices=["done"], default="done")
     sp = sub.add_parser("wake", help="кто будит ассистента и сколько раз впустую")
     sp.add_argument("--days", type=int, default=3)
     sp = sub.add_parser("tokens", help="во что обходится разговор: токены и деньги по дням")
@@ -1014,6 +1016,10 @@ def main(argv: list[str] | None = None) -> None:
             _print({"ok": True, "removed": inbox.clear()})
         else:
             _print({"pending": len(inbox.pending()), "items": inbox.recent()})
+    elif a.cmd == "watch":
+        from . import guardian
+
+        _print({"ok": True, "quiet_today": guardian.done(config.load())})
     elif a.cmd == "wake":
         from . import usage
 

@@ -30,3 +30,12 @@ def test_leaving_the_game_resets_the_wait(tmp_path):
     run([], t0 + 500, p, said)             # свернул игру
     run(GAME, t0 + 700, p, said)           # вернулся: отсчёт заново
     assert said == []
+
+
+def test_done_keeps_him_quiet_for_the_day(tmp_path):
+    """Фото принято, а через минуту Джарвис снова спрашивает про домашку."""
+    p, said, t0 = tmp_path / "g.json", [], time.time()
+    guardian.done(CFG, t0, p)
+    run(GAME, t0 + 1, p, said)
+    run(GAME, t0 + 900, p, said)
+    assert said == []
