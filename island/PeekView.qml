@@ -44,16 +44,21 @@ View {
         assistant: cAssistant, cat: cCat, clock: cClock, date: cDate, player: cPlayer, event: cEvent,
         timer: cTimer, muted: cMuted, focus: cFocus, weather: cWeather
     })
-    readonly property var names: ({ assistant: "Ассистент", cat: "Кошка", clock: "Часы", date: "Дата", player: "Плеер",
-        event: "Событие", timer: "Таймер", muted: "Без звука", focus: "Фокус", weather: "Погода" })
-    readonly property var allParts: Object.keys(parts)
-    // d = 0 убирает виджет, ±1 сдвигает. Пишем в конфиг целиком: список там один.
-    function edit(id, d) {
-        const l = JD.peekLayout.slice(), i = l.indexOf(id)
-        if (i < 0) return
-        if (d === 0) l.splice(i, 1)
-        else { const j = i + d; if (j < 0 || j >= l.length) return; l[i] = l[j]; l[j] = id }
-        JD.setConfig("island.peek", l)
+    function save(l) { JD.setConfig("island.peek", l) }
+    function remove(id) { save(JD.peekLayout.filter(k => k !== id)) }
+    // Куда встал перетащенный виджет: перед первым видимым, чей центр правее. Скрытые (таймер без
+    // таймера) в счёт не идут, у них нет места на экране.
+    function drop(from, cx) {
+        const l = JD.peekLayout.slice(), id = l.splice(from, 1)[0]
+        let at = l.length
+        for (let k = 0, n = 0; k < rep.count; k++) {
+            if (k === from) continue
+            const it = rep.itemAt(k)
+            if (it && it.visible && it.x + it.width / 2 > cx) { at = n; break }
+            n++
+        }
+        l.splice(at, 0, id)
+        save(l)
     }
     // Удержание включает режим правки, как на iPhone; забытый режим гаснет через две минуты.
     TapHandler {
@@ -71,6 +76,7 @@ View {
         transformOrigin: Item.Center
         HoverHandler { id: midHover; enabled: JD.islandStyle === "bar" }
         Repeater {
+            id: rep
             model: JD.peekLayout
             delegate: Loader {
                 id: slot
@@ -98,42 +104,38 @@ View {
                     color: "transparent"; radius: 8
                     border.width: 1; border.color: JD.accentBlue
                 }
-                Row {
+                // Перетаскивание вместо стрелок: двигаем только рисунок (translate), а место в списке
+                // решаем при отпускании, иначе RowLayout пересчитывался бы под пальцем на каждый пиксель.
+                property real dragX: 0
+                transform: Translate { x: slot.dragX }
+                z: drag.active ? 10 : 0
+                DragHandler {
+                    id: drag
+                    enabled: JD.editMode
+                    yAxis.enabled: false
+                    onTranslationChanged: slot.dragX = translation.x
+                    onActiveChanged: if (!active) { pv.drop(slot.index, slot.x + slot.width / 2 + slot.dragX); slot.dragX = 0 }
+                }
+                Rectangle {
                     visible: JD.editMode
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.top; anchors.bottomMargin: -2
-                    spacing: 2
-                    Repeater {
-                        model: [
-                            { g: "‹", d: -1, ok: slot.index > 0 },
-                            { g: "×", d: 0, ok: true },
-                            { g: "›", d: 1, ok: slot.index < JD.peekLayout.length - 1 }
-                        ]
-                        delegate: Rectangle {
-                            required property var modelData
-                            visible: modelData.ok
-                            width: 16; height: 16; radius: 8; color: JD.fill2
-                            Label2 { anchors.centerIn: parent; font.pixelSize: 12; color: JD.text1; text: parent.modelData.g }
-                            TapHandler { onTapped: pv.edit(slot.modelData, parent.modelData.d) }
-                        }
-                    }
+                    anchors.horizontalCenter: parent.right; anchors.verticalCenter: parent.top
+                    width: 14; height: 14; radius: 7; color: JD.fill2
+                    Icon { anchors.centerIn: parent; name: "x"; implicitSize: 9; tint: JD.text1 }
+                    TapHandler { onTapped: pv.remove(slot.modelData) }
                 }
             }
         }
-        // Убранные виджеты: нажатие возвращает на место в конец.
-        Repeater {
-            model: JD.editMode ? pv.allParts.filter(k => JD.peekLayout.indexOf(k) < 0) : []
-            delegate: Rectangle {
-                required property string modelData
-                height: 22; width: addText.implicitWidth + 16; radius: 11; color: JD.fill2
-                Label2 { id: addText; anchors.centerIn: parent; font.pixelSize: 12; color: JD.text2; text: "+ " + (pv.names[modelData] || modelData) }
-                TapHandler { onTapped: JD.setConfig("island.peek", JD.peekLayout.concat([parent.modelData])) }
-            }
+        // Одна кнопка нормального размера: гасит дрожание и открывает галерею виджетов под островком.
+        Rectangle {
+            visible: JD.editMode
+            height: 28; width: galText.implicitWidth + 32; radius: 14; color: JD.accentBlue
+            Label2 { id: galText; anchors.centerIn: parent; color: "white"; text: "+ " + JD.tr("Виджеты") }
+            TapHandler { onTapped: { JD.editMode = false; JD.openTools("widgets") } }
         }
         Rectangle {
             visible: JD.editMode
-            height: 22; width: doneText.implicitWidth + 16; radius: 11; color: JD.accentBlue
-            Label2 { id: doneText; anchors.centerIn: parent; font.pixelSize: 12; color: "white"; text: JD.tr("Готово") }
+            height: 28; width: doneText.implicitWidth + 28; radius: 14; color: JD.fill2
+            Label2 { id: doneText; anchors.centerIn: parent; color: JD.text1; text: JD.tr("Готово") }
             TapHandler { onTapped: JD.editMode = false }
         }
     }

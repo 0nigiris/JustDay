@@ -99,6 +99,7 @@ Item {
                             { id: "history", name: "История", icon: "message-circle" },
                             { id: "load", name: "Машина", icon: "activity" },
                             { id: "qr", name: "QR", icon: "layout-grid" },
+                            { id: "widgets", name: "Виджеты", icon: "plus" },
                         ]
                         delegate: Rectangle {
                             required property var modelData
@@ -564,6 +565,12 @@ Item {
         // ───────────── микшер ─────────────
         MixerView {
             visible: tv.page === "mixer"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
+        WidgetsView {
+            visible: tv.page === "widgets"
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
