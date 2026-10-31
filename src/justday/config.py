@@ -430,6 +430,8 @@ DEFAULTS: dict = {
     "island": {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off
         "accent": "blue",  # основной цвет: blue | indigo | purple | pink | graphite (JD.accents)
+        # Свои виджеты: строки «имя:путь к файлу». Виджет «custom:имя» в peek показывает первую строку файла.
+        "custom": [],
         "accent_custom": "",  # свой цвет «#rrggbb»; главнее accent
         "font": "",           # свой шрифт; пусто — Inter
         "orbs": True,       # шары состояний (island/Orb.qml) вместо кольца

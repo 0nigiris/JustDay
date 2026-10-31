@@ -20,6 +20,10 @@ Item {
         { id: "focus", name: "Фокус", hint: "Окно тишины по расписанию" },
         { id: "weather", name: "Погода", hint: "Температура за окном" },
     ]
+    // Свои виджеты из island.custom («имя:путь») идут в галерее после встроенных.
+    readonly property var customs: (Array.isArray(JD.island.custom) ? JD.island.custom : [])
+        .map(e => String(e).split(":")[0].trim()).filter(n => n)
+        .map(n => ({ id: "custom:" + n, name: n, hint: JD.tr("Первая строка файла, обновляется раз в 5 секунд") }))
     function has(id) { return JD.peekLayout.indexOf(id) >= 0 }
     function toggle(id) {
         JD.setConfig("island.peek", has(id) ? JD.peekLayout.filter(k => k !== id) : JD.peekLayout.concat([id]))
@@ -39,7 +43,7 @@ Item {
                 width: parent.width
                 spacing: 6
                 Repeater {
-                    model: wv.all
+                    model: wv.all.concat(wv.customs)
                     delegate: Rectangle {
                         required property var modelData
                         readonly property bool on: wv.has(modelData.id)

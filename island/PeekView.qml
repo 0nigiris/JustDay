@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 
 View {
     // Кошка живёт внутри загрузчика виджета; снаружи (shell.qml) её берут отсюда.
@@ -84,7 +85,7 @@ View {
                 required property string modelData
                 // Разделитель перед виджетом нужен, если он не первый.
                 readonly property bool lead: index > 0
-                sourceComponent: pv.parts[modelData] || null
+                sourceComponent: pv.parts[modelData] || (modelData.indexOf("custom:") === 0 ? cCustom : null)
                 visible: status === Loader.Ready && !!item && item.shown
                 onLoaded: if (modelData === "cat") pv.cat = item.catItem
 
@@ -177,6 +178,34 @@ View {
                 lookX: JD.pointerX
                 lookY: JD.pointerY
             }
+        }
+    }
+
+    // Свой виджет: «custom:имя» в island.peek, а в island.custom строка «имя:путь к файлу». Показывает
+    // первую строку файла, перечитывая раз в пять секунд. Команд не запускаем нарочно: файл пишет
+    // любой скрипт человека (cron, systemd-таймер), а остров только показывает; запуск чужих команд
+    // из конфига был бы дырой.
+    Component {
+        id: cCustom
+        Item {
+            id: cu
+            readonly property string name: String(parent.modelData).slice(7)
+            readonly property string path: {
+                const l = Array.isArray(JD.island.custom) ? JD.island.custom : []
+                for (const e of l) {
+                    const i = String(e).indexOf(":")
+                    if (i > 0 && String(e).slice(0, i).trim() === cu.name) return String(e).slice(i + 1).trim()
+                }
+                return ""
+            }
+            property string line: ""
+            readonly property bool shown: line !== ""
+            implicitWidth: lbl.implicitWidth
+            implicitHeight: lbl.implicitHeight
+            FileView { id: ff; path: cu.path; blockLoading: true; watchChanges: false }
+            function refresh() { if (!cu.path) { cu.line = ""; return } ff.reload(); cu.line = String(ff.text() || "").split("\n")[0].trim().slice(0, 60) }
+            Timer { interval: 5000; running: !!cu.path; repeat: true; triggeredOnStart: true; onTriggered: cu.refresh() }
+            Label2 { id: lbl; color: pv.fg; text: cu.line }
         }
     }
 
