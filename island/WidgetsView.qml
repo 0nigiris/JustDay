@@ -19,6 +19,8 @@ Item {
         { id: "muted", name: "Без звука", hint: "Метка, когда звук выключен" },
         { id: "focus", name: "Фокус", hint: "Окно тишины по расписанию" },
         { id: "weather", name: "Погода", hint: "Температура за окном" },
+        { id: "cpu", name: "Процессор", hint: "Нагрузка в процентах" },
+        { id: "ram", name: "Память", hint: "Занято в процентах" },
     ]
     // Свои виджеты из island.custom («имя:путь») идут в галерее после встроенных.
     readonly property var customs: (Array.isArray(JD.island.custom) ? JD.island.custom : [])

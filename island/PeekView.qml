@@ -43,7 +43,7 @@ View {
     // жёстко вписанной строкой: двигать и убирать виджеты можно было только правкой этого файла.
     readonly property var parts: ({
         assistant: cAssistant, cat: cCat, clock: cClock, date: cDate, player: cPlayer, event: cEvent,
-        timer: cTimer, muted: cMuted, focus: cFocus, weather: cWeather
+        timer: cTimer, muted: cMuted, focus: cFocus, weather: cWeather, cpu: cCpu, ram: cRam
     })
     function save(l) { JD.setConfig("island.peek", l) }
     function remove(id) { save(JD.peekLayout.filter(k => k !== id)) }
@@ -178,6 +178,29 @@ View {
                 lookX: JD.pointerX
                 lookY: JD.pointerY
             }
+        }
+    }
+
+    // Нагрузка. Числа берём из JD.cpu / JD.mem, которые и так обновляются для подсказки над кошкой,
+    // так что виджет ничего нового у системы не просит.
+    Component {
+        id: cCpu
+        RowLayout {
+            readonly property bool shown: true
+            spacing: 12
+            readonly property bool lead: parent ? parent.lead : false
+            Sep { visible: parent && parent.lead }
+            Label2 { color: JD.cpu > 85 ? JD.accentOrange : pv.fg; text: "CPU " + Math.round(JD.cpu) + "%" }
+        }
+    }
+    Component {
+        id: cRam
+        RowLayout {
+            readonly property bool shown: true
+            spacing: 12
+            readonly property bool lead: parent ? parent.lead : false
+            Sep { visible: parent && parent.lead }
+            Label2 { color: JD.mem > 90 ? JD.accentOrange : pv.fg; text: "RAM " + Math.round(JD.mem) + "%" }
         }
     }
 
