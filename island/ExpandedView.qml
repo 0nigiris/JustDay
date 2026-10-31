@@ -261,10 +261,7 @@ View {
                         spacing: 10
                         Rectangle {
                             implicitWidth: 44; implicitHeight: 44; radius: 12
-                            gradient: Gradient {
-                                GradientStop { position: 0; color: "#fc3c44" }
-                                GradientStop { position: 1; color: "#bf5af2" }
-                            }
+                            color: "#fc3c44"
                             Image { anchors.centerIn: parent; source: Quickshell.shellDir + "/icons/music.svg"; sourceSize: Qt.size(44, 44); width: 22; height: 22 }
                         }
                         ColumnLayout {

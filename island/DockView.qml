@@ -889,10 +889,7 @@ Item {
                         sourceComponent: Rectangle {
                             anchors.fill: parent
                             radius: width * 0.27
-                            gradient: Gradient {
-                                GradientStop { position: 0; color: "#3f8cff" }
-                                GradientStop { position: 1; color: "#7a4df0" }
-                            }
+                            color: "#3f8cff"
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.22)
                             Grid {

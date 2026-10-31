@@ -264,10 +264,7 @@ Item {
                     spacing: 10
                     Rectangle {
                         implicitWidth: 34; implicitHeight: 34; radius: 10
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: "#5e5ce6" }
-                            GradientStop { position: 1; color: "#0a84ff" }
-                        }
+                        color: JD.accentBlue
                         Glyph { anchors.centerIn: parent; name: "sparkles"; size: 18 }
                     }
                     ColumnLayout {
@@ -3128,10 +3125,7 @@ Item {
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 implicitWidth: 88; implicitHeight: 88; radius: 24
-                gradient: Gradient {
-                    GradientStop { position: 0; color: "#5e5ce6" }
-                    GradientStop { position: 1; color: "#0a84ff" }
-                }
+                color: JD.accentBlue
                 Glyph { anchors.centerIn: parent; name: "sparkles"; size: 44 }
             }
             Text { Layout.alignment: Qt.AlignHCenter; text: "JustDay"; color: win.t1; font.family: win.font; font.pixelSize: 30; font.weight: Font.Bold }
