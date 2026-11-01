@@ -10,7 +10,7 @@ Item {
     id: wv
     readonly property var all: [
         { id: "assistant", name: "Ассистент", icon: "sparkles", hint: "Шар или существо: слушает ли он и занят ли" },
-        { id: "cat", name: "Кошка", icon: "cat", hint: "Живёт на полоске, сидит на окнах" },
+        { id: "cat", name: "Кошка", icon: "smile", hint: "Живёт на полоске, сидит на окнах" },
         { id: "clock", name: "Часы", sample: "14:14", hint: "Время" },
         { id: "date", name: "Дата", sample: "1 нояб.", hint: "День недели и число" },
         { id: "player", name: "Плеер", icon: "music", hint: "Что играет, только пока играет" },

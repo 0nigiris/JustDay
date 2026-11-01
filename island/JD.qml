@@ -1558,7 +1558,7 @@ Singleton {
         "smile", "clipboard", "memory-stick", "hard-drive", "thermometer", "network", "wifi", "bluetooth", "gauge",
         "trash-2", "grip-vertical", "camera", "minus", "star", "wifi-off", "list-plus", "arrow-left", "pencil", "minimize-2",
         "mic-off", "sliders-horizontal", "volume-1", "lock", "star",
-        "arrow-right", "circle-stop", "cat"
+        "arrow-right", "circle-stop"
     ]
     // "" when the island has no glyph of its own for this name
     function glyph(name) { return name ? (glyphs[name] || (localIcons.indexOf(name) >= 0 ? name : "")) : "" }
