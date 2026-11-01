@@ -1226,6 +1226,16 @@ Item {
                 Row { title: JD.tr("Звуки интерфейса"); subtitle: JD.tr("Тихие, из одной гаммы; в играх молчат"); Toggle { checked: win.get("island.ui_sounds") !== false; onToggled: v => win.set("island.ui_sounds", v) } }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
+                    title: JD.tr("Размер всего")
+                    subtitle: JD.tr("Остров, док, лоток и меню разом. Вступает в силу после перезапуска острова (кнопка ниже или Meta+Ctrl+R)")
+                    SSlider { key: "island.ui_scale"; from: 70; to: 170; step: 5; decimals: 0; unit: "%" }
+                }
+                Row {
+                    title: JD.tr("Применить размер")
+                    subtitle: JD.tr("Перезапустить остров сейчас")
+                    Btn { text: JD.tr("Перезапустить"); onClicked: JD.send({ cmd: "module_restart", id: "ui" }) }
+                }
+                Row {
                     title: JD.tr("Вызывать взмахом")
                     subtitle: JD.tr("Спрятанный островок раскроется на быстрое движение к краю, а не на медленное наведение. 0 — любым наведением")
                     SSlider { key: "island.reveal_flick"; from: 0; to: 3000; step: 100; decimals: 0; unit: JD.tr(" тчк/с") }

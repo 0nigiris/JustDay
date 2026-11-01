@@ -18,6 +18,7 @@ from . import config
 MODULES: dict[str, tuple[str, str | None]] = {
     "daemon": ("Мозг и команды", "justday.service"),
     "island": ("Остров, док и лоток (перерисовать)", None),
+    "ui": ("Остров целиком (заново, с новым размером)", "justday-ui.service"),
     "voice": ("Распознавание речи", "justday-voice.service"),
     "tts": ("Голос нейросети", "justday-chatterbox.service"),
     "ollama": ("Местная модель", "justday-ollama.service"),

@@ -118,6 +118,15 @@ def run() -> int:
         loop = str((config.load()["island"] or {}).get("render_loop", "auto")).lower()
         if loop in ("threaded", "basic") and "QSG_RENDER_LOOP" not in os.environ:
             os.environ["QSG_RENDER_LOOP"] = loop
+        # Размер всего (остров, док, лоток, меню) одним числом. Масштаб Qt берут окна целиком, вместе с
+        # масками и зонами нажатия, поэтому ничего не расходится, чего не скажешь про попытку
+        # умножать размеры по одному в QML. Меняется только при запуске: на ходу Qt его не принимает.
+        try:
+            pct = float((config.load()["island"] or {}).get("ui_scale", 100) or 100)
+        except (TypeError, ValueError):
+            pct = 100.0
+        if 50 <= pct <= 250 and pct != 100 and "QT_SCALE_FACTOR" not in os.environ:
+            os.environ["QT_SCALE_FACTOR"] = f"{pct / 100:.2f}"
         os.execvp(exe, [exe, "-p", str(ISLAND_DIR)])
     from . import panel
     return panel.main()

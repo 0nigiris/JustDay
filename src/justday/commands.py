@@ -1001,7 +1001,8 @@ class CommandsMixin:
             return {"ok": False, "error": "модули перезапускает человек: кнопкой в настройках"}
         mid = str(req.get("id", ""))
         # Демон перезапускает сам себя: ответ уходит раньше, чем systemd его остановит.
-        if mid == "daemon":
+        # То же с островом: перезапуск гасит окно, из которого пришла просьба.
+        if mid in ("daemon", "ui"):
             asyncio.get_running_loop().call_later(0.5, modules.restart, mid)
             return {"ok": True, "how": "restart"}
         return await asyncio.get_running_loop().run_in_executor(None, modules.restart, mid)

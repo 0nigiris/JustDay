@@ -580,6 +580,7 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("action", choices=["get", "set"])
     sp.add_argument("key", nargs="?")
     sp.add_argument("value", nargs="?")
+    sub.add_parser("rescue", help="экстренная перезагрузка: снимок отладки, затем перезапуск демона и острова")
     sub.add_parser("restart", help="restart the daemon and start a fresh conversation (after model changes)")
     sp = sub.add_parser("module", help="отдельные части JustDay: list | restart ID (остров только перерисовывается, док остаётся)")
     sp.add_argument("action", choices=["list", "restart"])
@@ -1475,6 +1476,10 @@ def main(argv: list[str] | None = None) -> None:
                 print(suitcase.unpack(__import__("pathlib").Path(a.file).expanduser().read_bytes(), pw))
         except (ValueError, RuntimeError, OSError) as e:
             sys.exit(f"Не вышло: {e}")
+    elif a.cmd == "rescue":
+        from . import rescue
+
+        print(f"отладка записана: {rescue.restart()}")
     elif a.cmd == "restart":
         subprocess.run(["systemctl", "--user", "restart", "justday.service"], check=True)
         for _ in range(60):
