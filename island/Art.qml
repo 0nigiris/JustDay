@@ -12,6 +12,13 @@ ClippingRectangle {
     implicitHeight: size
     radius: Math.min(Math.round(size * 0.24), 16)
     color: JD.fill2
+    // Смена трека: обложка чуть «вздыхает» вместе с угасанием и появлением, а не мигает.
+    onSrcChanged: if (JD.animOn && src) pop.restart()
+    SequentialAnimation {
+        id: pop
+        NumberAnimation { target: artImg; property: "scale"; to: 0.94; duration: JD.dur(90); easing.type: Easing.InQuad }
+        NumberAnimation { target: artImg; property: "scale"; to: 1; duration: JD.dur(260); easing.type: Easing.OutBack }
+    }
     // no cover yet (a local file, a station): a record-sleeve gradient, not a grey file icon
     Rectangle {
         anchors.fill: parent
