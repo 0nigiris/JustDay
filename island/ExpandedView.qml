@@ -314,6 +314,7 @@ View {
         // ── sound: the assistant, the music, the whole computer. Three knobs in one card, each one only
         //    moves what it names — turning the assistant down leaves every other app where it was.
         Rectangle {
+            visible: JD.island.menu_sound !== false
             Layout.fillWidth: true
             implicitHeight: sndCol.implicitHeight + 24
             radius: 20
@@ -448,7 +449,7 @@ View {
 
         // ── next event
         Rectangle {
-            visible: !!JD.nextEvent
+            visible: !!JD.nextEvent && JD.island.menu_event !== false
             Layout.fillWidth: true
             implicitHeight: 40
             radius: 14
@@ -464,6 +465,7 @@ View {
 
         // ── model
         RowLayout {
+            visible: JD.island.menu_model !== false
             spacing: 10
             SectionLabel { text: JD.tr("МОДЕЛЬ") }
             Repeater {
@@ -553,7 +555,7 @@ View {
                 }
             }
             ColumnLayout {
-                visible: JD.history.length > 0
+                visible: JD.history.length > 0 && JD.island.menu_recent !== false
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
                 Layout.alignment: Qt.AlignTop

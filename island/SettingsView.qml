@@ -1835,6 +1835,10 @@ Item {
             Group {
                 // Переехало из «Общих»: это уведомление, и место ему среди уведомлений.
                 Row { title: JD.tr("Сообщать о подтверждениях и ошибках"); subtitle: JD.tr("Системные уведомления самого JustDay: «сделано», «не вышло», «нужно ваше да»"); Toggle { checked: !!win.get("ui.notifications"); onToggled: v => win.set("ui.notifications", v) } }
+                Row { title: JD.tr("В меню: громкость"); Toggle { checked: win.get("island.menu_sound") !== false; onToggled: v => win.set("island.menu_sound", v) } }
+                Row { title: JD.tr("В меню: ближайшее событие"); Toggle { checked: win.get("island.menu_event") !== false; onToggled: v => win.set("island.menu_event", v) } }
+                Row { title: JD.tr("В меню: выбор модели"); Toggle { checked: win.get("island.menu_model") !== false; onToggled: v => win.set("island.menu_model", v) } }
+                Row { title: JD.tr("В меню: недавнее"); Toggle { checked: win.get("island.menu_recent") !== false; onToggled: v => win.set("island.menu_recent", v) } }
                 Row { title: JD.tr("Уведомления на острове"); subtitle: JD.tr("Показывать всплывашки JustDay (Plasma при этом молчит, если включён режим «только остров»). Никуда не отправляются"); Toggle { checked: win.get("island.show_notifications") !== false; onToggled: v => win.set("island.show_notifications", v) } }
                 Row {
                     title: JD.tr("Всплывашки Plasma")

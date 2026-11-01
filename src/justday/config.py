@@ -485,6 +485,10 @@ DEFAULTS: dict = {
         "cat_place": "clock",  # где она на сплошной полосе: clock — у часов, tray — среди значков трея
         "work_quiet": True,
         "notification_server": True,
+        "menu_sound": True,    # какие блоки показывать в главном меню
+        "menu_event": True,
+        "menu_model": True,
+        "menu_recent": True,
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         # Where toast/shade notifications appear (Telegram-style), independent of the island pill:
         # screen: "" = same monitor as the island; "primary" | "secondary" | output name (HDMI-A-1, DP-2…)
