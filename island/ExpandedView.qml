@@ -95,6 +95,9 @@ View {
                 size: 32
                 onClicked: JD.setMuted(!JD.muted)
             }
+            // Правка живёт в главном меню, где человек и ищет всё остальное: закрывает меню и
+            // включает дрожание на полоске, оттуда же открываются виджеты.
+            IconButton { icon: "pencil"; size: 32; onClicked: { JD.expanded = false; JD.editMode = true } }
             IconButton { icon: "wand-sparkles"; size: 32; onClicked: JD.openTools("emoji") }   // спидометр читался как «скорость», а здесь — набор инструментов
             IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
             IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }

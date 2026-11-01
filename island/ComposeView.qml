@@ -52,6 +52,7 @@ View {
     function runCommand(c) {
         if (c.fill) { field.text = c.fill; field.cursorPosition = field.length; return }
         JD.composeOpen = false
+        JD.composeText = ""     // «/menu» — команда, а не черновик
         c.run()
     }
     function browse(step) {
@@ -93,6 +94,8 @@ View {
                     selectByMouse: true
                     textFormat: TextEdit.PlainText
                     onCursorRectangleChanged: fieldFlick.ensureVisible(cursorRectangle)
+                    // Каждая правка сразу уходит в черновик (JD.openCompose его не обнуляет).
+                    onTextChanged: if (cmp.shown) { JD.composeText = text; JD.composeDraftAt = Date.now() }
                     Text {
                         visible: !field.text && !field.preeditText
                         text: JD.composeContext.selection ? JD.tr("Что сделать с выделенным? Объясни, переведи, ответь…")

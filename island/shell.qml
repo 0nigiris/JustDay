@@ -554,8 +554,10 @@ ShellRoot {
             TapHandler {
                 // На полосе повторное нажатие по островку закрывает раскрытую карточку.
                 // На капсуле карточка и есть островок, поэтому там нажатие по-прежнему не гасит её.
-                enabled: (JD.islandStyle === "bar" && ["expanded", "settings", "tools"].includes(island.mode))
-                         || !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification", "alarm"].includes(island.mode)
+                // В режиме правки нажатие по кнопкам на полоске («+ Виджеты», «Готово», крестики)
+                // всплывало сюда и раскрывало главное меню поверх только что открытых виджетов.
+                enabled: !JD.editMode && ((JD.islandStyle === "bar" && ["expanded", "settings", "tools"].includes(island.mode))
+                         || !["expanded", "settings", "approval", "card", "compose", "player", "video", "notification", "alarm"].includes(island.mode))
                 onTapped: {
                     if (statusHover.hovered) return
                     barStatus.page = ""

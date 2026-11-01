@@ -9,18 +9,18 @@ import QtQuick.Layouts
 Item {
     id: wv
     readonly property var all: [
-        { id: "assistant", name: "Ассистент", hint: "Шар или существо: слушает ли он и занят ли" },
-        { id: "cat", name: "Кошка", hint: "Живёт на полоске, сидит на окнах" },
-        { id: "clock", name: "Часы", hint: "Время" },
-        { id: "date", name: "Дата", hint: "День недели и число" },
-        { id: "player", name: "Плеер", hint: "Что играет, только пока играет" },
-        { id: "event", name: "Событие", hint: "Ближайшая встреча, работа Клода, задача" },
-        { id: "timer", name: "Таймер", hint: "Виден, пока идёт" },
-        { id: "muted", name: "Без звука", hint: "Метка, когда звук выключен" },
-        { id: "focus", name: "Фокус", hint: "Окно тишины по расписанию" },
-        { id: "weather", name: "Погода", hint: "Температура за окном" },
-        { id: "cpu", name: "Процессор", hint: "Нагрузка в процентах" },
-        { id: "ram", name: "Память", hint: "Занято в процентах" },
+        { id: "assistant", name: "Ассистент", icon: "sparkles", hint: "Шар или существо: слушает ли он и занят ли" },
+        { id: "cat", name: "Кошка", icon: "cat", hint: "Живёт на полоске, сидит на окнах" },
+        { id: "clock", name: "Часы", sample: "14:14", hint: "Время" },
+        { id: "date", name: "Дата", sample: "1 нояб.", hint: "День недели и число" },
+        { id: "player", name: "Плеер", icon: "music", hint: "Что играет, только пока играет" },
+        { id: "event", name: "Событие", icon: "calendar-clock", hint: "Ближайшая встреча, работа Клода, задача" },
+        { id: "timer", name: "Таймер", icon: "timer", hint: "Виден, пока идёт" },
+        { id: "muted", name: "Без звука", icon: "volume-x", hint: "Метка, когда звук выключен" },
+        { id: "focus", name: "Фокус", icon: "moon", hint: "Окно тишины по расписанию" },
+        { id: "weather", name: "Погода", sample: "+23°", hint: "Температура за окном" },
+        { id: "cpu", name: "Процессор", sample: "12%", hint: "Нагрузка в процентах" },
+        { id: "ram", name: "Память", sample: "34%", hint: "Занято в процентах" },
     ]
     // Свои виджеты из island.custom («имя:путь») идут в галерее после встроенных.
     readonly property var customs: (Array.isArray(JD.island.custom) ? JD.island.custom : [])
@@ -52,8 +52,30 @@ Item {
                         width: col.width; height: 48; radius: 14
                         color: rowHover.hovered ? JD.fill2 : JD.fill1
                         // Без RowLayout: переключатель там уезжал вслед за длиной текста.
+                        // Крошечный предпросмотр: значок или то, что виджет показывает на полоске.
+                        // Не настоящая отрисовка (она зависит от данных), а намёк, что это за штука.
+                        Rectangle {
+                            id: thumb
+                            anchors.left: parent.left; anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 54; height: 30; radius: 15; color: "black"
+                            border.width: 1; border.color: JD.fill2
+                            opacity: on ? 1 : 0.55
+                            Icon {
+                                anchors.centerIn: parent
+                                visible: !!modelData.icon || String(modelData.id).startsWith("custom:")
+                                name: modelData.icon || "file-text"
+                                implicitSize: 16
+                            }
+                            Label2 {
+                                anchors.centerIn: parent
+                                visible: !!modelData.sample
+                                color: JD.text1; font.pixelSize: 12
+                                text: modelData.sample || ""
+                            }
+                        }
                         Column {
-                            anchors.left: parent.left; anchors.leftMargin: 14
+                            anchors.left: thumb.right; anchors.leftMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
                             Label1 { text: JD.tr(modelData.name) }
                             Label2 { color: JD.text2; font.pixelSize: 12; text: JD.tr(modelData.hint) }

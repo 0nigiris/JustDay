@@ -298,8 +298,14 @@ Singleton {
         settings = Object.assign({}, settings, { volume: v })   // the slider follows the finger, not the socket
         send({ cmd: "volume", value: v })
     }
+    // Черновик живёт, пока его не отправили: закрыл островок, чтобы глянуть в другое окно и скопировать
+    // кусок, открыл снова — текст на месте. Раньше каждое открытие обнуляло поле, и набранное
+    // по частям пропадало. Явная заготовка («Включи песню ») по-прежнему подставляется вместо него;
+    // забытый черновик старше 30 минут не воскрешаем.
+    property real composeDraftAt: 0
     function openCompose(text, context) {
-        composeText = text || ""
+        if (text) composeText = text
+        else if (Date.now() - composeDraftAt > 30 * 60 * 1000) composeText = ""
         composeContext = context || ({})
         settingsOpen = false
         expanded = false
