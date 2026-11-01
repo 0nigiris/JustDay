@@ -189,23 +189,6 @@ class MusicMixin:
         best_by_words = max(shown, key=lambda e: self._title_hit(e, ans))
         return best_by_words if self._title_hit(best_by_words, ans) > 0 else shown[0]
 
-    async def _ask_with_library(self, local: dict, query: str, loop) -> dict | None:
-        """Похоже нашлось и на диске, и снаружи — показываем и то, и другое.
-
-        Фонотека идёт первой: она играет мгновенно и без сети. Если сети нет
-        или поиск не удался, вопроса не будет — молча берём своё.
-        """
-        try:
-            outside = await loop.run_in_executor(None, media.find, query, "music", 2)
-        except Exception as e:
-            log.info("search for the choice failed (%s), playing what is downloaded", e)
-            return local
-        seen = local.get("url", "")
-        outside = [e for e in outside if e.get("url") != seen][:2]
-        if not outside:
-            return local
-        return await self._ask_which_song([{**local, "channel": local.get("artist", ""), "mine": True}, *outside], query)
-
     async def _ask_whole_list(self, yt: dict) -> bool:
         """Ссылка из микса или плейлиста: «только эту песню» (по умолчанию) или весь список?
 
@@ -237,6 +220,7 @@ class MusicMixin:
                 return {"ok": True, "done": t("музыка продолжается")}
             return {"ok": False, "error": "what to play?"}
         path = Path(query).expanduser()
+        near: list[dict] = []
         try:
             await self.music.ensure()
             if query.startswith(("/", "~", "./")) and path.exists():  # a file or a folder of music
@@ -261,38 +245,14 @@ class MusicMixin:
                 self._pause_videos()
                 return {"ok": True, "title": tracks[0]["title"], "queued": len(tracks) - 1,
                         "done": t("играет {what}", what=tracks[0]["title"])}
-            # already in the library: starts from disk in a moment, and works with no network at all
+            # Уже скачанное играет первым и сразу, но только точное: название целиком внутри названия
+            # трека. Похожее на слух («No Name» → какая-то другая песня с похожим куском) — не то, что
+            # просили, и раньше оно включалось само, а в тихом режиме даже без вопроса. Нет точного —
+            # ищем и качаем; а когда сети нет, ниже вернёмся к похожему с диска.
             if not playlist and count == 1 and mode == "replace" and not media.is_url(query):
                 near = media.find_local(query, limit=1)
-                if near and near[0]["score"] >= 0.82:
-                    # Точное попадание — играем молча. Похожее, но не точное —
-                    # спрашиваем, и в варианты кладём и то, что лежит на диске,
-                    # и то, что нашлось снаружи: «включи No Name» может значить
-                    # и скачанное когда-то, и совсем другую песню.
-                    if near[0]["score"] >= self.SURE_LOCAL or self.silent():
-                        return await self.play_library(query, count=1)
-                    chosen = await self._ask_with_library(near[0], query, loop)
-                    if chosen is None:
-                        return {"ok": True, "done": t("хорошо, не включаю")}
-                    # Своё узнаём по пометке, а не по ссылке: у скачанного трека
-                    # в фонотеке ссылка на ютуб как раз есть — оттуда его и взяли.
-                    if chosen.get("mine"):
-                        return await self.play_library(chosen["title"], count=1)
-                    entries = [chosen]
-                    self.music.set_loading({"title": chosen["title"], "progress": 0})
-                    first = await loop.run_in_executor(None, media.cached_track, chosen)
-                    if not first:
-                        first = await loop.run_in_executor(None, media.stream_track, chosen)
-                        spawn(self._cache_track(chosen))
-                    self.music.set_loading(None)
-                    await self.music.load([first], mode)
-                    self.music.source = ""
-                    self.music.remember()
-                    self._music_started = time.monotonic()
-                    self._pause_videos()
-                    events.emit("media_play", title=first["title"], file=first.get("file", ""), source="choice")
-                    return {"ok": True, "title": first["title"], "artist": first.get("artist", ""),
-                            "done": t("играет {what}", what=first["title"])}
+                if near and near[0]["score"] >= self.SURE_LOCAL:
+                    return await self.play_library(query, count=1)
             yt = media.parse_youtube(query) if media.is_url(query) else None
             if yt and yt["video"] and yt["list"] and not playlist:
                 playlist = await self._ask_whole_list(yt)
@@ -330,6 +290,9 @@ class MusicMixin:
         except Exception as e:
             self.music.set_loading(None)
             log.warning("play failed: %s", e)
+            # Сети нет или ютуб не ответил: лучше близкое с диска, чем тишина.
+            if near and near[0]["score"] >= 0.82:
+                return await self.play_library(query, count=1)
             return {"ok": False, "error": str(e)}
         self.music.set_loading(None)
         self._music_started = time.monotonic()
