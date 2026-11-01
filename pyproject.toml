@@ -1,6 +1,6 @@
 [project]
 name = "justday"
-version = "0.2.0"
+version = "0.9.0"
 description = "JustDay — voice front-end that turns Claude Code into a personal desktop agent for KDE Plasma"
 readme = "README.md"
 # Верхней границы нет нарочно: на чужом компьютере питон такой, какой там стоит (у Fedora 44 это

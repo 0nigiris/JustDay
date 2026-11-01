@@ -10,7 +10,7 @@ Item {
     id: wv
     readonly property var all: [
         { id: "assistant", name: "Ассистент", icon: "sparkles", hint: "Шар или существо: слушает ли он и занят ли" },
-        { id: "cat", name: "Кошка", icon: "smile", hint: "Живёт на полоске, сидит на окнах" },
+        { id: "cat", name: "Кошка", image: "icons/cat/run0.svg", hint: "Живёт на полоске, сидит на окнах" },
         { id: "clock", name: "Часы", sample: "14:14", hint: "Время" },
         { id: "date", name: "Дата", sample: "1 нояб.", hint: "День недели и число" },
         { id: "player", name: "Плеер", icon: "music", hint: "Что играет, только пока играет" },
@@ -26,6 +26,23 @@ Item {
     readonly property var customs: (Array.isArray(JD.island.custom) ? JD.island.custom : [])
         .map(e => String(e).split(":")[0].trim()).filter(n => n)
         .map(n => ({ id: "custom:" + n, name: n, hint: JD.tr("Первая строка файла, обновляется раз в 5 секунд") }))
+    // Включённые идут первыми и в том порядке, в каком стоят на полоске; выключенные — после.
+    // Порядок меняют стрелки в строке: перетаскивание на самой полоске остаётся, но тянуть
+    // длинный текст на узкой полоске неудобно.
+    readonly property var ordered: {
+        const every = all.concat(customs)
+        const byId = {}
+        every.forEach(w => byId[w.id] = w)
+        const on = JD.peekLayout.filter(id => byId[id]).map(id => byId[id])
+        return on.concat(every.filter(w => JD.peekLayout.indexOf(w.id) < 0))
+    }
+    function move(id, step) {
+        const l = JD.peekLayout.slice()
+        const i = l.indexOf(id), j = i + step
+        if (i < 0 || j < 0 || j >= l.length) return
+        l.splice(j, 0, l.splice(i, 1)[0])
+        JD.setConfig("island.peek", l)
+    }
     function has(id) { return JD.peekLayout.indexOf(id) >= 0 }
     function toggle(id) {
         JD.setConfig("island.peek", has(id) ? JD.peekLayout.filter(k => k !== id) : JD.peekLayout.concat([id]))
@@ -34,7 +51,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: 8
-        Label2 { color: JD.text2; text: JD.tr("Нажмите, чтобы добавить или убрать. Порядок меняется перетаскиванием на островке.") }
+        Label2 { color: JD.text2; text: JD.tr("Нажмите, чтобы добавить или убрать. Порядок меняют стрелки справа.") }
         Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -45,8 +62,9 @@ Item {
                 width: parent.width
                 spacing: 6
                 Repeater {
-                    model: wv.all.concat(wv.customs)
+                    model: wv.ordered
                     delegate: Rectangle {
+                        id: rowItem
                         required property var modelData
                         readonly property bool on: wv.has(modelData.id)
                         width: col.width; height: 48; radius: 14
@@ -63,9 +81,16 @@ Item {
                             opacity: on ? 1 : 0.55
                             Icon {
                                 anchors.centerIn: parent
-                                visible: !!modelData.icon || String(modelData.id).startsWith("custom:")
+                                visible: (!!modelData.icon || String(modelData.id).startsWith("custom:")) && !modelData.image
                                 name: modelData.icon || "file-text"
                                 implicitSize: 16
+                            }
+                            Image {
+                                anchors.centerIn: parent
+                                visible: !!modelData.image
+                                source: modelData.image ? Qt.resolvedUrl(modelData.image) : ""
+                                sourceSize.height: 40
+                                height: 20; fillMode: Image.PreserveAspectFit
                             }
                             Label2 {
                                 anchors.centerIn: parent
@@ -80,7 +105,26 @@ Item {
                             Label1 { text: JD.tr(modelData.name) }
                             Label2 { color: JD.text2; font.pixelSize: 12; text: JD.tr(modelData.hint) }
                         }
+                        Row {
+                            id: arrows
+                            visible: on
+                            anchors.right: sw.left; anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 4
+                            Repeater {
+                                model: [{ g: "chevron-up", s: -1 }, { g: "chevron-down", s: 1 }]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: 28; height: 28; radius: 14
+                                    color: ah.hovered ? JD.fill2 : "transparent"
+                                    Icon { anchors.centerIn: parent; name: modelData.g; implicitSize: 16 }
+                                    HoverHandler { id: ah; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: wv.move(rowItem.modelData.id, modelData.s) }
+                                }
+                            }
+                        }
                         Rectangle {
+                            id: sw
                             anchors.right: parent.right; anchors.rightMargin: 14
                             anchors.verticalCenter: parent.verticalCenter
                             width: 40; height: 24; radius: 12

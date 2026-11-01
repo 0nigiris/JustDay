@@ -1,10 +1,21 @@
 // Вынесено из shell.qml (Р-80).
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 
 View {
     implicitWidth: 600
-    implicitHeight: Math.min(430, answerText.implicitHeight + 116)
+    implicitHeight: Math.min(560, answerText.implicitHeight + 116)
+    // Колесо ловится на всей карточке: выделяемый текст под курсором перехватывал его, и длинный
+    // ответ нельзя было прокрутить.
+    WheelHandler {
+        onWheel: event => {
+            const room = Math.max(0, answerScroll.contentHeight - answerScroll.height)
+            answerScroll.contentY = Math.max(0, Math.min(room,
+                answerScroll.contentY - event.angleDelta.y))
+            event.accepted = true
+        }
+    }
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 18
@@ -42,12 +53,16 @@ View {
             // движение на полпути, и выделение обрывается ровно там, где человек разогнался.
             // Листать остаётся колесо — им тут и листают.
             interactive: false
-            WheelHandler {
-                onWheel: event => {
-                    const room = Math.max(0, answerScroll.contentHeight - answerScroll.height)
-                    answerScroll.contentY = Math.max(0, Math.min(room,
-                        answerScroll.contentY - event.angleDelta.y))
-                    event.accepted = true
+            // Полоса видна, пока ответ не помещается: раньше было нечем ни понять, что внизу есть ещё,
+            // ни схватиться мышью, если колесо не доходило до окна. За полосу можно тянуть.
+            ScrollBar.vertical: ScrollBar {
+                policy: answerScroll.contentHeight > answerScroll.height + 2 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                rightPadding: 2
+                implicitWidth: 10
+                background: null
+                contentItem: Rectangle {
+                    implicitWidth: 5; radius: 2.5
+                    color: Qt.rgba(1, 1, 1, 0.32)
                 }
             }
             SelectableText {

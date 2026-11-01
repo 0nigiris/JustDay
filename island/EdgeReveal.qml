@@ -97,8 +97,8 @@ Item {
             cancelHide()
             if (!edgeOnly)
                 reveal()
-            else if (!hovering)
-                hovering = true
+            else if (!hovering && flickSpeed <= 0)
+                hovering = true   // при взмахе только рывок зовёт полосу; тело её лишь удерживает
         } else {
             scheduleHide()
         }

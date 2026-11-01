@@ -350,10 +350,33 @@ ShellRoot {
                            : Math.max(1, JD.atTop ? island.y + island.height - Math.min(win.barBleed, island.y) : island.height)
             onParkedChanged: if (parked) { suppressEnter = true; suppressTimer.restart() }
             Timer { id: suppressTimer; interval: 180; onTriggered: revealPad.suppressEnter = false }
+            // Взмах, а не наведение. Спрятанный островок раскрывается только на быстрое движение к
+            // краю экрана: так же, как курсор «перелетает» на соседний монитор, а при медленном
+            // подходе упирается. Без этого островок выскакивал под вкладками браузера, когда к ним
+            // быстро тянулись, чтобы нажать. Скорость мерим по HoverHandler (точки в секунду):
+            // нужен рывок именно к краю, горизонтальный проезд вдоль него не считается.
+            property real fastAt: 0
+            readonly property real flick: JD.island.reveal_flick === undefined ? 1200 : Math.max(0, Number(JD.island.reveal_flick))
+            function flung(): bool {
+                return flick <= 0 || (Date.now() - fastAt) < 300
+            }
+            HoverHandler {
+                onPointChanged: {
+                    const v = point.velocity
+                    const toward = JD.atTop ? -v.y : v.y
+                    if (toward > revealPad.flick && toward > Math.abs(v.x) * 1.5) revealPad.fastAt = Date.now()
+                    if (revealPad.parked && revealPad.containsMouse && !revealPad.suppressEnter && revealPad.flung() && !JD.peeking) {
+                        JD.islandHovered = true
+                        JD.revealFromEdge()
+                    }
+                }
+            }
             onContainsMouseChanged: {
                 if (!revealPad.enabled) return
                 if (containsMouse) {
                     if (suppressEnter) return
+                    // Спрятанный островок на медленном заходе не трогаем; рывок поймает HoverHandler.
+                    if (parked && !flung()) return
                     JD.islandHovered = true
                     JD.revealFromEdge()
                 } else {
@@ -366,12 +389,12 @@ ShellRoot {
                 const p = mapToItem(null, mouseX, mouseY)
                 JD.pointerX = p.x
                 JD.pointerY = p.y
-                if (!revealPad.enabled || !containsMouse || !parked || suppressEnter) return
+                if (!revealPad.enabled || !containsMouse || !parked || suppressEnter || !flung()) return
                 JD.revealFromEdge()
             }
             onEnabledChanged: {
                 if (!enabled) return
-                if (containsMouse && !suppressEnter) {
+                if (containsMouse && !suppressEnter && (!parked || flung())) {
                     JD.islandHovered = true
                     JD.revealFromEdge()
                 } else if (!containsMouse) {

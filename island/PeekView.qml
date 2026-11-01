@@ -91,17 +91,21 @@ View {
 
                 // Режим правки: дрожание (у соседей чуть разное по времени, иначе строем), без анимаций
                 // вместо него рамка. Стрелки двигают виджет, крестик убирает.
+                // Размах поворота делится на ширину: длинный текст, повёрнутый на 2,4°, качал концами
+                // на пять пикселей и выглядел как сломанный. У широких виджетов дрожание почти
+                // незаметно, зато они обведены рамкой, как и остальные, чтобы было видно «правится».
+                readonly property real amp: Math.min(2.4, 2.4 * 44 / Math.max(44, slot.width))
                 property real wiggle: 0
                 rotation: JD.editMode && JD.animOn ? wiggle : 0
                 SequentialAnimation on wiggle {
                     running: JD.editMode && JD.animOn && slot.visible
                     loops: Animation.Infinite
-                    NumberAnimation { to: 2.4; duration: 95 + (slot.index % 3) * 18; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: -2.4; duration: 95 + (slot.index % 3) * 18; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: slot.amp; duration: 95 + (slot.index % 3) * 18; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: -slot.amp; duration: 95 + (slot.index % 3) * 18; easing.type: Easing.InOutSine }
                 }
                 Rectangle {
                     anchors.fill: parent; anchors.margins: -4
-                    visible: JD.editMode && !JD.animOn
+                    visible: JD.editMode && (!JD.animOn || slot.width > 90)
                     color: "transparent"; radius: 8
                     border.width: 1; border.color: JD.accentBlue
                 }

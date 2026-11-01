@@ -1226,6 +1226,11 @@ Item {
                 Row { title: JD.tr("Звуки интерфейса"); subtitle: JD.tr("Тихие, из одной гаммы; в играх молчат"); Toggle { checked: win.get("island.ui_sounds") !== false; onToggled: v => win.set("island.ui_sounds", v) } }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {
+                    title: JD.tr("Вызывать взмахом")
+                    subtitle: JD.tr("Спрятанный островок раскроется на быстрое движение к краю, а не на медленное наведение. 0 — любым наведением")
+                    SSlider { key: "island.reveal_flick"; from: 0; to: 3000; step: 100; decimals: 0; unit: JD.tr(" тчк/с") }
+                }
+                Row {
                     fine: true
                     title: JD.tr("Отступ сверху")
                     subtitle: JD.tr("Если панель стоит у верхнего края — опустите остров под неё, и панель останется под курсором")
