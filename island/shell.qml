@@ -77,7 +77,7 @@ ShellRoot {
         // Для отладки «не кликается»: почему нажатие по острову могло не сработать.
         function probe(): string {
             return JSON.stringify({ edit: JD.editMode, mode: island.mode, style: JD.islandStyle, peeking: JD.peeking,
-                                    modal: win.modal, big: win.big, expanded: JD.expanded, tools: JD.toolsPage, settingsOpen: JD.settingsOpen })
+                                    modal: win.modal, big: win.big, expanded: JD.expanded, tools: JD.toolsPage, settingsOpen: JD.settingsOpen, px: JD.pointerX, py: JD.pointerY, hov: JD.islandHovered })
         }
         function settingsPage(page: string): void { JD.openSettings(page) }
         function peek(): void { JD.peeking = true; JD.islandHovered = false }
