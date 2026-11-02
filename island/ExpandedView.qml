@@ -13,7 +13,33 @@ View {
     readonly property var sink: Pipewire.defaultAudioSink
     PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
     implicitWidth: 740
-    implicitHeight: Math.min(col.implicitHeight + 40, 800)
+    implicitHeight: Math.min((editing ? ed.implicitHeight : col.implicitHeight) + 40, 800)
+
+    // Правка самого меню: порядок блоков и какие из них видны. Хранится в island.menu_order и island.menu_*;
+    // порядок держит GridLayout (Layout.row у блоков), поэтому блоки не пришлось дробить на компоненты.
+    readonly property bool editing: JD.menuEditing
+    readonly property var blockIds: ["ask", "player", "sound", "event", "model", "lists"]
+    readonly property var blockNames: ({ ask: JD.tr("Строка запроса"), player: JD.tr("Музыка и плитки"),
+        sound: JD.tr("Громкость"), event: JD.tr("Ближайшее событие"), model: JD.tr("Модель"),
+        lists: JD.tr("Уведомления и недавнее") })
+    // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
+    readonly property var order: {
+        const saved = Array.isArray(JD.island.menu_order) ? JD.island.menu_order.filter((x, i, a) => blockIds.includes(x) && a.indexOf(x) === i) : []
+        return saved.concat(blockIds.filter(x => !saved.includes(x)))
+    }
+    function row(id) { return 10 + 2 * order.indexOf(id) }   // через один: между блоками остаётся место для хвоста (пересадка модели)
+    function isShown(id) { return JD.island["menu_" + id] !== false }
+    function move(id, d) {
+        const o = order.slice(), i = o.indexOf(id), j = i + d
+        if (j < 0 || j >= o.length) return
+        o[i] = o[j]; o[j] = id
+        JD.setConfig("island.menu_order", o)
+    }
+    function resetMenu() {
+        JD.setConfig("island.menu_order", blockIds)
+        for (const id of blockIds) JD.setConfig("island.menu_" + id, true)
+        JD.setConfig("island.menu_recent", true)
+    }
     SystemClock { id: evClock; precision: SystemClock.Minutes }
 
     function setting(key, value) { JD.setConfig(key, value) }
@@ -29,21 +55,26 @@ View {
 
     Flickable {
         id: evFlick
+        visible: !ev.editing
         anchors.fill: parent
         contentHeight: col.implicitHeight + 40
         clip: true
         interactive: contentHeight > height
         boundsBehavior: Flickable.StopAtBounds
 
-    ColumnLayout {
+    GridLayout {
         id: col
         x: 20
         y: 20
         width: evFlick.width - 40
-        spacing: 14
+        columns: 1
+        rowSpacing: 14
+        columnSpacing: 0
 
         // ── header: who, what it is doing · time, date, weather · settings
         RowLayout {
+            Layout.row: 0
+            Layout.fillWidth: true
             spacing: 14
             Orb { visible: JD.orbsOn; main: true; size: 36 }
             Ring { size: 36; visible: !JD.orbsOn }
@@ -98,7 +129,7 @@ View {
             // Правка живёт в главном меню, где человек и ищет всё остальное: закрывает меню и
             // включает дрожание на полоске, оттуда же открываются виджеты.
             IconButton { icon: "message-circle"; size: 32; onClicked: { JD.expanded = false; JD.chatOpen = true } }   // отдельный чат: файлы, история
-            IconButton { icon: "pencil"; size: 32; onClicked: { JD.expanded = false; JD.editMode = true } }
+            IconButton { icon: "pencil"; size: 32; onClicked: JD.menuEditing = true }   // правка меню; правка островка — из неё же
             IconButton { icon: "wand-sparkles"; size: 32; onClicked: JD.openTools("emoji") }   // спидометр читался как «скорость», а здесь — набор инструментов
             IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
             IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
@@ -107,6 +138,7 @@ View {
         // update available
         Rectangle {
             visible: !!JD.update
+            Layout.row: 1
             Layout.fillWidth: true
             implicitHeight: 46
             radius: 16
@@ -123,6 +155,8 @@ View {
 
         // ── ask by text (or the mic)
         Rectangle {
+            visible: ev.isShown("ask")
+            Layout.row: ev.row("ask")
             Layout.fillWidth: true
             implicitHeight: 46
             radius: 23
@@ -147,6 +181,9 @@ View {
 
         // ── now playing  |  toggles
         RowLayout {
+            visible: ev.isShown("player")
+            Layout.row: ev.row("player")
+            Layout.fillWidth: true
             spacing: 12
             Rectangle {
                 id: np
@@ -315,7 +352,8 @@ View {
         // ── sound: the assistant, the music, the whole computer. Three knobs in one card, each one only
         //    moves what it names — turning the assistant down leaves every other app where it was.
         Rectangle {
-            visible: JD.island.menu_sound !== false
+            visible: ev.isShown("sound")
+            Layout.row: ev.row("sound")
             Layout.fillWidth: true
             implicitHeight: sndCol.implicitHeight + 24
             radius: 20
@@ -369,6 +407,7 @@ View {
         // ── background jobs: a system update, a build — running while the assistant is free for anything else
         ColumnLayout {
             visible: JD.jobs.length > 0
+            Layout.row: 2
             Layout.fillWidth: true
             spacing: 6
             Repeater {
@@ -412,6 +451,7 @@ View {
         // ── timers and alarms: what is running, how long is left, and a way to stop it
         ColumnLayout {
             visible: JD.reminders.length > 0
+            Layout.row: 3
             Layout.fillWidth: true
             spacing: 6
             Repeater {
@@ -450,7 +490,8 @@ View {
 
         // ── next event
         Rectangle {
-            visible: !!JD.nextEvent && JD.island.menu_event !== false
+            visible: !!JD.nextEvent && ev.isShown("event")
+            Layout.row: ev.row("event")
             Layout.fillWidth: true
             implicitHeight: 40
             radius: 14
@@ -466,7 +507,9 @@ View {
 
         // ── model
         RowLayout {
-            visible: JD.island.menu_model !== false
+            visible: ev.isShown("model")
+            Layout.row: ev.row("model")
+            Layout.fillWidth: true
             spacing: 10
             SectionLabel { text: JD.tr("МОДЕЛЬ") }
             Repeater {
@@ -504,6 +547,8 @@ View {
         }
         RowLayout {
             visible: !!ev.pendingProvider && ev.pendingProvider !== JD.settings.provider
+            Layout.row: ev.row("model") + 1
+            Layout.fillWidth: true
             spacing: 10
             Label2 { text: JD.tr("Модель сменится после перезапуска (текущий разговор начнётся заново)"); Layout.fillWidth: true }
             PillButton { label: JD.tr("Перезапустить"); tint: JD.accentBlue; onClicked: { JD.run(["restart"]); ev.pendingProvider = "" } }
@@ -511,7 +556,9 @@ View {
 
         // ── notifications | recent
         RowLayout {
-            visible: (JD.notifications.length > 0 && JD.island.show_notifications !== false) || JD.history.length > 0
+            visible: ev.isShown("lists") && ((JD.notifications.length > 0 && JD.island.show_notifications !== false) || JD.history.length > 0)
+            Layout.row: ev.row("lists")
+            Layout.fillWidth: true
             spacing: 14
             ColumnLayout {
                 visible: JD.notifications.length > 0 && JD.island.show_notifications !== false
@@ -589,5 +636,61 @@ View {
             }
         }
     }
+    }
+
+    // ── правка меню: список блоков со стрелками и «показан / скрыт»
+    Item {
+        id: edItem
+        visible: ev.editing
+        anchors.fill: parent
+        ColumnLayout {
+            id: ed
+            x: 20
+            y: 20
+            width: parent.width - 40
+            spacing: 10
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Label1 { text: JD.tr("Правка главного меню"); font.pixelSize: 18; font.weight: Font.Bold }
+                    Label2 { text: JD.tr("Стрелки меняют порядок, кнопка справа прячет или возвращает блок."); Layout.fillWidth: true }
+                }
+                PillButton { label: JD.tr("Правка островка"); onClicked: { JD.menuEditing = false; JD.expanded = false; JD.editMode = true } }
+                PillButton { label: JD.tr("Готово"); tint: JD.accentBlue; onClicked: JD.menuEditing = false }
+            }
+            Repeater {
+                model: ev.order
+                Rectangle {
+                    required property string modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    implicitHeight: 46
+                    radius: 14
+                    color: JD.fill1
+                    opacity: ev.isShown(modelData) ? 1 : 0.55
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
+                        spacing: 8
+                        Icon { name: "grip-vertical"; implicitSize: 16; opacity: 0.5 }
+                        Label1 { text: ev.blockNames[modelData]; Layout.fillWidth: true }
+                        IconButton { icon: "chevron-up"; size: 30; opacity: index > 0 ? 1 : 0.3; onClicked: ev.move(modelData, -1) }
+                        IconButton { icon: "chevron-down"; size: 30; opacity: index < ev.order.length - 1 ? 1 : 0.3; onClicked: ev.move(modelData, 1) }
+                        PillButton {
+                            label: ev.isShown(modelData) ? JD.tr("Показан") : JD.tr("Скрыт")
+                            tint: ev.isShown(modelData) ? JD.accentBlue : JD.fill2
+                            onClicked: JD.setConfig("island.menu_" + modelData, !ev.isShown(modelData))
+                        }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                PillButton { label: JD.tr("Вернуть как было"); onClicked: ev.resetMenu() }
+            }
+        }
     }
 }

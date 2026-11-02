@@ -276,6 +276,8 @@ Singleton {
 
     // ───────────── UI state ─────────────
     property bool expanded: false
+    property bool menuEditing: false   // правка главного меню (порядок и видимость блоков)
+    onExpandedChanged: if (!expanded) menuEditing = false
     // the text field (Meta+K, click, or the talk key in keyboard mode)
     property bool composeOpen: false
     property string composeText: ""
@@ -1697,6 +1699,7 @@ Singleton {
         if (m.panel !== undefined) { if (m.panel) openTools(m.panel); else closeTools() }
         // Режим правки командой `justday edit`: без неё включить его можно только удержанием мыши,
         // а голосом, с горячей клавиши и из проверок оболочки до него не дотянуться.
+        if (m.menuEdit !== undefined) menuEditing = !!m.menuEdit   // для проверки без мыши
         if (m.edit !== undefined) editMode = m.edit === "toggle" ? !editMode : !!m.edit
         if (m.menu !== undefined) {
             if (m.menu === "search") toggleSearch()
