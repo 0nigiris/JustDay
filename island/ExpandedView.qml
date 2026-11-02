@@ -97,6 +97,7 @@ View {
             }
             // Правка живёт в главном меню, где человек и ищет всё остальное: закрывает меню и
             // включает дрожание на полоске, оттуда же открываются виджеты.
+            IconButton { icon: "message-circle"; size: 32; onClicked: { JD.expanded = false; JD.chatOpen = true } }   // отдельный чат: файлы, история
             IconButton { icon: "pencil"; size: 32; onClicked: { JD.expanded = false; JD.editMode = true } }
             IconButton { icon: "wand-sparkles"; size: 32; onClicked: JD.openTools("emoji") }   // спидометр читался как «скорость», а здесь — набор инструментов
             IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }

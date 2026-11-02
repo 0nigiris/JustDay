@@ -63,6 +63,19 @@ View {
         field.cursorPosition = field.length
     }
 
+    // Файл, брошенный на строку ввода, ложится в неё путём (картинка с пометкой): мозг откроет его сам.
+    DropArea {
+        anchors.fill: parent
+        onDropped: (drop) => {
+            for (const u of drop.urls || []) {
+                const path = decodeURIComponent(String(u).replace(/^file:\/\//, ""))
+                const bit = /\.(png|jpe?g|webp|gif)$/i.test(path) ? "[картинка: " + path + "]" : path
+                field.insert(field.cursorPosition, (field.text && !/\s$/.test(field.text) ? " " : "") + bit)
+            }
+            drop.accept()
+        }
+    }
+
     ColumnLayout {
         id: cmpCol
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
