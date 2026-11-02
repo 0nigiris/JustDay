@@ -74,6 +74,11 @@ ShellRoot {
         function toggle(): void { JD.expanded = !JD.expanded }
         function settings(): void { JD.openSettings("general") }
         function chat(): void { JD.chatOpen = true }
+        // Для отладки «не кликается»: почему нажатие по острову могло не сработать.
+        function probe(): string {
+            return JSON.stringify({ edit: JD.editMode, mode: island.mode, style: JD.islandStyle, peeking: JD.peeking,
+                                    modal: win.modal, big: win.big, expanded: JD.expanded, tools: JD.toolsPage, settingsOpen: JD.settingsOpen })
+        }
         function settingsPage(page: string): void { JD.openSettings(page) }
         function peek(): void { JD.peeking = true; JD.islandHovered = false }
         function status(): string {
