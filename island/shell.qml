@@ -356,7 +356,15 @@ ShellRoot {
             // быстро тянулись, чтобы нажать. Скорость мерим по HoverHandler (точки в секунду):
             // нужен рывок именно к краю, горизонтальный проезд вдоль него не считается.
             property real fastAt: 0
-            readonly property real flick: JD.island.reveal_flick === undefined ? 1200 : Math.max(0, Number(JD.island.reveal_flick))
+            property real enterAt: 0
+            // Скорость HoverHandler на Wayland ненадёжна (у человека рывок вообще не считался и остров
+            // не открывался). Второй признак не зависит от неё: курсор долетел до самой кромки не позже
+            // чем через 90 мс после входа в зону. Медленный подход тянется дольше.
+            function edgeFast(y) {
+                const onEdge = JD.atTop ? y <= 2 : y >= height - 3
+                if (onEdge && Date.now() - enterAt < 90) fastAt = Date.now()
+            }
+            readonly property real flick: JD.island.reveal_flick === undefined ? 700 : Math.max(0, Number(JD.island.reveal_flick))
             function flung(): bool {
                 return flick <= 0 || (Date.now() - fastAt) < 300
             }
@@ -374,6 +382,7 @@ ShellRoot {
             onContainsMouseChanged: {
                 if (!revealPad.enabled) return
                 if (containsMouse) {
+                    enterAt = Date.now()
                     if (suppressEnter) return
                     // Спрятанный островок на медленном заходе не трогаем; рывок поймает HoverHandler.
                     if (parked && !flung()) return
@@ -389,6 +398,7 @@ ShellRoot {
                 const p = mapToItem(null, mouseX, mouseY)
                 JD.pointerX = p.x
                 JD.pointerY = p.y
+                if (containsMouse && flick > 0) edgeFast(mouseY)
                 if (!revealPad.enabled || !containsMouse || !parked || suppressEnter || !flung()) return
                 JD.revealFromEdge()
             }

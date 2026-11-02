@@ -79,8 +79,21 @@ Item {
         return edge === "left" ? point.velocity.x < -flick : point.velocity.x > flick
     }
 
+    // Вход в зону узнаём по паузе между движениями. Скорость HoverHandler на Wayland ненадёжна, поэтому
+    // вторым признаком служит время: до самой кромки долетели не позже чем через 90 мс после входа.
+    property real _enterAt: 0
+    property real _lastAt: 0
+    function reachedEdge(point, zoneSize) {
+        const p = edge === "bottom" || edge === "top" ? point.position.y : point.position.x
+        return edge === "top" || edge === "left" ? p <= 2 : p >= zoneSize - 3
+    }
+
     function onEdgePoint(point, zoneSize) {
-        if (needHide && wants(point, zoneSize))
+        const now = Date.now()
+        if (now - _lastAt > 250) _enterAt = now
+        _lastAt = now
+        if (needHide && (wants(point, zoneSize)
+                         || (flickSpeed > 0 && now - _enterAt < 90 && reachedEdge(point, zoneSize))))
             reveal()
     }
 
