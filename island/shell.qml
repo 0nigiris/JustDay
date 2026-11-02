@@ -358,13 +358,12 @@ ShellRoot {
             // Взмах, а не наведение. Спрятанный островок раскрывается только на быстрое движение к
             // краю экрана: так же, как курсор «перелетает» на соседний монитор, а при медленном
             // подходе упирается. Без этого островок выскакивал под вкладками браузера, когда к ним
-            // быстро тянулись, чтобы нажать. Скорость мерим по HoverHandler (точки в секунду):
-            // нужен рывок именно к краю, горизонтальный проезд вдоль него не считается.
+            // быстро тянулись, чтобы нажать.
             property real fastAt: 0
             property real enterAt: 0
-            // Скорость HoverHandler на Wayland ненадёжна (у человека рывок вообще не считался и остров
-            // не открывался). Второй признак не зависит от неё: курсор долетел до самой кромки не позже
-            // чем через 90 мс после входа в зону. Медленный подход тянется дольше.
+            // Скорость не меряем: HoverHandler внутри этой зоны съедал нажатия, и остров переставал
+            // кликаться вовсе (проверено настоящим кликом). Рывком считается подлёт к самой кромке
+            // быстрее чем за 90 мс после входа в зону; медленный подход тянется дольше.
             function edgeFast(y) {
                 const onEdge = JD.atTop ? y <= 2 : y >= height - 3
                 if (onEdge && Date.now() - enterAt < 90) fastAt = Date.now()
@@ -372,17 +371,6 @@ ShellRoot {
             readonly property real flick: JD.island.reveal_flick === undefined ? 700 : Math.max(0, Number(JD.island.reveal_flick))
             function flung(): bool {
                 return flick <= 0 || (Date.now() - fastAt) < 300
-            }
-            HoverHandler {
-                onPointChanged: {
-                    const v = point.velocity
-                    const toward = JD.atTop ? -v.y : v.y
-                    if (toward > revealPad.flick && toward > Math.abs(v.x) * 1.5) revealPad.fastAt = Date.now()
-                    if (revealPad.parked && revealPad.containsMouse && !revealPad.suppressEnter && revealPad.flung() && !JD.peeking) {
-                        JD.islandHovered = true
-                        JD.revealFromEdge()
-                    }
-                }
             }
             onContainsMouseChanged: {
                 if (!revealPad.enabled) return
