@@ -198,7 +198,9 @@ def migrate_secrets_file() -> list[str]:
 DEFAULTS: dict = {
     # assistant_name: how the assistant calls itself and what you call it (also a hint for speech recognition)
     "user": {"name": "", "address_as": "сэр", "assistant_name": "Джарвис", "assistant_aliases": ["JustDay"],
-             "language": "ru"},  # ru | en — assistant replies, voice lines and the island
+             "language": "ru",
+             # false ставит установщик на свежей установке: тогда остров сам открывает знакомство (WelcomeView)
+             "onboarded": True},  # ru | en — assistant replies, voice lines and the island
     "audio": {
         # Substring of a PipeWire source node name; empty = system default source.
         # Что скрыто в микшере (имя программы в нижнем регистре; «__mic» — строка микрофона). Лишние строки

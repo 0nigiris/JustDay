@@ -86,6 +86,7 @@ Item {
             // про «Звук» и «Машину» узнавали случайно. Не влезло — ряд переносится.
             Flow {
                 id: tabRow
+                visible: tv.page !== "welcome"
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignTop
                 spacing: 8
@@ -565,6 +566,12 @@ Item {
         // ───────────── микшер ─────────────
         MixerView {
             visible: tv.page === "mixer"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
+        WelcomeView {
+            visible: tv.page === "welcome"
             Layout.fillWidth: true
             Layout.fillHeight: true
         }

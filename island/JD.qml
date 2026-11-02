@@ -457,6 +457,7 @@ Singleton {
     function qrAsk(what) { if (what.text || what.wifi) send(Object.assign({ cmd: "qr" }, what)); else qrRows = [] }
     property bool clipPaused: false
     property int clipSkipped: 0           // сколько не запомнили как похожее на пароль
+    property bool welcomeShown: false
     property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
 
     function openTools(page) {
@@ -1662,7 +1663,11 @@ Singleton {
     }
 
     function handle(m) {
-        if (m.settings !== undefined) settings = m.settings
+        if (m.settings !== undefined) {
+            settings = m.settings
+            // Свежая установка: знакомство открывается само, один раз за запуск острова.
+            if (settings.onboarded === false && !welcomeShown) { welcomeShown = true; Qt.callLater(() => openTools("welcome")) }
+        }
         if (m.history !== undefined) history = m.history
         if (m.workers !== undefined) workers = m.workers
         if (m.weather !== undefined) weather = m.weather

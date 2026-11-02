@@ -639,6 +639,8 @@ settings() {
     # строка дала бы второй ключ enabled в секции, где он уже есть, а TOML с двумя одинаковыми
     # ключами не читается вовсе — установка кончилась бы конфигом, который не открывается.
     apply_screen
+    # Остров сам откроет знакомство (имя, модель, место): в терминале остаётся только самое нужное.
+    "$APP_DIR/.venv/bin/justday" config set user.onboarded false >/dev/null 2>&1 || true
     # Настройки под выбранный набор: без распознавания речи кнопка открывает поле ввода,
     # а не запись; без нейросетевого голоса отвечает espeak-ng, а в текстовом наборе — молча.
     ((SPEECH)) || sed -i 's/^microphone = true/microphone = false/' "$CONF_DIR/config.toml"
@@ -700,6 +702,7 @@ services() {
   # вопрос расходятся, один — нет.
   face=$("$APP_DIR/.venv/bin/python" -c 'from justday import face; w, y = face.pick(); print(w, y, sep="|")' 2>/dev/null || echo 'panel|')
   if [[ "${face%%|*}" == island ]]; then
+    ISLAND_WELCOME=1
     note "$(t 'ассистент · остров' 'assistant · island')"
   else
     note "$(t 'ассистент · полоска сверху' 'assistant · strip along the top')"
@@ -857,7 +860,10 @@ if command -v kwriteconfig6 >/dev/null || command -v kwriteconfig5 >/dev/null; t
 fi
 
 # ───────────── first run: a few questions ─────────────
-if [[ "$FIRST_RUN" == 1 || "${JUSTDAY_SETUP:-}" == 1 ]] && [[ "${JUSTDAY_SETUP:-}" != 0 ]] && { : </dev/tty; } 2>/dev/null; then
+if [[ "${ISLAND_WELCOME:-0}" == 1 && "$FIRST_RUN" == 1 && "${JUSTDAY_SETUP:-}" != 1 ]]; then
+  # Остров уже на экране и сам зовёт знакомиться: имя, модель, место. Терминальный мастер — по `justday setup`.
+  printf '\n  %s%s%s\n' "$B" "$(t 'Дальше — в островке на экране. Почту и голос можно позже: justday setup' 'Next, on the island on your screen. Mail and voice later: justday setup')" "$N"
+elif [[ "$FIRST_RUN" == 1 || "${JUSTDAY_SETUP:-}" == 1 ]] && [[ "${JUSTDAY_SETUP:-}" != 0 ]] && { : </dev/tty; } 2>/dev/null; then
   printf '\n  %s%s%s\n  %s%s%s\n\n' "$B" "$(t 'Пара вопросов' 'A few questions')" "$N" "$D" \
     "$(t 'Модель, голос, микрофон, кнопка, почта. Enter оставляет вариант по умолчанию.' 'Model, voice, microphone, button, mail. Enter keeps the default.')" "$N"
   "$HOME/.local/bin/justday" setup </dev/tty || printf '  %s\n' "$(t 'Мастер прерван — продолжить можно командой justday setup' 'Wizard interrupted — continue with: justday setup')"
