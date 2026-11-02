@@ -1012,7 +1012,26 @@ class CommandsMixin:
 
         if self._peer_is_ai(writer):
             return {"ok": False, "error": "обновляет человек: кнопкой"}
-        return await asyncio.get_running_loop().run_in_executor(None, modules.update_in_background, bool(req.get("back")))
+        res = await asyncio.get_running_loop().run_in_executor(None, modules.update_in_background, bool(req.get("back")))
+        # Банер жил до следующей проверки через несколько часов: нажал «Обновить», окно закрылось, открыл —
+        # снова «Обновите». Перепроверяем сразу (без сети: ветка уже подтянута) и после конца работы.
+        asyncio.get_running_loop().create_task(self._recheck_update())
+        return res
+
+    async def _recheck_update(self) -> None:
+        from . import manage
+
+        loop = asyncio.get_running_loop()
+        for wait in (2, 40, 120):
+            await asyncio.sleep(wait)
+            try:
+                st = await loop.run_in_executor(None, manage.update_status, False)
+            except Exception:
+                continue
+            self.update_info = st if st.get("ok") and st.get("behind") else None
+            self.publish(update=self.update_info)
+            if not self.update_info:
+                return
 
     async def _cmd_parts_install(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Этап 2 установки из острова: доставить выбранные части в фоне. Качает гигабайты: решает человек."""
