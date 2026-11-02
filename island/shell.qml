@@ -427,6 +427,11 @@ ShellRoot {
         }
 
         Shortcut { sequence: "Escape"; enabled: win.big; onActivated: JD.closeAll() }
+        // Режим правки глушит нажатия по самому острову. Забытый, он выглядел как «остров не кликается
+        // вообще»: выходим из него по Escape, при уходе острова в тень и сам через минуту.
+        Shortcut { sequence: "Escape"; enabled: JD.editMode; onActivated: JD.editMode = false }
+        Connections { target: island; function onModeChanged() { if (island.mode === "hidden") JD.editMode = false } }
+        Timer { interval: 60000; running: JD.editMode; onTriggered: JD.editMode = false }
         Shortcut { sequence: "Escape"; enabled: island.mode === "video"; onActivated: videoView.close() }
 
         // Клавиши плеера — те, что ждёшь от плеера. Работают, когда по нему щёлкнули:
