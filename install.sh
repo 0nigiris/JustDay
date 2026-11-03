@@ -644,6 +644,12 @@ settings() {
     # Настройки под выбранный набор: без распознавания речи кнопка открывает поле ввода,
     # а не запись; без нейросетевого голоса отвечает espeak-ng, а в текстовом наборе — молча.
     ((SPEECH)) || sed -i 's/^microphone = true/microphone = false/' "$CONF_DIR/config.toml"
+    # Без NVIDIA «device = cuda» не заводится совсем (issue 5, школьный ПК): распознавание речи
+    # переходит на процессор и модель поменьше, иначе первая же фраза падает.
+    if [[ -z "$gpu" ]]; then
+      "$APP_DIR/.venv/bin/justday" config set stt.device cpu >/dev/null 2>&1 || true
+      "$APP_DIR/.venv/bin/justday" config set stt.model small >/dev/null 2>&1 || true
+    fi
     if ((VOICE == 0)); then
       if ((SPEECH)); then sed -i 's/^engine = "silero"/engine = "espeak"/' "$CONF_DIR/config.toml"
       else sed -i 's/^engine = "silero"/engine = "none"/' "$CONF_DIR/config.toml"; fi

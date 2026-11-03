@@ -196,9 +196,14 @@ def audio_devices() -> dict:
 def _shortcut(desktop_id: str) -> list[str]:
     """Active keys of a desktop-file shortcut. kglobalshortcutsrc holds only keys changed in System Settings;
     keys equal to the desktop file's X-KDE-Shortcuts defaults are not written there, so fall back to the file."""
+    raw = ""
     try:
-        raw = subprocess.run([kde.KREAD, "--file", "kglobalshortcutsrc", "--group", "services", "--group",
-                              desktop_id, "--key", "_launch"], capture_output=True, text=True).stdout.strip()
+        # Plasma 6 — вложенная группа [services][id]; Plasma 5 — группа верхнего уровня [id].
+        for groups in (["--group", "services", "--group", desktop_id], ["--group", desktop_id]):
+            raw = subprocess.run([kde.KREAD, "--file", "kglobalshortcutsrc", *groups, "--key", "_launch"],
+                                 capture_output=True, text=True).stdout.strip()
+            if raw:
+                break
     except OSError:
         raw = ""
     if raw and raw != "none":

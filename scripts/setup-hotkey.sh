@@ -77,6 +77,23 @@ if [[ -z "$KWRITE" ]]; then
   exit 1
 fi
 
+# Plasma 5 хранит командный хоткей в группе верхнего уровня с именем desktop-файла, Plasma 6 — во вложенной
+# [services][имя]. Пишем в формат, который понимает установленный kglobalaccel: KF5 вложенную группу не знает и
+# при перезаписи файла её выбрасывает (issue 5: установщик рапортовал «сочетание … →», а в файле ничего не было).
+P5=0; [[ "$KWRITE" == *5 ]] && P5=1
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+NOISLAND=0; { [[ "${XDG_SESSION_TYPE:-}" == x11 ]] || ! command -v qs >/dev/null; } && NOISLAND=1
+ksw() {  # $1 desktop id, дальше — аргументы kwriteconfig
+  local id="$1"; shift
+  if ((P5)); then "$KWRITE" --file kglobalshortcutsrc --group "$id" "$@"
+  else "$KWRITE" --file kglobalshortcutsrc --group services --group "$id" "$@"; fi
+}
+# Встало ли сочетание на самом деле: живая служба должна знать составляющую.
+known() {  # $1 desktop id
+  [[ -n "$QDBUS" ]] || return 0   # проверить нечем — не считаем это провалом
+  "$QDBUS" org.kde.kglobalaccel "/component/${1//[.-]/_}" org.kde.kglobalaccel.Component.shortcutNames 2>/dev/null | grep -q _launch
+}
+
 id_of() { [[ "$1" == talk ]] && echo "net.local.justday.desktop" || echo "net.local.justday-$1.desktop"; }
 
 # Имена, под которыми клавиши жили раньше: их файлы нужно убрать, иначе две составляющие спорят за
@@ -122,7 +139,7 @@ unregister() {  # $1 desktop id
 
 forget() {  # $1 desktop id — убрать и сочетание, и сам файл
   unregister "$1"
-  "$KWRITE" --file kglobalshortcutsrc --group services --group "$1" --key _launch --delete
+  ksw "$1" --key _launch --delete
   rm -f "${APPS:?}/${1:?}"
 }
 
@@ -154,7 +171,13 @@ X-KDE-GlobalAccel-CommandShortcut=true
 X-KDE-Shortcuts=$keys_csv
 EOF
   unregister "$id"
-  "$KWRITE" --file kglobalshortcutsrc --group services --group "$id" --key _launch "$keys_tab"
+  ((P5)) && ksw "$id" --key _k_friendly_name "JustDay: $name"
+  ksw "$id" --key _launch "$keys_tab"
+  # Plasma 5 перечитывает файл только при старте kglobalaccel; без этого запись есть, а сочетание не живёт.
+  if ((P5)) && command -v kquitapp5 >/dev/null; then
+    kquitapp5 kglobalaccel >/dev/null 2>&1; sleep 0.5
+    (kglobalaccel5 >/dev/null 2>&1 &); sleep 1
+  fi
   echo "сочетание ${keys_csv} → $cmd"
 }
 
@@ -181,8 +204,17 @@ for row in "${KEYS[@]}"; do
   # У «говорить» бывает вторая клавиша: кнопка мыши, перенастроенная на F19.
   [[ "$name" == talk && -n "$EXTRA" ]] && keys+=("$EXTRA")
   if [[ -n "${KEY[$name]}" ]]; then
-    for k in "${keys[@]}"; do free_key "$k" "$id"; done
-    register "$id" "$label" "$HOME/.local/bin/justday $cmd" "${keys[@]}"
+    # Plasma 6 держит сочетание живая служба, и без освобождения нажатие уходит прежнему владельцу.
+    # Plasma 5 сначала регистрируем и проверяем: отобрать Meta+Q и Meta+1…9 и ничего не поставить — хуже, чем не трогать.
+    ((P5)) || for k in "${keys[@]}"; do free_key "$k" "$id"; done
+    fullcmd="$HOME/.local/bin/justday $cmd"
+    # Острова нет (X11, нет Quickshell): окно ввода и ответа вместо тех, что рисует остров.
+    if ((NOISLAND)) && [[ "$name" == talk || "$name" == type ]]; then fullcmd="$ROOT/scripts/ask-dialog.sh"; fi
+    register "$id" "$label" "$fullcmd" "${keys[@]}"
+    if ((P5)); then
+      if known "$id"; then for k in "${keys[@]}"; do free_key "$k" "$id"; done
+      else echo "  сочетание для «$label» не встало (kglobalaccel его не видит): чужие клавиши не трогаю" >&2; fi
+    fi
   else
     forget "$id"
   fi

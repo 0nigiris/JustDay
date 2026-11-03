@@ -32,7 +32,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from . import chats, config, dispatch, events, providers
+from . import chats, config, dispatch, events, kde, providers
 from . import persona as persona_mod
 from .i18n import t
 
@@ -197,6 +197,9 @@ class Brain:
             persona_file = BRAIN_PKG_DIR / "PERSONA.md"
         persona = persona_file.read_text(encoding="utf-8")
         names = [u["assistant_name"], *u.get("assistant_aliases", [])]
+        plasma, kind = kde.session()
+        persona = (persona.replace("(KDE Plasma 6, Wayland)", f"(KDE Plasma {plasma}, {'X11' if kind == 'x11' else 'Wayland'})")
+                   .replace("`kwin_wayland`", f"`kwin_{kind}`"))
         persona = persona.replace("{character}", persona_mod.character(self.cfg))  # it has placeholders of its own
         # Что из его умений включено — знает конфиг, а не текст характера. Иначе он обещает
         # то, чего у человека нет, и не знает про то, что у него есть.

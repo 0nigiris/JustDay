@@ -2,7 +2,7 @@
   "mcpServers": {
     "kwin": {
       "command": "sh",
-      "args": ["-c", "exec \"$(uv tool dir)/kwin-mcp/bin/python\" \"${CLAUDE_PLUGIN_ROOT}/bin/kwin_live.py\""]
+      "args": ["-c", "p=\"$(uv tool dir 2>/dev/null)/kwin-mcp/bin/python\"; if [ -x \"$p\" ]; then exec \"$p\" \"${CLAUDE_PLUGIN_ROOT}/bin/kwin_live.py\"; else exec python3 \"${CLAUDE_PLUGIN_ROOT}/bin/kwin_none.py\"; fi"]
     }
   }
 }
