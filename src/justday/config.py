@@ -493,7 +493,6 @@ DEFAULTS: dict = {
         "menu_recent": True,
         "menu_ask": True,
         "menu_player": True,
-        "menu_lists": True,
         "menu_order": ["ask", "player", "sound", "event", "model", "lists"],   # порядок блоков главного меню
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         # Where toast/shade notifications appear (Telegram-style), independent of the island pill:

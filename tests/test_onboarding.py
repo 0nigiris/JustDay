@@ -12,4 +12,4 @@ def test_menu_order_default_lists_every_block():
     from justday.config import DEFAULTS
     isl = DEFAULTS["island"]
     assert sorted(isl["menu_order"]) == ["ask", "event", "lists", "model", "player", "sound"]
-    assert all(isl[f"menu_{b}"] is True for b in isl["menu_order"])
+    assert all(isl[f"menu_{b}"] is True for b in isl["menu_order"] if b != "lists")   # у нижнего ряда свои флаги: уведомления и недавнее

@@ -12,35 +12,78 @@ View {
     readonly property var player: JD.playerInExpanded ? JD.musicPlayer : null
     readonly property var sink: Pipewire.defaultAudioSink
     PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
+    SystemClock { id: evClock; precision: SystemClock.Minutes }
     implicitWidth: 740
-    implicitHeight: Math.min((editing ? ed.implicitHeight : col.implicitHeight) + 40, 800)
+    implicitHeight: Math.min(col.implicitHeight + 40, 800)
 
-    // Правка самого меню: порядок блоков и какие из них видны. Хранится в island.menu_order и island.menu_*;
-    // порядок держит GridLayout (Layout.row у блоков), поэтому блоки не пришлось дробить на компоненты.
+    // Правка самого меню, как раскладка значков на айфоне: блоки подрагивают, у каждого красный минус
+    // (или правая кнопка мыши) прячет его, перетаскиванием меняется порядок, а спрятанное лежит внизу
+    // и возвращается нажатием. Порядок хранит GridLayout (Layout.row у блоков), поэтому блоки не пришлось
+    // дробить на компоненты; поверх них в режиме правки лежит слой с перехватом мыши (`eo`).
     readonly property bool editing: JD.menuEditing
     readonly property var blockIds: ["ask", "player", "sound", "event", "model", "lists"]
+    readonly property var blocks: ({ ask: blkAsk, player: blkPlayer, sound: blkSound, event: blkEvent, model: blkModel, lists: blkLists })
     readonly property var blockNames: ({ ask: JD.tr("Строка запроса"), player: JD.tr("Музыка и плитки"),
         sound: JD.tr("Громкость"), event: JD.tr("Ближайшее событие"), model: JD.tr("Модель"),
-        lists: JD.tr("Уведомления и недавнее") })
+        notifs: JD.tr("Уведомления"), recent: JD.tr("Недавнее") })
     // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
+    // `forced` держит порядок до ответа демона: иначе блок после броска на миг прыгал бы обратно.
+    property var forced: null
     readonly property var order: {
+        if (forced) return forced
         const saved = Array.isArray(JD.island.menu_order) ? JD.island.menu_order.filter((x, i, a) => blockIds.includes(x) && a.indexOf(x) === i) : []
         return saved.concat(blockIds.filter(x => !saved.includes(x)))
     }
+    Connections { target: JD; function onIslandChanged() { ev.forced = null } }
     function row(id) { return 10 + 2 * order.indexOf(id) }   // через один: между блоками остаётся место для хвоста (пересадка модели)
     function isShown(id) { return JD.island["menu_" + id] !== false }
-    function move(id, d) {
-        const o = order.slice(), i = o.indexOf(id), j = i + d
-        if (j < 0 || j >= o.length) return
-        o[i] = o[j]; o[j] = id
-        JD.setConfig("island.menu_order", o)
+    // Спрятанное, что можно вернуть: пять блоков и две половины нижнего ряда.
+    readonly property var hidden: {
+        const r = ["ask", "player", "sound", "event", "model"].filter(id => JD.island["menu_" + id] === false)
+        if (JD.island.show_notifications === false) r.push("notifs")
+        if (JD.island.menu_recent === false) r.push("recent")
+        return r
     }
+    function flagKey(id) { return id === "notifs" ? "island.show_notifications" : "island.menu_" + id }
+    function hide(id) { JD.setConfig(flagKey(id), false) }
+    function unhide(id) { JD.setConfig(flagKey(id), true) }
+    function sign(id) { return order.indexOf(id) % 2 ? -1 : 1 }   // соседние блоки качаются в разные стороны
     function resetMenu() {
+        forced = null
         JD.setConfig("island.menu_order", blockIds)
-        for (const id of blockIds) JD.setConfig("island.menu_" + id, true)
-        JD.setConfig("island.menu_recent", true)
+        for (const id of ["ask", "player", "sound", "event", "model", "notifs", "recent"]) unhide(id)
     }
-    SystemClock { id: evClock; precision: SystemClock.Minutes }
+
+    // Перетаскивание: пока блок тянут, он едет за пальцем (dragDy), порядок меняется при отпускании.
+    property string dragId: ""
+    property real dragDy: 0
+    property real wig: 0
+    SequentialAnimation on wig {
+        running: ev.editing && JD.animOn
+        loops: Animation.Infinite
+        NumberAnimation { to: 0.45; duration: 110 }
+        NumberAnimation { to: -0.45; duration: 220 }
+        NumberAnimation { to: 0; duration: 110 }
+    }
+    function drop() {
+        const id = dragId
+        if (!id) return
+        const b = blocks[id], down = dragDy > 0, c = b.y + b.height / 2 + dragDy
+        let hit = ""
+        for (const o of order) {
+            const t = blocks[o]
+            if (o !== id && t.visible && c >= t.y && c <= t.y + t.height) { hit = o; break }
+        }
+        dragId = ""; dragDy = 0
+        if (!hit) return
+        const next = order.filter(x => x !== id)
+        next.splice(next.indexOf(hit) + (down ? 1 : 0), 0, id)
+        forced = next
+        JD.setConfig("island.menu_order", next)
+    }
+    Shortcut { sequence: "Escape"; enabled: JD.menuEditing; onActivated: JD.menuEditing = false }
+    // Долгое нажатие на пустое место меню: тот же вход, что и карандаш.
+    TapHandler { onLongPressed: JD.menuEditing = true }
 
     function setting(key, value) { JD.setConfig(key, value) }
     function ask(text) { JD.expanded = false; JD.send({ cmd: "type", text: text }) }
@@ -55,7 +98,6 @@ View {
 
     Flickable {
         id: evFlick
-        visible: !ev.editing
         anchors.fill: parent
         contentHeight: col.implicitHeight + 40
         clip: true
@@ -156,7 +198,11 @@ View {
         // ── ask by text (or the mic)
         Rectangle {
             visible: ev.isShown("ask")
+            id: blkAsk
             Layout.row: ev.row("ask")
+            rotation: ev.editing ? ev.wig * ev.sign("ask") : 0
+            transform: Translate { y: ev.dragId === "ask" ? ev.dragDy : 0 }
+            z: ev.dragId === "ask" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: 46
             radius: 23
@@ -182,7 +228,11 @@ View {
         // ── now playing  |  toggles
         RowLayout {
             visible: ev.isShown("player")
+            id: blkPlayer
             Layout.row: ev.row("player")
+            rotation: ev.editing ? ev.wig * ev.sign("player") : 0
+            transform: Translate { y: ev.dragId === "player" ? ev.dragDy : 0 }
+            z: ev.dragId === "player" ? 5 : 0
             Layout.fillWidth: true
             spacing: 12
             Rectangle {
@@ -353,7 +403,11 @@ View {
         //    moves what it names — turning the assistant down leaves every other app where it was.
         Rectangle {
             visible: ev.isShown("sound")
+            id: blkSound
             Layout.row: ev.row("sound")
+            rotation: ev.editing ? ev.wig * ev.sign("sound") : 0
+            transform: Translate { y: ev.dragId === "sound" ? ev.dragDy : 0 }
+            z: ev.dragId === "sound" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: sndCol.implicitHeight + 24
             radius: 20
@@ -491,7 +545,11 @@ View {
         // ── next event
         Rectangle {
             visible: !!JD.nextEvent && ev.isShown("event")
+            id: blkEvent
             Layout.row: ev.row("event")
+            rotation: ev.editing ? ev.wig * ev.sign("event") : 0
+            transform: Translate { y: ev.dragId === "event" ? ev.dragDy : 0 }
+            z: ev.dragId === "event" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: 40
             radius: 14
@@ -508,7 +566,11 @@ View {
         // ── model
         RowLayout {
             visible: ev.isShown("model")
+            id: blkModel
             Layout.row: ev.row("model")
+            rotation: ev.editing ? ev.wig * ev.sign("model") : 0
+            transform: Translate { y: ev.dragId === "model" ? ev.dragDy : 0 }
+            z: ev.dragId === "model" ? 5 : 0
             Layout.fillWidth: true
             spacing: 10
             SectionLabel { text: JD.tr("МОДЕЛЬ") }
@@ -556,8 +618,12 @@ View {
 
         // ── notifications | recent
         RowLayout {
-            visible: ev.isShown("lists") && ((JD.notifications.length > 0 && JD.island.show_notifications !== false) || JD.history.length > 0)
+            visible: (JD.notifications.length > 0 && JD.island.show_notifications !== false) || (JD.history.length > 0 && JD.island.menu_recent !== false)
+            id: blkLists
             Layout.row: ev.row("lists")
+            rotation: ev.editing ? ev.wig * ev.sign("lists") : 0
+            transform: Translate { y: ev.dragId === "lists" ? ev.dragDy : 0 }
+            z: ev.dragId === "lists" ? 5 : 0
             Layout.fillWidth: true
             spacing: 14
             ColumnLayout {
@@ -635,62 +701,102 @@ View {
                 }
             }
         }
-    }
-    }
 
-    // ── правка меню: список блоков со стрелками и «показан / скрыт»
-    Item {
-        id: edItem
-        visible: ev.editing
-        anchors.fill: parent
+        // ── в режиме правки: спрятанное и кнопки выхода
         ColumnLayout {
-            id: ed
-            x: 20
-            y: 20
-            width: parent.width - 40
-            spacing: 10
+            visible: ev.editing
+            Layout.row: 100
+            Layout.fillWidth: true
+            spacing: 8
+            Label2 { text: ev.hidden.length ? JD.tr("Спрятано, нажмите, чтобы вернуть:") : JD.tr("Красный минус или правая кнопка прячет блок, перетаскивание меняет порядок."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 8
+                Repeater {
+                    model: ev.hidden
+                    PillButton { required property string modelData; label: "+ " + ev.blockNames[modelData]; onClicked: ev.unhide(modelData) }
+                }
+            }
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 10
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-                    Label1 { text: JD.tr("Правка главного меню"); font.pixelSize: 18; font.weight: Font.Bold }
-                    Label2 { text: JD.tr("Стрелки меняют порядок, кнопка справа прячет или возвращает блок."); Layout.fillWidth: true }
-                }
+                spacing: 8
+                PillButton { label: JD.tr("Вернуть как было"); onClicked: ev.resetMenu() }
+                Item { Layout.fillWidth: true }
                 PillButton { label: JD.tr("Правка островка"); onClicked: { JD.menuEditing = false; JD.expanded = false; JD.editMode = true } }
                 PillButton { label: JD.tr("Готово"); tint: JD.accentBlue; onClicked: JD.menuEditing = false }
             }
-            Repeater {
-                model: ev.order
+        }
+    }
+
+    // Слой правки: лежит поверх блоков, глотает нажатия (иначе кнопки под ним продолжали бы работать),
+    // ловит перетаскивание и правую кнопку. Шевелится вместе с блоком, чтобы рамка не отставала.
+    Item {
+        id: eo
+        visible: ev.editing
+        width: evFlick.width
+        height: col.implicitHeight + 40
+        Repeater {
+            model: ev.blockIds
+            Item {
+                id: slot
+                required property string modelData
+                readonly property Item blk: ev.blocks[modelData]
+                readonly property bool lists: modelData === "lists"
+                readonly property bool hasNotifs: JD.notifications.length > 0 && JD.island.show_notifications !== false
+                readonly property bool hasRecent: JD.history.length > 0 && JD.island.menu_recent !== false
+                visible: !!blk && blk.visible
+                x: col.x + blk.x
+                y: col.y + blk.y + (ev.dragId === modelData ? ev.dragDy : 0)
+                width: blk.width
+                height: blk.height
+                z: ev.dragId === modelData ? 10 : 1
+                rotation: ev.editing ? ev.wig * ev.sign(modelData) : 0
                 Rectangle {
-                    required property string modelData
-                    required property int index
-                    Layout.fillWidth: true
-                    implicitHeight: 46
-                    radius: 14
-                    color: JD.fill1
-                    opacity: ev.isShown(modelData) ? 1 : 0.55
-                    RowLayout {
-                        anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
-                        spacing: 8
-                        Icon { name: "grip-vertical"; implicitSize: 16; opacity: 0.5 }
-                        Label1 { text: ev.blockNames[modelData]; Layout.fillWidth: true }
-                        IconButton { icon: "chevron-up"; size: 30; opacity: index > 0 ? 1 : 0.3; onClicked: ev.move(modelData, -1) }
-                        IconButton { icon: "chevron-down"; size: 30; opacity: index < ev.order.length - 1 ? 1 : 0.3; onClicked: ev.move(modelData, 1) }
-                        PillButton {
-                            label: ev.isShown(modelData) ? JD.tr("Показан") : JD.tr("Скрыт")
-                            tint: ev.isShown(modelData) ? JD.accentBlue : JD.fill2
-                            onClicked: JD.setConfig("island.menu_" + modelData, !ev.isShown(modelData))
+                    anchors.fill: parent
+                    radius: 16
+                    color: ev.dragId === slot.modelData ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, 0.16)
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.AllButtons
+                    cursorShape: ev.dragId === slot.modelData ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                    DragHandler {
+                        target: null
+                        xAxis.enabled: false
+                        onActiveChanged: { if (active) { ev.dragId = slot.modelData; ev.dragDy = 0 } else ev.drop() }
+                        onTranslationChanged: if (active) ev.dragDy = translation.y
+                    }
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: point => {
+                            if (!slot.lists) ev.hide(slot.modelData)
+                            else if (slot.hasNotifs && (point.position.x < slot.width / 2 || !slot.hasRecent)) ev.hide("notifs")
+                            else if (slot.hasRecent) ev.hide("recent")
                         }
                     }
                 }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                Item { Layout.fillWidth: true }
-                PillButton { label: JD.tr("Вернуть как было"); onClicked: ev.resetMenu() }
+                // красный минус: у нижнего ряда их два, по одному на половину
+                Repeater {
+                    model: slot.lists ? [{ id: "notifs", on: slot.hasNotifs, at: 0 }, { id: "recent", on: slot.hasRecent, at: slot.hasNotifs ? slot.width / 2 : 0 }]
+                                      : [{ id: slot.modelData, on: true, at: 0 }]
+                    Rectangle {
+                        required property var modelData
+                        visible: modelData.on
+                        x: modelData.at - 7
+                        y: -7
+                        width: 26; height: 26; radius: 13
+                        color: "#E5484D"
+                        border.width: 2
+                        border.color: Qt.rgba(0, 0, 0, 0.6)
+                        Icon { anchors.centerIn: parent; name: "minus"; implicitSize: 14 }
+                        TapHandler { onTapped: ev.hide(modelData.id) }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+                }
             }
         }
+    }
     }
 }
