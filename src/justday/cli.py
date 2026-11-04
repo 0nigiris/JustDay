@@ -631,7 +631,12 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     sp = sub.add_parser("setup", help="first-run wizard: model, mail, voice, buttons")
     sp = sub.add_parser("calendar", help="private calendar from iCal links: setup | today | tomorrow | week")
-    sp.add_argument("action", choices=["setup", "today", "tomorrow", "week", "test", "forget"])
+    sp.add_argument("action", choices=["setup", "today", "tomorrow", "week", "test", "forget", "login", "add"])
+    sp.add_argument("title", nargs="?", default="", help="для add: название встречи")
+    sp.add_argument("--start", default="", help="для add: когда, «2026-11-07 15:00»")
+    sp.add_argument("--minutes", type=int, default=60, help="для add: длительность")
+    sp.add_argument("--yes", action="store_true", help="для add: человек подтвердил, создавать; без него только показ")
+    sp.add_argument("--client", default="", help="для login: файл клиента OAuth из Google Cloud (один раз)")
     sp = sub.add_parser("voiceprint", help="personal voice profile: status | enroll | record KIND INDEX SECONDS | finish | reset | mode off|wake|always")
     sp.add_argument("action", choices=["status", "enroll", "record", "finish", "reset", "mode"])
     sp.add_argument("args", nargs="*")
@@ -1401,8 +1406,24 @@ def main(argv: list[str] | None = None) -> None:
             _print(calendar_lane.setup(value))
         elif a.action == "forget":
             _print(calendar_lane.forget())
+        elif a.action == "login":
+            from . import gcal
+
+            _print(gcal.login(Path(a.client).read_text() if a.client else None))
+        elif a.action == "add":
+            from . import gcal
+
+            if not (a.title and a.start):
+                _print({"ok": False, "error": "нужны название и --start"})
+            else:
+                when = gcal.parse_start(a.start)
+                # Без --yes ничего не создаётся: мозг зачитывает показ человеку и повторяет с --yes после «да».
+                _print(gcal.add(a.title, when, a.minutes) if a.yes else {"ok": True, "preview": gcal.preview(a.title, when, a.minutes),
+                                                                          "next": "спросить человека и повторить с --yes"})
         elif a.action == "test":
-            _print({"configured": bool(calendar_lane.urls()), "calendars": len(calendar_lane.urls())})
+            from . import gcal
+
+            _print({"configured": bool(calendar_lane.urls()), "calendars": len(calendar_lane.urls()), "can_write": gcal.connected()})
         else:
             import datetime as dt
 

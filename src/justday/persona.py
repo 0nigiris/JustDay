@@ -97,7 +97,8 @@ ABILITIES: list[tuple[str, str, str]] = [
      "Live Claude Code sessions: the «Claude» page on the island — what each one is doing now."),
     ("media.show_player", "Музыка и видео: `justday play`, `justday player`, `justday video`.",
      "Music and video: `justday play`, `justday player`, `justday video`."),
-    ("mail.address", "Почта и календарь: `justday mail`, `justday calendar`, `justday contacts`.",
+    ("mail.address", "Почта и календарь: `justday mail`, `justday calendar`, `justday contacts`. "
+     "Записать встречу: `justday calendar add НАЗВАНИЕ --start 'ГГГГ-ММ-ДД ЧЧ:ММ'` покажет её; зачитай и только после «да» повтори с `--yes`.",
      "Mail and calendar: `justday mail`, `justday calendar`, `justday contacts`."),
     ("", "Память: `justday memory` — она в файлах на диске и переживает перезапуск.",
      "Memory: `justday memory` — files on disk; it survives a restart."),
