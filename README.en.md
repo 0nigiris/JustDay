@@ -27,7 +27,13 @@
 
 JustDay is long past a voice helper. It is a desktop built around one island: dock, tray, menu, Spotlight, player, video, mail, an editing studio and tasks in separate chats. Every part has a fallback: when one model or key runs out, the next one carries on. Each part restarts on its own, and updates run in the background with no terminal and no vanishing dock.
 
-**What's new**
+**What's new (November)**
+- **Dock right away.** The shell used to wait up to 12 seconds for the daemon after login. It now starts at once and connects to the daemon on the fly.
+- **Own calendar.** `justday calendar add "Meeting" --start "2026-11-07 15:00"`: no accounts, keys or cloud consoles. The file lives on your computer; it is shown first and written after you confirm. Other calendars (any ICS link) are read alongside it.
+- **Menu edit mode like on a phone.** Blocks wiggle, a red minus hides one, dragging reorders, Escape leaves.
+- **Your own island widgets, accent colour, font and one slider for the size of everything.**
+- **Plasma 5 and X11 without a GPU or microphone.** Works by text; a fallback bar replaces the island.
+- **Night shift.** `justday terminal --night`: work goes on from the plan while you sleep; anything that needs a confirmation waits for morning.
 - **Install without admin rights.** Everything goes to your home folder; `bash scripts/check-pc.sh` tells you before installing what will work on this computer.
 - **Suitcase.** `justday suitcase export file` packs settings and keys into one file under your password; `import` unpacks it on another computer.
 - **Several keys.** An ElevenLabs key and a spare (`ELEVENLABS_API_KEY_2`): when the first runs out, the voice takes the second.

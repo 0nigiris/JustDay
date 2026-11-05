@@ -105,10 +105,8 @@ def run() -> int:
     what, why = pick()
     print(f"justday ui: {what} — {why}", file=sys.stderr, flush=True)
     if what == "island":
-        if wait_daemon():
-            print("justday ui: демон на связи", file=sys.stderr, flush=True)
-        else:
-            print("justday ui: сокета нет, подключаемся на ходу", file=sys.stderr, flush=True)
+        # Демона не ждём: раньше здесь стояло ожидание сокета до 12 с, и док появлялся с опозданием
+        # после каждого входа. JD.qml сам переподключается, а недостающее доезжает за секунду.
         exe = quickshell()
         # Цикл отрисовки Qt. «basic» (его Qt выбирает сам) крутит анимации таймером на 16 мс —
         # шестьдесят шагов в секунду при любой развёртке, и на 165 герцах движение идёт ступеньками.
