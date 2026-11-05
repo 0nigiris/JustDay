@@ -61,6 +61,11 @@ def setup(raw: str) -> dict:
 def forget() -> dict:
     subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", "calendar"], check=False, timeout=10)
     providers.secret_forget("calendar")
+    # Вход для записи в Google (gcal.py) снимается вместе со ссылками: политика конфиденциальности на сайте
+    # обещает, что `calendar forget` стирает токен с компьютера.
+    for key in ("gcal_token", "gcal_client"):
+        subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", key], check=False, timeout=10)
+        providers.secret_forget(key)
     _cache.clear()
     return {"ok": True}
 
