@@ -56,14 +56,14 @@ class HousekeepingMixin:
                 await self._try_home()
                 await self._diary_maybe()
                 await self._cycle_maybe()
-                if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.urls():
+                if time.monotonic() - getattr(self, "_last_cal", 0) > 300 and calendar_lane.active():
                     self._last_cal = time.monotonic()
                     try:
                         nxt = await asyncio.get_running_loop().run_in_executor(None, calendar_lane.upcoming, 2)
                     except Exception:
                         nxt = None
                     self.publish(next_event=nxt)
-                if time.monotonic() - getattr(self, "_last_observe", 0) > 60 and calendar_lane.urls():
+                if time.monotonic() - getattr(self, "_last_observe", 0) > 60 and calendar_lane.active():
                     self._last_observe = time.monotonic()
                     spawn(self._observe())
                 if time.monotonic() - getattr(self, "_last_guard", 0) > 60:

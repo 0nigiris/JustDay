@@ -54,7 +54,7 @@ def _weather_line(w: dict | None) -> str:
 
 
 def _calendar_line() -> str:
-    if not calendar_lane.urls():
+    if not calendar_lane.active():
         return ""
     today = [e for e in calendar_lane.day(0) if not e["all_day"]]
     now = dt.datetime.now().astimezone()

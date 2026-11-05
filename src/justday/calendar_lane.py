@@ -9,11 +9,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import secrets
 import subprocess
 import time
 import urllib.request
 
-from . import events, providers
+from . import config, events, providers
 from .i18n import lang, t
 
 CAL_WORDS = re.compile(r"\b(календар\w*|расписани\w*|встреч\w*|созвон\w*|планы? на|что у меня (сегодня|завтра|на неделе|на завтра)|"
@@ -41,6 +42,54 @@ def urls() -> list[str]:
     return parse_urls(providers.secret_get("calendar"))
 
 
+# Свой календарь на этом компьютере: Джарвис пишет сюда сам, без аккаунтов и ключей. Раньше запись шла в Google
+# через OAuth, и это требовало проект в облачной консоли, страницу и политику на сайте: для личного ассистента,
+# которым пользуются другие, такой вход никто не пройдёт.
+LOCAL = config.DATA_DIR / "calendar.ics"
+
+
+def active() -> bool:
+    """Есть чего читать: подключённая лента или собственный календарь."""
+    return bool(urls()) or LOCAL.exists()
+
+
+def preview(title: str, start: dt.datetime, minutes: int = 60) -> dict:
+    end = start + dt.timedelta(minutes=minutes)
+    return {"title": title.strip(), "start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes")}
+
+
+def parse_start(text: str) -> dt.datetime:
+    """«2026-11-07 15:00»; местный пояс. Разбор живой речи («в пятницу») делает мозг, не этот код."""
+    when = dt.datetime.fromisoformat(text.strip().replace("T", " "))
+    return when.astimezone() if when.tzinfo else when.replace(tzinfo=dt.datetime.now().astimezone().tzinfo)
+
+
+def add(title: str, start: dt.datetime, minutes: int = 60) -> dict:
+    """Записать встречу. Вызывать только после «да» человека; ту же встречу дважды не плодим."""
+    import icalendar
+
+    p = preview(title, start, minutes)
+    if not p["title"]:
+        return {"ok": False, "error": "пустое название"}
+    cal = icalendar.Calendar.from_ical(LOCAL.read_bytes()) if LOCAL.exists() else icalendar.Calendar()
+    cal["PRODID"], cal["VERSION"], cal["X-WR-CALNAME"] = "-//JustDay//RU", "2.0", "JustDay"
+    for ev in cal.walk("VEVENT"):
+        if str(ev.get("SUMMARY")) == p["title"] and ev["DTSTART"].dt == start:
+            return {"ok": True, "duplicate": True, **p}
+    ev = icalendar.Event()
+    ev.add("uid", f"{secrets.token_hex(8)}@justday")
+    ev.add("summary", p["title"])
+    ev.add("dtstart", start)
+    ev.add("dtend", start + dt.timedelta(minutes=minutes))
+    ev.add("dtstamp", dt.datetime.now(dt.UTC))
+    cal.add_component(ev)
+    LOCAL.parent.mkdir(parents=True, exist_ok=True)
+    tmp = LOCAL.with_suffix(".tmp")
+    tmp.write_bytes(cal.to_ical())
+    tmp.replace(LOCAL)  # обрыв посреди записи не должен оставить половину календаря
+    return {"ok": True, **p}
+
+
 def setup(raw: str) -> dict:
     """Check every link before it goes to the keyring, so a typo is never saved as a "connected" calendar."""
     import icalendar
@@ -61,11 +110,6 @@ def setup(raw: str) -> dict:
 def forget() -> dict:
     subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", "calendar"], check=False, timeout=10)
     providers.secret_forget("calendar")
-    # Вход для записи в Google (gcal.py) снимается вместе со ссылками: политика конфиденциальности на сайте
-    # обещает, что `calendar forget` стирает токен с компьютера.
-    for key in ("gcal_token", "gcal_client"):
-        subprocess.run(["secret-tool", "clear", *providers.SECRET_ATTRS, "key", key], check=False, timeout=10)
-        providers.secret_forget(key)
     _cache.clear()
     return {"ok": True}
 
@@ -87,8 +131,9 @@ def between(start: dt.datetime, end: dt.datetime) -> list[dict]:
 
     local = dt.datetime.now().astimezone().tzinfo
     out = []
-    for url in urls():
-        cal = icalendar.Calendar.from_ical(_fetch(url))
+    feeds = [_fetch(u) for u in urls()] + ([LOCAL.read_bytes()] if LOCAL.exists() else [])
+    for raw in feeds:
+        cal = icalendar.Calendar.from_ical(raw)
         name = str(cal.get("X-WR-CALNAME", ""))
         for ev in recurring_ical_events.of(cal).between(start, end):
             s, e = ev.get("DTSTART").dt, (ev.get("DTEND") or ev.get("DTSTART")).dt
