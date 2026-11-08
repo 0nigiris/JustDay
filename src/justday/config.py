@@ -530,7 +530,7 @@ DEFAULTS: dict = {
         "menu_style": "card",
         "start_style": "menu",  # что открывает кнопка «Пуск» и Meta: menu | search
         "menu_width": 760,
-        "menu_height": 620,
+        "menu_height": 500,
         "video_width": 640,  # the island video frame, in points — dragged by its corner, remembered here
         "video_volume": 1.0,  # how loud that frame is, 0–1 (the wheel over it)
         # Как Qt крутит анимации. basic (его Qt выбирает сам) — таймером, шестьдесят шагов в

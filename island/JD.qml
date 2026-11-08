@@ -1107,7 +1107,7 @@ Singleton {
     // Размер меню приложений: его задаёт человек, потянув карточку за угол, и он же запоминается.
     // Считать размер по содержимому нельзя — тогда лента разделов уезжает после каждого нажатия.
     readonly property real menuWidth: Math.max(520, island.menu_width || 760)
-    readonly property real menuHeight: Math.max(360, island.menu_height || 620)
+    readonly property real menuHeight: Math.max(360, island.menu_height || 500)
     function saveMenuSize(w, h) {
         setConfig("island.menu_width", Math.round(w))
         setConfig("island.menu_height", Math.round(h))

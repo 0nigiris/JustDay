@@ -40,7 +40,9 @@ Item {
                                  : shown.length <= 9 ? 3
                                  : shown.length <= 16 ? 4 : 5
     readonly property real padTile: 150
-    readonly property real tile: spotlight ? 52 : pad ? padTile : 104
+    // Плитка выше, значок крупнее (8 нояб.): при значке 40 на карточке 760×620 меню выглядело
+    // большим и пустым — «не в стиле Apple». Теперь значок 52, а карточка ниже (menu_height 500).
+    readonly property real tile: spotlight ? 52 : pad ? padTile : 116
 
     // Размер меню больше не считается по содержимому — и это починка, а не упрощение. Раньше
     // высота карточки равнялась высоте сетки: шесть закреплённых программ и сто пятьдесят семь
@@ -52,7 +54,7 @@ Item {
     // Теперь размер задаёт человек, углом карточки, и он же запоминается. Сетка прокручивается
     // внутри, а лента разделов и поиск стоят на месте всегда.
     implicitWidth: 760
-    implicitHeight: 620
+    implicitHeight: 500
 
     // Одна строка подсказки внизу вместо всплывающих плашек у курсора: плашка закрывает соседнюю
     // плитку ровно в тот момент, когда по ней целятся.
@@ -184,7 +186,9 @@ Item {
                         color: JD.text3
                         text: mv.spotlight
                             ? ("Поиск или просьба к " + JD.assistantName)
-                            : ("Программа, файл, окно — или просьба к " + JD.assistantName)
+                            // Сочетание поиска прямо в поле: он хочет привыкнуть открывать поиск с
+                            // клавиатуры, и меню, открытое мышью, каждый раз напоминает, как быстрее.
+                            : ("Программа, файл или просьба к " + JD.assistantName + " · " + (JD.hotkeys.apps || "Alt+Space"))
                     }
                 }
                 // Поиск не на каждую букву: пока печатают быстро, спрашивать демона незачем.
@@ -274,7 +278,7 @@ Item {
                 // замысел; дыра с двух — как незаполненная форма.
                 readonly property real cell: mv.spotlight
                     ? parent.width
-                    : Math.min(Math.floor((parent.width - 6) / mv.columns), mv.pad ? 180 : 140)
+                    : Math.min(Math.floor((parent.width - 6) / mv.columns), mv.pad ? 180 : 150)
                 width: mv.spotlight ? parent.width : cell * mv.columns
                 height: Math.min(parent.height, contentHeight)
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -379,8 +383,8 @@ Item {
                                 Layout.alignment: Qt.AlignHCenter
                                 name: modelData.icon
                                 fallback: "application-x-executable"
-                                implicitSize: mv.pad ? 56 : 40
-                                renderSize: mv.pad ? 128 : 96
+                                implicitSize: mv.pad ? 56 : 52
+                                renderSize: 128
                                 theme: true
                             }
                             Text {
