@@ -251,6 +251,20 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 contentHeight: sideCol.implicitHeight + 18 + 30
                 ScrollBar.vertical: ThinBar {}
+            // Р3-28: подсветка выбранного раздела — одна пилюля, которая едет к нажатому пункту, а не
+            // гаснет на старом и зажигается на новом. Так глаз видит, откуда и куда перешли.
+            Rectangle {
+                id: sidePill
+                property Item at: null
+                visible: !!at
+                x: sideCol.x + (at ? at.x : 0)
+                y: sideCol.y + (at ? at.y : 0)
+                width: at ? at.width : 0
+                height: at ? at.height : 0
+                radius: 8
+                color: Qt.rgba(1, 1, 1, 0.1)
+                Behavior on y { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
+            }
             ColumnLayout {
                 id: sideCol
                 x: 12
@@ -308,8 +322,9 @@ Item {
                         readonly property bool selected: modelData.id === "dock"
                             ? (win.page === "dock" || win.page === "appearance" || String(win.page).indexOf("panel-") === 0)
                             : win.page === modelData.id
-                        color: caption ? "transparent"
-                             : selected ? Qt.rgba(1, 1, 1, 0.1)
+                        onSelectedChanged: if (selected) sidePill.at = this
+                        Component.onCompleted: if (selected) sidePill.at = this
+                        color: caption || selected ? "transparent"
                              : (navHover.hovered ? Qt.rgba(1, 1, 1, 0.05) : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
                         Text {

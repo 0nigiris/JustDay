@@ -70,6 +70,9 @@ Item {
     }
 
     property int catIndex: 0
+    // Только что открыт: пока true, ряды приложений появляются лесенкой (см. делегат rowsRep).
+    property bool fresh: true
+    Timer { interval: 500; running: true; onTriggered: sp.fresh = false }
     readonly property var currentCategory: appsByCategory[Math.min(catIndex, appsByCategory.length - 1)]
     readonly property int tileW: 86
     readonly property int cols: 8
@@ -352,8 +355,20 @@ Item {
                             delegate: Column {
                                 id: rowItem
                                 required property var modelData
+                                required property int index
                                 width: appsColumn.width
                                 spacing: 4
+                                // Р3-28: при открытии ряды выходят лесенкой, сверху вниз. Только в первые
+                                // полсекунды: смена категории тоже пересобирает ряды, и каскад на каждый
+                                // щелчок по категории мельтешил бы.
+                                property real rise: sp.fresh && JD.animOn ? 1 : 0
+                                opacity: 1 - rise
+                                transform: Translate { y: rowItem.rise * 8 }
+                                SequentialAnimation on rise {
+                                    running: rowItem.rise > 0
+                                    PauseAnimation { duration: Math.min(rowItem.index, 8) * 28 }
+                                    NumberAnimation { to: 0; duration: JD.durBase; easing.type: JD.easeOut }
+                                }
 
                                 Label2 {
                                     visible: !!rowItem.modelData.caption
