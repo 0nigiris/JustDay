@@ -11,7 +11,7 @@
 и выходит — когда он вернётся и отопрёт экран, сторож уже не мешает.
 
     scripts/guard.py [--delay СЕК]          по умолчанию 15 с, чтобы успеть отойти
-    systemd-run --user --unit=justday-storozh scripts/guard.py    в фоне; снять: systemctl --user stop justday-storozh
+    systemd-run --user --unit=justday-storozh .venv/bin/python scripts/guard.py    в фоне; снять: systemctl --user stop justday-storozh
 """
 
 import argparse
@@ -67,6 +67,16 @@ def alarm(who: str) -> None:
     cam.wait(timeout=30)
     with open(OUT / "журнал.txt", "a", encoding="utf-8") as log:
         log.write(f"{stamp}  тронули: {who}; экран заперт; фото {stamp}_1..4.jpg\n")
+    # Его нет дома: фото должно дойти до телефона сразу, а не ждать, пока он вернётся к экрану.
+    # Отправка — после замка и записи на диск: без сети фото всё равно останутся.
+    try:
+        from justday import telegram
+        shots = sorted(OUT.glob(f"{stamp}_*.jpg"))
+        for i, shot in enumerate(shots[:2]):
+            telegram.photo(shot, f"Сторож: тронули {who}, экран заперт ({stamp})" if i == 0 else "")
+    except Exception as e:  # сеть, токен, что угодно: замок уже сработал
+        with open(OUT / "журнал.txt", "a", encoding="utf-8") as log:
+            log.write(f"{stamp}  в телеграм не ушло: {e}\n")
 
 
 def main() -> None:

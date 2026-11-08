@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import html
 import json
+import mimetypes
 import os
 import re
 import subprocess
@@ -225,6 +226,10 @@ def voice(text: str, to: str = "", cfg: dict | None = None) -> dict:
             ogg.unlink(missing_ok=True)
 
 
+def photo(path: Path, caption: str = "", to: str = "") -> dict:
+    return _send_file("sendPhoto", "photo", Path(path), {"chat_id": to or chat(), "caption": caption[:1024]})
+
+
 def _send_file(method: str, field: str, path: Path, params: dict) -> dict:
     """multipart вручную: ради одной отправки файла тянуть requests в зависимости незачем."""
     key = token()
@@ -234,7 +239,7 @@ def _send_file(method: str, field: str, path: Path, params: dict) -> dict:
         body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n"
                  f"{value}\r\n").encode()
     body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; "
-             f"filename=\"{path.name}\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()
+             f"filename=\"{path.name}\"\r\nContent-Type: {mimetypes.guess_type(path.name)[0] or 'application/octet-stream'}\r\n\r\n").encode()
     body += path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
     req = urllib.request.Request(f"{API}/bot{key}/{method}", data=bytes(body),
                                  headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
