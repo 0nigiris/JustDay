@@ -247,10 +247,11 @@ PanelWindow {
         // Меню читают, а не рассматривают: карточка почти непрозрачная, и размытие под ней —
         // только чтобы её край не выглядел вырезанным из картона. Стекло на 74% выглядело
         // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
-        color: JD.blurOn ? JD.menuSurface : Qt.rgba(0.04, 0.04, 0.05, 0.99)
+        color: JD.blurOn ? JD.glass(JD.menuSurface) : Qt.rgba(0.04, 0.04, 0.05, 0.99)
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.14)
         clip: true
+        GlassEdge { radius: parent.radius }
 
         // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.
         transformOrigin: JD.menuSearchMode ? Item.Top

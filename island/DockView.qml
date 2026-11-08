@@ -718,9 +718,10 @@ Item {
         // Р3-7: при 28% чёрного на светлых обоях док выходил светло-серым под чёрным островком —
         // два разных языка. Теперь материал тот же, что у меню островка, только с размытием чуть
         // прозрачнее; и рамка та же тонкая, что у островка.
-        color: JD.blurOn ? Qt.rgba(JD.menuSurface.r, JD.menuSurface.g, JD.menuSurface.b, 0.72) : JD.menuSurface
+        color: JD.blurOn ? JD.glass(Qt.rgba(JD.menuSurface.r, JD.menuSurface.g, JD.menuSurface.b, 0.72)) : JD.menuSurface
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.10)
+        GlassEdge { radius: parent.radius }
 
         // Щелчок по пустому месту полосы — мимо значков — тоже закрывает меню. Он объявлен до
         // значков, то есть лежит под ними, и их нажатия у них не отбирает.

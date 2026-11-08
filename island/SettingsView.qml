@@ -1307,6 +1307,16 @@ Item {
                     }
                 }
                 Row {
+                    title: JD.tr("Материал панелей")
+                    subtitle: JD.tr("Меню, док и лоток. Стекло прозрачнее и с бликом по краю. Размытие нагружает видеокарту, сплошной — нет")
+                    Choice {
+                        key: "island.material"
+                        options: [{ value: "frosted", label: JD.tr("Матовый") },
+                                 { value: "glass", label: JD.tr("Стекло") },
+                                 { value: "solid", label: JD.tr("Сплошной") }]
+                    }
+                }
+                Row {
                     fine: true
                     title: JD.tr("Отступ сверху")
                     subtitle: JD.tr("На сколько опустить островок от края экрана. Вырез и сплошная полоса остаются прижатыми")

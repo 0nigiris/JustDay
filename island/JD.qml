@@ -1311,7 +1311,14 @@ Singleton {
     // (and darkened card tints via DockView/TrayView). Per-screen hide already drops
     // blur with the strip: dockBlur/trayBlur use `… && dockWin.shown` / `trayWin.shown`,
     // and shown follows dockCoveredOn (true-fullscreen / overlap on THAT output only).
-    readonly property bool blurOn: island.blur !== false
+    // Материал панелей (Р3-17): сплошной, матовый (размытие под полупрозрачной заливкой) или стекло —
+    // то же размытие, но заливка прозрачнее и по краю блик (GlassEdge). Стекло — только выбором: на
+    // светлых обоях в нём хуже читается текст, поэтому по умолчанию матовый. Старый island.blur=false
+    // по-прежнему значит «сплошной».
+    readonly property string material: island.material || (island.blur === false ? "solid" : "frosted")
+    readonly property bool blurOn: material !== "solid"
+    readonly property bool glassOn: material === "glass"
+    function glass(c) { return glassOn ? Qt.rgba(c.r, c.g, c.b, c.a * 0.7) : c }
     readonly property string place: island.position || "top-center"
     readonly property bool atTop: !place.startsWith("bottom")
     readonly property string side: place.split("-")[1] || "center"

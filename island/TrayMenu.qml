@@ -159,9 +159,10 @@ Item {
             height: Math.min(sh.contentH + 12, tm.screenH - 24)
             radius: 14
             // Match dock/tray chrome: translucent over frosted blur, solid when blur is off.
-            color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.9)
+            color: JD.glass(Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.9))
             border.width: 1
             border.color: Qt.rgba(1, 1, 1, 0.12)
+            GlassEdge { radius: parent.radius }
             // Вправо, если вправо есть место; иначе слева от родителя — но никогда за краем экрана.
             x: {
                 const want = sh.wantLeft

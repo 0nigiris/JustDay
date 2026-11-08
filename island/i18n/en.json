@@ -647,5 +647,10 @@
   "экран гаснет сам": "screen sleeps as usual",
   "Или скажите: «напомни завтра позвонить маме»": "Or say: “remind me to call mom tomorrow”",
   "Добавить план": "Add a plan",
-  "Нажатие добавляет или убирает, ручка ⠿ меняет порядок.": "Click to add or remove, drag ⠿ to reorder."
+  "Нажатие добавляет или убирает, ручка ⠿ меняет порядок.": "Click to add or remove, drag ⠿ to reorder.",
+  "Материал панелей": "Panel material",
+  "Меню, док и лоток. Стекло прозрачнее и с бликом по краю. Размытие нагружает видеокарту, сплошной — нет": "Menu, dock and tray. Glass is clearer with a highlight on the edge. Blur loads the GPU, solid does not",
+  "Матовый": "Frosted",
+  "Стекло": "Glass",
+  "Сплошной": "Solid"
 }
