@@ -646,5 +646,6 @@
   "экран не гаснет": "screen stays on",
   "экран гаснет сам": "screen sleeps as usual",
   "Или скажите: «напомни завтра позвонить маме»": "Or say: “remind me to call mom tomorrow”",
-  "Добавить план": "Add a plan"
+  "Добавить план": "Add a plan",
+  "Нажатие добавляет или убирает, ручка ⠿ меняет порядок.": "Click to add or remove, drag ⠿ to reorder."
 }

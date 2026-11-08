@@ -1,8 +1,7 @@
 // Галерея виджетов островка: что стоит на полоске и что можно добавить.
 //
 // Зачем отдельная страница, а не кнопки на самой полоске: на полоске места мало, и «+ Погода»
-// рядом с дрожащими виджетами превращало режим правки в кашу. Порядок здесь не меняется — его
-// двигают перетаскиванием на самой полоске; тут только «есть / нет».
+// рядом с дрожащими виджетами превращало режим правки в кашу.
 import QtQuick
 import QtQuick.Layouts
 
@@ -27,8 +26,8 @@ Item {
         .map(e => String(e).split(":")[0].trim()).filter(n => n)
         .map(n => ({ id: "custom:" + n, name: n, hint: JD.tr("Первая строка файла, обновляется раз в 5 секунд") }))
     // Включённые идут первыми и в том порядке, в каком стоят на полоске; выключенные — после.
-    // Порядок меняют стрелки в строке: перетаскивание на самой полоске остаётся, но тянуть
-    // длинный текст на узкой полоске неудобно.
+    // Порядок меняют, таская строку за ручку (Р3-13): стрелки ↑↓ двигали на одну позицию за нажатие,
+    // и перенести виджет с конца в начало было десятком щелчков.
     readonly property var ordered: {
         const every = all.concat(customs)
         const byId = {}
@@ -36,10 +35,13 @@ Item {
         const on = JD.peekLayout.filter(id => byId[id]).map(id => byId[id])
         return on.concat(every.filter(w => JD.peekLayout.indexOf(w.id) < 0))
     }
+    readonly property int rowStep: 48 + 6   // высота строки и промежуток — шаг перетаскивания
+    property string dragId: ""
+    property real dragDy: 0
     function move(id, step) {
         const l = JD.peekLayout.slice()
-        const i = l.indexOf(id), j = i + step
-        if (i < 0 || j < 0 || j >= l.length) return
+        const i = l.indexOf(id), j = Math.max(0, Math.min(l.length - 1, i + step))
+        if (i < 0 || j === i) return
         l.splice(j, 0, l.splice(i, 1)[0])
         JD.setConfig("island.peek", l)
     }
@@ -51,12 +53,13 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: 8
-        Label2 { color: JD.text2; text: JD.tr("Нажмите, чтобы добавить или убрать. Порядок меняют стрелки справа.") }
+        Label2 { Layout.fillWidth: true; color: JD.text2; text: JD.tr("Нажатие добавляет или убирает, ручка ⠿ меняет порядок.") }
         Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentHeight: col.implicitHeight
             clip: true
+            interactive: !wv.dragId   // иначе список уезжал вместе с перетаскиваемой строкой
             Column {
                 id: col
                 width: parent.width
@@ -68,7 +71,9 @@ Item {
                         required property var modelData
                         readonly property bool on: wv.has(modelData.id)
                         width: col.width; height: 48; radius: 14
-                        color: rowHover.hovered ? JD.fill2 : JD.fill1
+                        z: wv.dragId === rowItem.modelData.id ? 10 : 1
+                        transform: Translate { y: wv.dragId === rowItem.modelData.id ? wv.dragDy : 0 }
+                        color: rowHover.hovered || wv.dragId === rowItem.modelData.id ? JD.fill2 : JD.fill1
                         // Без RowLayout: переключатель там уезжал вслед за длиной текста.
                         // Крошечный предпросмотр: значок или то, что виджет показывает на полоске.
                         // Не настоящая отрисовка (она зависит от данных), а намёк, что это за штука.
@@ -105,22 +110,24 @@ Item {
                             Label1 { text: JD.tr(modelData.name) }
                             Label2 { color: JD.text2; font.pixelSize: 12; text: JD.tr(modelData.hint) }
                         }
-                        Row {
-                            id: arrows
+                        Rectangle {
+                            id: grip
                             visible: on
                             anchors.right: sw.left; anchors.rightMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 4
-                            Repeater {
-                                model: [{ g: "chevron-up", s: -1 }, { g: "chevron-down", s: 1 }]
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    width: 28; height: 28; radius: 14
-                                    color: ah.hovered ? JD.fill2 : "transparent"
-                                    Icon { anchors.centerIn: parent; name: modelData.g; implicitSize: 16 }
-                                    HoverHandler { id: ah; cursorShape: Qt.PointingHandCursor }
-                                    TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: wv.move(rowItem.modelData.id, modelData.s) }
+                            width: 28; height: 28; radius: 14
+                            color: gh.hovered || wv.dragId === rowItem.modelData.id ? JD.fill2 : "transparent"
+                            Icon { anchors.centerIn: parent; name: "grip-vertical"; implicitSize: 16 }
+                            HoverHandler { id: gh; cursorShape: wv.dragId ? Qt.ClosedHandCursor : Qt.OpenHandCursor }
+                            DragHandler {
+                                target: null
+                                xAxis.enabled: false
+                                onActiveChanged: {
+                                    if (active) { wv.dragId = rowItem.modelData.id; wv.dragDy = 0; return }
+                                    wv.move(wv.dragId, Math.round(wv.dragDy / wv.rowStep))
+                                    wv.dragId = ""; wv.dragDy = 0
                                 }
+                                onTranslationChanged: if (active) wv.dragDy = translation.y
                             }
                         }
                         Rectangle {
