@@ -715,9 +715,12 @@ Item {
         radius: Math.round(dv.cardHeight * 0.3)
         // Без размытия под доком та же прозрачность превращается в кашу: значки читаются по тому,
         // что за ними, а не по себе. Нет размытия — нет и прозрачности.
-        color: Qt.rgba(0, 0, 0, JD.blurOn ? 0.28 : 0.55)
+        // Р3-7: при 28% чёрного на светлых обоях док выходил светло-серым под чёрным островком —
+        // два разных языка. Теперь материал тот же, что у меню островка, только с размытием чуть
+        // прозрачнее; и рамка та же тонкая, что у островка.
+        color: JD.blurOn ? Qt.rgba(JD.menuSurface.r, JD.menuSurface.g, JD.menuSurface.b, 0.72) : JD.menuSurface
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.14)
+        border.color: Qt.rgba(1, 1, 1, 0.10)
 
         // Щелчок по пустому месту полосы — мимо значков — тоже закрывает меню. Он объявлен до
         // значков, то есть лежит под ними, и их нажатия у них не отбирает.
@@ -889,7 +892,7 @@ Item {
                         sourceComponent: Rectangle {
                             anchors.fill: parent
                             radius: width * 0.27
-                            color: "#3f8cff"
+                            color: JD.accentBlue  // свой знак — цвета акцента островка, а не своего синего
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.22)
                             Grid {

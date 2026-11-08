@@ -324,7 +324,7 @@ def find_icon(name: str, theme: str = "") -> pathlib.Path | None:
                key=lambda p: (0 if "scalable" in p.parts else 1, -_icon_size(p), 0 if p.suffix == ".svg" else 1))
 
 
-def launcher_icon(want: str = "apple") -> str:
+def launcher_icon(want: str = "grid") -> str:
     """Путь к значку, из которого достаётся меню. Пусто — рисовать свою сетку точек."""
     if want in ("", "grid"):
         return ""
@@ -696,7 +696,7 @@ def catalog_cached() -> dict:
         if isinstance(got, dict) and isinstance(got.get("items"), list) and got.get("pinned") is not None:
             # Keep trash/launcher fresh cheaply.
             got["trash_full"] = trash_full()
-            launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
+            launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "grid")))
             if launcher:
                 got["launcher"] = launcher
             return got
@@ -801,7 +801,7 @@ def catalog() -> dict:
         soft["separate"] = child in _get_separate_instances()
         match.setdefault(child, soft)
 
-    launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "apple")))
+    launcher = launcher_icon(str((config.load().get("dock") or {}).get("launcher", "grid")))
     want = pinned()
     items = []
     for k in want:
