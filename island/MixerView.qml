@@ -30,6 +30,9 @@ Item {
         const p = node.properties || ({})
         if (String(p["stream.monitor"]) === "true") return ""
         if ((p["application.name"] || "") === "pw-record") return ""
+        // venmic (демонстрация экрана в Discord/Equibop) повторяет звук других программ своими
+        // ручьями «venmic-loopback-playback-…»: громкость у оригинала, копия только путает.
+        if (/^venmic-loopback/.test(node.name || "")) return ""
         const cls = p["media.class"] || ""
         if (cls === "Stream/Output/Audio") return "play"
         if (cls === "Stream/Input/Audio") return "rec"
@@ -69,7 +72,15 @@ Item {
         if (!node) return ""
         const p = node.properties || ({})
         // Браузер называет все потоки одинаково («Chromium»): без названия вкладки не понять, где что (Р2-48).
+        // Electron-программы (Equibop — это Discord) представляются «Chromium» с ручьём «Playback»:
+        // настоящее имя тогда только в имени процесса.
+        const bin = p["application.process.binary"] || ""
+        if (isBrowser(p) && /^playback$/i.test(p["media.name"] || "") && bin && !isBrowser({ "application.name": bin }))
+            return /equibop|vesktop|discord/i.test(bin) ? "Discord" : bin.charAt(0).toUpperCase() + bin.slice(1)
         if (isBrowser(p) && p["media.name"]) return p["media.name"] + " — " + p["application.name"]
+        // gpu-screen-recorder называет свои ручьи «gsr-default_output/_input». Прятать их нельзя:
+        // человек должен видеть, что звук и микрофон пишутся, — но назвать по-человечески.
+        if (/^gsr-/.test(node.name || "")) return "Запись экрана"
         return p["application.name"] || p["media.name"] || node.description || node.name || ""
     }
     readonly property var outputs: Pipewire.nodes.values.filter(n => n.isSink && !n.isStream && n.audio)
@@ -85,6 +96,8 @@ Item {
         if (/hdmi|displayport/i.test(desc + " " + (node.name || "")))
             return "Монитор" + (nick && !/hdmi/i.test(nick) ? " " + nick : "")
         if (ff === "internal") return node.isSink ? "Выход компьютера" : "Вход компьютера"
+        // Гнездо наушников на USB-микрофоне (Q2U): ALSA зовёт выход именем микрофона.
+        if (node.isSink && /\bmic/i.test(desc)) return "Наушники (" + desc.split(/\s+/)[0] + ")"
         const plain = desc.replace(/\s+(Analog|Digital|Pro|Multichannel)(\s+(Stereo|Mono|Surround[\s\d.]*))?(\s+Input|\s+Output)?$/i, "")
         const name = plain || nick || node.name || fallback
         return ff === "headphones" || ff === "headset" ? "Наушники " + name : name
@@ -98,7 +111,9 @@ Item {
         const note = what && what !== who && !isBrowser(p) ? what : (p["application.process.binary"] || "")
         // «waywallen.renderer.wescene.playback» — внутренний идентификатор потока, человеку он ничего
         // не говорит и делает микшер похожим на отладочную панель.
-        return /^[\w-]+([._][\w-]+){2,}$/.test(note) ? "" : note
+        if (/^[\w-]+([._][\w-]+){2,}$/.test(note)) return ""
+        // «Audio Stream», «Playback» — имя по умолчанию из библиотеки, а не подпись.
+        return /^(audio stream|playback|output|audio)$/i.test(note) || note === nameOf(node) ? "" : note
     }
     // Значок берём только тот, который программа назвала сама. Имя двоичного файла в роли имени
     // значка выглядит правдоподобно и врёт: в теме находится что-нибудь похожее по названию, и в
