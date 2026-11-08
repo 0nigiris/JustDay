@@ -73,13 +73,32 @@ Item {
         return p["application.name"] || p["media.name"] || node.description || node.name || ""
     }
     readonly property var outputs: Pipewire.nodes.values.filter(n => n.isSink && !n.isStream && n.audio)
+    // Имя устройства так, как его назвал бы человек. ALSA отдаёт «GA106 High Definition Audio
+    // Controller Digital Stereo (HDMI) [27G2G3]» — это имя чипа видеокарты, а звук идёт в монитор;
+    // в микшере такие строки читались как отладка, а не как продукт (ревизия 8 нояб.).
+    function deviceName(node, fallback) {
+        if (!node) return fallback
+        const p = node.properties || ({})
+        const desc = node.description || p["node.description"] || ""
+        const nick = node.nickname || p["node.nick"] || ""
+        const ff = p["device.form-factor"] || ""
+        if (/hdmi|displayport/i.test(desc + " " + (node.name || "")))
+            return "Монитор" + (nick && !/hdmi/i.test(nick) ? " " + nick : "")
+        if (ff === "internal") return node.isSink ? "Выход компьютера" : "Вход компьютера"
+        const plain = desc.replace(/\s+(Analog|Digital|Pro|Multichannel)(\s+(Stereo|Mono|Surround[\s\d.]*))?(\s+Input|\s+Output)?$/i, "")
+        const name = plain || nick || node.name || fallback
+        return ff === "headphones" || ff === "headset" ? "Наушники " + name : name
+    }
     function isBrowser(p) { return /chrom|firefox|brave|vivaldi|opera|edge/i.test(p["application.name"] || "") }
     function noteOf(node) {
         if (!node) return ""
         const p = node.properties || ({})
         const what = p["media.name"] || ""
         const who = p["application.name"] || ""
-        return what && what !== who && !isBrowser(p) ? what : (p["application.process.binary"] || "")
+        const note = what && what !== who && !isBrowser(p) ? what : (p["application.process.binary"] || "")
+        // «waywallen.renderer.wescene.playback» — внутренний идентификатор потока, человеку он ничего
+        // не говорит и делает микшер похожим на отладочную панель.
+        return /^[\w-]+([._][\w-]+){2,}$/.test(note) ? "" : note
     }
     // Значок берём только тот, который программа назвала сама. Имя двоичного файла в роли имени
     // значка выглядит правдоподобно и врёт: в теме находится что-нибудь похожее по названию, и в
@@ -270,7 +289,7 @@ Item {
             strong: true
             own: "volume-2"
             tint: JD.accentBlue
-            title: mx.sink ? (mx.sink.description || mx.sink.name || "Выход") : "Выхода нет"
+            title: mx.sink ? mx.deviceName(mx.sink, "Выход") : "Выхода нет"
             note: "Общая громкость — всё сразу"
         }
         // Куда звук идёт: наушники/колонки одним щелчком (он жаловался, что наушники пропали из настроек)
@@ -283,11 +302,12 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
                     readonly property bool on: mx.sink && modelData.id === mx.sink.id
+                    readonly property string label: mx.deviceName(modelData, "Выход")
                     height: 26; width: chipText.implicitWidth + 20; radius: 13
                     color: on ? JD.accentBlue : Qt.rgba(1, 1, 1, 0.1)
                     Label2 { id: chipText; anchors.centerIn: parent; font.pixelSize: 12
                              color: parent.on ? "#ffffff" : JD.text2
-                             text: modelData.description || modelData.name }
+                             text: parent.label }
                     TapHandler { onTapped: Quickshell.execDetached(["wpctl", "set-default", String(modelData.id)]) }
                 }
             }
@@ -302,7 +322,7 @@ Item {
             // «вас слышат» у Apple. Раньше приложения были фиолетовыми, микрофон бирюзовым, и он не
             // понимал, чем нижние полосы отличаются от верхней (13 окт) — ничем, кроме имени.
             tint: JD.accentOrange
-            title: mx.source ? (mx.source.description || mx.source.name || "Микрофон") : "Микрофона нет"
+            title: mx.source ? mx.deviceName(mx.source, "Микрофон") : "Микрофона нет"
             note: "Что слышат остальные"
         }
 

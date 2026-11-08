@@ -6,6 +6,7 @@ Never exposed on the network.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import json
 import logging
@@ -1115,10 +1116,16 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             if watcher.returncode is None:
                 watcher.kill()
         self.mic.stop()
+        cli = self.brain.cli_tree()
         try:
             await asyncio.wait_for(self.brain.stop(), 5)
         except Exception:
             log.exception("brain stop")
+        # KillMode=process: всё, что не убили сами, переживёт демон. Запущенные человеком программы так
+        # и задумано, а свой claude — нет: кто не вышел за 5 с, тот уже не выйдет.
+        for pid in cli:
+            with contextlib.suppress(OSError):
+                os.kill(pid, signal.SIGKILL)
         events.emit("daemon_stopped")
         logging.shutdown()
         os._exit(0)  # executor threads (STT/TTS/mail calls) must not keep a restart waiting

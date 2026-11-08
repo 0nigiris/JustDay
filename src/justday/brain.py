@@ -292,6 +292,24 @@ class Brain:
         async with self._conn_lock:
             await self._stop()
 
+    def cli_tree(self) -> list[int]:
+        """PID процесса claude и всех его потомков. Нужен демону при выходе: закрытие SDK ступенями
+        тянется до ~20 с, срок остановки короче, и обрезанное закрытие оставляло claude с детьми
+        жить после демона (7 нояб.: «left-over process (claude)» при каждом следующем старте)."""
+        proc = getattr(getattr(self.client, "_transport", None), "_process", None)
+        todo, seen = [getattr(proc, "pid", None)], []
+        while todo:
+            pid = todo.pop()
+            if not pid:
+                continue
+            seen.append(pid)
+            for kids in Path(f"/proc/{pid}/task").glob("*/children"):
+                try:
+                    todo += [int(k) for k in kids.read_text().split()]
+                except OSError:
+                    pass
+        return seen
+
     async def _stop(self) -> None:
         if self._reader:
             self._reader.cancel()
