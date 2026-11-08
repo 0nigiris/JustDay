@@ -636,8 +636,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--start", default="", help="для add: когда, «2026-11-07 15:00»")
     sp.add_argument("--minutes", type=int, default=60, help="для add: длительность")
     sp.add_argument("--yes", action="store_true", help="для add: человек подтвердил, создавать; без него только показ")
-    sp = sub.add_parser("voiceprint", help="personal voice profile: status | enroll | record KIND INDEX SECONDS | finish | reset | mode off|wake|always")
-    sp.add_argument("action", choices=["status", "enroll", "record", "finish", "reset", "mode"])
+    sp = sub.add_parser("voiceprint", help="голосовые профили: status | enroll [ИМЯ] | begin ИМЯ | record KIND INDEX SECONDS [ИМЯ] | "
+                                          "finish [ИМЯ] | use ИМЯ | reset [ИМЯ] | mode off|wake|always; без имени — активный голос")
+    sp.add_argument("action", choices=["status", "enroll", "begin", "record", "finish", "use", "reset", "mode"])
     sp.add_argument("args", nargs="*")
     sp = sub.add_parser("parts", help="необязательные части окружения (речь, голос, CUDA): "
                                      "`justday parts` показывает, что стоит; add/remove доставляет и убирает")
@@ -1658,29 +1659,35 @@ def _voiceprint_cmd(a) -> None:
     args = a.args
     if a.action == "status":
         _print(control("voiceprint_status", timeout=10))
+    elif a.action == "begin":
+        _print(control("voiceprint_begin", timeout=10, profile=args[0] if args else ""))
     elif a.action == "record":
-        _print(control("enroll_record", timeout=60, kind=args[0], index=int(args[1]), seconds=float(args[2])))
+        _print(control("enroll_record", timeout=60, kind=args[0], index=int(args[1]), seconds=float(args[2]),
+                       profile=args[3] if len(args) > 3 else ""))
     elif a.action == "finish":
-        _print(control("enroll_finish", timeout=300))
+        _print(control("enroll_finish", timeout=300, profile=args[0] if args else ""))
+    elif a.action == "use":
+        _print(control("voiceprint_use", timeout=20, profile=args[0]))
     elif a.action == "reset":
-        _print(control("voiceprint_reset", timeout=20))
+        _print(control("voiceprint_reset", timeout=20, profile=args[0] if args else ""))
     elif a.action == "mode":
         config.set_value("voiceprint", "mode", args[0])
         _print(control("reload_settings", timeout=5))
     else:  # interactive enrollment in the terminal
         st = control("voiceprint_status", timeout=10)
+        name = control("voiceprint_begin", timeout=10, profile=args[0] if args else "").get("profile", "")
         steps = [("wake", i, 2.5, p) for i, p in enumerate(st["wake_phrases"])] + [("phrase", i, 5.0, p) for i, p in enumerate(st["phrases"])]
         print("Настройка под ваш голос: после сигнала произнесите фразу обычным голосом. Enter — записать, s — пропустить.")
         for n, (kind, idx, secs, phrase) in enumerate(steps, 1):
             while True:
                 if input(f"\n[{n}/{len(steps)}] Скажите: «{phrase}»  (Enter) ").strip().lower() == "s":
                     break
-                r = control("enroll_record", timeout=60, kind=kind, index=idx, seconds=secs)
+                r = control("enroll_record", timeout=60, kind=kind, index=idx, seconds=secs, profile=name)
                 if r.get("ok"):
                     print("  ✓" + (f" услышал: «{r['text']}»" if r.get("text") else ""))
                     break
                 print(f"  ✗ {r.get('error')} — ещё раз")
-        r = control("enroll_finish", timeout=300)
+        r = control("enroll_finish", timeout=300, profile=name)
         print("\nГотово: порог узнавания {threshold}, пауза конца фразы {silence_seconds} с, слово пробуждения дообучено: {wake}".format(
             threshold=r.get("threshold"), silence_seconds=r.get("silence_seconds"), wake="да" if r.get("wake_verifier") else "нет")
             if r.get("ok") else f"\nНе получилось: {r.get('error')}")

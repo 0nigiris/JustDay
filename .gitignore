@@ -48,3 +48,4 @@ scripts/snapshot.sh
 scripts/stop-check.sh
 scripts/verification-loop.sh
 .pre-commit-config.yaml
+ПОЛНАЯ-ПЕРЕДАЧА.md

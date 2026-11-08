@@ -278,11 +278,13 @@ class TTS:
             writer.write((json.dumps(req, ensure_ascii=False) + "\n").encode())
             await writer.drain()
             while True:
-                head = await reader.readexactly(4)
+                # Срок на каждый кусок: служба, застрявшая на видеокарте, молчала, не закрывая сокет, и
+                # очередь речи стояла навсегда — а с ней и ход. TimeoutError — это OSError: дальше Silero.
+                head = await asyncio.wait_for(reader.readexactly(4), 30)
                 (size,) = struct.unpack("<I", head)
                 if size == 0:
                     return
-                yield await reader.readexactly(size)
+                yield await asyncio.wait_for(reader.readexactly(size), 30)
         except asyncio.IncompleteReadError as e:
             raise OSError("voice service closed the stream") from e
         finally:

@@ -109,7 +109,8 @@ class SpeechMixin:
                         and await self._speak_stream(sentence, gen, "chatterbox")):
                     continue
                 ahead = self._synth_ahead.pop(sentence, None)
-                pcm = await (ahead or loop.run_in_executor(None, self.tts.synth, sentence))
+                # Срок: зависший синтез держал очередь, и wait_speech_done ждал её вечно вместе с ходом.
+                pcm = await asyncio.wait_for(ahead or loop.run_in_executor(None, self.tts.synth, sentence), 60)
                 if gen != self._speech_gen or not len(pcm):
                     continue
                 self.state = "speaking"

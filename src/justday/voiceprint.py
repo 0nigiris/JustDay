@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import time
 import urllib.request
 import wave
@@ -17,8 +19,10 @@ import numpy as np
 
 from . import config
 
+# Каждый голос — своя папка DIR/<имя>/: голос меняется (простуда, возраст, другой микрофон), и за одним
+# компьютером бывает не один хозяин. Активный — voiceprint.profile в настройках, иначе первый по имени.
 DIR = config.DATA_DIR / "voiceprint"
-PROFILE = DIR / "profile.json"
+DEFAULT = "основной"
 MODEL = config.DATA_DIR / "models" / "campplus_sv.onnx"
 MODEL_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/"
              "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx")
@@ -157,11 +161,58 @@ def inner_pauses(pcm: np.ndarray) -> list[float]:
     return [g for g in gaps if g >= 0.09]
 
 
+# ---------------- profiles ----------------
+def check_name(name: str) -> str:
+    """Имя становится папкой: без точек и слэшей, чтобы «../» не вывело запись за пределы DIR."""
+    name = (name or "").strip()
+    if not re.fullmatch(r"[\w\- ]{1,40}", name):
+        raise ValueError(f"имя голоса «{name}»: только буквы, цифры, пробел, дефис, до 40 знаков")
+    return name
+
+
+def _migrate() -> None:
+    """До 7 нояб. единственный профиль лежал прямо в DIR — переносим его в «основной», а не теряем."""
+    if not (DIR / "profile.json").exists():
+        return
+    dest = DIR / DEFAULT
+    dest.mkdir(parents=True, exist_ok=True)
+    for f in DIR.iterdir():
+        if f.is_file():
+            f.replace(dest / f.name)
+
+
+def names() -> list[str]:
+    _migrate()
+    return sorted(p.parent.name for p in DIR.glob("*/profile.json") if not p.parent.name.startswith("."))
+
+
+def active() -> str:
+    have = names()
+    want = config.load()["voiceprint"].get("profile", "")
+    return want if want in have else (have[0] if have else "")
+
+
+def draft(name: str) -> Path:
+    return DIR / f".draft-{check_name(name)}"
+
+
+def begin(name: str) -> None:
+    """Чистый черновик: обрывки прошлой записи (пропущенные шаги, старый голос) не должны попасть в новый профиль."""
+    d = draft(name)
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+
+
 # ---------------- enrollment ----------------
-def enroll_finish() -> dict:
-    """Build the profile from DIR/phrase_*.wav and DIR/wake_*.wav."""
-    phrases = sorted(DIR.glob("phrase_*.wav"))
-    wakes = sorted(DIR.glob("wake_*.wav"))
+def enroll_finish(name: str = DEFAULT) -> dict:
+    """Build the profile from the draft's phrase_*.wav and wake_*.wav, then swap it in for the old one.
+
+    Раньше новые записи ложились поверх старых в ту же папку: всё, что не перезаписали, оставалось от прежнего
+    голоса, и «записать заново» давало смесь двух голосов. Теперь старый профиль заменяется только целиком
+    и только когда новый собран."""
+    src = draft(name)
+    phrases = sorted(src.glob("phrase_*.wav"))
+    wakes = sorted(src.glob("wake_*.wav"))
     if len(phrases) < 3:
         return {"ok": False, "error": "нужно записать хотя бы 3 фразы"}
     clips = [load_wav(p) for p in phrases + wakes]
@@ -180,8 +231,15 @@ def enroll_finish() -> dict:
         verifier = train_wake_verifier(wakes, phrases)
 
     profile = {"embedding": center.round(6).tolist(), "threshold": round(threshold, 3), "enroll_scores": sims.round(3).tolist(),
-               "silence_seconds": round(silence, 2), "wake_verifier": verifier, "created": time.strftime("%Y-%m-%d %H:%M")}
-    PROFILE.write_text(json.dumps(profile), encoding="utf-8")
+               "silence_seconds": round(silence, 2), "wake_verifier": Path(verifier).name if verifier else "",
+               "created": time.strftime("%Y-%m-%d %H:%M")}
+    (src / "profile.json").write_text(json.dumps(profile), encoding="utf-8")
+    dest, old = DIR / name, DIR / f".old-{name}"
+    shutil.rmtree(old, ignore_errors=True)
+    if dest.exists():
+        dest.rename(old)
+    src.rename(dest)
+    shutil.rmtree(old, ignore_errors=True)
     return {"ok": True, "threshold": profile["threshold"], "silence_seconds": profile["silence_seconds"],
             "wake_verifier": bool(verifier), "clips": len(clips)}
 
@@ -198,7 +256,7 @@ def train_wake_verifier(positives: list[Path], negatives: list[Path]) -> str:
         from openwakeword.utils import download_models
 
         download_models(model_names=["hey_jarvis"])
-    out = DIR / "hey_jarvis_verifier.pkl"
+    out = positives[0].parent / "hey_jarvis_verifier.pkl"
     try:  # the function takes *lists of wav paths* (its docstring says directories, the code iterates items)
         train_custom_verifier(positive_reference_clips=[str(p) for p in positives],
                               negative_reference_clips=[str(p) for p in negatives],
@@ -209,11 +267,16 @@ def train_wake_verifier(positives: list[Path], negatives: list[Path]) -> str:
 
 
 # ---------------- runtime ----------------
-def profile() -> dict | None:
+def profile(name: str = "") -> dict | None:
+    """Активный профиль (или названный). Путь к проверщику — от папки профиля: она переименовывается из черновика."""
+    name = check_name(name) if name else active()
     try:
-        return json.loads(PROFILE.read_text(encoding="utf-8"))
+        p = json.loads((DIR / name / "profile.json").read_text(encoding="utf-8")) if name else None
     except (OSError, json.JSONDecodeError):
         return None
+    if p and p.get("wake_verifier"):
+        p["wake_verifier"] = str(DIR / name / Path(p["wake_verifier"]).name)
+    return p
 
 
 def score(pcm: np.ndarray) -> float | None:
@@ -223,7 +286,6 @@ def score(pcm: np.ndarray) -> float | None:
     return float(embed(pcm) @ np.asarray(p["embedding"], dtype=np.float32))
 
 
-def reset() -> None:
-    import shutil
-
-    shutil.rmtree(DIR, ignore_errors=True)
+def reset(name: str = "") -> None:
+    """Один голос по имени или все сразу."""
+    shutil.rmtree(DIR / check_name(name) if name else DIR, ignore_errors=True)

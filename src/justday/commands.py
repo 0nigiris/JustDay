@@ -39,7 +39,7 @@ from . import (
     sysload,
     voiceprint,
 )
-from .aio import spawn
+from .aio import blocking, spawn
 from .brain import Brain
 from .i18n import t
 
@@ -210,28 +210,52 @@ class CommandsMixin:
             resp = {"ok": True, "result": "черновик показан пользователю и ждёт его подтверждения голосом или кнопкой"}
         return resp
 
+    @staticmethod
+    def _vp_name(req: dict) -> str:
+        """Без имени — перезапись активного голоса: так работали и старая панель, и `voiceprint enroll`."""
+        return voiceprint.check_name(req.get("profile") or voiceprint.active() or voiceprint.DEFAULT)
+
+    async def _cmd_voiceprint_begin(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        voiceprint.begin(name := self._vp_name(req))
+        return {"ok": True, "profile": name}
+
     async def _cmd_enroll_record(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        return await self.enroll_record(req.get("kind", "phrase"), int(req.get("index", 0)), float(req.get("seconds", 4)))
+        return await self.enroll_record(req.get("kind", "phrase"), int(req.get("index", 0)), float(req.get("seconds", 4)),
+                                        self._vp_name(req))
 
     async def _cmd_enroll_finish(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        resp = await asyncio.get_running_loop().run_in_executor(None, voiceprint.enroll_finish)
+        name = self._vp_name(req)
+        resp = await asyncio.get_running_loop().run_in_executor(None, voiceprint.enroll_finish, name)
         if resp.get("ok"):
             config.set_value("audio", "silence_seconds", resp["silence_seconds"])
+            config.set_value("voiceprint", "profile", name)
             if self.cfg["voiceprint"]["mode"] == "off":
                 config.set_value("voiceprint", "mode", "wake")
             self.reload_settings()
+            await self.rebuild_wake()
         return resp
+
+    async def _cmd_voiceprint_use(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        name = voiceprint.check_name(req.get("profile", ""))
+        if name not in voiceprint.names():
+            return {"ok": False, "error": f"голоса «{name}» нет"}
+        config.set_value("voiceprint", "profile", name)
+        self.reload_settings()
+        await self.rebuild_wake()
+        return {"ok": True, "profile": name}
 
     async def _cmd_voiceprint_status(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         p = voiceprint.profile()
-        return {"ok": True, "enrolled": bool(p), "created": (p or {}).get("created", ""), "threshold": (p or {}).get("threshold"),
+        return {"ok": True, "enrolled": bool(p), "profiles": voiceprint.names(), "active": voiceprint.active(), "created": (p or {}).get("created", ""), "threshold": (p or {}).get("threshold"),
                 "wake_verifier": bool((p or {}).get("wake_verifier")), "mode": self.cfg["voiceprint"]["mode"],
                 "phrases": voiceprint.phrases(), "wake_phrases": voiceprint.WAKE_PHRASES}
 
     async def _cmd_voiceprint_reset(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        voiceprint.reset()
-        config.set_value("voiceprint", "mode", "off")
+        voiceprint.reset(voiceprint.check_name(req["profile"]) if req.get("profile") else "")
+        if not voiceprint.names():
+            config.set_value("voiceprint", "mode", "off")
         self.reload_settings()
+        await self.rebuild_wake()
         return {"ok": True}
 
     async def _cmd_record_sample(self, req: dict, writer: asyncio.StreamWriter) -> dict:
@@ -499,7 +523,7 @@ class CommandsMixin:
             if self._discard_recording or pcm is None or len(pcm) < audio.RATE * 0.3:
                 return {"ok": False, "dictated": "", "error": t("Не расслышал.")}
             self.state = "transcribing"
-            text = (await asyncio.to_thread(self.stt.transcribe, pcm)).strip()
+            text = (await blocking(self.stt.transcribe, pcm)).strip()
             events.emit("chat_dictated", chars=len(text))   # сам текст — только в окно, не в журнал
             return {"ok": bool(text), "dictated": text}
         finally:
@@ -981,7 +1005,7 @@ class CommandsMixin:
         self.mic.unsubscribe(cb)
         text = ""
         if frames:
-            text = (await asyncio.to_thread(self.stt.transcribe_head, np.concatenate(frames)))[0]
+            text = (await blocking(self.stt.transcribe_head, np.concatenate(frames)))[0]
         variants = self._spotter.variants if self._spotter else namespot.spellings(self._wake_names(self.cfg))
         self.publish(kind="wake_check", heard=text, matched=bool(text) and namespot.split_name(text, variants)[0])
 

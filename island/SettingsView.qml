@@ -2125,9 +2125,13 @@ Item {
                 property bool recording: false
                 property string heard: ""
                 property string result: ""
+                property string name: ""       // какой голос пишем; пусто — активный (перезапись)
                 // Ответ приходит и после ухода со страницы: группы уже нет, и запись в неё падала TypeError.
                 function refresh() { win.run(["voiceprint", "status"], v => { if (vpGroup) vpGroup.st = v }) }
-                function start() {
+                // Запись идёт в черновик и подменяет профиль только на «Готово»: прежний голос не смешивается с новым.
+                function start(n) {
+                    name = n || (st && st.active) || ""
+                    win.run(["voiceprint", "begin", name], r => { if (vpGroup && r.profile) vpGroup.name = r.profile })
                     steps = st.wake_phrases.map((p, i) => ({ kind: "wake", index: i, secs: 2.5, text: p }))
                               .concat(st.phrases.map((p, i) => ({ kind: "phrase", index: i, secs: 5, text: p })))
                     step = 0; heard = ""; result = ""
@@ -2135,7 +2139,7 @@ Item {
                 function record() {
                     const s = steps[step]
                     recording = true; heard = ""
-                    win.run(["voiceprint", "record", s.kind, String(s.index), String(s.secs)], r => {
+                    win.run(["voiceprint", "record", s.kind, String(s.index), String(s.secs), name], r => {
                         recording = false
                         if (!r.ok) { heard = "✗ " + (r.error || JD.tr("не получилось")); return }
                         heard = r.text ? "✓ «" + r.text + "»" : JD.tr("✓ записано")
@@ -2145,7 +2149,7 @@ Item {
                 }
                 function finish() {
                     result = JD.tr("Обучаю…")
-                    win.run(["voiceprint", "finish"], r => {
+                    win.run(["voiceprint", "finish", name], r => {
                         step = -1
                         result = r.ok ? JD.tr("Готово: пауза конца фразы ") + r.silence_seconds + JD.tr(" с") + (r.wake_verifier ? JD.tr(", «Hey Jarvis» дообучено") : "") : JD.tr("Не получилось: ") + (r.error || "")
                         refresh(); win.reload()
@@ -2156,13 +2160,32 @@ Item {
 
                 Row {
                     visible: vpGroup.step < 0
-                    title: vpGroup.st && vpGroup.st.enrolled ? JD.tr("Голос настроен · ") + vpGroup.st.created : JD.tr("Настроить под мой голос")
+                    title: vpGroup.st && vpGroup.st.enrolled ? JD.tr("Голос «") + vpGroup.st.active + JD.tr("» настроен · ") + vpGroup.st.created : JD.tr("Настроить под мой голос")
                     subtitle: vpGroup.result || JD.tr("Прочитайте 11 коротких фраз (~1 минута). Ассистент запомнит тембр и темп вашей речи; «Hey Jarvis» начнёт лучше узнавать именно вас. Всё хранится только на компьютере")
                     RowLayout {
                         spacing: 8
                         Btn { text: vpGroup.st && vpGroup.st.enrolled ? JD.tr("Заново") : JD.tr("Начать"); primary: !(vpGroup.st && vpGroup.st.enrolled); enabled: !!vpGroup.st; onClicked: vpGroup.start() }
                         Btn { visible: !!(vpGroup.st && vpGroup.st.enrolled); glyph: "trash"; text: ""; implicitWidth: 34; danger: true
-                              onClicked: win.run(["voiceprint", "reset"], () => { vpGroup.result = JD.tr("Профиль голоса удалён"); vpGroup.refresh() }) }
+                              onClicked: win.run(["voiceprint", "reset", vpGroup.st.active], () => { vpGroup.result = JD.tr("Профиль голоса удалён"); vpGroup.refresh() }) }
+                    }
+                }
+                Row {
+                    visible: vpGroup.step < 0 && !!(vpGroup.st && vpGroup.st.enrolled)
+                    title: JD.tr("Чей голос слушать")
+                    subtitle: JD.tr("Можно записать несколько голосов: введите имя и нажмите «Добавить»")
+                    RowLayout {
+                        spacing: 8
+                        Segmented {
+                            options: (vpGroup.st && vpGroup.st.profiles || []).map(n => ({ value: n, label: n }))
+                            current: vpGroup.st ? vpGroup.st.active : ""
+                            onPicked: v => win.run(["voiceprint", "use", v], r => {
+                                if (!vpGroup) return
+                                if (!r.ok) win.notify(JD.tr("Не получилось: ") + (r.error || ""))
+                                vpGroup.refresh()
+                            })
+                        }
+                        Field { id: vpNew; implicitWidth: 140; placeholderText: JD.tr("Имя голоса") }
+                        Btn { text: JD.tr("Добавить"); enabled: vpNew.text.trim() !== ""; onClicked: vpGroup.start(vpNew.text.trim()) }
                     }
                 }
                 // enrollment step

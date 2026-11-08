@@ -44,6 +44,8 @@ log = logging.getLogger("justday.brain")
 # едет с программой: PERSONA, характеры, роли, settings.json.
 BRAIN_DIR = config.DATA_DIR / "brain"
 BRAIN_PKG_DIR = Path(__file__).parent / "brain"
+QUERY_TIMEOUT_S = 30    # отправка реплики — запись в трубу процесса; дольше значит, что процесс уже не читает
+STALL_POLL_S = 5        # как часто ход проверяет, жив ли поток
 
 
 # What a model writes when it means "nothing to say": never read aloud (the daemon plays the "done" chime instead).
@@ -181,6 +183,7 @@ class Brain:
         self._notes: list[str] = []
         self._pending: list[str] = []   # text of the current step; spoken only if it turns out to be final
         self._turn_started = 0.0
+        self._last_msg = 0.0            # monotonic последнего сообщения из потока: по нему видно, что ход жив
         self._last_active = 0.0         # monotonic конца последнего хода
         self._context = 0               # сколько токенов история весила в последнем шаге
         self.cancelled = False
@@ -342,10 +345,10 @@ class Brain:
         events.emit("request", source=source, text=text, injected=True)
         async with self._conn_lock:
             pass
-        await self.client.query(self._with_notes(
+        await asyncio.wait_for(self.client.query(self._with_notes(
             "(Новая реплика пользователя, пока ты выполнял предыдущую просьбу. Предыдущую не бросай, если он явно "
             "не отменил её. Сначала выполни/ответь на эту; если по предыдущей нужен ответ, добавь его после словами "
-            f"«Кстати, насчёт …».)\n{text}"))
+            f"«Кстати, насчёт …».)\n{text}")), QUERY_TIMEOUT_S)
 
     async def ask(self, text: str, source: str = "voice") -> str:
         """Send one user message and wait until Claude finishes the turn. Returns the final text."""
@@ -364,11 +367,32 @@ class Brain:
             self.request = text
             self._turn_done.clear()
             self._begin_turn()
-            await self.client.query(self._with_notes(text))
-            await self._turn_done.wait()
+            await asyncio.wait_for(self.client.query(self._with_notes(text)), QUERY_TIMEOUT_S)
+            await self._await_turn()
             if self._error:
                 raise BrainError(self._error)
             return self._last_text
+
+    async def _await_turn(self) -> None:
+        """Ждать конца хода, пока поток жив. Раньше здесь было голое `_turn_done.wait()`: если Claude Code
+        переставал отвечать, не умирая (подвис запрос к API, повис MCP), ход не кончался никогда — `busy`
+        оставался True, каждая новая фраза вкидывалась в мёртвый ход, и Джарвис молчал до перезапуска.
+        Теперь тишина дольше срока — это ошибка хода: клиент останавливается (следующий ask поднимет
+        новый), а лестница поставщиков получает BrainError, как при любом отказе."""
+        b = self.cfg["brain"]
+        while not self._turn_done.is_set():
+            try:
+                await asyncio.wait_for(self._turn_done.wait(), STALL_POLL_S)
+            except TimeoutError:
+                # Инструмент может работать долго и молча (сборка, обновление системы): ему срок длиннее.
+                limit = b.get("stall_tool_seconds", 900) if self._tool_since else b.get("stall_seconds", 240)
+                silent = time.monotonic() - self._last_msg
+                if silent > limit:
+                    events.emit("brain_stall", silent_s=round(silent), tool=self.tool_label if self._tool_since else "")
+                    self._error = self._error or f"нет ответа {round(silent)} с"
+                    await self.stop()
+                    self._tool_since = None
+                    self._turn_done.set()
 
     def stale(self) -> bool:
         """Пора начать заново, пока Claude Code не сел сжимать историю посреди ответа:
@@ -386,7 +410,7 @@ class Brain:
         self._last_text = ""
         self._error = ""
         self._pending = []
-        self._turn_started = time.monotonic()
+        self._turn_started = self._last_msg = time.monotonic()
         self._spoke_in_turn = False
         self._used_tools = False
 
@@ -423,6 +447,7 @@ class Brain:
         (e.g. when a background shell task finishes)."""
         try:
             async for msg in self.client.receive_messages():
+                self._last_msg = time.monotonic()
                 await self._handle(msg)
         except asyncio.CancelledError:
             raise

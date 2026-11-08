@@ -54,7 +54,7 @@ from . import (
 )
 from . import brain as brain_mod
 from . import weather as weather_mod
-from .aio import spawn
+from .aio import blocking, spawn
 from .approvals import AskMixin
 from .background import BackgroundMixin
 from .brain import Brain
@@ -593,7 +593,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self.state = "idle"
         return np.concatenate(frames) if frames else np.zeros(0, dtype=np.int16)
 
-    async def enroll_record(self, kind: str, index: int, seconds: float) -> dict:
+    async def enroll_record(self, kind: str, index: int, seconds: float, name: str = voiceprint.DEFAULT) -> dict:
         """One enrollment clip: "Hey Jarvis" (kind=wake) or a command phrase (kind=phrase)."""
         pcm = await self._record_fixed(seconds)
         await self.earcon("done")
@@ -601,10 +601,10 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         if level < 0.02:
             return {"ok": False, "error": t("Слишком тихо — говорите ближе к микрофону"), "level": round(level, 3)}
         clip = voiceprint.trim_silence(pcm)
-        voiceprint.save_wav(voiceprint.DIR / f"{kind}_{index}.wav", pcm)
+        voiceprint.save_wav(voiceprint.draft(name) / f"{kind}_{index}.wav", pcm)
         text = ""
         if kind == "phrase":
-            text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
+            text = await blocking(self.stt.transcribe, pcm)
         return {"ok": True, "text": text, "level": round(level, 3), "seconds": round(len(clip) / audio.RATE, 1)}
 
     async def record_sample(self, seconds: float) -> dict:
@@ -628,7 +628,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             w.setsampwidth(2)
             w.setframerate(audio.RATE)
             w.writeframes(pcm.astype(np.int16).tobytes())
-        text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
+        text = await blocking(self.stt.transcribe, pcm)
         return {"ok": bool(text), "path": str(path), "text": text, "seconds": round(len(pcm) / audio.RATE, 1)}
 
     async def _speak_and_listen(self, text: str, expects: bool) -> None:

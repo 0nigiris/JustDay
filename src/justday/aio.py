@@ -38,3 +38,11 @@ def die_with_daemon() -> None:
     import signal
 
     ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGTERM)    # PR_SET_PDEATHSIG
+
+
+async def blocking(fn, *args, timeout: float = 60):
+    """Блокирующий вызов в потоке, но со сроком. Поток убить нельзя, а ждать его можно перестать:
+    распознавание, зависшее на видеокарте после сна, держало «transcribing» навсегда, и ни кнопка,
+    ни слово пробуждения не будили ассистента до перезапуска. По сроку летит TimeoutError, и
+    обработчик выше возвращает состояние, как при любой другой ошибке."""
+    return await asyncio.wait_for(asyncio.to_thread(fn, *args), timeout)

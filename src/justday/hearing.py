@@ -18,7 +18,7 @@ from . import (
     parts,
     voiceprint,
 )
-from .aio import spawn
+from .aio import blocking, spawn
 from .i18n import t
 
 log = logging.getLogger("justday.daemon")
@@ -158,7 +158,7 @@ class HearingMixin:
         if mode == "always" or (mode == "wake" and (followup or self._activation == "wake")):
             prof = voiceprint.profile()
             if prof:
-                sc = await asyncio.get_running_loop().run_in_executor(None, voiceprint.score, pcm)
+                sc = await blocking(voiceprint.score, pcm)
                 if sc is not None and sc < prof["threshold"]:
                     events.emit("listen_rejected", score=round(sc, 2))
                     self.publish(kind="error", detail=t("Голос не узнан"))
@@ -169,12 +169,12 @@ class HearingMixin:
         text = None
         if rec.speculated is not None and early:
             try:
-                text = await early[-1]  # распознано, пока доходила пауза: человек после этого не заговорил
+                text = await asyncio.wait_for(early[-1], 60)  # распознано, пока доходила пауза: человек после этого не заговорил
                 events.emit("heard_early")
             except Exception as e:  # раннее не вышло (видеокарта, память) — обычный путь ещё впереди
                 log.info("раннее распознавание упало (%s): распознаю заново", type(e).__name__)
         if text is None:
-            text = await asyncio.get_running_loop().run_in_executor(None, self.stt.transcribe, pcm)
+            text = await blocking(self.stt.transcribe, pcm)
         if gen != self._cancel_gen:  # cancelled while transcribing: forget what was said
             events.emit("listen_cancelled", text=text)
             return
@@ -237,23 +237,32 @@ class HearingMixin:
             base = max(base, 0.7)
         return base
 
-    def _setup_wakeword(self) -> None:
-        w = self.cfg["wakeword"]
-        if not w["enabled"] or not self.mic_on():
-            return
+    def _wake_model(self):
         from openwakeword.model import Model
 
+        w = self.cfg["wakeword"]
         path = audio.onnx_model(f"{w['model']}_v0.1.onnx")
         feature_models = {"melspec_model_path": audio.onnx_model("melspectrogram.onnx"),
                           "embedding_model_path": audio.onnx_model("embedding_model.onnx")}
         prof = voiceprint.profile() or {}
         verifier = prof.get("wake_verifier") or ""
         if verifier and os.path.exists(verifier):  # trained on the user's own "Hey Jarvis"
-            self._wake = Model(wakeword_models=[path], inference_framework="onnx", **feature_models,
-                               custom_verifier_models={os.path.basename(path).rsplit(".onnx", 1)[0]: verifier},
-                               custom_verifier_threshold=0.3)
-        else:
-            self._wake = Model(wakeword_models=[path], inference_framework="onnx", **feature_models)
+            return Model(wakeword_models=[path], inference_framework="onnx", **feature_models,
+                         custom_verifier_models={os.path.basename(path).rsplit(".onnx", 1)[0]: verifier},
+                         custom_verifier_threshold=0.3)
+        return Model(wakeword_models=[path], inference_framework="onnx", **feature_models)
+
+    async def rebuild_wake(self) -> None:
+        """Проверщик «Hey Jarvis» читается в модель один раз: после перезаписи голоса или смены профиля
+        в памяти оставался прежний, и новый голос не будил ассистента до перезапуска демона."""
+        if self._wake:
+            self._wake = await blocking(self._wake_model)
+
+    def _setup_wakeword(self) -> None:
+        w = self.cfg["wakeword"]
+        if not w["enabled"] or not self.mic_on():
+            return
+        self._wake = self._wake_model()
         loop = asyncio.get_running_loop()
 
         def on_frame(frame: np.ndarray) -> None:

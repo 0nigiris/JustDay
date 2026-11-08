@@ -254,6 +254,18 @@ class UtteranceRecorder:
             self.mic.unsubscribe(cb)
 
 
+# pw-play читает трубу в темпе звука, так что дольше длины звука плюс запас он ждать не должен.
+# Когда PipeWire замирал (после сна, пропала колонка), pw-play висел вечно, `playing` не гас,
+# и ход стоял в wait_speech_done до перезапуска.
+PLAY_SLACK_S = 15
+
+
+def _hung(proc: asyncio.subprocess.Process) -> None:
+    log.warning("pw-play завис, обрываю")
+    if proc.returncode is None:
+        proc.kill()
+
+
 class Player:
     """Plays int16 mono PCM through pw-play; stop() cuts playback immediately.
 
@@ -277,13 +289,16 @@ class Player:
         self._proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
         )
+        proc = self._proc
         try:
-            self._proc.stdin.write(pcm.astype(np.int16).tobytes())
-            await self._proc.stdin.drain()
-            self._proc.stdin.close()
-            await self._proc.wait()
+            proc.stdin.write(pcm.astype(np.int16).tobytes())
+            await asyncio.wait_for(proc.stdin.drain(), len(pcm) / rate + PLAY_SLACK_S)
+            proc.stdin.close()
+            await asyncio.wait_for(proc.wait(), PLAY_SLACK_S)
         except (BrokenPipeError, ConnectionResetError):
             pass
+        except TimeoutError:
+            _hung(proc)
         finally:
             self._proc = None
 
@@ -298,11 +313,13 @@ class Player:
                 if proc.returncode is not None:  # stop() killed the player
                     break
                 proc.stdin.write(data)
-                await proc.stdin.drain()
+                await asyncio.wait_for(proc.stdin.drain(), len(data) / (2 * rate) + PLAY_SLACK_S)
             proc.stdin.close()
-            await proc.wait()
+            await asyncio.wait_for(proc.wait(), PLAY_SLACK_S)
         except (BrokenPipeError, ConnectionResetError):
             pass
+        except TimeoutError:
+            _hung(proc)
         finally:
             self._proc = None
 
