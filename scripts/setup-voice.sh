@@ -18,5 +18,4 @@ sed "s|@REPO@|$REPO|" "$REPO/systemd/justday-voice.service" > "$HOME/.config/sys
 cp "$REPO/systemd/justday-voice.socket" "$HOME/.config/systemd/user/justday-voice.socket"
 systemctl --user daemon-reload
 systemctl --user enable --now justday-voice.socket
-systemctl --user enable --now justday-voice.service
 echo "neural voice ready: justday config set tts.engine qwen   (voice: jarvis)"

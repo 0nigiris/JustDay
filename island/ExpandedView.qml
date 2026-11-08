@@ -131,7 +131,9 @@ View {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     text: JD.workers > 0 ? JD.tr("Клод работает") + (JD.workers > 1 ? " ×" + JD.workers : "")
-                        : ({ idle: JD.micOn ? JD.tr("Готов · скажите имя или ") + (JD.hotkeys.talk || "Meta+J") : JD.tr("Готов · ") + (JD.hotkeys.type || "Meta+K"),
+                        // Р3-5: длинная подсказка обрезалась многоточием; клавиша — единственное, что
+                        // из неё нужно, и она помещается.
+                        : ({ idle: JD.tr("Готов · ") + (JD.micOn ? (JD.hotkeys.talk || "Meta+J") : (JD.hotkeys.type || "Meta+K")),
                              listening: JD.tr("Слушаю"), transcribing: JD.tr("Распознаю"), thinking: JD.activity || JD.tr("Работаю"),
                              speaking: JD.tr("Говорит"), approval: JD.tr("Ждёт подтверждения"), offline: JD.tr("Демон не запущен") })[JD.dstate] || JD.dstate
                     color: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.text2

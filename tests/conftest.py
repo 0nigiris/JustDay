@@ -67,6 +67,12 @@ def no_live_machine(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     from justday import terminal
     monkeypatch.setattr(terminal, "NIGHT_DIR", tmp_path / "ночь")
     monkeypatch.setattr(terminal, "NEXT_DIR", tmp_path / "ночь" / "дальше")
+    # Гнёзда голоса — тоже живые: демон в тестах собирается с голосом по умолчанию (silero) и при
+    # загрузке просит службу прогреться, а гнездо systemd её будит. Каждый pytest поднимал
+    # justday-voice на полгигабайта у человека, у которого голос выключен.
+    from justday.tts import TTS
+    monkeypatch.setattr(TTS, "SOCKET", tmp_path / "no-voice.sock")
+    monkeypatch.setattr(TTS, "CHATTERBOX_SOCKET", tmp_path / "no-chatterbox.sock")
     monkeypatch.setattr(server, "_run", lambda *cmd, timeout=10: False)
     monkeypatch.setattr(server, "_out", lambda *cmd, timeout=10: "")
     monkeypatch.setattr(server, "_keep_awake", lambda why: 0)

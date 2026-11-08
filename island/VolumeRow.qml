@@ -31,7 +31,9 @@ Item {
             knob: true
             live: true
             thickness: 6
-            tint: vr.tint
+            // Р3-6: три ползунка трёх цветов спорили друг с другом. Как в Пункте управления macOS —
+            // дорожка цвета текста, свой цвет несёт только значок слева.
+            tint: JD.text1
             value: vr.value
             onMoved: v => vr.moved(v)
         }
