@@ -54,6 +54,7 @@ from . import (
     volume,
 )
 from . import brain as brain_mod
+from . import server as server_mod
 from . import weather as weather_mod
 from .aio import blocking, spawn
 from .approvals import AskMixin
@@ -708,6 +709,8 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
                 {k: old["user"].get(k) for k in ("assistant_name", "address_as", "assistant_aliases")}):
             spawn(self._reconnect_brain())
         self.stt.vocabulary = island.vocabulary(new)
+        if new["desktop"].get("coffee") != old["desktop"].get("coffee"):
+            spawn(asyncio.to_thread(server_mod.coffee, bool(new["desktop"].get("coffee"))))
         # Имя будится без перезапуска (ниже): wake_names не повод пересобирать детектор
         sans = lambda c: {k: v for k, v in c["wakeword"].items() if k != "wake_names"}  # noqa: E731
         restart += [s for s in ("brain", "stt", "local_llm") if new[s] != old[s]]
@@ -1085,6 +1088,8 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
                 self._dock = last
                 self.publish(dock=last)
         spawn(_warm_dock())
+        if self.cfg["desktop"].get("coffee"):  # службы «кофе» не переживают перезагрузку, настройка — да
+            spawn(asyncio.to_thread(server_mod.coffee, True))
         # Остров — единственное место для уведомлений, если так попросили.
         want_popups = bool(self.cfg["island"].get("system_popups", False))
         if notifications.system_popups().get("popups") != want_popups:

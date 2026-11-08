@@ -653,7 +653,8 @@ DEFAULTS: dict = {
              # Палитра значков: original | auto | light | clear | tinted | mono
              "icon_style": "original", "icon_tint": "#7AC8FF"},
     # Accessibility bus on: Qt/GTK apps expose their buttons, so `look` can mark them for exact clicks.
-    "desktop": {"accessibility": True},
+    # coffee — «кофе»: экран не гаснет, машина не спит (server.coffee); переживает перезагрузку.
+    "desktop": {"accessibility": True, "coffee": False},
     # Настоящий звонок (`src/justday/telnyx.py`). Ключ живёт только в связке ключей под именем
     # telnyx — здесь его нет и быть не должно: конфиг уезжает в репозиторий, связка нет.
     # from — купленный номер, app_id — приложение Call Control из портала. Пусто — звонков нет.

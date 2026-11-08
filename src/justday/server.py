@@ -241,6 +241,27 @@ def awake(why: str = "ночная работа") -> int:
     return _keep_awake(why)
 
 
+COFFEE_UNITS = {
+    "justday-coffee": ["systemd-inhibit", "--what=idle:sleep", "--who=JustDay", "--why=кофе: экран не гасить",
+                       "sleep", "infinity"],
+    # systemd-inhibit не держит экран Plasma: гасит его PowerDevil, и слушает он только kde-inhibit.
+    "justday-coffee-kde": ["kde-inhibit", "--power", "--screenSaver", "sleep", "infinity"],
+}
+
+
+def coffee(on: bool) -> None:
+    """«Кофе», как Amphetamine на Mac: экран не гаснет и машина не спит, пока включено (Р3-30).
+
+    Службы systemd, а не наши дети: демон перезапускается, а экран из-за этого гаснуть не должен.
+    Включённость живёт в настройке desktop.coffee, и демон заводит службы заново после загрузки.
+    """
+    for unit, cmd in COFFEE_UNITS.items():
+        if not on:
+            _run("systemctl", "--user", "stop", f"{unit}.service")
+        elif shutil.which(cmd[0]) and not _run("systemctl", "--user", "is-active", "--quiet", f"{unit}.service"):
+            _run("systemd-run", "--user", "--collect", f"--unit={unit}", "--description=JustDay: кофе", *cmd)
+
+
 def _watchdog_on(hours: float) -> bool:
     """Завести сторожа, который сам выключит режим через `hours` часов.
 

@@ -91,8 +91,14 @@ ColumnLayout {
             onToggled: { JD.closeMenu(); JD.toggleServerMode() }
         }
         Tile {
+            icon: "coffee"; title: "Кофе"; onText: "экран не гаснет"; offText: "экран гаснет сам"
+            on: JD.coffeeOn; tint: JD.accentOrange
+            onToggled: ct.setting("desktop.coffee", !JD.coffeeOn)
+        }
+        Tile {
             icon: "settings"; title: "Настройки"; onText: ""; offText: "открыть"
             tint: JD.accentBlue
+            Layout.columnSpan: 2   // седьмая плитка: без этого рядом с ней дыра
             onToggled: { JD.closeMenu(); JD.openSettings("general") }
         }
     }

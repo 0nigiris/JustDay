@@ -398,6 +398,10 @@ View {
                 Tile { icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); onText: JD.tr("на острове"); offText: JD.tr("не беспокоить")
                        on: JD.island.show_notifications !== false; tint: JD.accentPurple
                        onToggled: ev.setting("island.show_notifications", JD.island.show_notifications === false) }
+                // Во всю ширину: пятая плитка в сетке на две колонки иначе висела бы одна с дырой рядом.
+                Tile { icon: "coffee"; title: JD.tr("Кофе"); onText: JD.tr("экран не гаснет"); offText: JD.tr("экран гаснет сам")
+                       on: JD.coffeeOn; tint: JD.accentOrange; Layout.columnSpan: 2
+                       onToggled: ev.setting("desktop.coffee", !JD.coffeeOn) }
             }
         }
 

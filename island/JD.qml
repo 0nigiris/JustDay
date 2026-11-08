@@ -690,6 +690,7 @@ Singleton {
     // открытого окна есть только appId вроде «org.kde.dolphin», и превратить его в «Finder» с
     // правильным значком может лишь тот, кто читал .desktop-файлы.
     readonly property var dockCfg: settings.dock || ({})
+    readonly property bool coffeeOn: !!(settings.desktop || {}).coffee   // «кофе»: экран не гаснет (Р3-30)
     readonly property var trayCfg: settings.tray || ({})
     readonly property bool dockOn: dockCfg.enabled !== false
     // Полоса лотка: 0 — как в настройках, 1 — показана кнопкой, −1 — спрятана кнопкой.
@@ -1561,7 +1562,7 @@ Singleton {
         "smile", "clipboard", "memory-stick", "hard-drive", "thermometer", "network", "wifi", "bluetooth", "gauge",
         "trash-2", "grip-vertical", "camera", "minus", "star", "wifi-off", "list-plus", "arrow-left", "pencil", "minimize-2",
         "mic-off", "sliders-horizontal", "volume-1", "lock", "star",
-        "arrow-right", "circle-stop"
+        "arrow-right", "circle-stop", "coffee"
     ]
     // "" when the island has no glyph of its own for this name
     function glyph(name) { return name ? (glyphs[name] || (localIcons.indexOf(name) >= 0 ? name : "")) : "" }
