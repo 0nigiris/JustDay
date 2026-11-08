@@ -74,9 +74,10 @@ Item {
                 spacing: 6
 
                 // Пусто — так и сказано словами. Пустой список без объяснения читается как поломка.
+                // Как у Apple: значок, строка, как это заполнить, и одна кнопка (Р3-14).
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: pv.all.length ? 0 : 120
+                    Layout.preferredHeight: pv.all.length ? 0 : 170
                     visible: pv.all.length === 0
                     Column {
                         anchors.centerIn: parent
@@ -89,6 +90,17 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             color: JD.text3
                             text: JD.tr("Планов пока нет")
+                        }
+                        Label2 {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            color: JD.text3
+                            font.pixelSize: 12
+                            text: JD.tr("Или скажите: «напомни завтра позвонить маме»")
+                        }
+                        PillButton {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            label: JD.tr("Добавить план")
+                            onClicked: field.forceActiveFocus()
                         }
                     }
                 }
