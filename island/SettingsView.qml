@@ -924,7 +924,7 @@ Item {
             Group {
                 Row {
                     title: JD.tr("Только главное")
-                    subtitle: JD.tr("Прячет тонкую подстройку: пружины, черты, отступы, мониторы OSD")
+                    subtitle: JD.tr("Оставляет самое нужное, тонкая подстройка прячется")
                     Toggle { checked: win.get("ui.settings_simple") !== false; onToggled: v => win.set("ui.settings_simple", v) }
                 }
             }
