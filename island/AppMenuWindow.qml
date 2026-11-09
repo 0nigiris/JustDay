@@ -1,6 +1,7 @@
 // Вынесено из shell.qml (Р-80).
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 
@@ -260,9 +261,23 @@ PanelWindow {
             ? (menuWin.side === "left" ? Item.TopLeft : menuWin.side === "right" ? Item.TopRight : Item.Top)
             : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
         opacity: JD.menuOpen ? 1 : 0
-        scale: JD.menuOpen ? 1 : 0.94
+        scale: JD.menuOpen || menuCard.round ? 1 : 0.94
         Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
+
+        // Р3-28: меню раскрывается кругом из угла, от которого растёт (из ролика, что он прислал).
+        // Маска включается только на время раскрытия: слой на всю карточку в покое стоил бы кадра
+        // на каждое движение мыши. Поиск и Launchpad открываются из середины — им круг не к лицу.
+        readonly property bool round: JD.animOn && !JD.menuSearchMode && !JD.menuLaunchpad
+        property real reveal: JD.menuOpen ? 1 : 0
+        Behavior on reveal { enabled: menuCard.round; NumberAnimation { duration: JD.slideMs + 120; easing.type: Easing.OutCubic } }
+        layer.enabled: round && reveal < 1
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: revealMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 0.2
+        }
 
         // Щелчок по самой карточке её не закрывает — только мимо.
         MouseArea { id: menuCardBody; anchors.fill: parent; hoverEnabled: true }
@@ -345,5 +360,22 @@ PanelWindow {
         }
         Component { id: menuBodyFull; MenuView {} }
         Component { id: spotlightBody; SpotlightView {} }
+    }
+
+    // Маска раскрытия: круг из угла, к которому прижато меню. Соседом, а не ребёнком карточки,
+    // иначе маска попала бы в её же слой и замаскировала сама себя.
+    Item {
+        id: revealMask
+        x: menuCard.x; y: menuCard.y; width: menuCard.width; height: menuCard.height
+        visible: false
+        layer.enabled: menuCard.layer.enabled
+        readonly property real big: Math.hypot(width, height)
+        readonly property real ox: menuWin.side === "left" ? 0 : menuWin.side === "right" ? width : width / 2
+        readonly property real oy: menuWin.atTop ? 0 : height
+        Rectangle {
+            width: 2 * revealMask.big * menuCard.reveal; height: width; radius: width / 2
+            x: revealMask.ox - width / 2; y: revealMask.oy - height / 2
+            color: "white"
+        }
     }
 }
