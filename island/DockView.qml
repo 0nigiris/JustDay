@@ -1264,16 +1264,20 @@ Item {
         }
         function requestThumbs() {
             if (!dv.preview || JD.thumbCaptureBroken) return
-            for (const w of wins.slice(0, 5))
+            for (const w of wins.slice(0, thumbN))
                 if (w && w.id) JD.requestThumb(w.id)
         }
         // Cap tip width. Chromium/Electron page titles are huge; sizing from
         // titleLab.implicitWidth made a full-width black strip that looked like a broken
         // Helium/CSD title bar floating above the dock — not a real window decoration.
         readonly property real tipMax: Math.min(360, Math.max(200, Math.round(dv.width * 0.42)))
-        width: Math.min(tipMax,
-                        showsThumbs ? Math.max(tipText.implicitWidth + 20, winRow.implicitWidth + 16)
-                      : showsWinList ? Math.max(tipText.implicitWidth + 20, winList.implicitWidth + 20)
+        // Миниатюры в этот предел не влезали: две карточки по 148 шире плашки и торчали за её
+        // края тёмным пятном поверх дока (9 ноя, «ЧТО ЭТО»). Плашку с миниатюрами растят по ним,
+        // а сколько их показать, решает ширина дока.
+        readonly property int thumbN: Math.max(1, Math.min(5, Math.floor((dv.width - 8) / 156)))
+        width: showsThumbs ? Math.max(Math.min(tipMax, tipText.implicitWidth + 20), winRow.implicitWidth + 16)
+             : Math.min(tipMax,
+                        showsWinList ? Math.max(tipText.implicitWidth + 20, winList.implicitWidth + 20)
                       : tipText.implicitWidth + 20)
         height: showsThumbs ? 28 + winRow.implicitHeight + 10 + volH
               : showsWinList ? 28 + winList.implicitHeight + 8 + volH
@@ -1310,7 +1314,7 @@ Item {
             anchors { top: tipText.bottom; topMargin: 6; horizontalCenter: parent.horizontalCenter }
             spacing: 8
             Repeater {
-                model: tip.showsThumbs ? tip.wins.slice(0, 5) : []
+                model: tip.showsThumbs ? tip.wins.slice(0, tip.thumbN) : []
                 delegate: Item {
                     id: cardWin
                     required property var modelData
@@ -1417,11 +1421,11 @@ Item {
             }
         }
         Label2 {
-            visible: tip.showsThumbs && tip.wins.length > 5
+            visible: tip.showsThumbs && tip.wins.length > tip.thumbN
             anchors { top: winRow.bottom; topMargin: 2; horizontalCenter: parent.horizontalCenter }
             font.pixelSize: 11
             color: JD.text3
-            text: "и ещё " + (tip.wins.length - 5)
+            text: "и ещё " + (tip.wins.length - tip.thumbN)
         }
         Item {
             visible: tip.volH > 0
