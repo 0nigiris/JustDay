@@ -652,5 +652,7 @@
   "Меню, док и лоток. Стекло прозрачнее и с бликом по краю. Размытие нагружает видеокарту, сплошной — нет": "Menu, dock and tray. Glass is clearer with a highlight on the edge. Blur loads the GPU, solid does not",
   "Матовый": "Frosted",
   "Стекло": "Glass",
-  "Сплошной": "Solid"
+  "Сплошной": "Solid",
+  "Ничего не нашлось. Попробуйте другое слово": "Nothing found. Try another word",
+  "Меню, док и лоток. Стекло прозрачнее, с бликом по кромке. Размытие нагружает видеокарту, сплошной — нет": "Menu, dock and tray. Glass is clearer, with a highlight along the edge. Blur loads the GPU, solid does not"
 }

@@ -55,6 +55,74 @@ Item {
     property bool restartNeeded: false
     property string toast: ""
 
+    // Поиск по настройкам (9 нояб.: «нужно добавить поиск», а стекло он так и не нашёл). Индекс
+    // собирается из этого же файла: каждая строка с подписью JD.tr("…") — настройка своей страницы.
+    // Отдельный список устарел бы при первой новой настройке; файл не устаревает.
+    property string query: ""
+    property string seek: ""          // подпись строки, к которой прокрутить после перехода
+    readonly property var pageKeys: ({ generalPage: "general", characterPage: "character", appearancePage: "appearance",
+        panelTopPage: "panel-top", panelDockPage: "panel-dock", panelTrayPage: "panel-tray", dockPage: "dock",
+        widgetsPage: "widgets", notificationsPage: "notifications", voicePage: "voice", mediaPage: "media",
+        buttonsPage: "buttons", modelPage: "model", mailPage: "mail", peoplePage: "people", cyclePage: "cycle",
+        memoryPage: "memory", privacyPage: "privacy", diagnosticsPage: "diagnostics", aboutPage: "about" })
+    readonly property var pageNames: ({ general: "Общие", character: "Характер", appearance: "Панели › Остров и анимации",
+        "panel-top": "Панели › Верхняя панель", "panel-dock": "Панели › Док", "panel-tray": "Панели › Трей", dock: "Панели",
+        widgets: "Виджеты", notifications: "Уведомления", voice: "Голос и звук", media: "Музыка и видео",
+        buttons: "Кнопки", model: "Модель", mail: "Почта и календарь", people: "Люди", cycle: "Цикл ассистента",
+        memory: "Память", privacy: "Приватность", diagnostics: "Диагностика", about: "О программе" })
+    FileView { id: selfSrc; path: Quickshell.shellDir + "/SettingsView.qml"; blockLoading: true; watchChanges: false }
+    readonly property var searchIndex: {
+        const parts = String(selfSrc.text()).split(/\n    Component \{\n        id: (\w+)\n/)
+        const out = [], seen = {}
+        const re = /title:\s*JD\.tr\("((?:[^"\\]|\\.)*)"\)(?:[;\s]*subtitle:\s*JD\.tr\("((?:[^"\\]|\\.)*)"\))?/g
+        for (let i = 1; i + 1 < parts.length; i += 2) {
+            const page = pageKeys[parts[i]]
+            if (!page) continue
+            let m
+            while ((m = re.exec(parts[i + 1])) !== null) {
+                if (seen[page + m[1]]) continue
+                seen[page + m[1]] = true
+                out.push({ page, title: m[1], subtitle: m[2] || "" })
+            }
+        }
+        return out
+    }
+    // Все слова запроса должны найтись — в подписи, пояснении или названии страницы, на любом языке.
+    readonly property var found: {
+        const words = query.toLowerCase().split(/\s+/).filter(w => w)
+        if (!words.length) return []
+        return searchIndex.filter(e => {
+            const hay = [e.title, e.subtitle, pageNames[e.page] || "", JD.tr(e.title), JD.tr(e.subtitle)].join(" ").toLowerCase()
+            return words.every(w => hay.indexOf(w) >= 0)
+        }).sort((a, b) => (b.title.toLowerCase().indexOf(words[0]) >= 0) - (a.title.toLowerCase().indexOf(words[0]) >= 0)).slice(0, 40)
+    }
+    function openFound(e) {
+        query = ""
+        seek = e.title
+        if (page === e.page) Qt.callLater(reveal)
+        else page = e.page
+    }
+    // Докрутить до найденной строки и коротко подсветить её: иначе на длинной странице («Голос и звук»)
+    // переход ничего не давал — нужное всё равно приходилось искать глазами.
+    function reveal() {
+        const root = pageLoader.item, want = seek
+        seek = ""
+        if (!root || !want) return
+        const t = JD.tr(want)
+        const hunt = it => {
+            if (it.title === t && it.visible && it.height > 0) return it
+            for (const c of it.children) { const r = hunt(c); if (r) return r }
+            return null
+        }
+        const hit = hunt(root)
+        if (!hit) return
+        const at = hit.mapToItem(pageLoader, 0, 0)
+        scroller.contentY = Math.max(0, Math.min(scroller.contentHeight - scroller.height, pageLoader.y + at.y - 90))
+        flash.x = 32 + at.x; flash.y = pageLoader.y + at.y
+        flash.width = hit.width; flash.height = hit.height
+        flashAnim.restart()
+    }
+
     function get(path) {
         return path.split(".").reduce((o, k) => (o === undefined || o === null) ? undefined : o[k], d.config)
     }
@@ -287,6 +355,30 @@ Item {
                         Text { text: JD.assistantName + " · " + (win.d.about ? win.d.about.version : ""); color: win.t2; font.family: win.font; font.pixelSize: 11 }
                     }
                 }
+                TextField {
+                    id: searchField
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 8
+                    implicitHeight: 32
+                    text: win.query
+                    onTextEdited: win.query = text
+                    placeholderText: JD.tr("Поиск")
+                    color: win.t1
+                    placeholderTextColor: win.t3
+                    selectionColor: win.blue
+                    font.family: win.font
+                    font.pixelSize: 13
+                    leftPadding: 30
+                    background: Rectangle {
+                        radius: 8
+                        color: win.field
+                        border.width: searchField.activeFocus ? 2 : 0
+                        border.color: win.blue
+                        Glyph { anchors.left: parent.left; anchors.leftMargin: 9; anchors.verticalCenter: parent.verticalCenter; name: "search"; size: 14 }
+                    }
+                    Keys.onEscapePressed: win.query = ""
+                    onAccepted: if (win.found.length) win.openFound(win.found[0])
+                }
                 Repeater {
                     model: [
                         // Шестнадцать строк подряд читаются как список дел, а не как настройки.
@@ -453,10 +545,42 @@ Item {
                 }
             }
 
+            // Найденное: строка — подпись, пояснение и где она лежит. Нажатие ведёт на страницу и к строке.
+            Flickable {
+                id: foundList
+                z: 8
+                anchors.fill: parent
+                visible: !win.loading && win.query.trim() !== ""
+                contentHeight: foundCol.implicitHeight + 90
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ThinBar {}
+                ColumnLayout {
+                    id: foundCol
+                    x: 32; y: 26
+                    width: Math.min(700, foundList.width - 64)
+                    spacing: 6
+                    PageTitle { title: JD.tr("Поиск"); subtitle: win.found.length ? "" : JD.tr("Ничего не нашлось. Попробуйте другое слово") }
+                    Group {
+                        visible: win.found.length > 0
+                        Repeater {
+                            model: win.found
+                            NavRow {
+                                required property var modelData
+                                dest: modelData.page
+                                title: JD.tr(modelData.title)
+                                subtitle: JD.tr(win.pageNames[modelData.page] || "") + (modelData.subtitle ? " · " + JD.tr(modelData.subtitle) : "")
+                                TapHandler { onTapped: win.openFound(modelData) }
+                            }
+                        }
+                    }
+                }
+            }
+
             Flickable {
                 id: scroller
                 anchors.fill: parent
-                visible: !win.loading
+                visible: !win.loading && win.query.trim() === ""
                 contentHeight: pageLoader.implicitHeight + 60
                 bottomMargin: 30   // не меньше радиуса карточки: последний пункт не садится на скруглённый угол
                 clip: true
@@ -492,6 +616,7 @@ Item {
                                         diagnostics: systemPage, about: systemPage })[win.page]
                     onLoaded: {
                         scroller.contentY = 0
+                        if (win.seek) Qt.callLater(win.reveal)
                         // Сплошная полоса уже везёт карточку вниз. Сдвиг страницы слева — второй проезд.
                         if (JD.islandStyle === "bar") {
                             pageIn.stop()
@@ -505,6 +630,20 @@ Item {
                         id: pageIn
                         NumberAnimation { target: pageLoader; property: "opacity"; from: 0; to: 1; duration: JD.dur(180); easing.type: Easing.OutCubic }
                         NumberAnimation { target: pageLoader; property: "x"; from: 56; to: 32; duration: JD.dur(220); easing.type: Easing.OutCubic }
+                    }
+                }
+                Rectangle {
+                    id: flash
+                    radius: 12
+                    color: "transparent"
+                    border.width: 2
+                    border.color: win.blue
+                    opacity: 0
+                    SequentialAnimation {
+                        id: flashAnim
+                        NumberAnimation { target: flash; property: "opacity"; to: 1; duration: 150 }
+                        PauseAnimation { duration: 900 }
+                        NumberAnimation { target: flash; property: "opacity"; to: 0; duration: 500 }
                     }
                 }
             }
@@ -1322,16 +1461,6 @@ Item {
                     }
                 }
                 Row {
-                    title: JD.tr("Материал панелей")
-                    subtitle: JD.tr("Меню, док и лоток. Стекло прозрачнее и с бликом по краю. Размытие нагружает видеокарту, сплошной — нет")
-                    Choice {
-                        key: "island.material"
-                        options: [{ value: "frosted", label: JD.tr("Матовый") },
-                                 { value: "glass", label: JD.tr("Стекло") },
-                                 { value: "solid", label: JD.tr("Сплошной") }]
-                    }
-                }
-                Row {
                     fine: true
                     title: JD.tr("Отступ сверху")
                     subtitle: JD.tr("На сколько опустить островок от края экрана. Вырез и сплошная полоса остаются прижатыми")
@@ -1742,6 +1871,21 @@ Item {
         ColumnLayout {
             spacing: 6
             PageTitle { title: JD.tr("Панели"); subtitle: JD.tr("Верхняя полоса, док, лоток и вид островка") }
+            // Материал здесь, а не внутри «Верхней панели»: он меняет меню, док и лоток сразу, и там его
+            // не нашли (9 нояб.: «я не нашёл в настройках, как включить стекло»).
+            Group {
+                Row {
+                    title: JD.tr("Материал панелей")
+                    subtitle: JD.tr("Меню, док и лоток. Стекло прозрачнее, с бликом по кромке. Размытие нагружает видеокарту, сплошной — нет")
+                    Segmented {
+                        current: win.get("island.material") || (win.get("island.blur") === false ? "solid" : "frosted")
+                        options: [{ value: "frosted", label: JD.tr("Матовый") },
+                                  { value: "glass", label: JD.tr("Стекло") },
+                                  { value: "solid", label: JD.tr("Сплошной") }]
+                        onPicked: v => win.set("island.material", v)
+                    }
+                }
+            }
             Group {
                 NavRow { title: JD.tr("Верхняя панель"); subtitle: JD.tr("Островок, полоса и кошка у верхнего края"); dest: "panel-top" }
                 NavRow { title: JD.tr("Док"); subtitle: JD.tr("Полоса программ у края экрана"); dest: "panel-dock" }
