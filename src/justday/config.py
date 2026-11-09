@@ -434,7 +434,7 @@ DEFAULTS: dict = {
     },
     "updates": {"check": True, "interval_hours": 6, "channel": "stable"},   # stable — только проверенное; main — всё сразу
     # personal voice profile (Settings → Голос и звук → «Настроить под мой голос»)
-    "voiceprint": {"mode": "off", "profile": ""},  # profile — активный голос; пусто — первый по имени  # off | wake (only wake word / follow-ups must be you) | always
+    "voiceprint": {"mode": "off", "profile": "*"},  # profile — чей голос слушать; «*» — любой записанный (он выбрал так 9 ноя)  # off | wake (only wake word / follow-ups must be you) | always
     # Dynamic Island look & feel (applied live)
     "island": {
         "animations": "spring",  # spring (Apple-like bounce) | smooth | off

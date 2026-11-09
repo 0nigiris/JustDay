@@ -231,7 +231,9 @@ class CommandsMixin:
         resp = await asyncio.get_running_loop().run_in_executor(None, voiceprint.enroll_finish, name)
         if resp.get("ok"):
             config.set_value("audio", "silence_seconds", resp["silence_seconds"])
-            config.set_value("voiceprint", "profile", name)
+            # «Все» он выбрал сам: новый записанный голос добавляется к ним, а не отменяет выбор.
+            if self.cfg["voiceprint"].get("profile") != voiceprint.ALL:
+                config.set_value("voiceprint", "profile", name)
             if self.cfg["voiceprint"]["mode"] == "off":
                 config.set_value("voiceprint", "mode", "wake")
             self.reload_settings()
