@@ -69,3 +69,25 @@ def test_allowed_tools_ran_any_command_past_the_ask_list():
     for ok in ("flatpak run com.visualstudio.code", "qdbus-qt6 org.kde.KWin /KWin org.kde.KWin.showDesktop",
                "xdotool getactivewindow"):
         assert _runs_silently(ok), ok
+
+
+def test_джарвис_меняет_настройку_и_может_вернуть_как_было(tmp_path, monkeypatch):
+    """9 нояб.: «разрешить джарвису менять настройки, если они обратимы». Обратимо = после
+    «верни как было» стоит прежнее значение, а вторая отмена идёт ещё на шаг назад."""
+    from justday import config, manage
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(manage, "CHANGES_FILE", tmp_path / "changes.jsonl")
+    start = config.load()["audio"]["earcons"]
+    manage._set_setting("audio.earcons", str(not start))
+    manage._set_setting("audio.earcons", str(start))
+    manage._set_setting("audio.earcons", str(not start))
+    assert manage.undo_setting()["old"] == start
+    assert config.load()["audio"]["earcons"] == start
+    assert manage.undo_setting()["old"] == (not start)
+    assert config.load()["audio"]["earcons"] == (not start)
+
+
+def test_модель_и_права_джарвис_меняет_только_спросив():
+    ask = SETTINGS["permissions"]["ask"]
+    for s in ("brain", "terminal", "voiceprint", "mail"):
+        assert f"Bash(justday config set {s}.:*)" in ask

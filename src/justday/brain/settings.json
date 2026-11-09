@@ -170,7 +170,18 @@
       "Bash(qdbus* *Scripting*)",
       "Bash(qdbus* *evaluateScript*)",
       "Bash(xdotool *type*)",
-      "Bash(xdotool *key*)"
+      "Bash(xdotool *key*)",
+      "Bash(justday config set brain.:*)",
+      "Bash(justday config set workers.:*)",
+      "Bash(justday config set terminal.:*)",
+      "Bash(justday config set voiceprint.:*)",
+      "Bash(justday config set phone.:*)",
+      "Bash(justday config set updates.:*)",
+      "Bash(justday config set mail.:*)",
+      "Bash(justday config set observer.:*)",
+      "Bash(justday config set watch.:*)",
+      "Bash(justday config set local_llm.:*)",
+      "Bash(justday model use:*)"
     ],
     "deny": [
       "Bash(justday mail:*)",

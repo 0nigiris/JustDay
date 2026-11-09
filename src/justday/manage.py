@@ -538,11 +538,45 @@ def _set_setting(key: str, text: str):
             value = int(text)
         elif re.fullmatch(r"-?\d+\.\d+", text):
             value = float(text)
+    if old != value:
+        _remember_change(key, old, value)
     config.set_value(section, name, value)
     if section == "island" and name == "show_osd":
         from . import notifications as notif
         notif.sync_plasma_osd(show_osd=bool(value))
     return value
+
+
+# Журнал изменённых настроек: Джарвису разрешено менять обратимое без вопроса (9 нояб.), а «обратимое»
+# значит, что вернуть можно одной фразой «верни как было». Для этого нужно помнить прежнее значение.
+CHANGES_FILE = config.STATE_DIR / "settings-changes.jsonl"
+CHANGES_KEEP = 200
+
+
+def _remember_change(key: str, old, new) -> None:
+    CHANGES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lines = CHANGES_FILE.read_text(encoding="utf-8").splitlines() if CHANGES_FILE.exists() else []
+    lines.append(json.dumps({"at": time.time(), "key": key, "old": old, "new": new}, ensure_ascii=False))
+    CHANGES_FILE.write_text("\n".join(lines[-CHANGES_KEEP:]) + "\n", encoding="utf-8")
+
+
+def undo_setting() -> dict | None:
+    """Вернуть последнюю изменённую настройку к прежнему значению. Сама отмена в журнал не пишется:
+    иначе вторая отмена подряд вернула бы первую, а не шла глубже."""
+    with _SET_LOCK:
+        if not CHANGES_FILE.exists():
+            return None
+        lines = CHANGES_FILE.read_text(encoding="utf-8").splitlines()
+        while lines:
+            entry = json.loads(lines.pop())
+            if entry.get("old") is None:
+                continue   # ключа раньше не было: «вернуть» нечего, идём к предыдущему
+            section, name = entry["key"].rsplit(".", 1)
+            config.set_value(section, name, entry["old"])
+            CHANGES_FILE.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+            return entry
+        CHANGES_FILE.write_text("", encoding="utf-8")
+        return None
 
 
 def models() -> dict:

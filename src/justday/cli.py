@@ -576,8 +576,9 @@ def main(argv: list[str] | None = None) -> None:
                                        "color жёлтый|#ffd23f|auto (the colour of the track on the island)")
     sp.add_argument("action", nargs="?", default="status")
     sp.add_argument("value", nargs="?")
-    sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false")
-    sp.add_argument("action", choices=["get", "set"])
+    sp = sub.add_parser("config", help="get / set a setting: config set audio.earcons false; "
+                                       "config undo — вернуть последнюю изменённую")
+    sp.add_argument("action", choices=["get", "set", "undo"])
     sp.add_argument("key", nargs="?")
     sp.add_argument("value", nargs="?")
     sub.add_parser("rescue", help="экстренная перезагрузка: снимок отладки, затем перезапуск демона и острова")
@@ -2006,9 +2007,17 @@ def _config_cmd(a) -> None:
             node = node[part]
         _print(node)
         return
+    from . import manage
+
+    if a.action == "undo":
+        e = manage.undo_setting()
+        if not e:
+            sys.exit("отменять нечего")
+        control("reload_settings", timeout=5)
+        print(f"{e['key']} = {e['old']} (было {e['new']})")
+        return
     if not a.key or a.value is None or "." not in a.key:
         sys.exit("usage: justday config set section.key value")
-    from . import manage
 
     value = manage.set_setting(a.key, a.value)
     control("reload_settings", timeout=5)
