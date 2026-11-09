@@ -69,3 +69,21 @@ def test_old_single_profile_survives_the_update(vp):
 def test_profile_name_cannot_escape_the_folder(vp):
     with pytest.raises(ValueError):
         voiceprint.draft("../x")
+
+
+def test_second_voice_was_not_heard_while_only_one_was_listened_to(vp, monkeypatch):
+    """9 нояб.: «настроить несколько голосов». Записать второй было можно, но слушался только выбранный,
+    и второй человек получал «голос не узнан». При «Все» узнаётся любой и известно, кто сказал."""
+    # единичный вектор, угол = громкость: у разных голосов косинус далеко ниже порога
+    monkeypatch.setattr(voiceprint, "embed", lambda pcm: np.array(
+        [np.cos(a := float(np.abs(pcm).mean()) / 1000), np.sin(a)], dtype=np.float32))
+    record("я", 100)
+    voiceprint.enroll_finish("я")
+    record("брат", 3000)
+    voiceprint.enroll_finish("брат")
+    brother = np.random.default_rng(3000).normal(0, 3000, 16000).astype(np.int16)
+    vp["voiceprint"]["profile"] = "я"
+    assert not voiceprint.identify(brother)["ok"]
+    vp["voiceprint"]["profile"] = voiceprint.ALL
+    who = voiceprint.identify(brother)
+    assert who["ok"] and who["name"] == "брат"

@@ -2341,12 +2341,13 @@ Item {
                 Row {
                     visible: vpGroup.step < 0 && !!(vpGroup.st && vpGroup.st.enrolled)
                     title: JD.tr("Чей голос слушать")
-                    subtitle: JD.tr("Можно записать несколько голосов: введите имя и нажмите «Добавить»")
+                    subtitle: JD.tr("Можно записать несколько голосов: введите имя и нажмите «Добавить». «Все» — откликаться на любой из них")
                     RowLayout {
                         spacing: 8
                         Segmented {
-                            options: (vpGroup.st && vpGroup.st.profiles || []).map(n => ({ value: n, label: n }))
-                            current: vpGroup.st ? vpGroup.st.active : ""
+                            readonly property var names: vpGroup.st && vpGroup.st.profiles || []
+                            options: (names.length > 1 ? [{ value: "*", label: JD.tr("Все") }] : []).concat(names.map(n => ({ value: n, label: n })))
+                            current: vpGroup.st ? (vpGroup.st.listen || vpGroup.st.active) : ""
                             onPicked: v => win.run(["voiceprint", "use", v], r => {
                                 if (!vpGroup) return
                                 if (!r.ok) win.notify(JD.tr("Не получилось: ") + (r.error || ""))

@@ -186,7 +186,11 @@ def names() -> list[str]:
     return sorted(p.parent.name for p in DIR.glob("*/profile.json") if not p.parent.name.startswith("."))
 
 
+ALL = "*"   # voiceprint.profile = "*": пускать любой записанный голос, а не один
+
+
 def active() -> str:
+    """Голос, чей «Hey Jarvis» дообучен и чей профиль перезаписывает «Заново». При «*» — первый по имени."""
     have = names()
     want = config.load()["voiceprint"].get("profile", "")
     return want if want in have else (have[0] if have else "")
@@ -284,6 +288,22 @@ def score(pcm: np.ndarray) -> float | None:
     if not p:
         return None
     return float(embed(pcm) @ np.asarray(p["embedding"], dtype=np.float32))
+
+
+def identify(pcm: np.ndarray) -> dict | None:
+    """Чей это голос. 9 нояб. он попросил «настроить несколько голосов»: записать их можно было и раньше,
+    но слушал ассистент только один выбранный, и второй человек (или он сам простуженный) оставался
+    «не узнан». При voiceprint.profile = "*" сравниваем со всеми и берём того, кто дальше всех над своим
+    порогом. Отпечаток считается один раз: сравнение с профилем — одно скалярное произведение."""
+    want = config.load()["voiceprint"].get("profile", "")
+    who = names() if want == ALL else [active()]
+    profs = {n: p for n in who if n and (p := profile(n))}
+    if not profs:
+        return None
+    e = embed(pcm)
+    best = max(((n, float(e @ np.asarray(p["embedding"], dtype=np.float32)), p["threshold"]) for n, p in profs.items()),
+               key=lambda x: x[1] - x[2])
+    return {"name": best[0], "score": best[1], "threshold": best[2], "ok": best[1] >= best[2]}
 
 
 def reset(name: str = "") -> None:

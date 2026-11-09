@@ -156,14 +156,14 @@ class HearingMixin:
             return
         mode = self.cfg["voiceprint"]["mode"]
         if mode == "always" or (mode == "wake" and (followup or self._activation == "wake")):
-            prof = voiceprint.profile()
-            if prof:
-                sc = await blocking(voiceprint.score, pcm)
-                if sc is not None and sc < prof["threshold"]:
-                    events.emit("listen_rejected", score=round(sc, 2))
-                    self.publish(kind="error", detail=t("Голос не узнан"))
-                    self.state = after
-                    return
+            who = await blocking(voiceprint.identify, pcm)
+            if who and not who["ok"]:
+                events.emit("listen_rejected", score=round(who["score"], 2), closest=who["name"])
+                self.publish(kind="error", detail=t("Голос не узнан"))
+                self.state = after
+                return
+            if who:
+                events.emit("speaker", name=who["name"], score=round(who["score"], 2))
         self.state = "transcribing"
         gen = self._cancel_gen
         text = None

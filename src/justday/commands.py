@@ -236,8 +236,9 @@ class CommandsMixin:
         return resp
 
     async def _cmd_voiceprint_use(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        name = voiceprint.check_name(req.get("profile", ""))
-        if name not in voiceprint.names():
+        name = req.get("profile", "")
+        name = name if name == voiceprint.ALL else voiceprint.check_name(name)
+        if name != voiceprint.ALL and name not in voiceprint.names():
             return {"ok": False, "error": f"голоса «{name}» нет"}
         config.set_value("voiceprint", "profile", name)
         self.reload_settings()
@@ -246,7 +247,9 @@ class CommandsMixin:
 
     async def _cmd_voiceprint_status(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         p = voiceprint.profile()
-        return {"ok": True, "enrolled": bool(p), "profiles": voiceprint.names(), "active": voiceprint.active(), "created": (p or {}).get("created", ""), "threshold": (p or {}).get("threshold"),
+        listen = voiceprint.ALL if self.cfg["voiceprint"].get("profile") == voiceprint.ALL else voiceprint.active()
+        return {"ok": True, "enrolled": bool(p), "profiles": voiceprint.names(), "listen": listen,
+                "active": voiceprint.active(), "created": (p or {}).get("created", ""), "threshold": (p or {}).get("threshold"),
                 "wake_verifier": bool((p or {}).get("wake_verifier")), "mode": self.cfg["voiceprint"]["mode"],
                 "phrases": voiceprint.phrases(), "wake_phrases": voiceprint.WAKE_PHRASES}
 

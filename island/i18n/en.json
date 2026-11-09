@@ -654,5 +654,7 @@
   "Стекло": "Glass",
   "Сплошной": "Solid",
   "Ничего не нашлось. Попробуйте другое слово": "Nothing found. Try another word",
-  "Меню, док и лоток. Стекло прозрачнее, с бликом по кромке. Размытие нагружает видеокарту, сплошной — нет": "Menu, dock and tray. Glass is clearer, with a highlight along the edge. Blur loads the GPU, solid does not"
+  "Меню, док и лоток. Стекло прозрачнее, с бликом по кромке. Размытие нагружает видеокарту, сплошной — нет": "Menu, dock and tray. Glass is clearer, with a highlight along the edge. Blur loads the GPU, solid does not",
+  "Все": "All",
+  "Можно записать несколько голосов: введите имя и нажмите «Добавить». «Все» — откликаться на любой из них": "You can record several voices: type a name and press “Add”. “All” answers any of them"
 }
