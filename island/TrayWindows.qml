@@ -189,7 +189,7 @@ Loader {
             readonly property real winTop: Math.max(0, Math.min(Math.max(0, screenH - capH), Math.round(restTop - (capH - tray.restLength) / 2)))
             readonly property real winLeft: trayHost.atRight ? screenW - winW : 0
             readonly property bool onScreen: stripX + stripW > 1 && stripX < screenW - 1 && stripY + stripH > 1 && stripY < screenH - 1
-            visible: JD.trayOn && JD.blurOn && !tray.empty && trayWin.shown && onScreen
+            visible: JD.trayOn && JD.barBlur && !tray.empty && trayWin.shown && onScreen
             anchors {
                 left: !trayHost.atRight
                 right: trayHost.atRight

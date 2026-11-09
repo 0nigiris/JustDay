@@ -256,7 +256,7 @@ Variants {
             readonly property real winLeft: Math.max(0, Math.round((screenW - capW) / 2))
             readonly property real winTop: dockHost.atTop ? 0 : Math.max(0, screenH - bandH)
             readonly property bool onScreen: cardX + cardW > 1 && cardX < screenW - 1 && cardY + cardH > 1 && cardY < screenH - 1
-            visible: JD.dockOn && JD.blurOn && dockWin.shown && onScreen
+            visible: JD.dockOn && JD.barBlur && dockWin.shown && onScreen
             implicitWidth: capW
             implicitHeight: bandH
             margins.left: winLeft

@@ -1314,10 +1314,14 @@ Singleton {
     readonly property string material: island.material || (island.blur === false ? "solid" : "frosted")
     readonly property bool blurOn: material !== "solid"
     readonly property bool glassOn: material === "glass"
-    // Стекло не темнее, а прозрачнее и чуть светлее матового: почти чёрная заливка делала цвет обоев
-    // мутно-бурым, и это читалось как тонированная плёнка Aero (9 нояб.). Нижняя граница 0.08
-    // серого и 60% от прежней плотности держат белый текст читаемым и на светлых обоях.
-    function glass(c) { return glassOn ? Qt.rgba(Math.max(c.r, 0.08), Math.max(c.g, 0.08), Math.max(c.b, 0.09), c.a * 0.6) : c }
+    // У Liquid Glass нет своего цвета: оно берёт цвет того, что под ним. Прежняя заливка несла
+    // оттенок карточки (а он от обоев), и стекло выходило тонированной плёнкой Aero — дважды, 8 и
+    // 9 нояб. Теперь заливка нейтральная, только затемнение ради читаемости, плотность от исходной.
+    function glass(c) { return glassOn ? Qt.rgba(0.03, 0.03, 0.04, Math.min(c.a, 0.75) * 0.55) : c }
+    // Размытие под доком и треем у стекла выключено: оно размазывало обои в цветную кашу, и это
+    // главный признак Aero. Там значки, а не текст, — фон можно оставить чётким, как у прозрачного
+    // варианта Liquid Glass. Меню с текстом размытие сохраняют: без него строки тонут в обоях.
+    readonly property bool barBlur: blurOn && !glassOn
     readonly property string place: island.position || "top-center"
     readonly property bool atTop: !place.startsWith("bottom")
     readonly property string side: place.split("-")[1] || "center"
