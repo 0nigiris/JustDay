@@ -270,7 +270,7 @@ PanelWindow {
         // на каждое движение мыши. Поиск и Launchpad открываются из середины — им круг не к лицу.
         readonly property bool round: JD.animOn && !JD.menuSearchMode && !JD.menuLaunchpad
         property real reveal: JD.menuOpen ? 1 : 0
-        Behavior on reveal { enabled: menuCard.round; NumberAnimation { duration: JD.slideMs + 120; easing.type: Easing.OutCubic } }
+        Behavior on reveal { enabled: JD.animOn && menuCard.round; NumberAnimation { duration: JD.slideMs + 120; easing.type: Easing.OutCubic } }
         layer.enabled: round && reveal < 1
         layer.effect: MultiEffect {
             maskEnabled: true
