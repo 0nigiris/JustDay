@@ -33,6 +33,10 @@ Songs are saved to ~/Music/JustDay/YouTube and play from disk next time (offline
 Artist without a song («включи Linkin Park») → their top songs: `count=15`. An album («альбом Meteora») → `playlist=1`.
 "включи что-нибудь" without a hint: pick by the time of day and what the user usually likes (memory), count=10, and name the choice in 3–5 words.
 System volume ("громче", "тише") is `wpctl`, not the player.
+"Потом", "следующим": don't break what is playing, use `next=1` or `add=1`, not a bare `play`.
+"Похожее": keep the source track's energy and manner (calm after calm). Unsure: check `justday history`.
+"Что играло", "последнюю песню": `justday history`, then `justday play` that line; don't ask for the title.
+"Запомни раз и навсегда" for a name or a song ("Temporarily" is this exact song): `justday pin WORD = exact query`, then `justday play WORD` always plays it. Remove: `justday pin --remove WORD`.
 
 ## Video
 `justday video "what to find or a link"` — finds the video and **asks the user where to play it** (the island shows three buttons: in the island, in a window, on YouTube; the user can also answer by voice). Wait for it; it returns `where`.
