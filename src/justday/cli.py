@@ -679,11 +679,6 @@ def main(argv: list[str] | None = None) -> None:
                                     "тяжёлые программы")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--watch", action="store_true", help="обновлять на месте, пока не остановят")
-    sp = sub.add_parser("qr", help="QR-код в терминале: `justday qr https://…` · `justday qr --wifi ИМЯ` "
-                                   "(пароль спросит скрыто)")
-    sp.add_argument("text", nargs="*")
-    sp.add_argument("--wifi", metavar="ИМЯ_СЕТИ", help="код для подключения к Wi-Fi")
-    sp.add_argument("--hidden", action="store_true", help="сеть скрытая")
     sp = sub.add_parser("transcript", help="видео → текст → выжимка: ссылка или файл, текст ложится в docs/видео/")
     sp.add_argument("source", nargs="?", help="ссылка (YouTube, Instagram…) или путь к файлу")
     sp.add_argument("--no-summary", action="store_true", help="только текст, без выжимки местной моделью")
@@ -846,21 +841,6 @@ def main(argv: list[str] | None = None) -> None:
             print(transcript.run(a.source, with_summary=not a.no_summary))
         except (transcript.NeedsLogin, RuntimeError) as e:
             sys.exit(f"не вышло: {e}")
-    elif a.cmd == "qr":
-        from . import qr
-
-        if a.wifi:
-            import getpass
-
-            # Пароль не в аргументах: их видно в `ps` всем на машине.
-            pw = getpass.getpass("Пароль сети (пусто — открытая): ") if sys.stdin.isatty() else ""
-            text = qr.wifi_payload(a.wifi, pw, hidden=a.hidden)
-        else:
-            text = " ".join(a.text)
-        try:
-            print(qr.ascii_art(qr.matrix(text)))
-        except ValueError:
-            sys.exit("justday qr: нечего кодировать — дайте ссылку или текст, либо --wifi ИМЯ")
     elif a.cmd == "memory":
         from .brain import BRAIN_DIR
 

@@ -1,17 +1,7 @@
-"""QR для телефона: Wi-Fi с «;» в имени сети ломал запись, а пустой ввод должен отказывать, а не рисовать мусор."""
+"""QR сопряжения с телефоном: пустой ввод должен отказывать, а не рисовать мусор, и код должен читаться камерой."""
 import pytest
 
 from justday import qr
-
-
-def test_wifi_name_with_special_characters_is_escaped():
-    bs = chr(92)  # обратная косая: в литерале рядом с «;» её легко съесть
-    assert qr.wifi_payload("Дом;2", "p:a,ss") == f"WIFI:T:WPA;S:Дом{bs};2;P:p{bs}:a{bs},ss;;"
-
-
-def test_open_network_has_no_password_and_hidden_is_marked():
-    assert qr.wifi_payload("Кафе") == "WIFI:T:nopass;S:Кафе;P:;;"
-    assert qr.wifi_payload("Кафе", "x", "WEP", hidden=True) == "WIFI:T:WEP;S:Кафе;P:x;H:true;;"
 
 
 def test_matrix_is_square_and_encodes_a_link():

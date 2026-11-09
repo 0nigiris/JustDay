@@ -1,24 +1,9 @@
-"""QR-код ссылкой или Wi-Fi: показать на экране, чтобы снять телефоном (пункт 30 плана).
+"""QR для сопряжения телефона (`justday phone pair`).
 
-Кодирует segno (чистый Python, без зависимостей). Пароль сети здесь только проходит насквозь: он не пишется
-ни в журнал, ни в историю — ответ демона уходит островку и больше нигде не лежит."""
+Вкладку «QR» в инструментах он попросил убрать 9 нояб.: ею не пользовался. Кодирует segno (чистый Python)."""
 from __future__ import annotations
 
 import segno
-
-BAD = "\\;,:\""   # символы, которые в записи WIFI: надо экранировать
-
-
-def wifi_payload(ssid: str, password: str = "", security: str = "WPA", hidden: bool = False) -> str:
-    """Строка `WIFI:…` в формате, который понимают камеры Android и iOS.
-
-    Спецсимволы `\\ ; , : "` экранируются: сеть с `;` в имени иначе обрывала бы запись на полуслове, и телефон
-    подключался к сети с другим именем или не подключался вовсе."""
-    def esc(s: str) -> str:
-        return "".join("\\" + c if c in BAD else c for c in s)
-
-    kind = "nopass" if not password else ("WEP" if security.upper() == "WEP" else "WPA")
-    return f"WIFI:T:{kind};S:{esc(ssid)};P:{esc(password)};{'H:true;' if hidden else ''};"
 
 
 def matrix(text: str) -> list[str]:

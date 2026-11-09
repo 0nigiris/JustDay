@@ -455,8 +455,6 @@ Singleton {
     property var load: null               // последний взгляд на машину
     property var loadHistory: ({ cpu: [], mem: [], gpu: [] })   // для графиков: последние 60 секунд
     property var focusNow: null           // идёт окно тишины по расписанию: {name, until} или null
-    property var qrRows: []               // страница «QR»: матрица из «0» и «1»; стирается при закрытии панели
-    function qrAsk(what) { if (what.text || what.wifi) send(Object.assign({ cmd: "qr" }, what)); else qrRows = [] }
     property bool clipPaused: false
     property int clipSkipped: 0           // сколько не запомнили как похожее на пароль
     property bool welcomeShown: false
@@ -479,7 +477,6 @@ Singleton {
         if (toolsPage === "load") send({ cmd: "load_watch", on: false })
         toolsPage = ""
         toolsItems = []
-        qrRows = []
     }
     function setToolsPage(page) {
         if (page === toolsPage) return
@@ -488,7 +485,6 @@ Singleton {
         toolsQuery = ""
         toolsPick = 0
         toolsItems = []
-        qrRows = []
         if (wasLoad !== (page === "load")) send({ cmd: "load_watch", on: page === "load" })
         refreshTools()
     }
@@ -1812,7 +1808,6 @@ Singleton {
             toolsItems = m.emoji; emojiGroups = m.groups || emojiGroups
             if (toolsPick >= toolsItems.length) toolsPick = Math.max(0, toolsItems.length - 1)
         }
-        if (m.qr !== undefined) qrRows = m.qr
         if (m.focus !== undefined) focusNow = m.focus
         if (m.clip !== undefined) {
             toolsItems = m.clip; clipPaused = !!m.paused; clipSkipped = m.skipped || 0

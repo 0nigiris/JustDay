@@ -921,18 +921,6 @@ class CommandsMixin:
             resp = {"ok": True, "panel": which}
         return resp
 
-    async def _cmd_qr(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        """Код ссылкой или Wi-Fi для панели «QR»; пароль сети нигде не остаётся"""
-        from . import qr
-
-        try:
-            text = (qr.wifi_payload(str(req["wifi"]), str(req.get("password", "")), hidden=bool(req.get("hidden")))
-                    if req.get("wifi") else str(req.get("text", "")))
-            resp = {"ok": True, "qr": qr.matrix(text)}
-        except ValueError:
-            resp = {"ok": True, "qr": []}   # пустое поле — не ошибка, а пустой экран
-        return resp
-
     async def _cmd_load(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Нагрузка машины одним взглядом"""
         return {"ok": True, "load": await self.load_snapshot(), }

@@ -42,7 +42,10 @@ Item {
     readonly property real padTile: 150
     // Плитка выше, значок крупнее (8 нояб.): при значке 40 на карточке 760×620 меню выглядело
     // большим и пустым — «не в стиле Apple». Теперь значок 52, а карточка ниже (menu_height 500).
-    readonly property real tile: spotlight ? 52 : pad ? padTile : 116
+    // Нижняя граница высоты ряда. Настоящая высота растягивается так, чтобы в окно вошло целое
+    // число рядов (grid.rowH): при постоянных 116 третий ряд резался пополам, и меню звало крутить
+    // ради четырёх значков (9 нояб.).
+    readonly property real tile: spotlight ? 52 : pad ? padTile : 96
 
     // Размер меню больше не считается по содержимому — и это починка, а не упрощение. Раньше
     // высота карточки равнялась высоте сетки: шесть закреплённых программ и сто пятьдесят семь
@@ -280,13 +283,16 @@ Item {
                     ? parent.width
                     : Math.min(Math.floor((parent.width - 6) / mv.columns), mv.pad ? 180 : 150)
                 width: mv.spotlight ? parent.width : cell * mv.columns
+                // Только целые ряды: ряд, срезанный пополам, звал крутить, а крутить было почти нечего.
+                readonly property real rowH: mv.spotlight ? mv.tile
+                    : parent.height / Math.max(1, Math.floor(parent.height / mv.tile))
                 height: Math.min(parent.height, contentHeight)
                 anchors.horizontalCenter: parent.horizontalCenter
                 // Spotlight: список сверху; полное меню: сетка по центру.
                 y: mv.spotlight ? 0 : Math.max(0, (parent.height - height) / 2)
                 clip: true
                 cellWidth: cell
-                cellHeight: mv.tile
+                cellHeight: rowH
                 model: mv.shown
                 currentIndex: JD.menuPick
                 highlightMoveDuration: 90

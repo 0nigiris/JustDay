@@ -288,7 +288,7 @@ ShellRoot {
         // возвращает демон перед вставкой (Daemon._focus_back).
         // Страницы инструментов без ввода (микшер, планы, нагрузка, claude) не берут клавиатуру сами: окно
         // под ними оставалось без фокуса, хотя печатать в панели было нечего. Щелчок по панели даёт фокус.
-        readonly property bool toolsTyping: ["emoji", "clip", "history", "qr"].includes(JD.toolsPage)
+        readonly property bool toolsTyping: ["emoji", "clip", "history"].includes(JD.toolsPage)
         WlrLayershell.keyboardFocus: island.mode === "compose" || (island.mode === "tools" && toolsTyping) || (island.mode === "player" && JD.playerPage === "library") ? WlrKeyboardFocus.Exclusive
                                    : island.mode === "settings" || island.mode === "tools" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         // Р2-31: плеер, видео и expanded клавиатуру не берут. Раньше у них стоял OnDemand, и щелчок по

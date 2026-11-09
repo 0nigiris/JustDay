@@ -54,4 +54,4 @@ def test_every_island_file_compiles_in_the_real_engine(tmp_path) -> None:
     bad = [r for r in rows if " FAIL " in r and r.split()[0] not in nowin]
     seen = {r.split()[0] for r in rows}
     assert not bad, "не компилируются:\n" + "\n".join(bad)
-    assert seen >= {"JD", "QrView", "SettingsView", "ToolsView"}, f"проверка не дошла до конца: {sorted(seen)[:5]}…"
+    assert seen >= {"JD", "SettingsView", "ToolsView"}, f"проверка не дошла до конца: {sorted(seen)[:5]}…"

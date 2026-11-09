@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ISLAND = Path(__file__).resolve().parent.parent / "island"
-VIEWS = ["MenuView", "ToolsView", "SessionsView", "HistoryView", "PlansView", "MixerView", "TrayView", "QrView",
+VIEWS = ["MenuView", "ToolsView", "SessionsView", "HistoryView", "PlansView", "MixerView", "TrayView",
          "MusicLibrary", "ControlTiles", "DockAudio", "DockClock", "DockCat", "Buddy", "Mascot",
          "DockView", "TrayMenu", "ChatWindow",
          # Вынесены из shell.qml (Р-80): внутри shell.qml они видели id главного окна (`island.mode`,
