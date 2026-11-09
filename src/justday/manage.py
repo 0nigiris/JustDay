@@ -145,7 +145,8 @@ def voices() -> dict:
             items.append({"id": d.name, "name": meta.get("name", d.name), "description": meta.get("description", ""),
                           "kind": meta.get("kind", ""), "builtin": builtin})
     return {"neural_installed": installed, "neural_running": state == "active", "neural_available": installed and state == "active",
-            "neural": items, "silero": VOICES, "eleven_key": bool(config.secret("ELEVENLABS_API_KEY"))}
+            "neural": items, "silero": VOICES, "eleven_key": bool(config.secret("ELEVENLABS_API_KEY")),
+            "fish_key": bool(config.secret("FISH_API_KEY"))}
 
 
 def update_status(fetch: bool = True) -> dict:

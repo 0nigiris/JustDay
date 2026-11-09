@@ -2099,10 +2099,11 @@ Item {
                     subtitle: vp.engine === "qwen" ? JD.tr("Нейросетевой: Qwen3-TTS на вашей видеокарте")
                             : vp.engine === "chatterbox" ? JD.tr("Chatterbox: живее Silero; когда видеокарта занята, говорит Silero")
                             : vp.engine === "elevenlabs" ? JD.tr("ElevenLabs: лучший голос, но текст ответов уходит на их серверы")
+                            : vp.engine === "fish" ? JD.tr("Fish Audio: дешевле ElevenLabs, есть бесплатный лимит; текст ответов уходит на их серверы")
                             : vp.engine === "silero" ? JD.tr("Silero: быстрый, звучит роботизированно") : JD.tr("Без голоса, только остров")
                     Segmented {
                         options: [{ value: "qwen", label: JD.tr("Нейросетевой") }, { value: "chatterbox", label: "Chatterbox" },
-                                  { value: "elevenlabs", label: "ElevenLabs" }, { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
+                                  { value: "elevenlabs", label: "ElevenLabs" }, { value: "fish", label: "Fish" }, { value: "silero", label: "Silero" }, { value: "none", label: JD.tr("Выкл") }]
                         current: vp.engine
                         onPicked: v => { win.set("tts.engine", v); vp.engine = v }
                     }
@@ -2156,6 +2157,22 @@ Item {
                     title: JD.tr("Какие голоса доступны")
                     subtitle: JD.tr("Список с вашего аккаунта, с идентификаторами")
                     Btn { text: JD.tr("Показать"); onClicked: JD.send({ cmd: "terminal_run", what: "voice_voices" }) }
+                }
+                Row {
+                    visible: vp.engine === "fish"
+                    title: win.d.voices && win.d.voices.fish_key ? JD.tr("Ключ Fish Audio сохранён") : JD.tr("Нужен ключ Fish Audio")
+                    subtitle: JD.tr("fish.audio → API Keys. Ключ ляжет в связку ключей рабочего стола, в конфиг и в git не попадает")
+                    Btn {
+                        text: JD.tr("Ввести ключ")
+                        primary: !(win.d.voices && win.d.voices.fish_key)
+                        onClicked: JD.send({ cmd: "terminal_run", what: "fish_key" })
+                    }
+                }
+                Row {
+                    visible: vp.engine === "fish"
+                    title: JD.tr("Голос Fish Audio")
+                    subtitle: JD.tr("ID голоса со страницы голоса на fish.audio; пусто — голос по умолчанию")
+                    Field { key: "tts.fish_voice"; placeholderText: "model id" }
                 }
                 Row {
                     visible: vp.engine === "qwen" && !vp.neuralInstalled

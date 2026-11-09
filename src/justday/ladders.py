@@ -29,6 +29,9 @@ def _voice(cfg: dict) -> dict:
                           "now": i == 0, "note": ""})
         if not keys:
             rungs.append({"name": "ElevenLabs", "model": "", "ready": False, "now": False, "note": "нет ключа"})
+    elif engine == "fish":
+        ok = bool(config.secrets("FISH_API_KEY"))
+        rungs.append({"name": "Fish Audio", "model": "", "ready": ok, "now": ok, "note": "" if ok else "нет ключа"})
     elif engine != "silero":
         rungs.append({"name": engine, "model": "", "ready": True, "now": True, "note": ""})
     rungs.append({"name": "Silero", "model": "", "ready": True, "now": engine == "silero", "note": ""})

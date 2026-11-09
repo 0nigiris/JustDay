@@ -54,6 +54,9 @@ TERMINAL_JOBS = {
     "update": (["justday", "update"], True),
     "voice_voices": (["justday", "voice", "eleven"], True),
     "voice_key": (["sh", "-c", "echo 'Вставьте ключ ElevenLabs и нажмите Enter, затем Ctrl+D:'; justday voice key"], True),
+    # secret-tool сам спрашивает ключ, не показывая его: в историю оболочки и в конфиг он не попадает.
+    "fish_key": (["sh", "-c", "echo 'Вставьте ключ Fish Audio и нажмите Enter:'; "
+                              "secret-tool store --label 'JustDay: fish' service justday key fish && echo 'Сохранено'"], True),
     "setup_voice": ([str(SCRIPTS / "setup-voice.sh")], True),
     "logs": (["justday", "logs", "-f"], False),
 }

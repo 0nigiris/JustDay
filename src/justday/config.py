@@ -250,7 +250,7 @@ DEFAULTS: dict = {
         "initial_prompt": "Джарвис, JustDay, Claude Code, YouTube, Discord, Steam, Proton, GitHub, KDE, Helium, VS Code.",
     },
     "tts": {
-        "engine": "silero",  # qwen (neural, justday-voice service) | chatterbox | elevenlabs | silero | espeak | none
+        "engine": "silero",  # qwen (neural, justday-voice service) | chatterbox | elevenlabs | fish | silero | espeak | none
         # Chatterbox уступает Silero, когда видеокарта загружена на столько процентов (или идёт игра)
         "gpu_busy_percent": 50,
         "voice": "jarvis",  # neural voice id: the built-in jarvis, or one you designed/cloned
@@ -266,6 +266,10 @@ DEFAULTS: dict = {
         "numbers": True,  # say figures as words: «7:05» → «семь ноль пять», «3,5 ГБ» → «три с половиной гигабайта»
         # ElevenLabs (engine = "elevenlabs"): the key lives in the desktop keyring (`justday secret set elevenlabs`), never here.
         "eleven_voice": "JBFqnCBsd6RMkjVDRZzb",  # `justday voice eleven` lists the voices on your account
+        # Fish Audio (engine = "fish"): ключ в связке ключей под именем fish. fish_voice — id голоса с
+        # fish.audio (страница голоса, «Copy ID»); пусто — голос сервера по умолчанию.
+        "fish_voice": "",
+        "fish_model": "",
         "eleven_model": "eleven_flash_v2_5",  # flash = fastest; eleven_multilingual_v2 = richer, slower
         # Нейроголос отказал (не влез в видеопамять) — столько минут к нему не стучаться. Иначе
         # каждая фраза начинается с ожидания отказа, и человек слышит это как «голос лагает».

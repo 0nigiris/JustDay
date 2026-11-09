@@ -75,7 +75,7 @@ class SpeechMixin:
         предыдущая: раньше каждая ждала конца предыдущей и потом ещё 0,1–0,5 с собственного синтеза (Р-53).
         Потоковые голоса (Qwen, ElevenLabs) не тронуты: они и так играют по мере генерации."""
         engine = self.tts.cfg["engine"]
-        if engine in ("qwen", "elevenlabs", "chatterbox", "none") or sentence in self._synth_ahead:
+        if engine in ("qwen", "elevenlabs", "fish", "chatterbox", "none") or sentence in self._synth_ahead:
             return
         try:
             self._synth_ahead[sentence] = asyncio.get_running_loop().run_in_executor(None, self.tts.synth, sentence)
@@ -99,8 +99,8 @@ class SpeechMixin:
                 # Отказ ElevenLabs (кончились кредиты, голос не для бесплатного тарифа) — сразу Silero.
                 # Раньше запасным был Qwen: 3,4 ГБ видеопамяти и полминуты холодного старта на
                 # каждый такой отказ. И не стучаться к нему каждой фразой, пока не остынет.
-                if (engine == "elevenlabs" and time.monotonic() >= self._neural_cold_until
-                        and await self._speak_stream(sentence, gen, "elevenlabs")):
+                if (engine in ("elevenlabs", "fish") and time.monotonic() >= self._neural_cold_until
+                        and await self._speak_stream(sentence, gen, engine)):
                     continue
                 if (engine == "qwen" and time.monotonic() >= self._neural_cold_until
                         and await self._speak_stream(sentence, gen, "qwen")):
@@ -135,6 +135,8 @@ class SpeechMixin:
         False = this voice is unavailable, and the caller falls back to the next one."""
         if engine == "elevenlabs":
             stream, rate, native = self.tts.eleven_stream(sentence), self.tts.ELEVEN_RATE, max(0.7, min(1.2, self.tts.speed))
+        elif engine == "fish":
+            stream, rate, native = self.tts.fish_stream(sentence), self.tts.ELEVEN_RATE, max(0.7, min(1.2, self.tts.speed))
         else:
             # Нейроголос набирает темп сам, по словесной просьбе (`instruct`), но
             # на глаз: от фразы к фразе выходит то быстрее, то медленнее. Поэтому

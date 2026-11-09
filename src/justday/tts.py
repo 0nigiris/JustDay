@@ -93,7 +93,8 @@ def split_sentences(text: str, max_len: int = 400) -> list[str]:
 
 
 # voices that read English (and any other script) on their own
-MULTILINGUAL = ("qwen", "elevenlabs")
+MULTILINGUAL = ("qwen", "elevenlabs", "fish")
+CLOUD = ("elevenlabs", "fish")   # голоса, которые синтезируют на чужом сервере; у них Silero — запасной
 
 
 def latin_mode(cfg: dict) -> str:
@@ -133,7 +134,7 @@ class TTS:
         return config.MODELS_DIR / self.cfg["silero_model_url"].rsplit("/", 1)[1]
 
     def load(self) -> None:
-        if self.cfg["engine"] in ("silero", "chatterbox", "elevenlabs"):  # у них Silero — запасной
+        if self.cfg["engine"] in ("silero", "chatterbox", *CLOUD):  # у них Silero — запасной
             # Служба голоса держит torch у себя; демон только просит её подняться. Нет службы — как раньше.
             if self.path_exists() and self.nudge("warm", engine="silero", model=str(self._silero_path())):
                 return
@@ -302,10 +303,7 @@ class TTS:
         """ElevenLabs: yields int16 PCM at ELEVEN_RATE. The text leaves the machine — that is the trade.
 
         Raises OSError when there is no key or the service refuses, so the caller can fall back."""
-        import asyncio
         import json as jsonlib
-        import urllib.error
-        import urllib.request
 
         keys = [k for k in config.secrets("ELEVENLABS_API_KEY") if self._eleven_dead.get(k, 0) < time.time()]
         if not keys:
@@ -315,13 +313,48 @@ class TTS:
                               "voice_settings": {"stability": 0.45, "similarity_boost": 0.75, "speed": speed}},
                              ensure_ascii=False).encode()
         url = self.ELEVEN_URL.format(voice=self.cfg.get("eleven_voice", ""))
+        async for chunk in self._cloud_stream("ElevenLabs", url, body, keys,
+                                              lambda k: {"xi-api-key": k, "content-type": "application/json"}):
+            yield chunk
+
+    FISH_URL = "https://api.fish.audio/v1/tts"
+
+    async def fish_stream(self, sentence: str):
+        """Fish Audio: тот же поток int16 PCM 24 кГц, что у ElevenLabs. 9 нояб. он выбрал его: дешевле, есть
+        бесплатный лимит, голос клонируется по минуте записи. Голос — `tts.fish_voice` (id модели голоса с
+        fish.audio), модель синтеза — `tts.fish_model` (пусто — какую сервер даёт по умолчанию)."""
+        import json as jsonlib
+
+        keys = [k for k in config.secrets("FISH_API_KEY") if self._eleven_dead.get(k, 0) < time.time()]
+        if not keys:
+            raise OSError("no Fish Audio key (secret-tool store … key fish)")
+        req = {"text": sentence, "format": "pcm", "sample_rate": self.ELEVEN_RATE, "latency": "balanced",
+               "chunk_length": 150, "prosody": {"speed": max(0.7, min(1.2, self.speed))}}
+        if voice := str(self.cfg.get("fish_voice") or ""):
+            req["reference_id"] = voice
+        body = jsonlib.dumps(req, ensure_ascii=False).encode()
+        model = str(self.cfg.get("fish_model") or "")
+
+        def headers(k: str) -> dict:
+            return {"authorization": f"Bearer {k}", "content-type": "application/json", **({"model": model} if model else {})}
+
+        async for chunk in self._cloud_stream("Fish Audio", self.FISH_URL, body, keys, headers):
+            yield chunk
+
+    async def _cloud_stream(self, name: str, url: str, body: bytes, keys: list[str], headers):
+        """Потоковый POST к облачному голосу. Кончился или не принят ключ — час его не трогаем и берём
+        следующий (свой кончился — ключ друга). OSError наружу: вызывающий перейдёт на Silero."""
+        import asyncio
+        import urllib.error
+        import urllib.request
+
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue(maxsize=32)
 
         def pump() -> None:
             err: BaseException = OSError("no key")
             for key in keys:
-                req = urllib.request.Request(url, data=body, headers={"xi-api-key": key, "content-type": "application/json"})
+                req = urllib.request.Request(url, data=body, headers=headers(key))
                 try:
                     with urllib.request.urlopen(req, timeout=30) as r:
                         while True:
@@ -333,7 +366,7 @@ class TTS:
                     return
                 except urllib.error.HTTPError as e:
                     err = e
-                    if e.code in (401, 402, 429):   # ключ кончился или не принят: час не трогаем, пробуем следующий
+                    if e.code in (401, 402, 429):
                         self._eleven_dead[key] = time.time() + 3600
                         continue
                     break
@@ -350,7 +383,7 @@ class TTS:
                 if item is None:
                     return
                 if isinstance(item, BaseException):
-                    raise OSError(f"ElevenLabs: {item}") from item
+                    raise OSError(f"{name}: {item}") from item
                 yield item
         finally:
             task.cancel()
@@ -361,7 +394,7 @@ class TTS:
         lang = self.cfg.get("lang", "ru")
         # Chatterbox и ElevenLabs сюда попадают, только когда сами не смогли (занята видеокарта,
         # кончились кредиты) — и тогда говорит Silero.
-        if engine in ("silero", "chatterbox", "elevenlabs") and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
+        if engine in ("silero", "chatterbox", *CLOUD) and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
             try:
                 try:
                     pcm = self.silero_remote(sentence)
