@@ -260,7 +260,9 @@ PanelWindow {
             : menuWin.atTop
             ? (menuWin.side === "left" ? Item.TopLeft : menuWin.side === "right" ? Item.TopRight : Item.Top)
             : (menuWin.side === "left" ? Item.BottomLeft : menuWin.side === "right" ? Item.BottomRight : Item.Bottom)
-        opacity: JD.menuOpen ? 1 : 0
+        // При круге прозрачность не трогаем: растворение поверх круга прятало его целиком (9 ноя он
+        // спросил «какой круг?»). Закрытую карточку тогда прячет сама маска с нулевым радиусом.
+        opacity: JD.menuOpen || menuCard.round ? 1 : 0
         scale: JD.menuOpen || menuCard.round ? 1 : 0.94
         Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
         Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
@@ -270,7 +272,11 @@ PanelWindow {
         // на каждое движение мыши. Поиск и Launchpad открываются из середины — им круг не к лицу.
         readonly property bool round: JD.animOn && !JD.menuSearchMode && !JD.menuLaunchpad
         property real reveal: JD.menuOpen ? 1 : 0
-        Behavior on reveal { enabled: JD.animOn && menuCard.round; NumberAnimation { duration: JD.slideMs + 120; easing.type: Easing.OutCubic } }
+        Behavior on reveal { enabled: JD.animOn && menuCard.round; NumberAnimation {
+            // Закрытие обязано уложиться в slideMs: потом окно гаснет (menuFadeOut) и обрубит круг.
+            duration: JD.menuOpen ? 420 : JD.slideMs
+            easing.type: JD.menuOpen ? Easing.OutCubic : Easing.InCubic
+        } }
         layer.enabled: round && reveal < 1
         layer.effect: MultiEffect {
             maskEnabled: true
@@ -369,7 +375,8 @@ PanelWindow {
         x: menuCard.x; y: menuCard.y; width: menuCard.width; height: menuCard.height
         visible: false
         layer.enabled: menuCard.layer.enabled
-        readonly property real big: Math.hypot(width, height)
+        // Ровно до дальнего угла: с запасом круг закрывал меню за первые ~80 мс, и глаз его не видел.
+        readonly property real big: Math.hypot(Math.max(ox, width - ox), Math.max(oy, height - oy))
         readonly property real ox: menuWin.side === "left" ? 0 : menuWin.side === "right" ? width : width / 2
         readonly property real oy: menuWin.atTop ? 0 : height
         Rectangle {
