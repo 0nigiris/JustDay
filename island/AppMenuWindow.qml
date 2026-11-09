@@ -249,7 +249,7 @@ PanelWindow {
         // красиво ровно до первых светлых обоев, после которых половина кнопок пропадала.
         color: JD.blurOn ? JD.glass(JD.menuSurface) : Qt.rgba(0.04, 0.04, 0.05, 0.99)
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.14)
+        border.color: JD.glassOn ? "transparent" : Qt.rgba(1, 1, 1, 0.14)   // у стекла кромку рисует GlassEdge
         clip: true
         GlassEdge { radius: parent.radius }
 

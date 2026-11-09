@@ -1314,7 +1314,10 @@ Singleton {
     readonly property string material: island.material || (island.blur === false ? "solid" : "frosted")
     readonly property bool blurOn: material !== "solid"
     readonly property bool glassOn: material === "glass"
-    function glass(c) { return glassOn ? Qt.rgba(c.r, c.g, c.b, c.a * 0.7) : c }
+    // Стекло не темнее, а прозрачнее и чуть светлее матового: почти чёрная заливка делала цвет обоев
+    // мутно-бурым, и это читалось как тонированная плёнка Aero (9 нояб.). Нижняя граница 0.08
+    // серого и 60% от прежней плотности держат белый текст читаемым и на светлых обоях.
+    function glass(c) { return glassOn ? Qt.rgba(Math.max(c.r, 0.08), Math.max(c.g, 0.08), Math.max(c.b, 0.09), c.a * 0.6) : c }
     readonly property string place: island.position || "top-center"
     readonly property bool atTop: !place.startsWith("bottom")
     readonly property string side: place.split("-")[1] || "center"

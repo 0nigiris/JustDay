@@ -720,7 +720,7 @@ Item {
         // прозрачнее; и рамка та же тонкая, что у островка.
         color: JD.blurOn ? JD.glass(Qt.rgba(JD.menuSurface.r, JD.menuSurface.g, JD.menuSurface.b, 0.72)) : JD.menuSurface
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.10)
+        border.color: JD.glassOn ? "transparent" : Qt.rgba(1, 1, 1, 0.10)
         GlassEdge { radius: parent.radius }
 
         // Щелчок по пустому месту полосы — мимо значков — тоже закрывает меню. Он объявлен до
