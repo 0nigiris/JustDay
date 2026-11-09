@@ -142,8 +142,11 @@ PanelWindow {
         y: menuCard.y - 48 + 8
         width: menuCard.width + 96
         height: menuCard.height + 96
-        opacity: (JD.menuOpen ? 0.5 : 0) * menuCard.opacity
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+        // При круге тень идёт за кругом: она рисуется отдельно от карточки и маске не подчиняется,
+        // и прямоугольная тень всего меню висела, пока круг ещё рос или уже сжимался (9 нояб.,
+        // «эта часть некрасиво уходит»). Куб — чтобы проявлялась под конец, когда карточка почти вся.
+        opacity: menuCard.round ? 0.5 * Math.pow(menuCard.reveal, 3) : (JD.menuOpen ? 0.5 : 0) * menuCard.opacity
+        Behavior on opacity { enabled: JD.animOn && !menuCard.round; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
     }
 
     // Размер меню задаёт человек, углом карточки. Раньше его задавало содержимое — и лента
@@ -263,9 +266,15 @@ PanelWindow {
         // При круге прозрачность не трогаем: растворение поверх круга прятало его целиком (9 ноя он
         // спросил «какой круг?»). Закрытую карточку тогда прячет сама маска с нулевым радиусом.
         opacity: JD.menuOpen || menuCard.round ? 1 : 0
-        scale: JD.menuOpen || menuCard.round ? 1 : 0.94
+        // Круг плюс лёгкая упругость: карточка дотягивается до размера с маленьким перелётом — так
+        // стекло ощущается жидким, а не вырезанным.
+        scale: JD.menuOpen ? 1 : menuCard.round ? 0.96 : 0.94
         Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.slideMs; easing.type: JD.slideEase } }
+        Behavior on scale { enabled: JD.animOn; NumberAnimation {
+            duration: menuCard.round && JD.menuOpen ? 300 : JD.slideMs
+            easing.type: menuCard.round && JD.menuOpen ? Easing.OutBack : JD.slideEase
+            easing.overshoot: 2.2
+        } }
 
         // Р3-28: меню раскрывается кругом из угла, от которого растёт (из ролика, что он прислал).
         // Маска включается только на время раскрытия: слой на всю карточку в покое стоил бы кадра
@@ -274,7 +283,8 @@ PanelWindow {
         property real reveal: JD.menuOpen ? 1 : 0
         Behavior on reveal { enabled: JD.animOn && menuCard.round; NumberAnimation {
             // Закрытие обязано уложиться в slideMs: потом окно гаснет (menuFadeOut) и обрубит круг.
-            duration: JD.menuOpen ? 420 : JD.slideMs
+            // Он попросил быстрее (9 нояб.): 420 мс читались как вялость.
+            duration: JD.menuOpen ? 260 : Math.round(JD.slideMs * 0.8)
             easing.type: JD.menuOpen ? Easing.OutCubic : Easing.InCubic
         } }
         layer.enabled: round && reveal < 1

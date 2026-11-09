@@ -3,10 +3,14 @@
 //
 // Дважды выходило Aero (8 и 9 нояб., «ещё больше Aero»): ровная рамка плюс блестящая полоса
 // сверху — это и есть глянец Windows 7. У Liquid Glass свет живёт в толще края: мягкое
-// свечение по всему кругу внутрь на несколько пикселей, ярче по диагонали — у верхнего левого
-// угла, слабее у нижнего правого, почти нет у двух других. Горизонтальной полосы нет вовсе.
-// Canvas, потому что Rectangle не умеет ни диагональный градиент рамки, ни мягкий спад внутрь;
-// перерисовывается только при смене размера.
+// свечение внутрь на несколько пикселей, собранное у одного угла, и слабый ответный отсвет у
+// противоположного. Горизонтальной полосы нет вовсе.
+//
+// «Жидким» (его слово, 9 нояб.) стекло делает свет, который плывёт за курсором с запаздыванием,
+// как блик в толще воды. Без курсора он возвращается в верхний левый угол — тот вид, что ему
+// понравился. Canvas, потому что Rectangle не умеет ни радиальный свет по рамке, ни мягкий спад
+// внутрь; рисует в своём потоке, чтобы перерисовка за курсором не трогала остальной интерфейс.
+pragma ComponentBehavior: Bound
 import QtQuick
 
 Canvas {
@@ -14,6 +18,24 @@ Canvas {
     property real radius: 0
     visible: JD.glassOn
     anchors.fill: parent
+    renderStrategy: Canvas.Threaded
+
+    // Где сейчас свет. Курсор ловит обработчик на самой карточке (родителе): у кромки под
+    // значками наведения не было бы — его забирают их MouseArea.
+    property var hov: null
+    readonly property bool lit: hov !== null && hov.hovered
+    property real lx: lit ? hov.point.position.x : 0
+    property real ly: lit ? hov.point.position.y : 0
+    Behavior on lx { enabled: JD.animOn; SmoothedAnimation { velocity: 900; easing.type: Easing.OutCubic } }
+    Behavior on ly { enabled: JD.animOn; SmoothedAnimation { velocity: 900; easing.type: Easing.OutCubic } }
+    onLxChanged: requestPaint()
+    onLyChanged: requestPaint()
+    Component {
+        id: hovComp
+        HoverHandler { enabled: edge.visible }
+    }
+    Component.onCompleted: hov = hovComp.createObject(edge.parent)
+
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     onRadiusChanged: requestPaint()
@@ -27,22 +49,23 @@ Canvas {
         const ctx = getContext("2d")
         ctx.reset()
         const w = width, h = height
+        // Пятно света — в полторы-две высоты карточки: на широком доке иначе светился бы весь верх.
+        const R = Math.max(h * 2, 140)
+        const spots = [[lx, ly, 1], [w - lx, h - ly, 0.55]]   // блик и ответный отсвет напротив
         for (const [inset, lw, a] of layers) {
-            // Свет собран в два угла: по оси от верхнего левого к нижнему правому, но длиной в
-            // высоту карточки с каждой стороны, иначе на широком доке светился бы весь верх.
-            const g = ctx.createLinearGradient(0, 0, w, h)
-            const k = Math.min(0.45, h / (w + h))
-            g.addColorStop(0, Qt.rgba(1, 1, 1, a))
-            g.addColorStop(k, Qt.rgba(1, 1, 1, a * 0.12))
-            g.addColorStop(1 - k, Qt.rgba(1, 1, 1, a * 0.08))
-            g.addColorStop(1, Qt.rgba(1, 1, 1, a * 0.55))
             const o = inset + lw / 2
             const r = Math.max(0, radius - o)
-            ctx.beginPath()
-            ctx.roundedRect(o, o, w - 2 * o, h - 2 * o, r, r)
-            ctx.lineWidth = lw
-            ctx.strokeStyle = g
-            ctx.stroke()
+            for (const [sx, sy, k] of spots) {
+                const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, R)
+                g.addColorStop(0, Qt.rgba(1, 1, 1, a * k))
+                g.addColorStop(0.45, Qt.rgba(1, 1, 1, a * k * 0.2))
+                g.addColorStop(1, Qt.rgba(1, 1, 1, a * 0.05))
+                ctx.beginPath()
+                ctx.roundedRect(o, o, w - 2 * o, h - 2 * o, r, r)
+                ctx.lineWidth = lw
+                ctx.strokeStyle = g
+                ctx.stroke()
+            }
         }
     }
 }
