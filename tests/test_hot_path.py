@@ -78,3 +78,17 @@ def test_speed_report_names_what_is_slow(monkeypatch, capsys):
         assert "каталог программ, холодный" in str(e) and "status" not in str(e)
     else:
         raise AssertionError("медленное не названо")
+
+
+def test_next_line_of_the_same_work_does_not_drop_to_haiku(monkeypatch, state_dir):
+    """7 нояб.: хайку позвала сонет, а следующая реплика той же работы снова ушла на хайку: два
+    переподключения и пустой ход. Пока разговор идёт, остаёмся наверху; замолчал — спускаемся."""
+    import time
+    f = Fake()
+    asyncio.run(daemon.Daemon._lift(f, "sonnet"))
+    asyncio.run(daemon.Daemon._pick_model(f, "а теперь поправь ещё заголовок"))
+    assert f.cfg["brain"]["model"] == "sonnet" and f.reconnects == 1
+    now = time.monotonic()
+    monkeypatch.setattr(time, "monotonic", lambda: now + 11 * 60)
+    asyncio.run(daemon.Daemon._pick_model(f, "сделай тише"))
+    assert f.cfg["brain"]["model"] == "haiku"

@@ -103,6 +103,11 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self._name_gate: tuple[float, bool] = (0.0, True)
         self._gave_up_vram = False   # видеопамять уже отдана игре
         self.tts = TTS(self.cfg["tts"])
+        b = self.cfg["brain"]
+        # Первый ход после каждого запуска переподключал мозг (1–1,5 с) ради одного усилия: в файле
+        # `effort` пустой, а лестница ставит лёгкой «low». Сразу садимся так, как сядет лестница.
+        if b.get("auto_model", True) and b.get("auto_effort", True) and b.get("model") == (b.get("light_model") or "haiku"):
+            b["effort"] = dispatch.EFFORT[dispatch.LIGHT]
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)
         self._chat_last = ""   # чат, который последним открывали в окне: сюда идёт «запиши в чат»
         self._dictating = False  # кнопка микрофона в окне чата пишет фразу в поле ввода

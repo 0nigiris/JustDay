@@ -47,6 +47,14 @@ class LadderMixin:
                 None, functools.partial(dispatch.level_for, text, tiny=tiny_ok))
         else:
             level, why = dispatch.LIGHT, "без судьи"
+            # Без судьи каждый ход шёл на лёгкую, и сразу после «НУЖНА: sonnet» следующая же реплика
+            # той же работы («а теперь поправь ещё…») снова садилась на хайку: переподключение вниз,
+            # её ход впустую, «НУЖНА» и переподключение вверх (7 нояб., 21:50 → 21:51). Пока разговор
+            # идёт, остаёмся наверху; спускаемся, когда он замолчал на `stay_up_minutes`.
+            if b.get("model") in (strong, huge) and time.monotonic() < getattr(self, "_up_until", 0.0):
+                level, why = (dispatch.BIG if b.get("model") == huge else dispatch.STRONG), "разговор ещё идёт"
+        if level in (dispatch.STRONG, dispatch.BIG):
+            self._up_until = time.monotonic() + float(b.get("stay_up_minutes", 10)) * 60
         if level == dispatch.TINY and tiny_ok:
             want = (tiny_where, tiny_model)
         elif level == dispatch.BIG:
@@ -93,6 +101,7 @@ class LadderMixin:
             model, level = strong, dispatch.STRONG
         else:
             return False
+        self._up_until = time.monotonic() + float(b.get("stay_up_minutes", 10)) * 60
         if b.get("model") == model:
             return False
         was = (b.get("provider", "claude"), b.get("model", ""), b.get("effort", ""))
