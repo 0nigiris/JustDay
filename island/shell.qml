@@ -118,6 +118,8 @@ ShellRoot {
                                         volume: p.volume, volumeSupported: p.volumeSupported, stream: st ? st.name : null } : null)
         }
         function spotlight(on: bool): void { if (on) JD.openSearch(); else JD.closeMenu() }
+        // То же для полного меню: полку снизу (питание, инструменты) Spotlight не показывает.
+        function menu(on: bool): void { if (on) JD.openMenu(); else JD.closeMenu() }
         function menuState(): string {
             return JSON.stringify({ open: JD.menuOpen, search: JD.menuSearchMode, alive: menuWin.alive,
                                     body: menuWin.bodyKind,

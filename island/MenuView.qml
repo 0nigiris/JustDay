@@ -129,7 +129,8 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: spotlight ? 14 : 20
-        anchors.bottomMargin: spotlight ? 14 : 18
+        // Полке снизу столько же воздуха, сколько слева: при 18 значки лежали на скруглении рамки (10 нояб.).
+        anchors.bottomMargin: spotlight ? 14 : 20
         anchors.rightMargin: pad ? controlsW + 40 : (spotlight ? 14 : 20)
         spacing: spotlight ? 10 : 12
 
@@ -516,7 +517,7 @@ Item {
         Item {
             visible: !spotlight
             Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 30 : 0
+            Layout.preferredHeight: visible ? 46 : 0
 
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top }
@@ -526,7 +527,7 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.topMargin: 6
+                anchors.topMargin: 10
                 spacing: 4
                 ToolDot { icon: "volume-2"; note: "Звук"; onPicked: { JD.closeMenu(); JD.openTools("mixer") } }
                 ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
@@ -551,14 +552,16 @@ Item {
                 // Режим сервера прямо из меню: «включил и лёг спать» не должно начинаться с
                 // терминала. Включённый режим виден по значку — солнце возвращает машину.
                 ToolDot {
-                    icon: JD.serverMode ? "sun" : "moon"
+                    // Не луна: луна — это «сон» справа, две одинаковые кнопки рядом путали.
+                    icon: JD.serverMode ? "sun" : "hard-drive"
                     note: JD.serverMode ? "Вернуть машину" : "Режим сервера"
                     onPicked: { JD.closeMenu(); JD.toggleServerMode() }
                 }
                 // Проверить обновление быстро, не уходя в настройки: кнопка там была, но на самом
                 // дне страницы «О программе», и человек её попросту не находил.
                 ToolDot {
-                    icon: "refresh-cw"
+                    // Не круговые стрелки: так нарисована перезагрузка в той же полке.
+                    icon: "download"
                     note: "Проверить обновление"
                     onPicked: { JD.closeMenu(); JD.checkUpdate() }
                 }
