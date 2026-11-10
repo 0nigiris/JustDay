@@ -22,6 +22,7 @@ Item {
     property real atX: 0             // от какого края полосы растём
     property real atY: 0             // середина значка по высоте
     property bool toLeft: false      // полоса справа — меню растёт влево
+    property var screen: null        // для линзы стекла: над окнами она гаснет
     signal dismissed()
 
     // Union of open sheet cards — trayMenuWin blurs under this rect (dock/tray chrome).
@@ -162,6 +163,7 @@ Item {
             color: JD.glass(Qt.rgba(0, 0, 0, JD.blurOn ? 0.4 : 0.9))
             border.width: 1
             border.color: JD.glassOn ? "transparent" : Qt.rgba(1, 1, 1, 0.12)
+            GlassLens { radius: parent.radius; dim: 0.42; screen: tm.screen; at: Qt.point(card.x, card.y) }
             GlassEdge { radius: parent.radius }
             // Вправо, если вправо есть место; иначе слева от родителя — но никогда за краем экрана.
             x: {

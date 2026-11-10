@@ -11,7 +11,11 @@ import QtQuick
 ShaderEffect {
     id: lens
     property real radius: 0
-    property bool covered: false
+    property real dim: 0.62
+    // Экран, на котором лежит карточка: тогда линза сама гаснет над окнами. Док отвечает за это
+    // сам (его правило про перекрытие точнее) и экран не даёт.
+    property var screen: null
+    property bool covered: screen ? JD.rectCoveredOn(screen, at.x, at.y, width, height) : false
     property bool primary: true
     property real screenW: 1920
     property real screenH: 1080

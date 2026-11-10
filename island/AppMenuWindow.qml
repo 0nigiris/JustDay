@@ -255,6 +255,8 @@ PanelWindow {
         border.width: 1
         border.color: JD.glassOn ? "transparent" : Qt.rgba(1, 1, 1, 0.14)   // у стекла кромку рисует GlassEdge
         clip: true
+        // Меню читают: линза здесь темнее, чем у дока.
+        GlassLens { radius: parent.radius; dim: 0.42; screen: menuWin.screen; at: Qt.point(menuCard.x, menuCard.y) }
         GlassEdge { radius: parent.radius }
 
         // Растёт от своего угла, а не из середины экрана: глаз уже там, где нажали.

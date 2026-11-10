@@ -14,6 +14,7 @@ layout(std140, binding = 0) uniform buf {
     float bezel;    // ширина загиба у края, px
     float wobble;   // «рябь» при движении, 0..1
     float time;
+    float dim;      // сколько света оставить: меню темнее дока, их читают
 };
 layout(binding = 1) uniform sampler2D wallTex;
 
@@ -52,7 +53,7 @@ void main() {
     // Чтобы значки читались на любых обоях: притемнить и подсушить пёстрое.
     float l = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(vec3(l), col, 0.85);
-    col = col * 0.62 + 0.03;
+    col = col * dim + 0.03;
     float a = clamp(0.5 - d, 0.0, 1.0);
     fragColor = vec4(col, 1.0) * a * qt_Opacity;
 }

@@ -93,6 +93,7 @@ PanelWindow {
         id: trayMenu
         anchors.fill: parent
         handle: JD.trayMenu ? JD.trayMenu.menu : null
+        screen: trayMenuWin.screen
         atX: JD.trayMenuX
         atY: JD.trayMenuY
         toLeft: JD.trayMenuFromBar || JD.trayPlace === "right"

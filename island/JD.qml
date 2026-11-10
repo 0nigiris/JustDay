@@ -1076,6 +1076,20 @@ Singleton {
     // Окно наезжает на островок дока на этом экране (или true-fullscreen на нём).
     // Empty window list → never hide (false positive guard for startup / watch restart).
     // islandX/islandW — локальные к экрану координаты карточки (dock.x / dock.width).
+    // Лежит ли чьё-то окно под прямоугольником (координаты экрана screen). Нужно линзе стекла:
+    // под меню поверх окна она показала бы обои там, где на деле окно.
+    function rectCoveredOn(screen, x, y, w, h) {
+        if (!screen) return true
+        const L = screen.x + x, T = screen.y + y
+        for (const r of windowRects || []) {
+            if (!r || r.minimized) continue
+            const app = String(r.app || "").toLowerCase()
+            if (dockCoverIgnore.indexOf(app) >= 0) continue
+            if (r.screen && screen.name && r.screen !== screen.name) continue
+            if (r.x < L + w && r.x + r.w > L && r.y < T + h && r.y + r.h > T) return true
+        }
+        return false
+    }
     function dockCoveredOn(screen, stripPx, atTop, islandX, islandW) {
         if (dockCfg.hide_on_fullscreen === false) return false
         if (!screen) return false
