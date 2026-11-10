@@ -2282,7 +2282,9 @@ Item {
     // Снимок самой полосы дока в файл: глазами посмотреть на раскладку без экрана (`qs ipc call island dockShot путь`).
     function shot(path) {
         card.grabToImage(r => r.saveToFile(path))
-        return "ok"
+        // Состояние линзы — чтобы по снимку было видно, почему стекло без обоев.
+        return "ok lens=" + lens.opacity.toFixed(2) + " ready=" + lens.ready + " covered=" + lens.covered
+            + " wall=" + (lens.wall ? lens.wall.src : "нет")
     }
     function probe(x) {
         const wasEngaged = engaged, wasAt = pointerScene
