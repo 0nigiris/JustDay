@@ -45,3 +45,21 @@ def test_smarter_climbs_one_step_and_holds_even_with_auto_model_off():
     assert d.cfg["brain"]["model"] == "opus"
     assert "Haiku" in asyncio.run(d.ask_model(dispatch.LIGHT))
     assert d.cfg["brain"]["model"] == "haiku"
+
+
+def test_work_mode_never_drops_to_haiku_and_sends_big_work_to_opus(monkeypatch):
+    """«Роутер, настроенный именно под работу»: в работе хайку и была бедой — отвечала не тем."""
+    from justday import config
+    monkeypatch.setattr(config, "set_value", lambda *a: None)
+    assert dispatch.asked_work("Джарвис, включи рабочий режим") is True
+    assert dispatch.asked_work("выключи рабочий режим") is False
+    assert dispatch.asked_work("что такое рабочий режим") is None
+    d = _D()
+    asyncio.run(d.work_mode(True))
+    asyncio.run(d._pick_model("открой браузер"))
+    assert d.cfg["brain"]["model"] == "sonnet"
+    asyncio.run(d._pick_model("спроектируй с нуля сервис уведомлений"))
+    assert d.cfg["brain"]["model"] == "opus"
+    asyncio.run(d.ask_model(dispatch.LIGHT))          # его слово сильнее режима
+    asyncio.run(d._pick_model("открой браузер"))
+    assert d.cfg["brain"]["model"] == "haiku"

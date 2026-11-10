@@ -424,6 +424,10 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             return await self.run_scene(scene)
         if (what := fastpath.session_switch(text)) is not None:
             return await self.session_switch(what)
+        if (work := dispatch.asked_work(text)) is not None:
+            said = await self.work_mode(work)
+            await self.say(said)
+            return said
         if (asked := dispatch.asked_model(text)) is not None:
             said = await self.ask_model(asked[0])
             if asked[1]:            # во фразе больше ничего нет — ответить и закончить

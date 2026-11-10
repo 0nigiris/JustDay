@@ -201,3 +201,29 @@ def asked_model(text: str) -> tuple[str, bool] | None:
     rest = _FILLER.sub(" ", (s[:m.start()] + " " + s[m.end():]))
     rest = re.sub(rf"\b{_GO}\b", " ", rest)
     return level, len(rest.split()) == 0
+
+
+_WORK = r"(рабоч\w+\s+режим\w*|режим\w*\s+работы)"
+_WORK_ON = re.compile(rf"^(включи|запусти|давай|врубай|вруби|перейди\s+в)\s+{_WORK}$|^{_WORK}(\s+включи)?$")
+_WORK_OFF = re.compile(rf"^(выключи|отключи|останови|выруби|убери|хватит|выйди\s+из)\s+{_WORK}$")
+
+
+def asked_work(text: str) -> bool | None:
+    """«Включи рабочий режим» → True, «выключи рабочий режим» → False, остальное → None."""
+    s = re.sub(r"[^\w\s]", " ", (text or "").lower().replace("ё", "е"))
+    s = re.sub(r"\b(джарвис|пожалуйста|ну)\b", " ", s)
+    s = " ".join(s.split())
+    if _WORK_OFF.match(s):
+        return False
+    if _WORK_ON.match(s):
+        return True
+    return None
+
+
+def work_level(text: str) -> tuple[str, str]:
+    """Уровень в рабочем режиме: большая работа — опус, всё остальное — сонет. Судья не нужен:
+    ошибка тут стоит только лишнего опуса, а промах вниз на хайку в работе и был бедой."""
+    words = (text or "").strip()
+    if _BIG_WORDS.search(words) or len(words) >= 600:
+        return BIG, "рабочий режим"
+    return STRONG, "рабочий режим"

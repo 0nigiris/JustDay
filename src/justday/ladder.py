@@ -48,6 +48,11 @@ class LadderMixin:
             await self._go(was, want, dispatch.EFFORT[pin] if b.get("auto_effort", True) else b.get("effort", ""),
                            "сам попросил")
             return was
+        if b.get("work_mode"):
+            level, why = dispatch.work_level(text)
+            effort = dispatch.EFFORT[level] if b.get("auto_effort", True) else b.get("effort", "")
+            await self._go(was, (home, huge or strong if level == dispatch.BIG else strong), effort, why)
+            return was
         if not b.get("auto_model", True) or b.get("provider", "claude") != home:
             return was
         tiny_model = str(b.get("tiny_model") or "").strip()
@@ -102,6 +107,21 @@ class LadderMixin:
         self.publish(brain_model=want[1], brain_why=why, provider=want[0])
         return True
 
+    async def work_mode(self, on: bool) -> str:
+        """Рабочий режим: запомнить в конфиг (переживает перезапуск) и сразу сесть как надо."""
+        from . import config
+        b = self.cfg["brain"]
+        b["work_mode"] = on
+        config.set_value("brain", "work_mode", on)
+        self._pinned = ("", 0.0)
+        if on:
+            await self._go((b.get("provider", "claude"), b.get("model", "")),
+                           (str(b.get("home_provider") or "claude"), b.get("strong_model") or "sonnet"),
+                           dispatch.EFFORT[dispatch.STRONG] if b.get("auto_effort", True) else b.get("effort", ""),
+                           "рабочий режим")
+            return t("Рабочий режим: думаю сонетом, большое — опусом.")
+        return t("Рабочий режим выключен.")
+
     async def ask_model(self, level: str) -> str:
         """«Перейди на более умную / опус», «вернись на обычную» — его слово, а не догадка лестницы.
 
@@ -113,11 +133,10 @@ class LadderMixin:
         now = b.get("model", "")
         if level == "up":
             level = dispatch.BIG if now in (strong, huge) else dispatch.STRONG
+        # «Вернись на обычную» тоже держится: иначе рабочий режим тут же поднял бы обратно.
+        self._pinned = (level, time.monotonic() + PIN_MINUTES * 60)
         if level == dispatch.LIGHT:
-            self._pinned = ("", 0.0)
             self._up_until = 0.0
-        else:
-            self._pinned = (level, time.monotonic() + PIN_MINUTES * 60)
         home = str(b.get("home_provider") or "claude")
         was = (b.get("provider", "claude"), now)
         model = {dispatch.BIG: huge, dispatch.STRONG: strong}.get(level, light)
