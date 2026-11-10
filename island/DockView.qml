@@ -90,6 +90,11 @@ Item {
     // Док уехал за край — кошке незачем перебирать лапами в пустоту: под нагрузкой это тридцать
     // кадров в секунду, которых никто не видит.
     property bool awake: true
+    // Для линзы стекла: под доком окно (там не обои), какой экран и его размер.
+    property bool lensCovered: false
+    property bool lensPrimary: true
+    property real lensScreenW: 1920
+    property real lensScreenH: 1080
     readonly property bool showCat: JD.dockCfg.cat !== false
     readonly property bool showClock: JD.dockCfg.clock === true
     readonly property bool showTrayButton: JD.dockCfg.tray_button === true
@@ -678,7 +683,7 @@ Item {
                 dv.wake()
             }
             onHoveredChanged: {
-                if (hovered) { dv.cancelLeave(); dv.engaged = true; dv.pointerScene = point.scenePosition.x }
+                if (hovered) { dv.cancelLeave(); dv.engaged = true; dv.pointerScene = point.scenePosition.x; dv.jelly(0.96) }
                 else if (!cardHover.hovered && !tipHover.hovered) dv.leaveLane()
                 dv.wake()
             }
@@ -721,6 +726,21 @@ Item {
         color: JD.blurOn ? JD.glass(Qt.rgba(JD.menuSurface.r, JD.menuSurface.g, JD.menuSurface.b, 0.72)) : JD.menuSurface
         border.width: 1
         border.color: JD.glassOn ? "transparent" : Qt.rgba(1, 1, 1, 0.10)
+        transform: Scale {
+            origin.x: card.width / 2
+            origin.y: dv.atTop ? 0 : card.height
+            yScale: dv.squash
+            xScale: 1 + (1 - dv.squash) * 0.45
+        }
+        GlassLens {
+            id: lens
+            radius: parent.radius
+            covered: dv.lensCovered
+            primary: dv.lensPrimary
+            screenW: dv.lensScreenW
+            screenH: dv.lensScreenH
+            at: Qt.point(dv.x + card.x, dv.y + card.y)
+        }
         GlassEdge { radius: parent.radius }
 
         // Щелчок по пустому месту полосы — мимо значков — тоже закрывает меню. Он объявлен до
@@ -1182,7 +1202,17 @@ Item {
     // Do NOT republish on every magnify geom tick — that rewrote kwinrc + reconfigureEffect
     // dozens of times per second and froze Plasma / blanked dock icons. Rest positions on
     // lane / dockRect / windows changes are enough for the genie effect.
-    onAwakeChanged: if (awake) iconPublish.restart()
+    onAwakeChanged: if (awake) { iconPublish.restart(); jelly(0.8) }
+    // Желе (п. 36): карточка выезжает сплюснутой и пружинит, как капля, — ширина при этом
+    // раздаётся в стороны, будто объём сохраняется. По стеклу пробегает рябь.
+    property real squash: 1
+    function jelly(k) {
+        if (!JD.animOn || !JD.glassOn) return
+        jellyAnim.from = k
+        jellyAnim.restart()
+        lens.kick()
+    }
+    SpringAnimation { id: jellyAnim; target: dv; property: "squash"; to: 1; spring: 4.5; damping: 0.16; epsilon: 0.002 }
     Connections {
         target: JD
         function onDockRectChanged() { iconPublish.restart() }

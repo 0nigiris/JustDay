@@ -180,6 +180,10 @@ Variants {
                 id: dock
                 awake: dockWin.shown
                 edgeRoom: dockHost.edgeMargin
+                lensCovered: dockWin.overlapRaw
+                lensPrimary: dockHost.primary
+                lensScreenW: dockWin.width
+                lensScreenH: dockWin.height
                 // Full-screen paint: centre is screen midpoint.
                 anchorCentre: parent.width / 2
                 x: Math.max(0, Math.round((parent.width - width) / 2))

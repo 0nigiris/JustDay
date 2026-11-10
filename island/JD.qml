@@ -1597,6 +1597,43 @@ Singleton {
     // счёт (respectInhibitors: false): ушёл спать с фильмом — значит ушёл. Переписываем раз в 30 с,
     // чтобы мёртвый островок не оставил после себя вечное «сидит» или «ушёл».
     IdleMonitor { id: presence; timeout: 60; respectInhibitors: false; onIsIdleChanged: jd.writePresence() }
+    // Обои рабочего стола для линзы стекла (GlassLens): Plasma держит их в appletsrc, по
+    // контейнеру на экран. Берём только плагин «картинка» — у видео- и слайд-обоев картинки нет,
+    // и стекло тогда остаётся прежним оттенком.
+    FileView {
+        id: plasmaWall
+        path: Quickshell.env("HOME") + "/.config/plasma-org.kde.plasma.desktop-appletsrc"
+        watchChanges: true
+        onFileChanged: reload()
+    }
+    // ponytail: экран Plasma 0 = основной, остальные — первый попавшийся другой; точное
+    // соответствие по имени разъёма, если когда-нибудь на втором экране будут иные обои.
+    readonly property var wallpapers: {
+        const out = {}, cont = {}
+        let cur = null, sec = ""
+        for (const raw of plasmaWall.text().split("\n")) {
+            const line = raw.trim()
+            const m = line.match(/^\[Containments\]\[(\d+)\](.*)$/)
+            if (m) { cur = cont[m[1]] = cont[m[1]] || {}; sec = m[2]; continue }
+            if (line.startsWith("[")) { cur = null; continue }
+            if (!cur) continue
+            const kv = line.match(/^(\w+)=(.*)$/)
+            if (!kv) continue
+            if (sec === "") cur[kv[1]] = kv[2]
+            else if (sec === "[Wallpaper][org.kde.image][General]") cur["img_" + kv[1]] = kv[2]
+        }
+        for (const k in cont) {
+            const c = cont[k]
+            if (c.activityId && c.wallpaperplugin === "org.kde.image" && c.img_Image && c.lastScreen !== undefined)
+                out[c.lastScreen] = { src: c.img_Image, fill: c.img_FillMode === undefined ? 2 : Number(c.img_FillMode) }
+        }
+        return out
+    }
+    function wallpaperFor(primary) {
+        if (primary) return wallpapers["0"] || null
+        for (const k in wallpapers) if (k !== "0") return wallpapers[k]
+        return null
+    }
     FileView { id: presenceFile; path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/justday-presence.json"; atomicWrites: true }
     function writePresence() { presenceFile.setText(JSON.stringify({ idle: presence.isIdle, at: Date.now() / 1000 })) }
     Timer { interval: 30000; repeat: true; running: true; triggeredOnStart: true; onTriggered: jd.writePresence() }
