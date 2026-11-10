@@ -1603,6 +1603,7 @@ Singleton {
     FileView {
         id: plasmaWall
         path: Quickshell.env("HOME") + "/.config/plasma-org.kde.plasma.desktop-appletsrc"
+        blockLoading: true
         watchChanges: true
         onFileChanged: reload()
     }
