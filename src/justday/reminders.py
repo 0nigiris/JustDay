@@ -10,6 +10,7 @@ import re
 import time
 import uuid
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from . import config, numerals
 
@@ -24,6 +25,10 @@ _WORD_NUM = {"полминуты": 30, "полчаса": 1800, "полтора �
 _SPAN = re.compile(r"(\d+(?:[.,]\d+)?)\s*(сек\w*|мин\w*|час\w*|second\w*|sec\b|minute\w*|min\b|hour\w*|\bh\b|\bm\b|\bs\b)", re.I)
 _AT = re.compile(r"\b(?:в|к|на|at)\s+([01]?\d|2[0-3])(?:[:.]|\s+|-)([0-5]\d)\b(?!\s*(?:сек|мин|час|second|minute|hour))"
                  r"|\b(?:в|к|на|at)\s+([01]?\d|2[0-3])\s*(?:час\w*|o'?clock|(?=\s*(?:утра|вечера|дня|ночи|am|pm)))", re.I)
+# «на 20:30 по МСК»: он живёт в Мадриде, а встречи и просьбы приходят по московскому времени. 10 нояб.
+# будильник встал на 20:30 по Мадриду с подписью «По МСК» вместо 18:30.
+_ZONE = re.compile(r"\bпо\s+(мск|москв\w*|московск\w*|киев\w*|киевск\w*|utc|gmt)\b(?:\s+времени)?", re.I)
+_ZONES = {"мск": "Europe/Moscow", "мос": "Europe/Moscow", "кие": "Europe/Kyiv", "utc": "UTC", "gmt": "UTC"}
 _DAYPART = re.compile(r"\b(утра|вечера|дня|ночи|am|pm)\b", re.I)
 
 TIMER_WORDS = re.compile(r"\b(таймер\w*|timers?)\b", re.I)
@@ -135,7 +140,8 @@ def parse_time(text: str) -> float | None:
         hour += 12
     elif part and part.group(1).lower() == "ночи" and hour == 12:
         hour = 0
-    now = datetime.now()
+    zone = _ZONE.search(text)
+    now = datetime.now(ZoneInfo(_ZONES[zone[1].lower()[:3]])) if zone else datetime.now()
     when = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if when <= now:
         when += timedelta(days=1)
@@ -234,7 +240,7 @@ _MINE = re.compile(r"^(у меня|у нас|мне надо|мне нужно|�
 
 def _label(text: str) -> str:
     """What the reminder is about: everything that is not the command and not the time."""
-    rest = _POLITE.sub(" ", _LABEL_STRIP.sub(" ", text))
+    rest = _POLITE.sub(" ", _LABEL_STRIP.sub(" ", _ZONE.sub(" ", text)))
     for _ in range(8):
         # Запятая и пробелы в начале мешали срезать командные слова: после «поставь будильник» оставалось «, …».
         lead = rest.strip(" ,.;:—-")

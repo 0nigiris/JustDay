@@ -26,3 +26,26 @@ def test_setting_still_works():
 def test_cancel_still_works():
     got = reminders.parse("отмени будильник")
     assert got and got["action"] == "cancel"
+
+
+def test_moscow_time_becomes_madrid_time(monkeypatch):
+    """10 нояб.: «будильник на 20:30 по МСК» встал на 20:30 по Мадриду с названием «По МСК»."""
+    import os
+    import time as _t
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    monkeypatch.setenv("TZ", "Europe/Madrid")
+    _t.tzset()
+    try:
+        got = reminders.parse("Поставь будильник на 20-30 по МСК.")
+        local = datetime.fromtimestamp(got["at"], ZoneInfo("Europe/Madrid"))
+        msk = datetime.fromtimestamp(got["at"], ZoneInfo("Europe/Moscow"))
+        assert (msk.hour, msk.minute) == (20, 30)
+        assert (local.hour, local.minute) in ((18, 30), (19, 30))   # зима / лето
+        assert got["label"] == ""
+        plain = reminders.parse("разбуди в 7:30")
+        assert datetime.fromtimestamp(plain["at"]).hour == 7
+    finally:
+        monkeypatch.delenv("TZ")
+        os.environ.pop("TZ", None)
+        _t.tzset()
