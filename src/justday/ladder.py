@@ -18,6 +18,9 @@ from .i18n import t
 
 log = logging.getLogger("justday.daemon")
 
+# Сколько держать модель, которую он назвал сам, после последней реплики.
+PIN_MINUTES = 60
+
 
 class LadderMixin:
     async def _pick_model(self, text: str) -> tuple[str, str]:
@@ -35,10 +38,18 @@ class LadderMixin:
         b = self.cfg["brain"]
         home = str(b.get("home_provider") or "claude")
         was = (b.get("provider", "claude"), b.get("model", ""))
-        if not b.get("auto_model", True) or b.get("provider", "claude") != home:
-            return was
         light, strong = b.get("light_model") or "haiku", b.get("strong_model") or "sonnet"
         huge = str(b.get("huge_model") or "").strip()
+        # Он сам сказал «перейди на опус» — это сильнее и лестницы, и выключенного auto_model.
+        pin, until = getattr(self, "_pinned", ("", 0.0))
+        if pin and time.monotonic() < until:
+            self._pinned = (pin, time.monotonic() + PIN_MINUTES * 60)
+            want = (home, {dispatch.BIG: huge or strong, dispatch.STRONG: strong}.get(pin, light))
+            await self._go(was, want, dispatch.EFFORT[pin] if b.get("auto_effort", True) else b.get("effort", ""),
+                           "сам попросил")
+            return was
+        if not b.get("auto_model", True) or b.get("provider", "claude") != home:
+            return was
         tiny_model = str(b.get("tiny_model") or "").strip()
         tiny_where = str(b.get("tiny_provider") or "ollama")
         tiny_ok = bool(tiny_model) and fallback.usable(tiny_where)
@@ -68,8 +79,15 @@ class LadderMixin:
         # Усилие тоже выбирается само, по той же мерке: он просил, чтобы решала нейросеть, а не
         # настройка. Пустое `brain.effort` значит «как решит Claude Code», и его мы не трогаем.
         effort = dispatch.EFFORT.get(level, "") if b.get("auto_effort", True) else b.get("effort", "")
+        await self._go(was, want, effort, why)
+        return was
+
+    async def _go(self, was: tuple, want: tuple, effort: str, why: str) -> bool:
+        """Пересесть на `want` с этим усилием. True — сидим на нём (или уже сидели)."""
+        b = self.cfg["brain"]
         if want == was and effort == b.get("effort", ""):
-            return was
+            return True
+        old_effort = b.get("effort", "")
         b["provider"], b["model"] = want
         b["effort"] = effort
         try:
@@ -77,11 +95,40 @@ class LadderMixin:
         except Exception:
             log.exception("не вышло переключиться на %s, остаёмся на %s", want[1], was[1])
             b["provider"], b["model"] = was
-            return was
+            b["effort"] = old_effort
+            return False
         log.info("модель: %s → %s (%s)", was[1] or was[0], want[1] or want[0], why)
         events.emit("model_picked", model=want[1], was=was[1], why=why)
         self.publish(brain_model=want[1], brain_why=why, provider=want[0])
-        return was
+        return True
+
+    async def ask_model(self, level: str) -> str:
+        """«Перейди на более умную / опус», «вернись на обычную» — его слово, а не догадка лестницы.
+
+        Выбор держится, пока он не скажет вернуться или не замолчит на PIN_MINUTES: подписка у
+        него одна на всё, и забытый опус к вечеру съел бы лимит. Возвращает фразу для ответа."""
+        b = self.cfg["brain"]
+        light, strong = b.get("light_model") or "haiku", b.get("strong_model") or "sonnet"
+        huge = str(b.get("huge_model") or "").strip() or strong
+        now = b.get("model", "")
+        if level == "up":
+            level = dispatch.BIG if now in (strong, huge) else dispatch.STRONG
+        if level == dispatch.LIGHT:
+            self._pinned = ("", 0.0)
+            self._up_until = 0.0
+        else:
+            self._pinned = (level, time.monotonic() + PIN_MINUTES * 60)
+        home = str(b.get("home_provider") or "claude")
+        was = (b.get("provider", "claude"), now)
+        model = {dispatch.BIG: huge, dispatch.STRONG: strong}.get(level, light)
+        effort = dispatch.EFFORT[level] if b.get("auto_effort", True) else b.get("effort", "")
+        name = model.capitalize()
+        if was == (home, model):
+            return t("Уже на {model}.").format(model=name)
+        if not await self._go(was, (home, model), effort, "сам попросил"):
+            self._pinned = ("", 0.0)
+            return t("Не вышло перейти на {model}, остался на {was}.").format(model=name, was=(now or "?").capitalize())
+        return (t("Вернулся на {model}.") if level == dispatch.LIGHT else t("Перешёл на {model}.")).format(model=name)
 
     async def _lift(self, name: str) -> bool:
         """Лёгкая сказала «НУЖНА: …» — пересесть на сильную. True — пересели, вопрос надо задать снова.

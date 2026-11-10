@@ -424,6 +424,12 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             return await self.run_scene(scene)
         if (what := fastpath.session_switch(text)) is not None:
             return await self.session_switch(what)
+        if (asked := dispatch.asked_model(text)) is not None:
+            said = await self.ask_model(asked[0])
+            if asked[1]:            # во фразе больше ничего нет — ответить и закончить
+                await self.say(said)
+                return said
+            self.publish(detail=said, kind="tool")   # дальше та же фраза уходит уже новой модели
         if (levels := await asyncio.get_running_loop().run_in_executor(None, volume.plan, text)) is not None:
             return await self._set_volumes(text, levels)
         if re.match(r"^верни (удален\w+|только что удален\w+) (трек|песню|музыку)$", fastpath._clean(text)):

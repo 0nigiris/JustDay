@@ -137,8 +137,10 @@ def test_a_question_about_what_played_is_not_a_play_request(phrase):
     assert media.parse(phrase) != ("last", "")
 
 
-def test_two_filler_words_before_music_still_instant():
-    """«Включи какую-нибудь просто музыку» уходила к модели на 11 секунд: прилагательное допускалось одно."""
+def test_two_filler_words_before_music_still_instant(lib):
+    """«Включи какую-нибудь просто музыку» уходила к модели на 11 секунд: прилагательное допускалось одно.
+
+    Скачанная музыка подставлена: на сервере проверок её нет, и там тест падал с 9 ноября."""
     from justday import media
     assert media.parse("Включи какую-нибудь просто музыку.")[0] == "library"
     assert media.parse("включи свет") is None

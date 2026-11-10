@@ -18,6 +18,8 @@ class Fake:
     def publish(self, **kw):
         self.published.append(kw)
 
+    _go = daemon.Daemon._go
+
 
 def test_simple_request_never_asks_the_judge(monkeypatch, state_dir):
     """Судья съедал секунду и карту перед каждым «который час»: простая просьба его не зовёт."""
