@@ -1017,6 +1017,12 @@ Singleton {
         }
 
         const strip = Math.max(24, stripPx || dockStripGuess)
+        // Окно с другого монитора дока не касается. Ниже его прямоугольник сравнивается с его же
+        // выходом (sx/sw берутся из окна), поэтому kitty на правом мониторе «лежал» под доком
+        // на левом: док гас и прятался из-за чужого экрана (10 нояб., линза стекла не включалась).
+        if (w.screen && screen.name && w.screen !== screen.name) return false
+        if (!w.screen && w.ow > 0 && (Math.abs((w.ox || 0) - screen.x) > 4 || Math.abs((w.oy || 0) - screen.y) > 4))
+            return false
         let onScreen = false
         if (w.screen && screen.name && w.screen === screen.name) onScreen = true
         else if (w.ow > 0 && w.oh > 0

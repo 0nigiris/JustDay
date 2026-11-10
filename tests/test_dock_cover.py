@@ -24,6 +24,10 @@ def covers(w, screen, strip_px=60, at_top=False, skip=(), island_x=None, island_
             return abs(w.get("ox", 0) - screen["x"]) <= 4 and abs(w.get("oy", 0) - screen["y"]) <= 4
         return False
     strip = max(24, strip_px)
+    if w.get("screen") and screen.get("name") and w["screen"] != screen["name"]:
+        return False
+    if not w.get("screen") and w.get("ow", 0) > 0 and (abs(w.get("ox", 0) - screen["x"]) > 4 or abs(w.get("oy", 0) - screen["y"]) > 4):
+        return False
     on = False
     if (w.get("screen") and screen.get("name") and w["screen"] == screen["name"]) or (w.get("ow", 0) > 0 and abs(w.get("ox", 0) - screen["x"]) <= 4 and abs(w.get("oy", 0) - screen["y"]) <= 4):
         on = True
@@ -184,3 +188,13 @@ console.log(JSON.stringify(out))
         js = js.replace(key, val)
     got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
     assert got == {"moved_kept_windows": True, "moved_updated_rects": True, "minimized_rebuilt": True, "closed_rebuilt": True}
+
+
+def test_window_on_other_monitor_does_not_cover_dock():
+    """10 нояб.: kitty на правом мониторе считался лежащим под доком на левом — док гас и прятался,
+    линза стекла не включалась. Прямоугольник окна сравнивался с его же выходом."""
+    left = {"name": "DP-2", "x": 0, "y": 0, "width": 2560, "height": 1440}
+    kitty = {"app": "kitty", "x": 3520, "y": 0, "w": 960, "h": 1080,
+             "screen": "DP-1", "ox": 2560, "oy": 0, "ow": 1920, "oh": 1080}
+    assert not covers(kitty, left, 82, island_x=1033, island_w=494)
+    assert not covers({**kitty, "screen": ""}, left, 82, island_x=1033, island_w=494)
