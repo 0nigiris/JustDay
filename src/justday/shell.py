@@ -27,7 +27,7 @@ from . import config, providers
 # opencode/openai: вход через OAuth (ChatGPT Go), не через API-ключ. Проверка reachable
 # смотрит auth.json (logged_in) и наличие opencode CLI.
 KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
-        "groq": "GROQ_API_KEY", "nvidia": "NVIDIA_API_KEY",
+        "groq": "GROQ_API_KEY", "nvidia": "NVIDIA_API_KEY", "cloudflare": "CLOUDFLARE_API_KEY",
         "openai": "OPENAI_API_KEY", "opencode": "OPENCODE_API_KEY"}
 AUTH = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "opencode" / "auth.json"
 LOCAL = {"ollama", "lmstudio", "llamacpp", "local"}
@@ -149,6 +149,10 @@ def ensure() -> None:
     rungs = config_rungs() or want["ladder"]
     want["ladder"] = fresh([str(r) for r in rungs])
     want["tiny"] = RENAMED.get(str(want.get("tiny") or ""), want.get("tiny"))
+    # Бесплатные модели самого OpenCode сюда нельзя (Р-60), а живут они недолго: «маленькой» стояла
+    # fledge-alpha-free, её убрали, и каждый короткий вопрос в оболочке падал «Model not found».
+    if str(want["tiny"] or "").startswith("opencode/"):
+        want["tiny"] = ""
     # Таблицу «какому поставщику какой ключ» плагин берёт отсюда, а не держит свою: своя уже однажды
     # не знала про nvidia, и ступень, на которую ключ есть, считалась мёртвой.
     want["keys"], want["local"] = dict(KEYS), sorted(LOCAL)
@@ -181,6 +185,18 @@ def ensure() -> None:
         "name": "NVIDIA NIM (бесплатные кредиты)",
         "options": {"baseURL": "https://integrate.api.nvidia.com/v1",
                     "apiKey": "{env:NVIDIA_API_KEY}"},
+    })
+    # Cloudflare Workers AI: 10 000 «нейронов» в день даром. Формат Anthropic у них есть, но этим
+    # моделям он не отдаётся (400 «Anthropic Messages API is not supported»), поэтому сюда, в OpenCode,
+    # а не в мозг голосового Джарвиса. Номер аккаунта — в адресе, его подставит `env()` из настроек.
+    prov.setdefault("cloudflare", {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "Cloudflare Workers AI (10k нейронов в день даром)",
+        "options": {"baseURL": "https://api.cloudflare.com/client/v4/accounts/{env:CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+                    "apiKey": "{env:CLOUDFLARE_API_KEY}"},
+        "models": {"@cf/openai/gpt-oss-120b": {"name": "GPT-OSS 120B"},
+                   "@cf/qwen/qwen3.8-27b": {"name": "Qwen 3.8 27B"},
+                   "@cf/google/gemma-4-26b-a4b-it": {"name": "Gemma 4 26B"}},
     })
     conf["provider"] = prov
     conf.setdefault("compaction", {"auto": True, "tail_turns": 15})
@@ -241,6 +257,9 @@ def env() -> dict[str, str]:
     """
     out = dict(os.environ)
     out["JUSTDAY_SHELL"] = "opencode"
+    account = str((config.load().get("terminal") or {}).get("cloudflare_account") or "")
+    if account:
+        out["CLOUDFLARE_ACCOUNT_ID"] = account
     for name, var in KEYS.items():
         got = providers.secret_get(name)
         if got:

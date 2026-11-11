@@ -244,3 +244,20 @@ def test_sitting_down_to_work_should_not_start_with_a_refusal(monkeypatch, capsy
     shell.work([])
     assert opened == ["opencode"], "лимит кончился, а работа всё равно пошла в Claude"
     assert "ПЕРЕДАЧА.md" in capsys.readouterr().out, "пришедшей на смену не сказали, что читать"
+
+
+def test_short_questions_died_on_a_removed_free_model(tmp_path, monkeypatch) -> None:
+    """«Маленькой» стояла opencode/fledge-alpha-free; её убрали, и любой короткий вопрос падал."""
+    from justday import shell
+
+    conf = tmp_path / "opencode"
+    conf.mkdir()
+    monkeypatch.setattr(shell, "PLUGIN", conf / "plugin" / "justday-ladder.js")
+    monkeypatch.setattr(shell, "LADDER", conf / "justday-ladder.json")
+    monkeypatch.setattr(shell, "SETTINGS", conf / "opencode.json")
+    monkeypatch.setattr(shell.config, "load", lambda: {"terminal": {"ladder": ["opencode:ollama/своя"]}})
+    (conf / "justday-ladder.json").write_text(json.dumps({"tiny": "opencode/fledge-alpha-free"}), encoding="utf-8")
+
+    shell.ensure()
+
+    assert json.loads((conf / "justday-ladder.json").read_text(encoding="utf-8"))["tiny"] == ""

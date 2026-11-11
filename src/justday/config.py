@@ -685,7 +685,10 @@ DEFAULTS: dict = {
         # Замерено 3 октября (`opencode run`, короткий вопрос): nemotron-3-ultra-550b — 29 с.
         "ladder": ["claude:opus", "claude:sonnet", "opencode:openai/gpt-6-luna",
                    "opencode:nvidia/nvidia/nemotron-3-ultra-550b-a55b",
+                   "opencode:cloudflare/@cf/openai/gpt-oss-120b",
                    "opencode:openrouter/qwen/qwen3-coder", "opencode:ollama/qwen3.5:9b"],
+        # Номер аккаунта Cloudflare для Workers AI (не секрет, он виден в адресе панели); ключ — в связке.
+        "cloudflare_account": "",
         "effort": "",          # low | medium | high; пусто — как решит сам Claude Code
         # Сколько ждать первого слова от ступени. Ступень с просроченным входом не отказывает —
         # она висит молча и бесконечно, и работа висит вместе с ней. Дальше первого слова ждём
