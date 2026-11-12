@@ -449,7 +449,8 @@ DEFAULTS: dict = {
         "custom": [],
         "accent_custom": "",  # свой цвет «#rrggbb»; главнее accent
         "font": "",           # свой шрифт; пусто — Inter
-        "orbs": True,       # шары состояний (island/Orb.qml) вместо кольца
+        "orbs": True,       # старый тумблер; теперь главное orb_style
+        "orb_style": "",    # dots | ring | имя своего ~/.config/justday/orbs/ИМЯ.qml; пусто — по orbs
         "ui_sounds": True,  # тихие звуки интерфейса (island/sounds, собирает scripts/ui_sounds.py)
         "hover_reveal": True,  # hover the top edge to show the island
         # Нужная скорость рывка к краю (точек в секунду), чтобы спрятанный островок раскрылся.

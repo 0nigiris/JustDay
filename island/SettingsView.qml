@@ -2,6 +2,7 @@
 // by clicking a tile, or `qs -p <repo>/island ipc call island settings`.
 // Reads everything with `justday settings-data`, writes with `justday config set` and friends.
 import QtQuick
+import Qt.labs.folderlistmodel
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Effects
@@ -1398,7 +1399,22 @@ Item {
                     subtitle: JD.tr("У нарисованного тела своя плотность: кот с большой головой читается мельче шарика")
                     SSlider { key: "island.mascot_size"; from: 60; to: 260; step: 10; decimals: 0; unit: JD.tr("%") }
                 }
-                Row { title: JD.tr("Шары состояний"); subtitle: JD.tr("Слушаю, думаю, ищу — живым шаром вместо кольца"); Toggle { checked: win.get("island.orbs") !== false; onToggled: v => win.set("island.orbs", v) } }
+                Row {
+                    title: JD.tr("Значок состояния")
+                    subtitle: JD.tr("Слушаю, думаю, ищу. Свой — файл QML в ~/.config/justday/orbs/")
+                    Segmented {
+                        options: [{ value: "dots", label: JD.tr("Точки") }, { value: "ring", label: JD.tr("Шарик Джарвиса") }]
+                                 .concat(Array.from({ length: ownOrbs.count }, (_, i) => ({ value: String(ownOrbs.get(i, "fileBaseName")), label: String(ownOrbs.get(i, "fileBaseName")) })))
+                        current: JD.orbStyle
+                        onPicked: v => win.set("island.orb_style", v)
+                    }
+                    FolderListModel {
+                        id: ownOrbs
+                        folder: "file://" + Quickshell.env("HOME") + "/.config/justday/orbs"
+                        nameFilters: ["*.qml"]
+                        showDirs: false
+                    }
+                }
                 Row { title: JD.tr("Звуки интерфейса"); subtitle: JD.tr("Тихие, из одной гаммы; в играх молчат"); Toggle { checked: win.get("island.ui_sounds") !== false; onToggled: v => win.set("island.ui_sounds", v) } }
                 Row { title: JD.tr("Появляться при наведении"); subtitle: JD.tr("Подведите курсор к верхнему краю экрана по центру"); Toggle { checked: win.get("island.hover_reveal") !== false; onToggled: v => win.set("island.hover_reveal", v) } }
                 Row {

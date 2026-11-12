@@ -700,5 +700,9 @@
   "нет ключа": "no key",
   "Аккаунт Claude": "Claude account",
   "Войдите подпиской Claude или ключом Anthropic": "Sign in with a Claude subscription or an Anthropic key",
-  "Claude Code не найден": "Claude Code not found"
+  "Claude Code не найден": "Claude Code not found",
+  "Значок состояния": "Status icon",
+  "Слушаю, думаю, ищу. Свой — файл QML в ~/.config/justday/orbs/": "Listening, thinking, searching. Your own: a QML file in ~/.config/justday/orbs/",
+  "Точки": "Dots",
+  "Шарик Джарвиса": "Jarvis ring"
 }

@@ -1986,7 +1986,12 @@ Singleton {
     // Звуки интерфейса (scripts/ui_sounds.py). Играют только когда это не мешает: не в игре и
     // не при выключенных звуках.
     // Шары состояний вместо кольца (Orb.qml); без анимации Orb сам показывает один кадр.
-    readonly property bool orbsOn: island.orbs !== false
+    // П27: «точки или старый шарик Джарвиса» — выбор, а не тумблер; третье — свой шар: файл
+    // ~/.config/justday/orbs/ИМЯ.qml (пример — island/orbs-example.qml). Старое island.orbs=false = кольцо.
+    readonly property string orbStyle: String(island.orb_style || (island.orbs === false ? "ring" : "dots"))
+    readonly property bool orbsOn: orbStyle !== "ring"
+    readonly property string orbFile: orbStyle === "dots" || orbStyle === "ring" ? ""
+        : "file://" + Quickshell.env("HOME") + "/.config/justday/orbs/" + orbStyle + ".qml"
     readonly property bool sfxOn: island.ui_sounds !== false && !gameMode
     // Один «голос» на все звуки: прежде на каждый звук был свой pw-play, и щелчок, открытие и
     // «слушаю» накладывались друг на друга кашей. Теперь новый звук обрывает прежний, а наведение

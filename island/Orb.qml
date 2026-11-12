@@ -22,7 +22,20 @@ Item {
     property real clock: 1.0
     implicitWidth: size
     implicitHeight: size
-    readonly property bool live: visible && JD.animOn
+    readonly property bool live: visible && JD.animOn && JD.orbFile === ""
+
+    // Свой шар: получает то же, что и встроенный, — состояние, размер и громкость голоса.
+    Loader {
+        anchors.centerIn: parent
+        width: orb.size; height: orb.size
+        active: JD.orbFile !== ""
+        source: JD.orbFile
+        onLoaded: {
+            item.orbState = Qt.binding(() => orb.orbState)
+            item.size = Qt.binding(() => orb.size)
+            item.voice = Qt.binding(() => orb.main ? (JD.dstate === "listening" ? JD.level : 0) : orb.voice)
+        }
+    }
 
     Timer {
         interval: (orb.main && JD.dstate === "idle") ? 66 : 33; repeat: true; running: orb.live
@@ -40,6 +53,7 @@ Item {
 
     Canvas {
         id: cv
+        visible: JD.orbFile === ""
         // Холст втрое больше шара: раздутый шар выходит за свои 20 px, а раскладку не двигает.
         anchors.centerIn: parent
         width: orb.size * 3; height: orb.size * 3
