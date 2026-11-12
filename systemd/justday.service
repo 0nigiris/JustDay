@@ -16,6 +16,10 @@ Restart=on-failure
 # Упал — сохранить журнал и версии (justday crashlog), а не перезапускаться молча.
 ExecStopPost=-@JUSTDAY@ crashlog justday.service
 RestartSec=5
+# Завис — перезапустить (П20). Демон пингует каждые 5 с из цикла событий; две минуты тишины —
+# цикл встал. Запас широкий: загрузка моделей при старте идёт до первого пинга.
+WatchdogSec=120
+NotifyAccess=main
 TimeoutStopSec=15
 # Programs and games the assistant starts must outlive a daemon restart: only the daemon itself is stopped
 # (it shuts its own helpers down), everything it launched keeps running.

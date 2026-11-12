@@ -107,6 +107,19 @@ def report() -> Path | None:
     return out
 
 
+def latest() -> dict:
+    """Кто упал последним и как: островок говорит человеку причину, а не безликое «после сбоя».
+    Первая строка отчёта — «служба: X   результат: Y»; у отчётов quickshell результата нет, это падение."""
+    logs = sorted(DIR.glob("*.log")) if DIR.is_dir() else []
+    if not logs:
+        return {}
+    head = logs[-1].read_text(encoding="utf-8", errors="replace").split("\n", 1)[0]
+    m = re.match(r"служба: (\S+)(?:.*?результат: (\S+))?", head)
+    service = (m.group(1) if m else "").removesuffix(".service")
+    return {"who": "daemon" if service == "justday" else "ui",
+            "hung": bool(m and m.group(2) in ("watchdog", "hang"))}
+
+
 def unseen() -> int:
     """Сколько отчётов появилось с тех пор, как островок в последний раз о них говорил (метка — в state.json).
     Первый запуск после обновления молчит: старые отчёты не «новый сбой»."""

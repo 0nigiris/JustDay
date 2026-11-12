@@ -28,6 +28,7 @@ from . import (
     calendar_lane,
     chitchat,
     config,
+    crashlog,
     desktop,
     dispatch,
     dock,
@@ -80,6 +81,35 @@ STOP_WORDS = re.compile(r"\b(стоп|хватит|отмена|отмени|о�
 
 
 SIDE_AFTER_S = 5.0   # a tool call this old means an injected request would sit and wait: use the side session
+
+
+def ui_hung(seen: float, now: float, slept: bool, after: float) -> bool:
+    """Островок завис: отметка присутствия была (значит, он вообще живёт в этом сеансе) и давно не
+    менялась. После сна машины тишина честная — таймеры стояли у всех, это не зависание."""
+    return bool(seen) and not slept and now - seen > after
+
+
+def _run_quiet(cmd: list[str]) -> int:
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=30).returncode
+    except (OSError, subprocess.SubprocessError):
+        return -1
+
+
+def sd_notify(state: str) -> None:
+    """Пинг systemd без библиотеки: одна датаграмма в NOTIFY_SOCKET. Не под systemd — тишина."""
+    import socket
+
+    addr = os.environ.get("NOTIFY_SOCKET", "")
+    if not addr:
+        return
+    if addr.startswith("@"):
+        addr = "\0" + addr[1:]
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.sendto(state.encode(), addr)
+    except OSError:
+        pass
 
 
 class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, HousekeepingMixin, BackgroundMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, VideoMixin, ReminderMixin):
@@ -960,10 +990,44 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
     async def _heartbeat(self) -> None:
         """Пинг островку — отдельной задачей. В круге _housekeeping он стоял в хвосте, после git по сети,
         календаря, погоды и почты; круг шёл дольше 12 с, и островок объявлял демон мёртвым и сбрасывал
-        подписку (Р-15)."""
+        подписку (Р-15).
+
+        Тот же пинг — systemd (WatchdogSec в justday.service). Зависший цикл событий раньше висел
+        до ручного перезапуска: процесс жив, Restart=on-failure молчит, а Джарвис глух (П20). Теперь
+        тишина дольше WatchdogSec — и systemd сам его перезапускает, журнал падений пишет «watchdog»."""
         while True:
             await asyncio.sleep(self.HEARTBEAT_EVERY)
             self.publish(ping=1, state=self.state)
+            sd_notify("WATCHDOG=1")
+            try:
+                await self._ui_watch()
+            except Exception:  # сторож островка не должен уронить пинг, иначе systemd убьёт здоровый демон
+                log.exception("проверка островка")
+
+    UI_HUNG_AFTER = 120.0   # островок пишет присутствие раз в 30 с; четыре пропуска подряд — уже не случайность
+    _ui_tick = 0.0
+    _ui_seen = 0.0
+
+    async def _ui_watch(self) -> None:
+        """Зависший островок (П20): Quickshell жив, systemd доволен, а на экране замёрзший кадр.
+        Его таймер присутствия идёт в том же потоке, что и отрисовка, — встал файл, встал островок."""
+        now = time.time()
+        slept = self._ui_tick and now - self._ui_tick > self.HEARTBEAT_EVERY * 6  # сам спал (сон машины)
+        self._ui_tick = now
+        try:
+            at = float(json.loads(server_mod.PRESENCE.read_text()).get("at") or 0)
+        except (OSError, ValueError, AttributeError):
+            return
+        if at > self._ui_seen:
+            self._ui_seen = at
+        if not ui_hung(self._ui_seen, now, bool(slept), self.UI_HUNG_AFTER):
+            return
+        if await blocking(_run_quiet, ["systemctl", "--user", "is-active", "--quiet", "justday-ui"]) != 0:
+            return
+        log.warning("островок молчит %.0f с — перезапускаю", now - self._ui_seen)
+        self._ui_seen = now  # не дёргать второй раз, пока он поднимается
+        await blocking(crashlog.save, "justday-ui.service", "hang")
+        await blocking(_run_quiet, ["systemctl", "--user", "restart", "justday-ui"])
 
     def _focus_now(self) -> dict | None:
         return focus.current(self.cfg.get("focus", {}).get("schedule", []))

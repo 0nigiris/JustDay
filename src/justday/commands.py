@@ -102,7 +102,7 @@ class CommandsMixin:
                  "reminders": self._reminders_state(), "jobs": self.jobs.state(),
                  "dock": dock_hello or {}, "windows": self._windows, "focus": self._focus_now(),
                  "game": getattr(self, "_game_seen", "") or "",
-                 "crash": {"count": crashlog.count(), "new": crashlog.unseen()}}
+                 "crash": {"count": crashlog.count(), "new": crashlog.unseen(), **crashlog.latest()}}
         # В подписчики — только сейчас: пока док читался в потоке, рассылка успела бы прислать
         # островку частичное обновление раньше полного кадра.
         self._subs.add(writer)

@@ -1747,7 +1747,11 @@ Singleton {
         if (m.game !== undefined) game = m.game || ""
         if (m.crash !== undefined) {
             crashCount = m.crash.count || 0
-            if (m.crash.new > 0) flash(tr("Островок перезапустился после сбоя. Отчёт сохранён"), "circle-alert", accentOrange,
+            // Человек должен знать, кто и почему, а не только «что-то было» (П20).
+            if (m.crash.new > 0) flash(m.crash.who === "daemon"
+                                         ? (m.crash.hung ? tr("Ассистент завис, я его перезапустил. Отчёт сохранён") : tr("Ассистент упал и перезапустился. Отчёт сохранён"))
+                                         : (m.crash.hung ? tr("Островок завис, я его перезапустил. Отчёт сохранён") : tr("Островок перезапустился после сбоя. Отчёт сохранён")),
+                                       "circle-alert", accentOrange,
                                      [tr("Показать"), ["xdg-open", Quickshell.env("HOME") + "/.local/state/justday/crashes"]])
         }
         if (m.level !== undefined) level = Math.max(level * 0.6, m.level)

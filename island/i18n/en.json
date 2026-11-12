@@ -662,5 +662,9 @@
   "Нужен ключ Fish Audio": "Fish Audio key needed",
   "fish.audio → API Keys. Ключ ляжет в связку ключей рабочего стола, в конфиг и в git не попадает": "fish.audio → API Keys. The key goes to the desktop keyring, never to the config or git",
   "Голос Fish Audio": "Fish Audio voice",
-  "ID голоса со страницы голоса на fish.audio; пусто — голос по умолчанию": "Voice ID from the voice page on fish.audio; empty — the default voice"
+  "ID голоса со страницы голоса на fish.audio; пусто — голос по умолчанию": "Voice ID from the voice page on fish.audio; empty — the default voice",
+  "Ассистент завис, я его перезапустил. Отчёт сохранён": "The assistant froze, so I restarted it. Report saved",
+  "Ассистент упал и перезапустился. Отчёт сохранён": "The assistant crashed and restarted. Report saved",
+  "Островок завис, я его перезапустил. Отчёт сохранён": "The island froze, so I restarted it. Report saved",
+  "Островок перезапустился после сбоя. Отчёт сохранён": "The island restarted after a crash. Report saved"
 }
