@@ -1728,3 +1728,8 @@ body[data-mode="deck"] #toasts { bottom: calc(16px + env(safe-area-inset-bottom)
   .bar { background: rgba(120, 120, 128, 0.16); }
   .switch { background: rgba(120, 120, 128, 0.2); }
 }
+
+/* «Подробности» в карточке ESP32: цифры для разбора поломок нужны редко (П2). */
+.card details { margin-top: 8px; }
+.card summary { cursor: pointer; color: var(--text-dim); padding: 6px 0; }
+.card summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

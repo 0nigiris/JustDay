@@ -1130,7 +1130,10 @@ function guardConfigBlock(cfg) {
 }
 
 function esp32Card(status) {
-  if (!status) return "";
+  // Платы нет у большинства: если её не настроили и она ни разу не ответила,
+  // карточки нет вовсе (П2). Тем, у кого есть, — одна строка и тумблер сторожа,
+  // а цифры для разбора поломок спрятаны под «Подробности».
+  if (!status || (status.state === "unknown" && !status.device_id)) return "";
   const online = status.state === "online";
   const sim = status.simulated
     ? `<div class="meta warn">режим симуляции: настоящее железо не подключено</div>`
@@ -1158,11 +1161,6 @@ function esp32Card(status) {
           <div><span>Всего пробуждений</span><b>${esc(g.total_wakes ?? 0)}</b></div>
         </div>`;
       details += guardConfigBlock(g.config);
-      if (g.config) {
-        const off = g.config.enabled === false;
-        details += `<div class="row"><button class="btn ${off ? "primary" : "danger"}"
-          data-guard="${off ? "on" : "off"}">${off ? `${icon("shield")} Включить слежку` : `${icon("x")} Выключить слежку`}</button></div>`;
-      }
     }
     // Кнопка. Главное здесь — «изменений уровня»: если после нажатия оно
     // стоит на месте, сигнал не доходит до вывода, и искать ошибку в
@@ -1203,14 +1201,21 @@ function esp32Card(status) {
     details = `<div class="meta err">${esc(status.last_error)}</div>`;
   }
 
+  const cfg = status.guard?.config;
+  const off = cfg?.enabled === false;
+  const toggle = online && cfg
+    ? `<div class="row"><button class="btn ${off ? "primary" : "danger"}"
+        data-guard="${off ? "on" : "off"}">${off ? `${icon("shield")} Включить сторожа` : `${icon("x")} Выключить сторожа`}</button></div>`
+    : "";
   return `<section class="card">
     <div class="card-head">
       <span class="dot ${esc(status.state)}"></span>
       <h2>ESP32${status.simulated ? " (симулятор)" : ""}</h2>
-      <span class="state-label">${esc(STATE_LABEL[status.state] || status.state)}</span>
+      <span class="state-label">${online ? "найдена" : esc(STATE_LABEL[status.state] || status.state)}</span>
     </div>
     ${sim}
-    ${details}
+    ${toggle}
+    ${details ? `<details><summary>Подробности</summary>${details}</details>` : ""}
   </section>`;
 }
 
@@ -2830,9 +2835,8 @@ function viewHelp() {
       питания и терминал.</p>
       <p>Если компьютер выключен, остаётся кнопка <b>Включить</b>: она шлёт
       magic packet. Загрузка занимает минуту-полторы — это нормально.</p>
-      <p>Ниже — плата ESP32 и её <b>сторож</b>. Плата сама пингует основной ПК
-      и, если он пропал надолго, будит его. Выключить компьютер она не может:
-      только включить.</p>
+      <p>Если у вас есть плата ESP32, её можно подключить: она будит основной ПК,
+      когда тот пропал надолго.</p>
     </div>
   </section>
 
