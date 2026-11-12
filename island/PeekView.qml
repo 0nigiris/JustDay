@@ -95,7 +95,12 @@ View {
                 // Разделитель перед виджетом нужен, если он не первый.
                 readonly property bool lead: index > 0
                 sourceComponent: pv.parts[modelData] || (modelData.indexOf("custom:") === 0 ? cCustom : null)
-                visible: status === Loader.Ready && !!item && item.shown
+                // В правке видны и спящие (кнопки плеера без плеера, таймер без таймера) — бледными и не
+                // уже 24 пикселей: иначе добавленный виджет исчезал и из панели, и с полоски, и убрать
+                // его было не за что взяться.
+                readonly property bool asleep: status === Loader.Ready && !!item && !item.shown
+                visible: status === Loader.Ready && !!item && (item.shown || JD.editMode)
+                Layout.minimumWidth: asleep ? 24 : -1
                 onLoaded: if (modelData === "cat") pv.cat = item.catItem
 
                 // Режим правки: дрожание (у соседей чуть разное по времени, иначе строем), без анимаций
@@ -125,7 +130,7 @@ View {
                 property real dragY: 0
                 readonly property bool leaving: slot.dragY > 22
                 transform: Translate { x: slot.dragX; y: slot.dragY }
-                opacity: leaving ? 0.4 : 1
+                opacity: leaving || asleep ? 0.4 : 1
                 z: drag.active ? 10 : 0
                 DragHandler {
                     id: drag

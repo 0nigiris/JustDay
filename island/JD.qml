@@ -1294,7 +1294,7 @@ Singleton {
         { id: "date", name: "Дата", sample: "1 нояб.", hint: "День недели и число" },
         { id: "player", name: "Плеер", icon: "music", hint: "Что играет, только пока играет" },
         { id: "prev", name: "Назад", icon: "skip-back", hint: "Предыдущий трек, пока есть плеер" },
-        { id: "playpause", name: "Пауза", icon: "play", hint: "Пуск и пауза, пока есть плеер" },
+        { id: "playpause", name: "Пуск и пауза", icon: "play", hint: "Пуск и пауза, пока есть плеер" },
         { id: "next", name: "Дальше", icon: "skip-forward", hint: "Следующий трек, пока есть плеер" },
         { id: "volume", name: "Громкость", icon: "volume-2", hint: "Колесо меняет, нажатие глушит" },
         { id: "event", name: "Событие", icon: "calendar-clock", hint: "Ближайшая встреча, работа Клода, задача" },
@@ -1498,7 +1498,9 @@ Singleton {
         if ((dstate === "thinking" || dstate === "speaking") && !(workQuiet && musicShown)) return "thinking"
         if (video && videoMini && workers === 0) return "videopill"
         if (musicShown && (!workQuiet ? workers === 0 : true)) return "music"
-        if (peeking || workers > 0) return "peek"
+        // Правка держит полоску на виду: иначе «Правка островка» из меню закрывала меню, островок
+        // прятался, а спрятанный островок гасит правку — режим включался и тут же исчезал.
+        if (peeking || workers > 0 || editMode) return "peek"
         // Меню-бар не прячется сам: иначе у верхнего края пусто, пока не подведёшь курсор.
         // Прятать его — отдельная настройка, и только для сплошной полосы.
         if (islandStyle === "bar" && !barAutohide) return "peek"
