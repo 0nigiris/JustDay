@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero.png" alt="JustDay — личный Джарвис для Linux" width="100%">
+  <img src="docs/assets/hero.jpg" alt="JustDay — личный Джарвис для Linux" width="100%">
 </p>
 
 <p align="center">

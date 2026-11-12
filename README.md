@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero-en.png" alt="JustDay — your own JARVIS for Linux" width="100%">
+  <img src="docs/assets/hero-en.jpg" alt="JustDay — your own JARVIS for Linux" width="100%">
 </p>
 
 <p align="center"><a href="README.ru.md"><b>Читать на русском</b></a></p>
