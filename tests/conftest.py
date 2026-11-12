@@ -104,3 +104,12 @@ def no_codex_in_tests(monkeypatch):  # type: ignore[no-untyped-def]
         return None
 
     monkeypatch.setattr(terminal, "repo_state", not_a_repo)
+
+
+@pytest.fixture(autouse=True)
+def keyring_alive(monkeypatch):  # type: ignore[no-untyped-def]
+    """Тест с нарочно зависшей связкой помечал её мёртвой на весь процесс, и следующие тесты ключей
+    не находили ничего. Каждый тест начинает с живой связки."""
+    from justday import config
+
+    monkeypatch.setattr(config, "KEYRING_DEAD", [False])

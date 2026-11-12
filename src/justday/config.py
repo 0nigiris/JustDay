@@ -59,6 +59,10 @@ def secrets(name: str) -> list[str]:
 
 
 _KEYRING_CACHE: dict[str, str] = {}
+# Связка не ответила за таймаут — значит, её нет (чистая система, сессия без gnome-keyring/kwallet).
+# Без этой отметки каждый из полутора десятков ключей ждал свои 5 секунд, и страница настроек
+# висела на «Загружаю настройки…» больше минуты.
+KEYRING_DEAD = [False]
 
 
 def _keyring_name(name: str) -> str:
@@ -71,9 +75,14 @@ def _keyring_get(name: str) -> str:
     sentence (Р-32), and an empty answer is not remembered, so a key stored later is found."""
     if name in _KEYRING_CACHE:
         return _KEYRING_CACHE[name]
+    if KEYRING_DEAD[0]:
+        return ""
     try:
         r = subprocess.run(["secret-tool", "lookup", "service", "justday", "key", _keyring_name(name)],
                            capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired:
+        KEYRING_DEAD[0] = True
+        return ""
     except (OSError, subprocess.SubprocessError):
         return ""
     got = r.stdout.strip() if r.returncode == 0 else ""
@@ -120,6 +129,7 @@ def set_secret(name: str, value: str) -> None:
         if value:
             subprocess.run(["secret-tool", "store", "--label", f"JustDay: {_keyring_name(name)}", *base],
                            input=value, text=True, check=True, timeout=10)
+            KEYRING_DEAD[0] = False
         else:
             subprocess.run(["secret-tool", "clear", *base], check=False, timeout=10)
     except (OSError, subprocess.SubprocessError):

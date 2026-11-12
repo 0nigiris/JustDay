@@ -16,6 +16,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from justday import config
+
 # name → (base url, secret name or fixed token, description)
 PROVIDERS: dict[str, dict] = {
     "claude": {"desc": "подписка Claude / ключ Anthropic через ваш логин в Claude Code"},
@@ -81,11 +83,13 @@ def secret_get(name: str) -> str:
     if hit and time.monotonic() < hit[0]:
         return hit[1]
     value = ""
-    if shutil.which("secret-tool"):
+    if shutil.which("secret-tool") and not config.KEYRING_DEAD[0]:
         try:
             r = subprocess.run(["secret-tool", "lookup", *SECRET_ATTRS, "key", name], capture_output=True,
                                text=True, timeout=5)
             value = r.stdout.strip()
+        except subprocess.TimeoutExpired:
+            config.KEYRING_DEAD[0] = True
         except (OSError, subprocess.SubprocessError):
             pass
     _SECRETS[name] = (time.monotonic() + (SECRET_FOUND_TTL if value else SECRET_MISSING_TTL), value)
@@ -100,6 +104,7 @@ def secret_forget(name: str) -> None:
 def secret_set(name: str, value: str) -> None:
     subprocess.run(["secret-tool", "store", "--label", f"JustDay: {name}", *SECRET_ATTRS, "key", name],
                    input=value, text=True, check=True, timeout=15)
+    config.KEYRING_DEAD[0] = False  # записала — значит, жива: ключ должен находиться сразу
     secret_forget(name)
 
 
