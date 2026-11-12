@@ -176,10 +176,31 @@ def update_status(fetch: bool = True) -> dict:
 
 
 def app_version() -> str:
+    """«0.9.0» для проверенной сборки, «0.9.0 beta · 389d50e» для всего, что ещё не в stable.
+
+    П24: он хочет номера как у Apple — бета и релиз. Номер один и тот же (pyproject), а бетой
+    сборка считается, пока её коммит не дошёл до ветки stable: двигает её только человек
+    (scripts/promote-stable.sh), так что подпись не врёт, даже если версию забыли поднять.
+    """
+    # pyproject первым: метаданные пакета пишутся при установке и потом стоят на месте — после
+    # обновлений через git показывали 0.2.0, когда в коде была уже 0.9.0.
     try:
-        return pkg_version("justday")
-    except PackageNotFoundError:
-        return "dev"
+        import tomllib
+        v = tomllib.loads((config.REPO_DIR / "pyproject.toml").read_text())["project"]["version"]
+    except (OSError, KeyError, ValueError):
+        try:
+            v = pkg_version("justday")
+        except PackageNotFoundError:
+            return "dev"
+    repo = str(config.REPO_DIR)
+    git = lambda *a: subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True, timeout=10)  # noqa: E731
+    try:
+        if git("merge-base", "--is-ancestor", "HEAD", "origin/stable").returncode == 0:
+            return v
+        sha = git("rev-parse", "--short", "HEAD").stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return v
+    return f"{v} beta · {sha}" if sha else v
 
 
 def audio_devices() -> dict:
