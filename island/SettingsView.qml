@@ -2177,7 +2177,7 @@ Item {
                 Row {
                     visible: vp.engine === "elevenlabs"
                     title: win.d.voices && win.d.voices.eleven_key ? JD.tr("Ключ ElevenLabs сохранён") : JD.tr("Нужен ключ ElevenLabs")
-                    subtitle: JD.tr("Хранится в ~/.config/justday/secrets.env, правами только для вас; в конфиг и в git не попадает")
+                    subtitle: JD.tr("Хранится в связке ключей рабочего стола; в конфиг и в git не попадает")
                     Btn {
                         text: JD.tr("Ввести ключ")
                         primary: !(win.d.voices && win.d.voices.eleven_key)

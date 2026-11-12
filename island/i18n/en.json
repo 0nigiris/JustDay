@@ -568,7 +568,7 @@
   "Установить программу": "Install an app",
   "Характер": "Character",
   "Характер сменится через пару секунд": "The character changes in a couple of seconds",
-  "Хранится в ~/.config/justday/secrets.env, правами только для вас; в конфиг и в git не попадает": "Kept in ~/.config/justday/secrets.env, readable only by you; never in the config or in git",
+  "Хранится в связке ключей рабочего стола; в конфиг и в git не попадает": "Kept in the desktop keyring; never in the config or in git",
   "Цвет обложки, а если она ничего не говорит — цвет того, о чём музыка: тема персонажа, палитра игры. Название трека уходит модели": "The cover's colour, and when it says nothing — the colour of what the music is about: a character's theme, a game's palette. The track title goes to the model",
   "Цвет трека": "Track colour",
   "Числа словами": "Numbers as words",
@@ -1101,5 +1101,11 @@
   "по подписке Claude": "with a Claude subscription",
   "работает": "running",
   "у дока": "at the dock",
-  "…и ещё ": "…and "
+  "…и ещё ": "…and ",
+  "нажмите ещё раз": "click again",
+  "нажать дважды": "click twice",
+  "Режим сервера": "Server mode",
+  "Вернуть машину": "Give the machine back",
+  "Проверить обновление": "Check for updates",
+  "Настройки системы (KDE)": "System settings (KDE)"
 }

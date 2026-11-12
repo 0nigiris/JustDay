@@ -124,6 +124,23 @@ Item {
         function onMenuPickChanged() { if (sp.appsMode) sp.reveal() }
     }
 
+    // Кружок нижней полки: одна разметка на все кнопки, чтобы правка отступа или подсказки не
+    // расходилась по тринадцати копиям, как было.
+    component ShelfDot: Pressable {
+        id: dot
+        property string icon: ""
+        property string note: ""
+        signal picked()
+        implicitWidth: 30
+        implicitHeight: 30
+        radius: 15
+        color: hovered ? JD.menuFill3 : "transparent"
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+        onHoveredChanged: sp.hintFor(hovered, JD.tr(dot.note))
+        onClicked: picked()
+        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dot.hovered ? JD.text1 : JD.text3 }
+    }
+
     component AppTile: Pressable {
         id: tile
         required property var app
@@ -431,10 +448,20 @@ Item {
                     }
                 }
 
+                // ───────────── нижняя полка ─────────────
+                //
+                // Своя копия полки из MenuView отстала от неё: лежала вплотную к скруглённой рамке,
+                // рисовала две луны и две пары круговых стрелок (режим сервера = сон, обновление =
+                // перезагрузка), а «face-smile» нет в наборе — вместо смайлика выходила запасная
+                // искра. Он назвал это «нижние значки выглядят ужасно» (П28, 12 нояб.).
                 Item {
                     visible: sp.appsMode
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 46
+                    // Воздух как у строки поиска сверху: при 0 крайние значки ложились на скругление.
+                    Layout.leftMargin: 18
+                    Layout.rightMargin: 18
+                    Layout.bottomMargin: 12
 
                     Rectangle {
                         anchors { left: parent.left; right: parent.right; top: parent.top }
@@ -444,61 +471,13 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.topMargin: 6
+                        anchors.topMargin: 10
                         spacing: 4
 
-                        Pressable {
-                            id: volDot
-                            property string icon: "volume-2"
-                            property string note: "Звук"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.openTools("mixer") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
-                        Pressable {
-                            id: emojiDot
-                            property string icon: "face-smile"
-                            property string note: "Эмодзи"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.openTools("emoji") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
-                        Pressable {
-                            id: clipDot
-                            property string icon: "clipboard"
-                            property string note: "Буфер обмена"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.openTools("clip") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
-                        Pressable {
-                            id: loadDot
-                            property string icon: "cpu"
-                            property string note: "Нагрузка машины"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.openTools("load") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
+                        ShelfDot { icon: "volume-2"; note: "Звук"; onPicked: { JD.closeMenu(); JD.openTools("mixer") } }
+                        ShelfDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
+                        ShelfDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
+                        ShelfDot { icon: "cpu"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
 
                         Label2 {
                             Layout.fillWidth: true
@@ -506,81 +485,33 @@ Item {
                             font.pixelSize: 12
                             elide: Text.ElideRight
                             color: sp.askingName ? JD.accentRed : JD.text3
-                            text: sp.askingName ? sp.askingName + "  ·  нажмите ещё раз"
+                            text: sp.askingName ? sp.askingName + "  ·  " + JD.tr("нажмите ещё раз")
                                     : (sp.hint || (JD.menuUser.name ? JD.menuUser.name + (JD.menuUser.host ? "  ·  " + JD.menuUser.host : "") : ""))
                             opacity: (sp.askingName || sp.hint) ? 1 : 0.55
                             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         }
 
-                        Pressable {
-                            property string icon: JD.serverMode ? "sun" : "moon"
-                            property string note: JD.serverMode ? "Вернуть машину" : "Режим сервера"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: JD.serverMode ? (hovered ? "#3a5a3a" : "#2d4a2d") : (hovered ? JD.menuFill3 : "transparent")
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.toggleServerMode() }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
+                        // Не луна: луна — это «сон» среди кнопок питания.
+                        ShelfDot {
+                            icon: JD.serverMode ? "sun" : "hard-drive"
+                            note: JD.serverMode ? "Вернуть машину" : "Режим сервера"
+                            onPicked: { JD.closeMenu(); JD.toggleServerMode() }
                         }
-                        Pressable {
-                            property string icon: "refresh-cw"
-                            property string note: "Проверить обновление"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.checkUpdate() }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
-                        Pressable {
-                            property string icon: "settings"
-                            property string note: "Настройки"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.openSettings("general") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
-                        Pressable {
-                            property string icon: "sliders-horizontal"
-                            property string note: "Настройки системы (KDE)"
-                            implicitWidth: 30
-                            implicitHeight: 30
-                            radius: 15
-                            color: hovered ? JD.menuFill3 : "transparent"
-                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                            onClicked: { JD.closeMenu(); JD.systemSettings("") }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor; onHoveredChanged: sp.hintFor(hovered, parent.note) }
-                            Icon { anchors.centerIn: parent; name: parent.icon; implicitSize: 16; tint: parent.hovered ? JD.text1 : JD.text3 }
-                        }
+                        // Не круговые стрелки: так нарисована перезагрузка.
+                        ShelfDot { icon: "download"; note: "Проверить обновление"; onPicked: { JD.closeMenu(); JD.checkUpdate() } }
+                        ShelfDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
+                        ShelfDot { icon: "sliders-horizontal"; note: "Настройки системы (KDE)"; onPicked: { JD.closeMenu(); JD.systemSettings("") } }
 
                         Repeater {
                             model: JD.sessionActions
-                            delegate: Pressable {
+                            delegate: ShelfDot {
                                 id: pow
                                 required property var modelData
                                 readonly property bool asking: JD.menuConfirm === modelData.id
-                                implicitWidth: 30
-                                implicitHeight: 30
-                                radius: 15
-                                color: asking ? JD.accentRed : (pow.hovered ? JD.menuFill3 : "transparent")
-                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                                Icon {
-                                    anchors.centerIn: parent
-                                    name: pow.modelData.icon
-                                    implicitSize: 15
-                                    tint: pow.asking || pow.hovered ? JD.text1 : JD.text3
-                                }
-                                onHoveredChanged: sp.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
-                                                                                    : pow.modelData.name)
-                                onClicked: JD.sessionDo(pow.modelData.id, pow.modelData.danger)
+                                icon: modelData.icon
+                                note: modelData.danger ? modelData.name + "  ·  " + JD.tr("нажать дважды") : modelData.name
+                                color: asking ? JD.accentRed : (hovered ? JD.menuFill3 : "transparent")
+                                onPicked: JD.sessionDo(modelData.id, modelData.danger)
                             }
                         }
                     }
