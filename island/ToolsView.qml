@@ -126,6 +126,9 @@ Item {
             }
 
             // Ростом с вкладку: 30 px рядом с вкладками в 34 смотрелись мелкой кнопкой сбоку.
+            // П13: «в меню» и «закрыть» — везде парой, как в настройках. Без домика из инструментов было
+            // не вернуться в меню: крестик закрывал островок целиком, и меню приходилось звать заново.
+            IconButton { icon: "house"; size: 34; Layout.alignment: Qt.AlignTop; onClicked: { JD.closeTools(); JD.expanded = true } }
             IconButton { icon: "x"; size: 34; Layout.alignment: Qt.AlignTop; onClicked: JD.closeTools() }
         }
 

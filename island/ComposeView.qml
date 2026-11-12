@@ -9,18 +9,13 @@ View {
     property int recall: -1               // index in JD.sent / history while browsing with ↑↓
     property int pick: 0                  // highlighted slash command
     readonly property var recallList: JD.sent.concat(JD.history.map(h => h.q).filter(q => q && !JD.sent.includes(q)))
+    // П12: только то, чего не сделать самой просьбой. «/menu» ушёл — меню и так открыто, раз ты печатаешь;
+    // «/play», «/install» и прочие лишь подставляли «Включи песню », а это быстрее написать самому.
     readonly property var commands: [
         { cmd: "/new", title: JD.tr("Новый разговор"), icon: "document-new", run: () => JD.send({ cmd: "new_session" }) },
         { cmd: "/stop", title: JD.tr("Остановить всё"), icon: "media-playback-stop", run: () => JD.send({ cmd: "stop" }) },
-        { cmd: "/image", title: JD.tr("Нарисовать картинку"), icon: "image-x-generic", fill: JD.tr("Нарисуй ") },
-        { cmd: "/video", title: JD.tr("Сделать видео"), icon: "video-x-generic", fill: JD.tr("Сделай видео: ") },
-        { cmd: "/play", title: JD.tr("Включить песню"), icon: "media-playback-start", fill: JD.tr("Включи песню ") },
-        { cmd: "/watch", title: JD.tr("Включить видео"), icon: "video-x-generic", fill: JD.tr("Включи видео ") },
         { cmd: "/resume", title: JD.videoLast && JD.videoLast.in_window ? JD.tr("Вернуть видео в островок") : JD.tr("Продолжить ролик"),
           icon: "circle-play", run: () => { if (JD.videoLast && JD.videoLast.in_window) JD.videoPopin(); else JD.videoResume() } },
-        { cmd: "/music", title: JD.tr("Сделать музыку"), icon: "audio-x-generic", fill: JD.tr("Сделай трек: ") },
-        { cmd: "/install", title: JD.tr("Установить программу"), icon: "system-software-install", fill: JD.tr("Установи ") },
-        { cmd: "/screen", title: JD.tr("Что на экране?"), icon: "view-preview", fill: JD.tr("Посмотри на экран и ") },
         { cmd: "/mic", title: JD.micOn ? JD.tr("Выключить микрофон (только текст)") : JD.tr("Включить микрофон"), icon: JD.micOn ? "mic-off" : "mic",
           run: () => JD.setConfig("audio.microphone", !JD.micOn) },
         { cmd: "/chat", title: JD.tr("Чат с ассистентом (без голоса)"), icon: "message-circle", run: () => { JD.chatOpen = true } },
@@ -28,7 +23,6 @@ View {
         { cmd: "/emoji", title: JD.tr("Эмодзи"), icon: "smile", run: () => JD.openTools("emoji") },
         { cmd: "/clip", title: JD.tr("Буфер обмена"), icon: "clipboard", run: () => JD.openTools("clip") },
         { cmd: "/load", title: JD.tr("Нагрузка машины"), icon: "activity", run: () => JD.openTools("load") },
-        { cmd: "/menu", title: JD.tr("Меню"), icon: "view-grid", run: () => { JD.expanded = true } },
         { cmd: "/settings", title: JD.tr("Настройки"), icon: "configure", run: () => JD.openSettings("general") },
         { cmd: "/keys", title: JD.tr("Сочетания клавиш"), icon: "input-keyboard", run: () => JD.openSettings("buttons") },
         { cmd: "/help", title: JD.tr("Руководство"), icon: "help-contents", run: () => JD.openManual() }
@@ -50,7 +44,6 @@ View {
     Connections { target: JD; function onComposeSerialChanged() { if (cmp.shown) cmp.focusField() } }
 
     function runCommand(c) {
-        if (c.fill) { field.text = c.fill; field.cursorPosition = field.length; return }
         JD.composeOpen = false
         JD.composeText = ""     // «/menu» — команда, а не черновик
         c.run()

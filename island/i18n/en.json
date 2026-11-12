@@ -667,5 +667,13 @@
   "Ассистент упал и перезапустился. Отчёт сохранён": "The assistant crashed and restarted. Report saved",
   "Островок завис, я его перезапустил. Отчёт сохранён": "The island froze, so I restarted it. Report saved",
   "Островок перезапустился после сбоя. Отчёт сохранён": "The island restarted after a crash. Report saved",
-  "РОУТЕРЫ": "ROUTERS"
+  "РОУТЕРЫ": "ROUTERS",
+  "Кнопка чата": "Chat button",
+  "Кнопка инструментов": "Tools button",
+  "Кнопка настроек": "Settings button",
+  "Строка запроса": "Ask bar",
+  "Музыка и плитки": "Music and tiles",
+  "Ближайшее событие": "Next event",
+  "Спрятано, нажмите, чтобы вернуть:": "Hidden, tap to bring back:",
+  "Красный минус или правая кнопка прячет блок, перетаскивание меняет порядок.": "The red minus or right click hides a block, dragging changes the order."
 }

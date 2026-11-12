@@ -142,6 +142,7 @@ View {
                 Label1 { text: pl.p.title || ""; TextSwap on text {} font.pixelSize: 18; wrapMode: Text.Wrap; maximumLineCount: 2; Layout.fillWidth: true }
                 Label2 { text: pl.p.artist || ""; TextSwap on text {} font.pixelSize: 13; Layout.fillWidth: true }
             }
+            IconButton { icon: "house"; size: 26; Layout.alignment: Qt.AlignTop; onClicked: { JD.playerOpen = false; JD.expanded = true } }   // П13: в меню
             IconButton { icon: "go-up"; size: 26; Layout.alignment: Qt.AlignTop; Layout.rightMargin: -5; onClicked: JD.playerOpen = false }
         }
         JSlider {

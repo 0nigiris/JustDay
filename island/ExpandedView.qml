@@ -25,7 +25,25 @@ View {
     readonly property var blocks: ({ ask: blkAsk, player: blkPlayer, sound: blkSound, event: blkEvent, model: blkModel, lists: blkLists })
     readonly property var blockNames: ({ ask: JD.tr("Строка запроса"), player: JD.tr("Музыка и плитки"),
         sound: JD.tr("Громкость"), event: JD.tr("Ближайшее событие"), model: JD.tr("Модель"),
-        notifs: JD.tr("Уведомления"), recent: JD.tr("Недавнее") })
+        notifs: JD.tr("Уведомления"), recent: JD.tr("Недавнее"),
+        top_chat: JD.tr("Кнопка чата"), top_tools: JD.tr("Кнопка инструментов"), top_settings: JD.tr("Кнопка настроек") })
+    readonly property var topIds: ["top_chat", "top_tools", "top_settings"]
+    // Верхняя кнопка: в правке нажатие прячет её (красный минус в углу), в обычном режиме — делает своё.
+    component TopBtn: IconButton {
+        id: tb
+        property string bid
+        property var act
+        size: 32
+        visible: ev.isShown(tb.bid)
+        onClicked: ev.editing ? ev.hide(tb.bid) : tb.act()
+        Rectangle {
+            visible: ev.editing
+            width: 14; height: 14; radius: 7
+            anchors { top: parent.top; right: parent.right; margins: -3 }
+            color: JD.accentRed
+            Rectangle { anchors.centerIn: parent; width: 7; height: 2; color: "white" }
+        }
+    }
     // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
     // `forced` держит порядок до ответа демона: иначе блок после броска на миг прыгал бы обратно.
     property var forced: null
@@ -39,7 +57,7 @@ View {
     function isShown(id) { return JD.island["menu_" + id] !== false }
     // Спрятанное, что можно вернуть: пять блоков и две половины нижнего ряда.
     readonly property var hidden: {
-        const r = ["ask", "player", "sound", "event", "model"].filter(id => JD.island["menu_" + id] === false)
+        const r = ["ask", "player", "sound", "event", "model"].concat(topIds).filter(id => JD.island["menu_" + id] === false)
         if (JD.island.show_notifications === false) r.push("notifs")
         if (JD.island.menu_recent === false) r.push("recent")
         return r
@@ -51,7 +69,7 @@ View {
     function resetMenu() {
         forced = null
         JD.setConfig("island.menu_order", blockIds)
-        for (const id of ["ask", "player", "sound", "event", "model", "notifs", "recent"]) unhide(id)
+        for (const id of ["ask", "player", "sound", "event", "model", "notifs", "recent"].concat(topIds)) unhide(id)
     }
 
     // Перетаскивание: пока блок тянут, он едет за пальцем (dragDy), порядок меняется при отпускании.
@@ -165,17 +183,13 @@ View {
                 label: JD.tr("Стоп"); tint: JD.accentRed
                 onClicked: JD.send({ cmd: "stop" })
             }
-            IconButton {
-                icon: JD.muted ? "audio-volume-muted" : "audio-volume-high"
-                size: 32
-                onClicked: JD.setMuted(!JD.muted)
-            }
-            // Правка живёт в главном меню, где человек и ищет всё остальное: закрывает меню и
-            // включает дрожание на полоске, оттуда же открываются виджеты.
-            IconButton { icon: "message-circle"; size: 32; onClicked: { JD.expanded = false; JD.chatOpen = true } }   // отдельный чат: файлы, история
-            IconButton { icon: "pencil"; size: 32; onClicked: JD.menuEditing = true }   // правка меню; правка островка — из неё же
-            IconButton { icon: "wand-sparkles"; size: 32; onClicked: JD.openTools("emoji") }   // спидометр читался как «скорость», а здесь — набор инструментов
-            IconButton { icon: "configure"; size: 32; onClicked: JD.openSettings("general") }
+            // П14: громкость голоса сверху убрана — такая же есть в блоке «Громкость». Верхние кнопки
+            // прячутся в правке, как и блоки; «Править» стоит последней перед крестиком и не прячется,
+            // иначе спрятав всё, человек не нашёл бы, как вернуть.
+            TopBtn { bid: "top_chat"; icon: "message-circle"; act: () => { JD.expanded = false; JD.chatOpen = true } }   // отдельный чат: файлы, история
+            TopBtn { bid: "top_tools"; icon: "wand-sparkles"; act: () => JD.openTools("emoji") }
+            TopBtn { bid: "top_settings"; icon: "configure"; act: () => JD.openSettings("general") }
+            IconButton { icon: "pencil"; size: 32; onClicked: JD.menuEditing = !JD.menuEditing }   // правка меню; правка островка — из неё же
             IconButton { icon: "window-close"; size: 32; onClicked: JD.expanded = false }
         }
 
