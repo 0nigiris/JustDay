@@ -50,3 +50,14 @@ scripts/stop-check.sh
 scripts/verification-loop.sh
 .pre-commit-config.yaml
 ПОЛНАЯ-ПЕРЕДАЧА.md
+
+# Внутренние заметки разработки: на диске, но не в репозитории (П0, 12 нояб.)
+docs/ДЖАРВИС.md
+docs/НАУШНИК.md
+docs/ОТЧЁТ-голос-и-зависания.md
+docs/РЕВИЗИЯ-3.md
+docs/ОБХОД-КНОПОК.md
+docs/ПОЛЕЗНОЕ.md
+docs/ПРОИЗВОДИТЕЛЬНОСТЬ.md
+docs/ПРЕЗЕНТАЦИЯ.md
+видео/
