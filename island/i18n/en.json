@@ -704,5 +704,12 @@
   "Значок состояния": "Status icon",
   "Слушаю, думаю, ищу. Свой — файл QML в ~/.config/justday/orbs/": "Listening, thinking, searching. Your own: a QML file in ~/.config/justday/orbs/",
   "Точки": "Dots",
-  "Шарик Джарвиса": "Jarvis ring"
+  "Шарик Джарвиса": "Jarvis ring",
+  "Назад": "Back",
+  "Пауза": "Pause",
+  "Дальше": "Next",
+  "Предыдущий трек, пока есть плеер": "Previous track, while a player is open",
+  "Пуск и пауза, пока есть плеер": "Play and pause, while a player is open",
+  "Следующий трек, пока есть плеер": "Next track, while a player is open",
+  "Колесо меняет, нажатие глушит": "Scroll to change, click to mute"
 }

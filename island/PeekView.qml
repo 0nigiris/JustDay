@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 
 View {
     // Кошка живёт внутри загрузчика виджета; снаружи (shell.qml) её берут отсюда.
@@ -26,8 +27,14 @@ View {
                                     : JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") + " · " + JD.nextEvent.title
                                     : JD.update ? JD.tr("Доступно обновление")
                                     : (JD.island.show_events !== false && JD.history.length && JD.history[0].a) ? JD.history[0].a : ""
-    implicitWidth: peekRow.implicitWidth + 32
-    implicitHeight: JD.islandStyle === "bar" ? JD.barHeight : 44
+    // Высота самой полоски. В режиме правки под ней раскрывается панель недобавленных виджетов, и
+    // островок растёт вместе с ней (его высота берётся отсюда). На сплошной полосе высота постоянная,
+    // там вместо панели остаётся кнопка галереи.
+    readonly property real baseH: JD.islandStyle === "bar" ? JD.barHeight : 44
+    readonly property var spare: JD.widgetCatalog.filter(w => JD.peekLayout.indexOf(w.id) < 0)
+    readonly property bool trayOn: JD.editMode && JD.islandStyle !== "bar" && spare.length > 0
+    implicitWidth: Math.max(peekRow.implicitWidth, trayOn ? tray.width : 0) + 32
+    implicitHeight: baseH + (trayOn ? tray.implicitHeight + 14 : 0)
     property real squeeze: 1
     property real hoverScale: JD.islandStyle === "bar" && (midHover.hovered || JD.mode === "expanded" || JD.mode === "settings" || JD.mode === "tools") ? 1.08 : 1
     Behavior on hoverScale { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
@@ -43,14 +50,15 @@ View {
     // жёстко вписанной строкой: двигать и убирать виджеты можно было только правкой этого файла.
     readonly property var parts: ({
         assistant: cAssistant, cat: cCat, clock: cClock, date: cDate, player: cPlayer, event: cEvent,
-        timer: cTimer, muted: cMuted, focus: cFocus, weather: cWeather, cpu: cCpu, ram: cRam
+        timer: cTimer, muted: cMuted, focus: cFocus, weather: cWeather, cpu: cCpu, ram: cRam,
+        prev: cPrev, playpause: cPlayPause, next: cNext, volume: cVolume
     })
     function save(l) { JD.setConfig("island.peek", l) }
     function remove(id) { save(JD.peekLayout.filter(k => k !== id)) }
     // Куда встал перетащенный виджет: перед первым видимым, чей центр правее. Скрытые (таймер без
-    // таймера) в счёт не идут, у них нет места на экране.
-    function drop(from, cx) {
-        const l = JD.peekLayout.slice(), id = l.splice(from, 1)[0]
+    // таймера) в счёт не идут, у них нет места на экране. from = -1 — виджет пришёл из панели.
+    function place(id, cx, from) {
+        const l = JD.peekLayout.filter(k => k !== id)
         let at = l.length
         for (let k = 0, n = 0; k < rep.count; k++) {
             if (k === from) continue
@@ -71,7 +79,8 @@ View {
     Timer { interval: 120000; running: JD.editMode; onTriggered: JD.editMode = false }
     RowLayout {
         id: peekRow
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: (pv.baseH - height) / 2
         spacing: 12
         scale: pv.hoverScale * pv.squeeze
         transformOrigin: Item.Center
@@ -111,15 +120,22 @@ View {
                 }
                 // Перетаскивание вместо стрелок: двигаем только рисунок (translate), а место в списке
                 // решаем при отпускании, иначе RowLayout пересчитывался бы под пальцем на каждый пиксель.
+                // Утянутый вниз, прочь с полоски, виджет убирается: «наружу — убрал», как на телефоне.
                 property real dragX: 0
-                transform: Translate { x: slot.dragX }
+                property real dragY: 0
+                readonly property bool leaving: slot.dragY > 22
+                transform: Translate { x: slot.dragX; y: slot.dragY }
+                opacity: leaving ? 0.4 : 1
                 z: drag.active ? 10 : 0
                 DragHandler {
                     id: drag
                     enabled: JD.editMode
-                    yAxis.enabled: false
-                    onTranslationChanged: slot.dragX = translation.x
-                    onActiveChanged: if (!active) { pv.drop(slot.index, slot.x + slot.width / 2 + slot.dragX); slot.dragX = 0 }
+                    onTranslationChanged: { slot.dragX = translation.x; slot.dragY = Math.max(0, translation.y) }
+                    onActiveChanged: if (!active) {
+                        if (slot.leaving) pv.remove(slot.modelData)
+                        else pv.place(slot.modelData, slot.x + slot.width / 2 + slot.dragX, slot.index)
+                        slot.dragX = 0; slot.dragY = 0
+                    }
                 }
                 Rectangle {
                     visible: JD.editMode
@@ -142,6 +158,49 @@ View {
             height: 28; width: doneText.implicitWidth + 28; radius: 14; color: JD.fill2
             Label2 { id: doneText; anchors.centerIn: parent; color: JD.text1; text: JD.tr("Готово") }
             TapHandler { onTapped: JD.editMode = false }
+        }
+    }
+
+    // Панель недобавленных виджетов. Нажатие ставит виджет в конец полоски, перетаскивание наверх —
+    // туда, где его отпустили.
+    Flow {
+        id: tray
+        visible: pv.trayOn
+        width: Math.min(560, Math.max(340, peekRow.implicitWidth))
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: pv.baseH + 4
+        spacing: 6
+        Repeater {
+            model: pv.spare
+            delegate: Rectangle {
+                id: chip
+                required property var modelData
+                property real dx: 0
+                property real dy: 0
+                transform: Translate { x: chip.dx; y: chip.dy }
+                z: chipDrag.active ? 10 : 0
+                width: chipRow.implicitWidth + 20; height: 28; radius: 14
+                color: chipHover.hovered || chipDrag.active ? JD.fill2 : JD.fill1
+                Row {
+                    id: chipRow
+                    anchors.centerIn: parent
+                    spacing: 6
+                    Icon { anchors.verticalCenter: parent.verticalCenter; name: chip.modelData.icon || "plus"; implicitSize: 13; tint: JD.text1 }
+                    Label2 { anchors.verticalCenter: parent.verticalCenter; color: JD.text1; text: JD.tr(chip.modelData.name) }
+                }
+                HoverHandler { id: chipHover; cursorShape: chipDrag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor }
+                TapHandler { gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: pv.save(JD.peekLayout.concat([chip.modelData.id])) }
+                DragHandler {
+                    id: chipDrag
+                    target: null
+                    onTranslationChanged: { chip.dx = translation.x; chip.dy = translation.y }
+                    onActiveChanged: if (!active) {
+                        const c = chip.mapToItem(peekRow, chip.width / 2 + chip.dx, chip.height / 2 + chip.dy)
+                        if (c.y < peekRow.height + 8) pv.place(chip.modelData.id, c.x, -1)
+                        chip.dx = 0; chip.dy = 0
+                    }
+                }
+            }
         }
     }
 
@@ -187,6 +246,60 @@ View {
 
     // Нагрузка. Числа берём из JD.cpu / JD.mem, которые и так обновляются для подсказки над кошкой,
     // так что виджет ничего нового у системы не просит.
+    // Кнопки плеера по одной: человек ставит только нужные и в каком хочет порядке, а не весь
+    // плеер куском. Видны, пока есть какой-нибудь плеер, — иначе «пуск» на паузе было бы не нажать.
+    // В режиме правки нажатия не срабатывают: иначе перетаскивание ставило бы трек на паузу.
+    component PlayerBtn: Rectangle {
+        id: pb
+        property string icon
+        property var act: null
+        readonly property bool shown: !!JD.musicPlayer
+        implicitWidth: 26; implicitHeight: 26; radius: 13
+        color: pbHover.hovered && !JD.editMode ? JD.fill2 : "transparent"
+        Icon { anchors.centerIn: parent; name: pb.icon; implicitSize: 15; tint: pv.fg }
+        HoverHandler { id: pbHover; cursorShape: JD.editMode ? Qt.OpenHandCursor : Qt.PointingHandCursor }
+        TapHandler { enabled: !JD.editMode; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: if (JD.musicPlayer) pb.act(JD.musicPlayer) }
+    }
+    Component { id: cPrev; PlayerBtn { icon: "skip-back"; act: p => p.previous() } }
+    Component { id: cPlayPause; PlayerBtn { icon: JD.musicPlaying ? "pause" : "play"; act: p => p.togglePlaying() } }
+    Component { id: cNext; PlayerBtn { icon: "skip-forward"; act: p => p.next() } }
+
+    // Громкость системы, а не голоса ассистента: колесо по 5 %, нажатие глушит. Так её можно
+    // поправить, не открывая меню и микшер.
+    Component {
+        id: cVolume
+        Rectangle {
+            id: vol
+            readonly property var sink: Pipewire.defaultAudioSink
+            readonly property bool shown: !!(sink && sink.audio)
+            readonly property bool off: shown && (sink.audio.muted || sink.audio.volume <= 0.001)
+            PwObjectTracker { objects: vol.sink ? [vol.sink] : [] }
+            implicitWidth: volRow.implicitWidth + 14; implicitHeight: 26; radius: 13
+            color: volHover.hovered && !JD.editMode ? JD.fill2 : "transparent"
+            Row {
+                id: volRow
+                anchors.centerIn: parent
+                spacing: 5
+                Icon { anchors.verticalCenter: parent.verticalCenter; name: vol.off ? "volume-x" : "volume-2"; implicitSize: 15; tint: pv.fg }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: vol.shown ? Math.round(vol.sink.audio.volume * 100) + "%" : ""
+                    color: vol.off ? pv.fg2 : pv.fg; font.family: JD.fontFamily; font.pixelSize: 13; font.features: { "tnum": 1 }
+                }
+            }
+            HoverHandler { id: volHover; cursorShape: Qt.PointingHandCursor }
+            TapHandler { enabled: !JD.editMode; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: if (vol.shown) vol.sink.audio.muted = !vol.sink.audio.muted }
+            WheelHandler {
+                enabled: !JD.editMode
+                onWheel: e => {
+                    if (!vol.shown) return
+                    vol.sink.audio.volume = Math.max(0, Math.min(1, vol.sink.audio.volume + (e.angleDelta.y > 0 ? 0.05 : -0.05)))
+                    if (vol.sink.audio.volume > 0) vol.sink.audio.muted = false
+                }
+            }
+        }
+    }
+
     Component {
         id: cCpu
         RowLayout {

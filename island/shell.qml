@@ -468,7 +468,7 @@ ShellRoot {
                 notification: notificationView, alarm: alarmView, flash: flashView, answer: answerView, transcribing: thinkingView, thinking: thinkingView,
                 peek: peekView, hidden: peekView, music: musicView, player: playerView, video: videoView,
                 videopill: videoPillView, tools: toolsHolder })[mode]
-            readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen
+            readonly property bool compact: ["listening", "flash", "transcribing", "thinking", "peek", "hidden", "music", "videopill"].includes(mode) && !JD.detailOpen && !peekView.trayOn
 
             // Полоса остаётся полосой на всю ширину. Карточка живёт отдельным слоем под ней.
             readonly property bool barHang: JD.islandStyle === "bar" && (mode === "settings" || mode === "expanded" || mode === "tools")

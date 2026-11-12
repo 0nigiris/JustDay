@@ -7,20 +7,6 @@ import QtQuick.Layouts
 
 Item {
     id: wv
-    readonly property var all: [
-        { id: "assistant", name: "Ассистент", icon: "sparkles", hint: "Шар или существо: слушает ли он и занят ли" },
-        { id: "cat", name: "Кошка", image: "icons/cat/run0.svg", hint: "Живёт на полоске, сидит на окнах" },
-        { id: "clock", name: "Часы", sample: "14:14", hint: "Время" },
-        { id: "date", name: "Дата", sample: "1 нояб.", hint: "День недели и число" },
-        { id: "player", name: "Плеер", icon: "music", hint: "Что играет, только пока играет" },
-        { id: "event", name: "Событие", icon: "calendar-clock", hint: "Ближайшая встреча, работа Клода, задача" },
-        { id: "timer", name: "Таймер", icon: "timer", hint: "Виден, пока идёт" },
-        { id: "muted", name: "Без звука", icon: "volume-x", hint: "Метка, когда звук выключен" },
-        { id: "focus", name: "Фокус", icon: "moon", hint: "Окно тишины по расписанию" },
-        { id: "weather", name: "Погода", sample: "+23°", hint: "Температура за окном" },
-        { id: "cpu", name: "Процессор", sample: "12%", hint: "Нагрузка в процентах" },
-        { id: "ram", name: "Память", sample: "34%", hint: "Занято в процентах" },
-    ]
     // Свои виджеты из island.custom («имя:путь») идут в галерее после встроенных.
     readonly property var customs: (Array.isArray(JD.island.custom) ? JD.island.custom : [])
         .map(e => String(e).split(":")[0].trim()).filter(n => n)
@@ -29,7 +15,7 @@ Item {
     // Порядок меняют, таская строку за ручку (Р3-13): стрелки ↑↓ двигали на одну позицию за нажатие,
     // и перенести виджет с конца в начало было десятком щелчков.
     readonly property var ordered: {
-        const every = all.concat(customs)
+        const every = JD.widgetCatalog.concat(customs)
         const byId = {}
         every.forEach(w => byId[w.id] = w)
         const on = JD.peekLayout.filter(id => byId[id]).map(id => byId[id])

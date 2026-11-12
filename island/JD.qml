@@ -1285,6 +1285,26 @@ Singleton {
     // Что и в каком порядке стоит в полоске островка (`island.peek`); пусто или нет — порядок по умолчанию.
     readonly property var peekLayout: Array.isArray(island.peek) && island.peek.length ? island.peek
         : ["assistant", "cat", "clock", "date", "player", "event", "timer", "muted", "focus", "weather"]
+    // Каталог виджетов полоски. Один на галерею (WidgetsView) и панель режима правки (PeekView):
+    // раньше список жил в галерее, и панель пришлось бы держать вторым списком, который разъедется.
+    readonly property var widgetCatalog: [
+        { id: "assistant", name: "Ассистент", icon: "sparkles", hint: "Шар или существо: слушает ли он и занят ли" },
+        { id: "cat", name: "Кошка", image: "icons/cat/run0.svg", hint: "Живёт на полоске, сидит на окнах" },
+        { id: "clock", name: "Часы", sample: "14:14", hint: "Время" },
+        { id: "date", name: "Дата", sample: "1 нояб.", hint: "День недели и число" },
+        { id: "player", name: "Плеер", icon: "music", hint: "Что играет, только пока играет" },
+        { id: "prev", name: "Назад", icon: "skip-back", hint: "Предыдущий трек, пока есть плеер" },
+        { id: "playpause", name: "Пауза", icon: "play", hint: "Пуск и пауза, пока есть плеер" },
+        { id: "next", name: "Дальше", icon: "skip-forward", hint: "Следующий трек, пока есть плеер" },
+        { id: "volume", name: "Громкость", icon: "volume-2", hint: "Колесо меняет, нажатие глушит" },
+        { id: "event", name: "Событие", icon: "calendar-clock", hint: "Ближайшая встреча, работа Клода, задача" },
+        { id: "timer", name: "Таймер", icon: "timer", hint: "Виден, пока идёт" },
+        { id: "muted", name: "Без звука", icon: "volume-x", hint: "Метка, когда звук выключен" },
+        { id: "focus", name: "Фокус", icon: "moon", hint: "Окно тишины по расписанию" },
+        { id: "weather", name: "Погода", sample: "+23°", hint: "Температура за окном" },
+        { id: "cpu", name: "Процессор", sample: "12%", hint: "Нагрузка в процентах" },
+        { id: "ram", name: "Память", sample: "34%", hint: "Занято в процентах" },
+    ]
     readonly property string animStyle: island.animations || "spring"
     // Игровой режим (Р2-46): игра на весь экран — оболочка не анимирует ничего. Все Behavior и
     // таймеры уже гасятся через animOn, так что одно условие снимает с видеокарты и процессора
