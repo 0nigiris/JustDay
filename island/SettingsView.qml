@@ -1273,6 +1273,14 @@ Item {
                     subtitle: JD.tr("Паузы, «ну», «э-э», оговорки на ходу: «а, да, точно… как я мог забыть»")
                     Toggle { checked: !!win.get("persona.live_speech"); onToggled: v => win.set("persona.live_speech", v) }
                 }
+                Row {
+                    // П22: живость. Говорит местная модель, лимит подписки не тратится.
+                    title: JD.tr("Инициатива")
+                    subtitle: [JD.tr("Сам не заговаривает"), JD.tr("Скажет что-нибудь сам раз в три часа"),
+                               JD.tr("Скажет что-нибудь сам раз в час"), JD.tr("Скажет что-нибудь сам раз в 20 минут")][Math.max(0, Math.min(3, Number(win.get("initiative.level")) || 0))]
+                              + JD.tr(". Только когда вы за компьютером и не в игре, не ночью")
+                    SSlider { key: "initiative.level"; from: 0; to: 3; step: 1; decimals: 0 }
+                }
             }
             GroupTitle { text: JD.tr("ИМЯ") }
             Group {

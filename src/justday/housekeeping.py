@@ -66,6 +66,7 @@ class HousekeepingMixin:
                 if time.monotonic() - getattr(self, "_last_observe", 0) > 60 and calendar_lane.active():
                     self._last_observe = time.monotonic()
                     spawn(self._observe())
+                await self._initiative_maybe()
                 if time.monotonic() - getattr(self, "_last_guard", 0) > 60:
                     self._last_guard = time.monotonic()
                     try:
@@ -165,6 +166,26 @@ class HousekeepingMixin:
         self.notify(t("Компьютер работает без перезагрузки {days} дней — стоит перезагрузить.")
                     .format(days=int(weeks)), icon="system-reboot")
         events.emit("reboot_reminder", days=round(weeks, 1))
+
+    async def _initiative_maybe(self) -> None:
+        """Шкала инициативы (initiative.py): сказать что-нибудь самому, если он давно молчит и сидит тут."""
+        import datetime as dt
+
+        from . import initiative, server
+
+        level = int((self.cfg.get("initiative") or {}).get("level") or 0)
+        if not level or self.state != "idle" or server.here() is not True or desktop.running_game():
+            return
+        # Молчание считаем от последнего, что было: его просьбы, нашей реплики, включённого микрофона.
+        last = max(getattr(self.brain, "_last_msg", 0), getattr(self, "_last_mic_use", 0),
+                   getattr(self, "_last_initiative", 0))
+        now = dt.datetime.now()
+        if not initiative.due(level, (time.monotonic() - last) / 60, now):
+            return
+        self._last_initiative = time.monotonic()
+        text = await asyncio.get_running_loop().run_in_executor(None, initiative.remark, self.cfg, now)
+        events.emit("initiative", text=text)
+        await self.say(text)
 
     async def _memory_maybe(self) -> None:
         """Указатель памяти читается в каждом разговоре; когда он разросся, сказать об этом — раз в неделю."""

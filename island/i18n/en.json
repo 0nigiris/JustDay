@@ -675,5 +675,11 @@
   "Музыка и плитки": "Music and tiles",
   "Ближайшее событие": "Next event",
   "Спрятано, нажмите, чтобы вернуть:": "Hidden, tap to bring back:",
-  "Красный минус или правая кнопка прячет блок, перетаскивание меняет порядок.": "The red minus or right click hides a block, dragging changes the order."
+  "Красный минус или правая кнопка прячет блок, перетаскивание меняет порядок.": "The red minus or right click hides a block, dragging changes the order.",
+  "Инициатива": "Initiative",
+  "Сам не заговаривает": "Never speaks first",
+  "Скажет что-нибудь сам раз в три часа": "Says something on its own every three hours",
+  "Скажет что-нибудь сам раз в час": "Says something on its own every hour",
+  "Скажет что-нибудь сам раз в 20 минут": "Says something on its own every 20 minutes",
+  ". Только когда вы за компьютером и не в игре, не ночью": ". Only while you are at the computer, not gaming, not at night"
 }
