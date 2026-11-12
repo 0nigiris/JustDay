@@ -390,7 +390,7 @@ need=()
 for pair in playerctl:playerctl yt-dlp:yt-dlp plocate:plocate \
             fd:fd-find rg:ripgrep jq:jq spectacle:spectacle gtk-launch:gtk3 notify-send:libnotify \
             git:git kitty:kitty magick:ImageMagick zstd:zstd secret-tool:libsecret qdbus-qt6:qt6-qttools \
-            ffmpeg:ffmpeg; do
+            ffmpeg:ffmpeg cava:cava; do
   command -v "${pair%%:*}" >/dev/null || need+=("${pair#*:}")
 done
 # Микрофон и голос — только если их выбрали: в текстовом наборе просить пароль за espeak-ng незачем.
