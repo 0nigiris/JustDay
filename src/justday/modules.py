@@ -60,6 +60,12 @@ def restart(mid: str) -> dict:
     return {"ok": done.returncode == 0, "how": "restart", "error": done.stderr.strip()[:200]}
 
 
+def _why(log: Path) -> str:
+    """Причина провала — последняя непустая строка журнала, для уведомления (П23). Раньше там стояло
+    «Не удалось: justday update», и человек не знал, сеть это, его правки или сломанная зависимость."""
+    return f"$(grep -v '^[[:space:]]*$' '{log}' | tail -n1 | cut -c1-200 | tr -d '\"$`\\\\') (журнал: {log})"
+
+
 def update_in_background(back: bool = False) -> dict:
     """`justday update` отдельной службой systemd: она переживает рестарт демона, который сама и вызывает,
     и ничего не открывает на экране. Остров не перезапускается (`JUSTDAY_KEEP_UI`), QML подхватится сам.
@@ -69,10 +75,11 @@ def update_in_background(back: bool = False) -> dict:
         return {"ok": False, "error": "нет justday или systemd-run"}
     if _systemctl("is-active", f"{UPDATE_UNIT}.service").stdout.strip() == "active":
         return {"ok": True, "already": True}
+    log = config.STATE_DIR / "update.log"
+    done_text = "Прошлая версия возвращена" if back else "Обновление готово"
     notify = ("notify-send -a JustDay -i software-update-available JustDay "
-              "\"$( [ $rc = 0 ] && echo '%s' || echo 'Не удалось: justday update%s' )\"" % (
-                  ("Прошлая версия возвращена", " --back") if back else ("Обновление готово", "")))
-    script = f'{cli} update{" --back" if back else ""} >"{config.STATE_DIR}/update.log" 2>&1; rc=$?; {notify}'
+              f"\"$( [ $rc = 0 ] && echo '{done_text}' || echo \"Не удалось: {_why(log)}\" )\"")
+    script = f'{cli} update{" --back" if back else ""} >"{log}" 2>&1; rc=$?; {notify}'
     done = subprocess.run(
         ["systemd-run", "--user", "--collect", f"--unit={UPDATE_UNIT}", "--setenv=JUSTDAY_KEEP_UI=1",
          "--description=JustDay: обновление", "bash", "-c", script],
@@ -93,9 +100,10 @@ def parts_in_background(names: list[str]) -> dict:
         return {"ok": False, "error": "нет justday или systemd-run"}
     if _systemctl("is-active", "justday-parts.service").stdout.strip() == "active":
         return {"ok": True, "already": True}
+    log = config.STATE_DIR / "parts.log"
     notify = ("notify-send -a JustDay JustDay "
-              "\"$( [ $rc = 0 ] && echo 'Части установлены' || echo 'Часть не поставилась: justday parts' )\"")
-    script = f'{cli} parts add {" ".join(names)} >"{config.STATE_DIR}/parts.log" 2>&1; rc=$?; {notify}'
+              f"\"$( [ $rc = 0 ] && echo 'Части установлены' || echo \"Часть не поставилась: {_why(log)}\" )\"")
+    script = f'{cli} parts add {" ".join(names)} >"{log}" 2>&1; rc=$?; {notify}'
     done = subprocess.run(["systemd-run", "--user", "--collect", "--unit=justday-parts",
                            "--description=JustDay: доставка частей", "bash", "-c", script],
                           capture_output=True, text=True, timeout=15)

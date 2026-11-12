@@ -1360,14 +1360,16 @@ def main(argv: list[str] | None = None) -> None:
         here = subprocess.run(["git", "-C", str(config.REPO_DIR), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         if here:     # откат `update --back` вернётся именно сюда
             (config.STATE_DIR / "previous-version").write_text(here + "\n")
-        git_run = lambda *g: subprocess.run(["git", "-C", str(config.REPO_DIR), *g]).returncode  # noqa: E731
+        git_run = lambda *g: subprocess.run(["git", "-C", str(config.REPO_DIR), *g], capture_output=True, text=True)  # noqa: E731
         ch = st["branch"]
         if st.get("on") != ch:      # ставились из main, а канал другой: переезжаем на него целиком
-            ok = git_run("checkout", "--quiet", "-B", ch, f"origin/{ch}") == 0
+            got = git_run("checkout", "--quiet", "-B", ch, f"origin/{ch}")
         else:
-            ok = git_run("pull", "--ff-only", "--quiet", "origin", ch) == 0
-        if not ok:
-            sys.exit("git pull не удался")
+            got = git_run("pull", "--ff-only", "--quiet", "origin", ch)
+        if got.returncode != 0:
+            # Голое «git pull не удался» ничего не говорило (П23): сеть, разошедшаяся ветка — ответ git в одной строке.
+            said = [ln.strip() for ln in (got.stderr + got.stdout).splitlines() if ln.strip()]
+            sys.exit("git pull не удался: " + (said[-1] if said else f"код {got.returncode}"))
         from . import parts
 
         # Набор частей при обновлении не меняется и вопросов не задаёт: иначе обновление
