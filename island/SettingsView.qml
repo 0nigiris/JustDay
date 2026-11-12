@@ -862,6 +862,20 @@ Item {
         onClicked: b.clicked()
     }
 
+    // Маленькая квадратная кнопка со значком: Btn шире восьмидесяти точек, три стрелки в строку не влезали.
+    component MiniBtn: Pressable {
+        id: mb
+        property string glyph: ""
+        property string label: ""
+        implicitWidth: 28; implicitHeight: 28
+        width: 28; height: 28
+        radius: 7
+        opacity: enabled ? 1 : 0.35
+        color: hovered ? "#4a4a4c" : win.field
+        Accessible.name: label
+        Glyph { anchors.centerIn: parent; name: mb.glyph; size: 14 }
+    }
+
     component Field: TextField {
         id: f
         property string key: ""   // config path: saved on Enter / focus loss
@@ -3429,9 +3443,58 @@ Item {
                 }
                 function load() { win.run(["ladders"], v => { ladGroup.cards = (v && v.cards) || [] }) }
                 Component.onCompleted: load()
+                // П16: порядок нейросетей правится стрелками, а не строкой «openrouter, ollama» в поле.
+                // Верхняя (домашняя) стоит на месте: туда роутер возвращается, менять её — на странице «Модель».
+                readonly property var known: ["openrouter", "ollama_cloud", "ollama", "deepseek", "minimax", "moonshot", "custom"]
+                readonly property var fb: (win.get("brain.fallbacks") || []).map(String)
+                function move(i, by) {
+                    const l = fb.slice(), j = i + by
+                    if (j < 0 || j >= l.length) return
+                    const t = l[i]; l[i] = l[j]; l[j] = t
+                    win.set("brain.fallbacks", l); load()
+                }
+                function drop(i) { win.set("brain.fallbacks", fb.filter((x, k) => k !== i)); load() }
+                function add(n) { win.set("brain.fallbacks", fb.concat([n])); load() }
                 Repeater {
-                    model: ladGroup.cards
+                    model: ladGroup.cards.filter(c => c.id !== "brain")
                     Row { required property var modelData; title: modelData.title; subtitle: ladGroup.chain(modelData) }
+                }
+                Row {
+                    title: JD.tr("Что для чего")
+                    subtitle: [JD.tr("Мелочи") + " → " + (win.get("brain.tiny_model") || JD.tr("лёгкая")),
+                               JD.tr("Обычное") + " → " + (win.get("brain.light_model") || "haiku"),
+                               JD.tr("Сложное") + " → " + (win.get("brain.strong_model") || "sonnet"),
+                               JD.tr("Большая работа") + " → " + (win.get("brain.huge_model") || win.get("brain.strong_model") || "opus")].join("  ·  ")
+                }
+                Repeater {
+                    model: (ladGroup.cards.find(c => c.id === "brain") || { rungs: [] }).rungs
+                    Row {
+                        required property var modelData
+                        required property int index
+                        title: (index === 0 ? JD.tr("Сначала") : index + ". " + JD.tr("Потом")) + ": " + modelData.name + (modelData.now ? "  ●" : "")
+                        subtitle: (modelData.model || "") + (modelData.ready ? "" : (modelData.model ? " — " : "") + JD.tr(modelData.note))
+                        RowLayout {
+                            visible: index > 0
+                            spacing: 4
+                            MiniBtn { glyph: "chevron-up"; enabled: index > 1; label: JD.tr("Выше"); onClicked: ladGroup.move(index - 1, -1) }
+                            MiniBtn { glyph: "chevron-down"; enabled: index < ladGroup.fb.length; label: JD.tr("Ниже"); onClicked: ladGroup.move(index - 1, 1) }
+                            MiniBtn { glyph: "x"; label: JD.tr("Убрать"); onClicked: ladGroup.drop(index - 1) }
+                        }
+                    }
+                }
+                Row {
+                    visible: addFlow.children.length > 1
+                    title: JD.tr("Добавить в роутер")
+                    subtitle: JD.tr("Встанет последним. Без ключа ступень пропускается")
+                    Flow {
+                        id: addFlow
+                        Layout.maximumWidth: 320
+                        spacing: 6
+                        Repeater {
+                            model: ladGroup.known.filter(n => n !== (win.get("brain.home_provider") || "claude") && !ladGroup.fb.includes(n))
+                            Btn { required property string modelData; text: "+ " + modelData; onClicked: ladGroup.add(modelData) }
+                        }
+                    }
                 }
             }
             GroupTitle { text: JD.tr("ОБНОВЛЕНИЯ") }
