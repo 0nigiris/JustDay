@@ -40,7 +40,7 @@ def test_smarter_climbs_one_step_and_holds_even_with_auto_model_off():
     assert "Sonnet" in asyncio.run(d.ask_model("up"))
     assert d.cfg["brain"]["model"] == "sonnet"
     assert "Opus" in asyncio.run(d.ask_model("up"))
-    # Следующая просьба не скатывается обратно на хайку, хотя лестница выключена.
+    # Следующая просьба не скатывается обратно на хайку, хотя роутер выключена.
     asyncio.run(d._pick_model("а теперь открой браузер"))
     assert d.cfg["brain"]["model"] == "opus"
     assert "Haiku" in asyncio.run(d.ask_model(dispatch.LIGHT))

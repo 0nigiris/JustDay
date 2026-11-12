@@ -87,7 +87,7 @@ def test_terminal_answers_kept_code_monospace_and_within_telegram_limit(monkeypa
 
 
 def test_remote_terminal_kept_queued_phone_tasks_in_order(monkeypatch, tmp_path) -> None:
-    """Задачи с телефона должны пройти той же лестницей по одной, не затерев друг друга."""
+    """Задачи с телефона должны пройти тем же роутером по одной, не затерев друг друга."""
     from types import SimpleNamespace
 
     ran, replies = [], []

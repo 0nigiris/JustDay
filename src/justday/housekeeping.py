@@ -51,7 +51,7 @@ class HousekeepingMixin:
                 await self._memory_maybe()
                 await self._duplicates_maybe()
                 await self._welcome_back()
-                # Подняться обратно по лестнице можно и молча, не дожидаясь следующей просьбы: лимит
+                # подняться обратно по роутеру можно и молча, не дожидаясь следующей просьбы: лимит
                 # возвращается сам по себе, и ждать с ним до разговора незачем.
                 await self._try_home()
                 await self._diary_maybe()

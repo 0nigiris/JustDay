@@ -11,7 +11,7 @@ from . import config, telegram, terminal
 
 
 class TelegramShell:
-    """Очередь оболочки в приватном чате: задачи, лестница, подтверждения и журнал."""
+    """Очередь оболочки в приватном чате: задачи, роутер, подтверждения и журнал."""
 
     def __init__(self, daemon) -> None:
         self.daemon = daemon
@@ -66,7 +66,7 @@ class TelegramShell:
             else:
                 await self.reply(f"Текущая модель: {self.work.now.label}. Чтобы сменить: /модель ИМЯ")
             return True
-        if command in ("/лестница", "/ladder"):
+        if command in ("/роутер", "/лестница", "/ladder"):
             rows = [f"{'▶' if i == self.work.step else '·'} {r.label}"
                     for i, r in enumerate(self.work.rungs)]
             rows.extend(f"— {r.label}: нет входа" for r in self.work.skipped)
@@ -150,7 +150,7 @@ class TelegramShell:
         while self.queue:
             task = self.queue.pop(0)
             if not self.work.rungs:
-                await self.reply("Задача осталась без запуска: нет ни одной ступени лестницы со входом.")
+                await self.reply("Задача осталась без запуска: нет ни одной ступени роутера со входом.")
                 continue
             self.current = asyncio.create_task(self.work.send(task), name=task[:70])
             self._log(f"Начато: {task}")

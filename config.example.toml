@@ -113,7 +113,7 @@ context_window = 80000      # conversation ceiling: history is compacted there (
 # fallbacks = ["openrouter/qwen/qwen3-coder", "ollama/qwen3.5:9b"]  # запасные провайдеры при лимите
 # fallback_models = {}      # конкретные модели для фолбэков
 # fallback_back_after_hours = 0  # через сколько часов пытаться вернуться наверх (0 = не пытаться)
-# fallback_check_minutes = 15    # как часто проверять вершину лестницы
+# fallback_check_minutes = 15    # как часто проверять первую ступень роутера
 # fresh_after_minutes = 0    # новая сессия вместо рестарта, если прошло минут (0 = откл.)
 
 # Тишина по расписанию: в это время ответы только на экране, вслух не говорит и по имени не будится (кнопка и текст работают). Окно через полночь — так же.
@@ -322,7 +322,7 @@ ladder = [
 ]
 effort = ""                 # low | medium | high; пусто — как решит сам Claude Code
 first_word_seconds = 90     # сколько ждать первого слова от ступени
-probe_minutes = 15          # как часто спрашивать вершину лестницы
+probe_minutes = 15          # как часто спрашивать первую ступень роутера
 night_nudges = 0            # сколько раз ночью подталкивать вопросом к человеку
 hand_up = true              # разрешить лёгкой модели сказать «это серьёзнее меня»
 models = { tiny = "haiku", light = "haiku", strong = "sonnet", big = "opus" }

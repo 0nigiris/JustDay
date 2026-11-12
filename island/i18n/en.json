@@ -666,5 +666,6 @@
   "Ассистент завис, я его перезапустил. Отчёт сохранён": "The assistant froze, so I restarted it. Report saved",
   "Ассистент упал и перезапустился. Отчёт сохранён": "The assistant crashed and restarted. Report saved",
   "Островок завис, я его перезапустил. Отчёт сохранён": "The island froze, so I restarted it. Report saved",
-  "Островок перезапустился после сбоя. Отчёт сохранён": "The island restarted after a crash. Report saved"
+  "Островок перезапустился после сбоя. Отчёт сохранён": "The island restarted after a crash. Report saved",
+  "РОУТЕРЫ": "ROUTERS"
 }

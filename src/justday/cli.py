@@ -384,11 +384,11 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("shell", help="open the OpenCode window with the JustDay provider ladder")
     sp.add_argument("rest", nargs=argparse.REMAINDER, help="arguments passed on to opencode")
     # Одна команда на «сесть за работу»: пока подписка Claude отвечает — Claude Code (только в нём
-    # она и разрешена), кончился лимит — оболочка на живой ступени лестницы.
+    # она и разрешена), кончился лимит — оболочка на живой ступени роутера.
     # Своя оболочка: один терминал, в котором задачу подхватывает тот, кто сейчас может.
     sp = sub.add_parser("term", help="окно терминала (какой стоит) в папке: term [ПАПКА]")
     sp.add_argument("folder", nargs="?", default="")
-    sp = sub.add_parser("terminal", help="своя оболочка: один терминал, лестница движков")
+    sp = sub.add_parser("terminal", help="своя оболочка: один терминал, роутер движков")
     sp.add_argument("task", nargs="*", help="задача строкой (без неё открывается окно)")
     sp.add_argument("--night", action="store_true",
                     help="оставить задачу на ночь: не давать машине спать, ждать возвращения лимитов, "
@@ -586,7 +586,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("module", help="отдельные части JustDay: list | restart ID (остров только перерисовывается, док остаётся)")
     sp.add_argument("action", choices=["list", "restart"])
     sp.add_argument("id", nargs="?", default="")
-    sub.add_parser("ladders", help="лестницы: кто работает сейчас и кто подхватит (нейросеть, голос)")
+    sub.add_parser("ladders", help="роутеры: кто работает сейчас и кто подхватит (нейросеть, голос)")
     sp = sub.add_parser("suitcase", help="чемодан: перенос настроек и ключей на другой ПК одним файлом под паролем (export ФАЙЛ | import ФАЙЛ)")
     sp.add_argument("action", choices=["export", "import"])
     sp.add_argument("file")

@@ -609,9 +609,9 @@ def test_the_icon_map_file_was_rewritten_on_every_hover_tick(tmp_path, monkeypat
     assert path.exists(), "файл пропал, а карту не вернули"
 
 
-# ──────────────────────────── лестница поставщиков ────────────────────────────
+# ──────────────────────────── роутер поставщиков ────────────────────────────
 def test_the_ladder_starts_at_the_one_we_want_to_think_with(monkeypatch) -> None:
-    """Наверху лестницы — основной, ниже запасные по порядку, и никто не повторяется дважды."""
+    """Наверху роутера — основной, ниже запасные по порядку, и никто не повторяется дважды."""
     from justday import fallback
 
     cfg = {"brain": {"home_provider": "claude", "provider": "ollama",

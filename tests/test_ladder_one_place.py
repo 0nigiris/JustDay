@@ -1,4 +1,4 @@
-"""Лестница одна на весь проект, и все три проверки «есть ли чем войти» отвечают одинаково (Р-60 ревизии)."""
+"""Роутер один на весь проект, и все три проверки «есть ли чем войти» отвечают одинаково (Р-60 ревизии)."""
 import json
 import shutil
 import subprocess
@@ -38,7 +38,7 @@ def test_the_plugin_ladder_came_from_the_one_in_config_toml(conf, monkeypatch):
 
 
 def test_a_rung_with_a_key_in_the_environment_was_alive_in_one_check_and_dead_in_another(conf, monkeypatch):
-    """nvidia: терминал её знал, плагин OpenCode — нет, и лестница OpenCode ходила мимо неё.
+    """nvidia: терминал её знал, плагин OpenCode — нет, и роутер OpenCode ходил мимо неё.
     opencode free models: теперь доступны, если opencode CLI установлен и auth.json не пуст."""
     monkeypatch.setattr(terminal.shutil, "which", lambda name: "/usr/bin/" + name)
     rung = terminal.parse_rung("opencode:nvidia/nvidia/nemotron")

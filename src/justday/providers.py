@@ -31,7 +31,7 @@ PROVIDERS: dict[str, dict] = {
                  "desc": "DeepSeek напрямую; ключ на platform.deepseek.com"},
     # Адреса взяты из документации самих сервисов (Claude Code ходит только по Anthropic-протоколу). Модель не
     # подставляется: названия у них меняются, человек называет её сам (`justday model use ПОСТАВЩИК МОДЕЛЬ`);
-    # пока модели нет, ступень лестницы пропускается.
+    # пока модели нет, ступень роутера пропускается.
     "minimax": {"base_url": "https://api.minimax.io/anthropic", "secret": "minimax",
                 "desc": "MiniMax напрямую; ключ на platform.minimax.io (для Китая адрес api.minimaxi.com через custom)"},
     "moonshot": {"base_url": "https://api.moonshot.ai/anthropic", "secret": "moonshot",

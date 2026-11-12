@@ -3410,7 +3410,7 @@ Item {
                     }
                 }
             }
-            GroupTitle { text: JD.tr("ЛЕСТНИЦЫ") }
+            GroupTitle { text: JD.tr("РОУТЕРЫ") }
             Group {
                 id: ladGroup
                 property var cards: []

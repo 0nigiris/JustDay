@@ -80,7 +80,7 @@ def test_a_normal_answer_is_still_spoken():
 
 
 def test_the_limit_moved_the_brain_to_the_next_provider(tmp_path, monkeypatch):
-    """provider_fallback — ноль раз за месяц журнала: лестница не видела лимита. Живой Daemon."""
+    """provider_fallback — ноль раз за месяц журнала: роутер не видел лимита. Живой Daemon."""
     monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.toml")
     d = daemon.Daemon()
     asked: list[str] = []

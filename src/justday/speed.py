@@ -52,7 +52,7 @@ def _claude(extra: list[str]) -> float:
 
 
 def _opencode() -> float:
-    """Секунды от `opencode run` до слова ответа. Ступень лестницы платит это на каждой задаче."""
+    """Секунды от `opencode run` до слова ответа. Ступень роутера платит это на каждой задаче."""
     from . import shell
     cmd = ["opencode", "run", "--format", "json", "-m", "openrouter/qwen/qwen3-coder", "ответь одним словом: да"]
     t = time.perf_counter()

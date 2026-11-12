@@ -135,7 +135,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self.tts = TTS(self.cfg["tts"])
         b = self.cfg["brain"]
         # Первый ход после каждого запуска переподключал мозг (1–1,5 с) ради одного усилия: в файле
-        # `effort` пустой, а лестница ставит лёгкой «low». Сразу садимся так, как сядет лестница.
+        # `effort` пустой, а роутер ставит лёгкой «low». Сразу садимся так, как сядет роутер.
         if b.get("auto_model", True) and b.get("auto_effort", True) and b.get("model") == (b.get("light_model") or "haiku"):
             b["effort"] = dispatch.EFFORT[dispatch.LIGHT]
         self.brain = Brain(self.cfg, on_text=self._on_brain_text, approver=self._approve, asker=self._answer_questions)

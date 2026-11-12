@@ -1,6 +1,6 @@
 """Один терминал, в котором задачу подхватывает тот, кто сейчас может.
 
-Проверяется лестница, а не нейросети: движки здесь подменены. Беда, из-за которой всё это
+Проверяется роутер, а не нейросети: движки здесь подменены. Беда, из-за которой всё это
 написано, — «кончился лимит, и работа встала до вечера, потому что человек был в школе».
 """
 from __future__ import annotations
@@ -58,7 +58,7 @@ def test_a_limit_moved_the_task_down_instead_of_stopping_the_work() -> None:
     said = asyncio.run(work.send("почини док", on_note=notes.append))
 
     assert said.text == "доделал"
-    assert work.step == 1, "лестница не спустилась"
+    assert work.step == 1, "роутер не спустился"
     assert notes and "кончился лимит" in notes[0]
     # Пришедшему на смену отдали задачу целиком, а не слово «продолжай».
     handed = low.heard[0][1]
@@ -169,7 +169,7 @@ def test_a_trifle_was_taking_the_strongest_model_and_the_highest_effort(monkeypa
     """«Который час» уносил столько же лимита, сколько разбор беды, — и к вечеру его не оставалось.
 
     Лимит один на всё. Потраченный на «спасибо» к вечеру не вернётся, а именно вечером человек
-    садится за настоящую работу. Поэтому усилие и модель выбираются по самой задаче, а лестница
+    садится за настоящую работу. Поэтому усилие и модель выбираются по самой задаче, а роутер
     при этом не трогается: ступень остаётся той же.
     """
     models = {"tiny": "haiku", "light": "haiku", "strong": "sonnet", "big": "opus"}
@@ -183,7 +183,7 @@ def test_a_trifle_was_taking_the_strongest_model_and_the_highest_effort(monkeypa
                             lambda text, lvl=level, **kw: (lvl, "местная модель"))
         rung, effort, _ = work.shape("задача")
         assert (rung.model, effort) == want, f"уровень {level} взят не тем"
-    assert work.rungs[0].model == "opus", "выбор модели на один ход переписал саму лестницу"
+    assert work.rungs[0].model == "opus", "выбор модели на один ход переписал саму роутер"
 
 
 def test_the_judge_guessing_light_used_to_mean_an_hour_of_work_by_the_wrong_model() -> None:
@@ -566,14 +566,14 @@ def test_a_limit_announced_as_plain_text_used_to_pass_for_a_finished_answer() ->
     """«Зашёл в терминал, попросил — лимит. Говорю: перейди на другую модель — лимит».
 
     Claude Code сообщает о кончившемся лимите не ошибкой, а обычной строкой ответа: «You've hit
-    your session limit · resets 2:30am». Мы смотрели только в поток ошибок, поэтому лестница
+    your session limit · resets 2:30am». Мы смотрели только в поток ошибок, поэтому роутер
     считала это готовым ответом и не спускалась — хотя внизу её ждали живые ступени.
     """
     said = terminal.Said(text="You've hit your session limit · resets 2:30am (Europe/Madrid)")
     terminal._limit_in(said)
     assert said.limit, "лимит в тексте опять принят за ответ"
     assert not said.text, "сообщение о лимите уехало бы вниз как «что успел сказать предыдущий»"
-    assert terminal.Work.hopeless(said), "с таким ответом лестница так и стоит на месте"
+    assert terminal.Work.hopeless(said), "с таким ответом роутер так и стоит на месте"
 
     # А рассказ про лимиты — это рассказ: спускаться из-за него нельзя.
     story = terminal.Said(text="Лимит у подписки один на всё: " + "и его легко потратить. " * 20)
@@ -1034,7 +1034,7 @@ def test_a_task_from_the_phone_reaches_the_open_window_not_only_the_night() -> N
 
 def test_opencode_permission_noise_hid_the_usage_limit(monkeypatch) -> None:
     """Ночь на 13 октября: OpenCode сказал 429 строкой потока, а в stderr написал свою цветную
-    «permission requested … auto-rejecting». stderr затирал беду, и лестница писала «не ответила:
+    «permission requested … auto-rejecting». stderr затирал беду, и роутер писал «не ответила:
     [93m[1m! …» вместо «кончился лимит»."""
     import json
 
