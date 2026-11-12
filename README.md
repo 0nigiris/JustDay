@@ -1,409 +1,257 @@
 <p align="center">
-  <img src="docs/assets/hero.png" alt="JustDay — личный Джарвис для Linux" width="100%">
+  <img src="docs/assets/hero-en.png" alt="JustDay — your own JARVIS for Linux" width="100%">
 </p>
 
+<p align="center"><a href="README.ru.md"><b>Читать на русском</b></a></p>
+
 <p align="center">
-  <a href="LICENSE"><img alt="Лицензия GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-8b5cf6?style=flat-square"></a>
+  <a href="LICENSE"><img alt="License GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-8b5cf6?style=flat-square"></a>
   <img alt="KDE Plasma 6 · Wayland" src="https://img.shields.io/badge/KDE%20Plasma%206-Wayland-1d99f3?style=flat-square&logo=kde&logoColor=white">
   <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-3776ab?style=flat-square&logo=python&logoColor=white">
-  <img alt="Речь обрабатывается локально" src="https://img.shields.io/badge/речь-локально-30d158?style=flat-square">
-  <a href="https://github.com/0nigiris/JustDay/commits/main"><img alt="Последний коммит" src="https://img.shields.io/github/last-commit/0nigiris/JustDay?style=flat-square&color=ff9f0a"></a>
-  <a href="https://github.com/0nigiris/JustDay/actions/workflows/check.yml"><img alt="Проверка" src="https://img.shields.io/github/actions/workflow/status/0nigiris/JustDay/check.yml?style=flat-square&label=%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0"></a>
+  <img alt="Speech stays on your computer" src="https://img.shields.io/badge/speech-local-30d158?style=flat-square">
+  <a href="https://github.com/0nigiris/JustDay/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/0nigiris/JustDay?style=flat-square&color=ff9f0a"></a>
+  <a href="https://github.com/0nigiris/JustDay/actions/workflows/check.yml"><img alt="Checks" src="https://img.shields.io/github/actions/workflow/status/0nigiris/JustDay/check.yml?style=flat-square&label=checks"></a>
 </p>
 
 <p align="center">
-  <a href="#установка">Установка</a> ·
-  <a href="#что-умеет">Что умеет</a> ·
-  <a href="#как-выглядит">Как выглядит</a> ·
-  <a href="#голосом-или-с-клавиатуры">Клавиатура</a> ·
-  <a href="#музыка-и-видео">Музыка и видео</a> ·
-  <a href="#студия">Студия</a> ·
-  <a href="#модели">Модели</a> ·
-  <a href="#приватность">Приватность</a> ·
-  <a href="docs/MANUAL.md">Руководство</a> ·
-  <a href="README.en.md">English</a>
+  <a href="#install">Install</a> ·
+  <a href="#what-it-does">What it does</a> ·
+  <a href="#how-it-looks">How it looks</a> ·
+  <a href="#voice-or-keyboard">Keyboard</a> ·
+  <a href="#music-and-video">Music & video</a> ·
+  <a href="#studio">Studio</a> ·
+  <a href="#models">Models</a> ·
+  <a href="#privacy">Privacy</a> ·
+  <a href="README.ru.md">Русский</a>
 </p>
 
-<h3 align="center">Ассистент для Linux, который не просто отвечает, а делает.</h3>
+**JustDay** is an AI assistant for Linux that **acts**, not just answers: it opens apps and sites, presses buttons in windows, installs software, writes messages and mail, draws pictures, edits video, plays games and hands coding to Claude Code. Talk to it or type — the answer shows up in a **Dynamic Island** at the top of the screen.
 
-<p align="center">
-Говорите или пишите — ответ появляется в островке сверху экрана.<br>
-Он открывает программы, нажимает кнопки в окнах, ставит софт, пишет письма, рисует, монтирует видео<br>
-и раздаёт задачи Claude Code.
-</p>
+JustDay is long past a voice helper. It is a desktop built around one island: dock, tray, menu, Spotlight, player, video, mail, an editing studio and tasks in separate chats. Every part has a fallback: when one model or key runs out, the next one carries on. Each part restarts on its own, and updates run in the background with no terminal and no vanishing dock.
 
-<table>
-<tr>
-<td align="center" width="25%"><b>🏝️ Остров, док, лоток</b><br><sub>весь рабочий стол вокруг одного острова</sub></td>
-<td align="center" width="25%"><b>🔁 Роутер моделей</b><br><sub>кончился лимит — работу берёт следующая</sub></td>
-<td align="center" width="25%"><b>🔒 Речь — локально</b><br><sub>микрофон и письма не уходят в облако</sub></td>
-<td align="center" width="25%"><b>⚡ Без прав администратора</b><br><sub>всё ставится в домашнюю папку</sub></td>
-</tr>
-</table>
+**What's new (November)**
+- **Dock right away.** The shell used to wait up to 12 seconds for the daemon after login. It now starts at once and connects to the daemon on the fly.
+- **Own calendar.** `justday calendar add "Meeting" --start "2026-11-07 15:00"`: no accounts, keys or cloud consoles. The file lives on your computer; it is shown first and written after you confirm. Other calendars (any ICS link) are read alongside it.
+- **Menu edit mode like on a phone.** Blocks wiggle, a red minus hides one, dragging reorders, Escape leaves.
+- **Your own island widgets, accent colour, font and one slider for the size of everything.**
+- **Plasma 5 and X11 without a GPU or microphone.** Works by text; a fallback bar replaces the island.
+- **Night shift.** `justday terminal --night`: work goes on from the plan while you sleep; anything that needs a confirmation waits for morning.
+- **Install without admin rights.** Everything goes to your home folder; `bash scripts/check-pc.sh` tells you before installing what will work on this computer.
+- **Suitcase.** `justday suitcase export file` packs settings and keys into one file under your password; `import` unpacks it on another computer.
+- **Several keys.** An ElevenLabs key and a spare (`ELEVENLABS_API_KEY_2`): when the first runs out, the voice takes the second.
+- **Per-part restart.** `justday module list` and `justday module restart ID`; the island only redraws.
+- **Tasks in separate chats.** A big job lives in its own chat for a week (configurable); a pinned chat is never archived.
 
-<details open>
-<summary><b>✨ Что нового (ноябрь)</b></summary>
-
-- **Док сразу.** Раньше после входа в систему док ждал, пока проснётся демон, до 12 секунд. Теперь оболочка стартует немедленно и подключается к демону на ходу.
-- **Свой календарь.** `justday calendar add "Встреча" --start "2026-11-07 15:00"`: без аккаунтов, ключей и настройки в облачных консолях. Файл лежит на компьютере, показ перед записью, запись после подтверждения.
-- **Правка главного меню как на телефоне.** Блоки дрожат, красный минус прячет, перетаскивание меняет порядок, Escape выходит.
-- **Свои виджеты острова, цвет акцента, шрифт и размер всего интерфейса** одним ползунком.
-- **Присмотр.** Джарвис сам замечает, что вы засиделись в игре или забыли про обещанное, и говорит раз в день, без пустых напоминаний.
-- **Plasma 5 и X11 без видеокарты и микрофона.** Работает текстом, остров заменяет запасная полоска.
-- **Ночная смена.** `justday terminal --night`: пока вы спите, работа идёт по плану, а всё, что требует подтверждения, ждёт утра.
-- **Установка без прав администратора.** Всё ложится в домашнюю папку; `bash scripts/check-pc.sh` до установки скажет, что заработает на этом компьютере.
-- **Чемодан.** `justday suitcase export файл` собирает настройки и ключи в один файл под вашим паролем, `import` раскладывает их на другом компьютере.
-- **Перезапуск по частям.** `justday module list` и `justday module restart ID`; остров только перерисовывается.
-
-</details>
-
-## Установка
+## Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | bash
 ```
 
-Установщик спросит, что ставить, поставит зависимости и запустит мастер настройки: язык, имя, модель (поможет войти в Claude или выбрать бесплатную), **голосом или только текстом**, голос, кнопки, почта и погода. Всё потом меняется в настройках острова.
+The installer asks what to install, shows one line per step, installs what is missing (asking for your password once, after showing what it is for) and then runs a short setup: language, name, model (it helps you sign in to Claude or pick a free one), **voice or text only**, the voice, the keys, mail and weather. Everything can be changed later in the island's settings.
 
-**Ставится только то, что нужно.** Распознавание речи (550 МБ), нейросетевой голос (750 МБ) и ускорение на видеокарте NVIDIA (2,2 ГБ) — по выбору: без микрофона и наушников хватает ядра на 250 МБ, и команды пишутся с клавиатуры. Без вопросов: `./install.sh --text-only`, `--no-gpu`, `--everything`, `--parts speech`. Доставить потом — `justday parts add speech`; что стоит сейчас — `justday parts`. Долгие шаги показывают, сколько уже скачано, `--debug` печатает всё, что делают инструменты, а Ctrl+C ничего не портит: следующий запуск продолжит с того же места.
+**Only what you need gets installed.** Speech recognition (550 MB), the neural voice (750 MB) and NVIDIA acceleration (2.2 GB) are a choice: with no microphone and no headphones the 250 MB core is enough and commands are typed. Without questions: `./install.sh --text-only`, `--no-gpu`, `--everything`, `--parts speech`. Add a part later with `justday parts add speech`, see what is there with `justday parts`. Long steps show how much has been downloaded so far, `--debug` prints everything the tools do, and Ctrl+C breaks nothing: the next run continues from the same place.
 
-| Нужно | Зачем |
+| You need | For |
 |---|---|
-| KDE Plasma 6 на Wayland, PipeWire | остров, горячие клавиши, управление окнами (на X11 и Plasma 5 работает всё, кроме острова и кликов в чужих окнах) |
-| Подписка Claude **или** бесплатная модель | «мозг»: Claude, облако Ollama, OpenRouter, DeepSeek, локальная Ollama |
-| Видеокарта NVIDIA — *по желанию* | живой голос, быстрое распознавание, локальные модели и студия. Без неё JustDay работает: текстом, простым голосом и с облачной моделью |
+| KDE Plasma 6 on Wayland, PipeWire | the island, hotkeys, window control (on X11 and Plasma 5 everything works except the island and clicks inside other windows) |
+| A Claude subscription **or** a free model | the brain: Claude, Ollama's cloud, OpenRouter, DeepSeek, local Ollama |
+| An NVIDIA GPU — *optional* | the neural voice, fast speech recognition, local models and the studio. Without one JustDay still works: by text, with a simple voice and a cloud model |
 
-## Что видно на экране
+## What it does
+
+You say what you want. It does the whole thing, not just the first step.
+
+**Your computer**
+- “Install OBS” installs OBS from the most trusted source (Fedora, Flathub, COPR). Your password goes only into the system dialog; the assistant never sees it.
+- “Open Discord”, “close the browser”, “press Save”: it opens apps, switches windows and clicks buttons inside other programs. Buttons in Qt and GTK apps get numbered labels, so a click lands exactly.
+- “I'm sitting down to work” opens your editor and messenger and starts the music. One phrase, your own scenario.
+- “Update the system”, then “play some music”: the music starts right away. Long jobs run in the background and show on the island.
+- Games from Steam, Heroic and other launchers start by the name you call them.
+
+**Music and video**
+- “Play Back in Black”: three to five seconds later it plays in the island's own player. The original, not a cover or an hour-long loop. Next time it plays from disk, even offline.
+- “Pause”, “next”, “louder” work instantly, without a model.
+- The island takes the colour of the cover. When the cover says nothing, it picks the colour from what the track is about.
+- Videos play in the island over the screen, in a window or on YouTube.
+
+**People, mail and your day**
+- “Tell Ilya I'll be late”: the text shows on the island first and goes out only after your “yes”.
+- A local model reads and writes your mail, so letters never go to the cloud.
+- A calendar with no accounts and no cloud consoles; Google Calendar connects too.
+- The first “hello” of the day brings the weather, your next meeting, new mail and what was left from yesterday.
+- “Wake me up at 7:30 every day”, “a timer for 10 minutes”, “a meeting at 15:00 Moscow time”: set instantly, without a model.
+- It notices you have been gaming for four hours or forgot a promise, and says so once a day.
+
+**A studio on your GPU**
+- Pictures, background removal, 4× upscaling, photo edits by words.
+- Music and songs with vocals, 3D models from text or a photo, video from text, a photo brought to life.
+- Voice-over, subtitles, and montage: trim, join, add music, make a vertical cut, remove pauses, build a GIF.
+
+**Code**
+- Hands coding tasks to background Claude Code sessions, checks the result and reports back.
+- Its own terminal with a model router: when one model hits its limit, the next one carries on.
+- A night shift: work goes on from the plan while you sleep; anything that needs a confirmation waits for morning.
+
+**Voice and character**
+- A live neural voice on your GPU: “Jarvis”, a voice from a description, or one cloned from a recording. ElevenLabs if you like.
+- Numbers, times and dates are spoken as words; English words go to an engine that can say them.
+- A butler, a friend, a calm helper, or a character you describe yourself.
+- It remembers people (“Ilya is the one in Poland, message him on Discord”), habits and where your files live. The memory is shared by every model.
+
+**From your phone**
+- The same request and the same player from your phone or Telegram, through the [phone half](phone/README.md). A computer that is off can be woken from the phone.
+
+A detailed list with “verified / with a caveat” marks is in [CAPABILITIES.md](CAPABILITIES.md) (in Russian).
+
+## How it looks
 
 <table>
 <tr>
-<td width="58%" align="center"><img src="docs/assets/ui-settings.png" alt="Настройки острова"><br><sub><b>Настройки</b> прямо в острове: язык, голос, вид, почта и календарь, кнопки</sub></td>
-<td width="42%" align="center"><img src="docs/assets/ui-menu-edit.png" alt="Правка главного меню"><br><sub><b>Правка меню</b>: порядок стрелками, показать или скрыть каждый блок</sub></td>
+<td width="50%" align="center"><img src="docs/assets/en/island-answer.png" alt="An answer on the island"><br><sub><b>An answer</b> — spoken and written; reply or copy right away</sub></td>
+<td width="50%" align="center"><img src="docs/assets/en/island-compose.png" alt="The text field"><br><sub><b>Meta+K</b> — the text field, with the selected text already attached</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/assets/ui-mixer.png" alt="Микшер"><br><sub><b>Микшер</b> — громкость каждой программы и выбор устройства</sub></td>
-<td align="center"><img src="docs/assets/ui-dock.png" alt="Док"><br><br><img src="docs/assets/ui-tools.png" alt="Полка инструментов"><br><sub><b>Док</b> появляется сразу при входе, <b>полка</b>: эмодзи, буфер, звук, планы, история</sub></td>
+<td align="center"><img src="docs/assets/en/island-media.png" alt="A finished video"><br><sub><b>Studio</b> — a finished video with a preview; long jobs run in the background</sub></td>
+<td align="center"><img src="docs/assets/en/island-message.png" alt="A message draft"><br><sub><b>A message</b> — nothing is sent without your “yes”</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/en/island-player.png" alt="The player"><br><img src="docs/assets/en/island-music.png" alt="Playing" width="60%"><br><sub><b>Music</b> — albums and playlists, queue, shuffle and repeat; while it plays the island shows the cover and bars next to the time and weather</sub></td>
+<td align="center"><img src="docs/assets/en/island-video.png" alt="A video in the island"><br><sub><b>Video right in the island</b> — or in a window, or on YouTube: Jarvis asks</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/en/island-slash.png" alt="Quick commands"><br><sub><b>/</b> — quick commands: new conversation, picture, video, microphone…</sub></td>
+<td align="center"><img src="docs/assets/en/island-menu.png" alt="The menu"><br><sub><b>The menu</b> — music, switches, three volumes (the assistant, the music, the system), the model, notifications and recent requests</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/en/island-notification.png" alt="A notification"><br><sub><b>Notifications</b> — ⌄ opens the whole message, dismisses it, a click opens the app — even from the tray</sub></td>
+<td align="center"><img src="docs/assets/en/island-where.png" alt="Where to play a video"><br><sub><b>Video</b> — it asks where to play it</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/en/island-thinking.png" alt="Working" width="70%"><br><img src="docs/assets/en/island-listening.png" alt="Listening" width="45%"><br><sub>What it is doing right now — in plain words</sub></td>
+<td align="center"><img src="docs/assets/en/island-settings.png" alt="Settings"><br><sub><b>Settings</b> right in the island: 14 sections</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/en/island-cover.png" alt="The cover, large" width="80%"><br><sub><b>The cover</b> — a click shows it large; the island's colour comes from the cover or from what the track is about</sub></td>
+<td align="center"><img src="docs/assets/en/island-character.png" alt="Character"><br><sub><b>Character</b> — butler, friend, calm or your own; swearing and live speech separately</sub></td>
 </tr>
 </table>
 
-## Что умеет
+## Voice or keyboard
 
-<table>
-<tr>
-<td width="33%" valign="top">
-
-**🖥️ Управляет компьютером**<br>
-<sub>Приложения, окна, мышь и клавиатура.</sub>
-
-</td>
-<td width="33%" valign="top">
-
-**⌨️ Голосом или текстом**<br>
-<sub><kbd>Meta</kbd>+<kbd>J</kbd> — говорить, <kbd>Meta</kbd>+<kbd>K</kbd> — написать.</sub>
-
-</td>
-<td width="33%" valign="top">
-
-**🎨 Студия на вашей видеокарте**<br>
-<sub>Картинки, правка фото, удаление фона, видео из текста и оживление фото, музыка, 3D-модели, озвучка, субтитры и монтаж.</sub>
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**📦 Ставит программы**<br>
-<sub>«Установи OBS» — через [JII](https://github.com/0nigiris/JII): лучший доверенный источник (Fedora, Flathub, COPR…), пароль только в системном окне.</sub>
-
-</td>
-<td valign="top">
-
-**💬 Пишет людям — после вашего «да»**<br>
-<sub>Сначала показывает текст на острове, отправляет только после подтверждения кнопкой, голосом или <kbd>Meta</kbd>+<kbd>Y</kbd>.</sub>
-
-</td>
-<td valign="top">
-
-**✉️ Почта и календарь приватно**<br>
-<sub>Письма читает и пишет локальная модель — в облако они не уходят.</sub>
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**🧠 Учится**<br>
-<sub>Помнит людей («Илья — тот, что в Польше, писать в Discord»), привычки и где лежат файлы.</sub>
-
-</td>
-<td valign="top">
-
-**🎮 Играет**<br>
-<sub>Запускает игры из Steam, Heroic и других лаунчеров — по названию, как вы их зовёте.</sub>
-
-</td>
-<td valign="top">
-
-**👩‍💻 Руководит Claude Code**<br>
-<sub>Отдаёт задачи по коду фоновым сессиям Claude Code, сам проверяет результат и докладывает.</sub>
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**🗣️ Живой голос**<br>
-<sub>Qwen3-TTS на вашей видеокарте: «Джарвис», голос по описанию или из записи.</sub>
-
-</td>
-<td valign="top">
-
-**👂 Слышит по имени**<br>
-<sub>«Джарвис, открой Дискорд» — без кнопки.</sub>
-
-</td>
-<td valign="top">
-
-**🎵 Свой плеер**<br>
-<sub>«Включи песню…» — играет через пару секунд прямо в острове: обложка, эквалайзер, очередь; файл скачивается следом.</sub>
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**📱 И на телефоне**<br>
-<sub>Та же просьба, тот же плеер и то же «я ушёл» — с телефона, через [телефонную половину](phone/README.md): разбудить выключенный компьютер,…</sub>
-
-</td>
-<td valign="top">
-
-**🌅 Утренний брифинг**<br>
-<sub>Первое за день «привет» — и он сразу рассказывает день: погода, ближайшая встреча, новые письма и всё, что осталось со вчера.</sub>
-
-</td>
-<td valign="top">
-
-**⏱ Таймеры и будильники**<br>
-<sub>«Поставь таймер на 10 минут», «разбуди в 7:30 каждый день».</sub>
-
-</td>
-<td valign="top">
-
-**🗣 Голос, который не спотыкается**<br>
-<sub>Числа, время и даты проговариваются словами, английские слова достаются тому движку, который умеет их читать.</sub>
-
-</td>
-<td valign="top">
-
-**🎭 Свой характер**<br>
-<sub>Дворецкий на «вы», друг на «ты», спокойный помощник или описанный своими словами.</sub>
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**⚡ Несколько дел сразу**<br>
-<sub>«Обнови систему», а следом «включи музыку» — музыка играет сразу.</sub>
-
-</td>
-<td valign="top">
-
-**🎨 Цвет по музыке**<br>
-<sub>Остров окрашивается в цвет обложки, а если обложка ничего не говорит — в цвет того, о чём трек: тема жёлтого персонажа будет жёлтой.</sub>
-
-</td>
-<td valign="top">
-
-**📝 Планы и дневник в Obsidian**<br>
-<sub>«Запиши в планы» — пункт ложится в ваше хранилище обычным markdown, правится руками и виден с телефона.</sub>
-
-</td>
-<td valign="top">
-
-**🎬 Сценарии**<br>
-<sub>«Я сел работать» — открыть редактор, поднять мессенджер, включить музыку.</sub>
-
-</td>
-<td valign="top">
-
-**✈️ Работает и без компьютера**<br>
-<sub>Пульт на телефоне открывается, даже когда компьютер выключен: видны планы, можно надиктовать или написать.</sub>
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**🧘 Установка в одну строку**<br>
-<sub>Установщик показывает шаги, а не вывод команд, сам ставит недостающее и заканчивает одним действием: нажмите <kbd>Meta</kbd>+<kbd>J</kbd> и…</sub>
-
-</td>
-</tr>
-</table>
-
-Подробный список с пометками — в [docs/ВОЗМОЖНОСТИ.md](docs/ВОЗМОЖНОСТИ.md) и [CAPABILITIES.md](CAPABILITIES.md); инструменты — в [docs/ИНСТРУМЕНТЫ.md](docs/ИНСТРУМЕНТЫ.md).
-
-## Как выглядит
-
-<table>
-<tr>
-<td width="50%" align="center"><img src="docs/assets/island-answer.png" alt="Ответ на острове"><br><sub><b>Ответ</b> — голосом и текстом, можно сразу ответить или скопировать</sub></td>
-<td width="50%" align="center"><img src="docs/assets/island-compose.png" alt="Поле ввода"><br><sub><b>Meta+K</b> — поле ввода, выделенный текст уже прикреплён</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-media.png" alt="Готовое видео"><br><sub><b>Студия</b> — готовое видео с превью; долгие задачи идут в фоне</sub></td>
-<td align="center"><img src="docs/assets/island-message.png" alt="Черновик сообщения"><br><sub><b>Сообщение</b> — ничего не уходит без вашего «да»</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-player.png" alt="Плеер"><br><img src="docs/assets/island-music.png" alt="Играет" width="40%"><br><sub><b>Музыка</b> — альбомы и плейлисты, очередь, перемешивание и повтор; пока играет, сверху обложка и эквалайзер</sub></td>
-<td align="center"><img src="docs/assets/island-video.png" alt="Видео в острове"><br><sub><b>Видео прямо в острове</b> — или в окне, или на YouTube: Джарвис спросит</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-slash.png" alt="Быстрые команды"><br><sub><b>/</b> — быстрые команды: новый разговор, картинка, видео, микрофон…</sub></td>
-<td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — музыка, переключатели, три громкости (ассистент, музыка, система), модель, уведомления и недавнее</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-notification.png" alt="Уведомление"><br><sub><b>Уведомления</b> — ⌄ раскрывает всё сообщение, ✕ убирает, клик открывает приложение — даже если оно свёрнуто в трей</sub></td>
-<td align="center"><img src="docs/assets/island-where.png" alt="Где включить видео"><br><sub><b>Видео</b> — сам спросит, где показать</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-thinking.png" alt="Работает" width="70%"><br><img src="docs/assets/island-listening.png" alt="Слушает" width="45%"><br><sub>Что делает прямо сейчас — человеческими словами</sub></td>
-<td align="center"><img src="docs/assets/island-settings.png" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове: 14 разделов</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-cover.png" alt="Обложка крупно" width="80%"><br><sub><b>Обложка</b> — клик показывает её крупно; цвет острова берётся из обложки или из темы трека</sub></td>
-<td align="center"><img src="docs/assets/island-character.png" alt="Характер"><br><sub><b>Характер</b> — дворецкий, друг, спокойный или свой; мат и живая речь отдельно</sub></td>
-</tr>
-</table>
-
-## Голосом или с клавиатуры
-
-| Клавиши | Что делают |
+| Keys | What they do |
 |---|---|
-| <kbd>Meta</kbd>+<kbd>J</kbd> (или кнопка мыши) | говорить: нажать — слушает до паузы, зажать — пока держите. В режиме «только текст» — поле ввода |
-| <kbd>Meta</kbd>+<kbd>K</kbd> | написать просьбу; выделенный на экране текст прикрепляется |
-| <kbd>Meta</kbd>+<kbd>Y</kbd> / <kbd>Meta</kbd>+<kbd>N</kbd> | «да» / «нет» на вопрос острова: разрешить действие, отправить сообщение |
-| <kbd>Meta</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>, двойное нажатие или «стоп» | отменить всё |
-| В поле ввода: <kbd>Enter</kbd> · <kbd>Shift</kbd>+<kbd>Enter</kbd> · <kbd>↑</kbd> · <kbd>/</kbd> · <kbd>Esc</kbd> | отправить · новая строка · прошлые просьбы · команды · закрыть |
+| <kbd>Meta</kbd>+<kbd>J</kbd> (or a mouse button) | talk: press — it listens until you pause; hold — while you hold. In text-only mode — the text field |
+| <kbd>Meta</kbd>+<kbd>K</kbd> | type a request; the text selected on screen is attached |
+| <kbd>Meta</kbd>+<kbd>Y</kbd> / <kbd>Meta</kbd>+<kbd>N</kbd> | “yes” / “no” to the island's question: allow an action, send a message |
+| <kbd>Meta</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>, a double press, or “stop” | cancel everything |
+| In the text field: <kbd>Enter</kbd> · <kbd>Shift</kbd>+<kbd>Enter</kbd> · <kbd>↑</kbd> · <kbd>/</kbd> · <kbd>Esc</kbd> | send · new line · earlier requests · commands · close |
 
-**Без микрофона** (школа, офис, библиотека): *Настройки → Общие → Просьбы → «Только текст»*. Микрофон не открывается, распознавание речи даже не загружается, а ответы можно оставить только текстом (*«Отвечать голосом»*). Все сочетания меняются в *Настройки → Кнопки*.
+**Without a microphone** (school, office, library): *Settings → General → Requests → “Text only”*. The microphone is never opened, speech recognition is not even loaded, and replies can be text only too (*“Spoken replies”*). All keys can be changed in *Settings → Buttons*.
 
-## Музыка и видео
+## Music and video
 
-«Джарвис, включи песню Back in Black» — через 3–5 секунд она играет, без лишних слов. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно альбом или плейлист целиком («включи альбом Meteora»), исполнителя («включи Linkin Park»), вперемешку или на повтор.
+“Jarvis, play Back in Black” — it plays in 3–5 seconds, without chatter. JustDay finds the song on YouTube (the original, not a cover or an hour-long loop), downloads the audio to `~/Music/JustDay/YouTube` and plays it in its own player. Next time the song plays from disk, even offline. Whole albums and playlists work (“play the album Meteora”), artists (“play Linkin Park”), shuffled or on repeat.
 
-- Пока играет музыка, сверху висит **живая пилюля**: обложка, название и эквалайзер, а рядом — время, погода и то, что идёт в фоне. Клик открывает плеер с перемоткой, громкостью и очередью; клик по обложке — её крупно.
-- **Цвет острова** — цвет обложки, а если обложка ничего не говорит (чёрная, серая), модель один раз подбирает цвет того, о чём трек: тема персонажа, палитра игры.
-- «пауза», «дальше», «назад», «перемешай», «на повтор», «выключи повтор», «выключи музыку» работают мгновенно, без ИИ. В плеере те же кнопки и очередь: клик по песне включает её. Пока Джарвис слушает или говорит, музыка становится тише.
-- Плеер — отдельная служба, поэтому музыка не прерывается, даже если перезапустить ассистента.
+- While music plays, a **live pill** sits at the top: the cover, the title and the bars, and next to them the time, the weather and whatever runs in the background. A click opens the player with seeking, volume and the queue; a click on the cover shows it large.
+- **The island's colour** is the cover's — and when the cover says nothing (black, grey), the model picks, once, the colour of what the track is about: a character's theme, a game's palette.
+- “pause”, “next”, “back”, “shuffle”, “repeat”, “stop the music” work instantly, without AI. The player has the same buttons and the queue: a click on a song plays it. While Jarvis listens or speaks, the music gets quieter.
+- The player is a separate service, so the music keeps playing even when the assistant restarts.
 
-«Включи видео про чёрные дыры» — Джарвис найдёт ролик и **спросит, где его показать**:
+“Play a video about black holes” — Jarvis finds one and **asks where to show it**:
 
-- **В острове** — ролик загружается (до 720p) и играет прямо сверху экрана. Поверх него идут подписи ассистента, двойной клик открывает видео на весь экран.
-- **В окне** — отдельный плеер mpv, стартует сразу.
-- **YouTube** — страница в браузере, с комментариями.
+- **In the island** — the video loads (up to 720p) and plays right at the top of the screen, with the assistant's words as captions; a double click opens it full screen.
+- **In a window** — a separate mpv player, starts at once.
+- **YouTube** — the page in your browser, with comments.
 
-Чтобы не спрашивал каждый раз, выберите вариант в *Настройки → Музыка и видео*.
+To stop being asked, pick one in *Settings → Music & video*.
 
-## Студия
+## Studio
 
-Скажите или напишите: «нарисуй логотип с прозрачным фоном», «оживи это фото», «сделай лоу-фай бит на 30 секунд», «преврати фото кресла в 3D-модель», «вырежи паузы из видео и сделай вертикальное для шортсов».
+Say or type: “draw a logo with a transparent background”, “bring this photo to life”, “make a 30-second lo-fi beat”, “turn this photo of a chair into a 3D model”, “cut the pauses out of this video and make it vertical for shorts”.
 
-| Что | Как долго на RTX 3060 |
+| What | How long on an RTX 3060 |
 |---|---|
-| Картинка, картинка без фона, увеличение ×4 | 10–40 с |
-| Правка фото по словам | 1–2 мин |
-| Музыка и песни (с вокалом) | ~15 с на 10 с трека |
-| 3D-модель из текста или фото → GLB + STL | ~3 мин, в фоне |
-| Видео из текста или фото | ~8 мин на 3 с, в фоне — JustDay сам скажет, когда готово |
-| Озвучка вашим голосом ассистента, субтитры из речи | секунды |
-| Монтаж: обрезать, склеить, музыка под видео, вшить субтитры, вертикальное 9:16, убрать паузы, ускорить, GIF, слайдшоу | секунды, ffmpeg |
+| A picture, a picture without background, ×4 upscale | 10–40 s |
+| A photo edit from words | 1–2 min |
+| Music and songs (with vocals) | ~15 s per 10 s of track |
+| A 3D model from text or a photo → GLB + STL | ~3 min, in the background |
+| Video from text or a photo | ~8 min per 3 s, in the background — JustDay tells you when it's ready |
+| Voice-over in the assistant's voice, subtitles from speech | seconds |
+| Montage: trim, join, music under video, burned-in subtitles, vertical 9:16, pause removal, speed-up, GIF, slideshow | seconds, ffmpeg |
 
-Генерация идёт через локальный [ComfyUI](https://github.com/comfyanonymous/ComfyUI) с моделями FLUX.1-schnell, Qwen-Image-Edit, Wan 2.2, ACE-Step и Hunyuan3D. JustDay находит его сам (`~/ai-local/ComfyUI`, `~/ComfyUI` или `[studio] comfy_dir`), запускает только на `127.0.0.1` и в отдельной службе с лимитом памяти. Проверка: `justday studio status`. Монтаж, субтитры и озвучка работают и без видеокарты.
+Generation runs through a local [ComfyUI](https://github.com/comfyanonymous/ComfyUI) with FLUX.1-schnell, Qwen-Image-Edit, Wan 2.2, ACE-Step and Hunyuan3D. JustDay finds it by itself (`~/ai-local/ComfyUI`, `~/ComfyUI` or `[studio] comfy_dir`), runs it only on `127.0.0.1` and in a separate service with a memory limit. Check: `justday studio status`. Montage, subtitles and voice-over work without a GPU too.
 
-## Модели
+## Models
 
-| Провайдер | Цена | Что нужно |
+| Provider | Price | What you need |
 |---|---|---|
-| **Claude** (по умолчанию) | подписка Claude | вход в Claude Code — мастер поможет |
-| **Бесплатная** — облако Ollama | бесплатно с лимитами | бесплатный аккаунт Ollama |
-| **OpenRouter** `openrouter/free` | бесплатно, ~50 запросов в день | ключ OpenRouter |
-| **DeepSeek** | дёшево | ключ DeepSeek |
-| **Локальная** Ollama | бесплатно, ничего не уходит в сеть | видеокарта от 10 ГБ |
-| Свой адрес | — | любой Anthropic-совместимый API (LiteLLM, vLLM…) |
+| **Claude** (default) | a Claude subscription | signed in to Claude Code — the setup helps |
+| **Free** — Ollama's cloud | free, with limits | a free Ollama account |
+| **OpenRouter** `openrouter/free` | free, ~50 requests a day | an OpenRouter key |
+| **DeepSeek** | cheap | a DeepSeek key |
+| **Local** Ollama | free, nothing leaves the machine | a GPU with 10 GB or more |
+| Your own endpoint | — | any Anthropic-compatible API (LiteLLM, vLLM…) |
 
-Память, навыки и записная книжка общие для всех моделей. Смена: остров → меню → «Модель» или `justday model use <провайдер> <модель>`.
+Memory, skills and the address book are shared by all models. Switch: island → menu → “Model”, or `justday model use <provider> <model>`.
 
-## Приватность
+## Privacy
 
-| Остаётся на компьютере | Уходит в облако |
+| Stays on your computer | Goes to the cloud |
 |---|---|
-| звук микрофона и распознавание речи, голос ассистента (кроме ElevenLabs, если выбран) | текст ваших просьб и ответы — выбранной модели |
-| письма, календарь, мгновенные команды | выделенный текст — только если он прикреплён к просьбе (видно в поле) |
-| картинки, видео, музыка и 3D из студии | название города для погоды (Open-Meteo) |
-| пароли и ключи — в системной связке ключей, не в памяти ассистента | названия треков — по одному разу, когда остров подбирает цвет по музыке (можно выключить) |
+| microphone audio and speech recognition, the assistant's voice | the text of your requests and the replies — to the chosen model |
+| mail, calendar, instant commands | selected text — only when it is attached to a request (you see it in the field) |
+| pictures, video, music and 3D from the studio | the city name for the weather (Open-Meteo) |
+| passwords and keys — in the system keyring, never in the assistant's memory | track titles, once each, when the island picks a colour from the music (can be turned off) |
 
-Телеметрия Claude Code выключена. Опасные действия (удаление, `sudo`, форс-пуш…) ждут вашего подтверждения — в том числе запущенные фоновой задачей, а обычный запуск программ — нет. Подробнее — в [руководстве](docs/MANUAL.md); полный список сервисов и как удалить свои данные — [политика конфиденциальности](docs/КОНФИДЕНЦИАЛЬНОСТЬ.md), условия — [соглашение](docs/СОГЛАШЕНИЕ.md).
+Claude Code telemetry is off. Dangerous actions (deleting, `sudo`, force-push…) wait for your confirmation — also when they are started as background jobs; launching an app does not. More in the [manual](docs/MANUAL.md) (in Russian).
 
-## Команды
+## Commands
 
 ```bash
-justday ask "открой дискорд"          # просьба текстом из терминала
-justday compose                       # открыть поле ввода на острове
-justday play "AC/DC Back in Black"   # песня с YouTube в свой плеер (count=5 — несколько)
-justday video "черные дыры" where=island  # видео: island | window | browser (без where — спросит)
-justday play "Linkin Park Meteora" playlist=1 shuffle=1   # альбом вперемешку
-justday player repeat one             # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50 | color жёлтый
-justday job start "Обновление системы" -- jii update --json   # долгое — в фон
-justday persona friend swearing=on live=on                   # характер: jarvis | friend | calm | custom
+justday ask "open discord"               # a request from the terminal
+justday compose                          # open the text field on the island
+justday play "AC/DC Back in Black"  # a song from YouTube in its own player (count=5 — several)
+justday video "black holes" where=island # video: island | window | browser (no where — it asks)
+justday play "Linkin Park Meteora" playlist=1 shuffle=1   # an album, shuffled
+justday player repeat one                # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50 | color yellow
+justday job start "System update" -- jii update --json   # something long, in the background
+justday persona friend swearing=on live=on               # the character: jarvis | friend | calm | custom
 justday studio image "a red fox, watercolor" size=wide
 justday studio vertical ~/Videos/clip.mp4
-justday plan add "забрать посылку"    # планы в Obsidian: list | add | done 1 | open
-justday scene run работа              # сценарии: list | run | add | forget
-justday diary                         # страница дня в хранилище
-justday tokens                        # во что обходится разговор, по дням
-justday wake                          # кто будит ассистента и сколько раз впустую
-justday setup                         # мастер настройки заново
-justday doctor                        # проверка всего
-justday update                        # обновиться (остров подскажет, когда есть новое)
-justday logs -f                       # что он слышит и делает
+justday setup                            # the setup again
+justday doctor                           # check everything
+justday update                           # update (the island tells you when there is something new)
+justday logs -f                          # what it hears and does
 ```
 
 <details>
-<summary><b>Частые вопросы</b></summary>
+<summary><b>Questions</b></summary>
 
-**Работает без видеокарты NVIDIA?** Да. Мастер выберет распознавание речи на процессоре (или режим «только текст»), простой голос Silero и облачную модель. Недоступны только живой голос, локальные модели и генерация в студии.
+**Does it work without an NVIDIA GPU?** Yes. The setup picks speech recognition on the CPU (or text-only mode), the simple Silero voice and a cloud model. Only the neural voice, local models and studio generation are not available.
 
-**Можно вообще без голоса?** Да: *Настройки → Общие → «Только текст»* и выключить *«Отвечать голосом»*. <kbd>Meta</kbd>+<kbd>K</kbd> открывает поле ввода.
+**Can I use it without voice at all?** Yes: *Settings → General → “Text only”* and turn off *“Spoken replies”*. <kbd>Meta</kbd>+<kbd>K</kbd> opens the text field.
 
-**Он сам что-нибудь отправит или удалит?** Сообщения и письма — только после вашего «да». Удаление файлов, `sudo`, удаление программ и другие опасные действия — тоже с подтверждением.
+**Will it send or delete something on its own?** Messages and mail only after your “yes”. Deleting files, `sudo`, removing software and other dangerous actions need a confirmation too.
 
-**Другие окружения (GNOME, X11, Plasma 5)?** Работает, только вместо острова — запасная полоска сверху экрана (на Tk): состояние, ответы, меню правой кнопкой с «Написать…», «Остановить» и кнопками плеера. Окнами управляют `wmctrl` и `xdotool`, снимок экрана берётся любым найденным инструментом, выделенный текст читается через `xclip`, горячие клавиши в GNOME ставит `scripts/setup-hotkey-gnome.sh`. Установщик определяет всё это сам — и не один раз: если на компьютере есть и Wayland, и X11, нужное выбирается при каждом входе, переустанавливать при смене сеанса нечего. Только для KDE Plasma 6 на Wayland остаются сам остров (плеер, видео в кадре, карточки писем) и точные клики по разметке чужих окон.
+**Other desktops (GNOME, X11, Plasma 5)?** It works — the island is replaced by a fallback strip at the top of the screen (written in Tk): state, answers, and a right-click menu with “Type…”, “Stop” and the player buttons. Windows are handled by `wmctrl` and `xdotool`, screenshots by whichever tool is installed, the selected text through `xclip`, and GNOME shortcuts by `scripts/setup-hotkey-gnome.sh`. The installer works all of this out by itself — and not once and for all: on a computer that offers both Wayland and X11, the right one is picked at every login, with nothing to reinstall when you switch. KDE Plasma 6 on Wayland keeps the island itself (player, video in frame, mail cards) and the exact clicks inside other windows.
 
-**Нет прав администратора (`sudo`)?** Установка идёт до конца: всё, кроме системных пакетов, живёт в домашней папке. Установщик поставит `uv`, Claude Code, окружение Python и модели, а `yt-dlp` для музыки возьмёт себе же через `uv tool`. В конце он перечислит, чего не хватает и что именно от этого не работает, с готовой командой для администратора. Можно и сразу без вопросов: `JUSTDAY_NO_SUDO=1 ./install.sh`.
+**No admin rights (`sudo`)?** The install runs to the end: everything but the system packages lives in your home folder. The installer sets up `uv`, Claude Code, the Python environment and the models, and picks up `yt-dlp` for music through `uv tool`. At the end it lists what is missing, what stops working because of it, and the exact command for an admin. You can also skip the question entirely: `JUSTDAY_NO_SUDO=1 ./install.sh`.
 
-**Где файлы из студии?** В `~/Pictures/JustDay`, `~/Videos/JustDay`, `~/Music/JustDay` и `~/Documents/JustDay/3D`; на острове есть кнопки «Открыть» и «Показать в папке».
+**Where do studio files go?** `~/Pictures/JustDay`, `~/Videos/JustDay`, `~/Music/JustDay` and `~/Documents/JustDay/3D`; the island has “Open” and “Show in folder” buttons.
+
+**Does it speak English?** Yes — the island, the settings, the voice and the replies. *Settings → General → Language*.
 
 </details>
 
-📖 **[Все команды](docs/КОМАНДЫ.md)** — список подкоманд `justday` (80 штук, сверяется тестом).
+**[The full manual](docs/MANUAL.md)** (in Russian) — how it works, models, voice, memory, mail, games, studio, safety, troubleshooting.
 
-📖 **[Полное руководство](docs/MANUAL.md)** — устройство, модели, голос, память, почта, игры, студия, безопасность, решение проблем.
+## Contributing
 
-## Участие
+Bugs and ideas — in [Issues](https://github.com/0nigiris/JustDay/issues). Code, comments and commit history are in English; the interface is in Russian and English (`island/i18n`, `src/justday/i18n.py`). The README screenshots are taken in an isolated KWin session with default settings, in both languages: `SHOTS_LANG=ru|en tests/ui/readme_shots.sh`.
 
-Баги и идеи — в [Issues](https://github.com/0nigiris/JustDay/issues). Код (кроме имён переменных и API), комментарии и история коммитов — на русском; интерфейс — на русском и английском (`island/i18n`, `src/justday/i18n.py`). Скриншоты для README снимаются в изолированной сессии KWin с настройками по умолчанию, по-русски и по-английски: `SHOTS_LANG=ru|en tests/ui/readme_shots.sh`.
+## License
 
----
+JustDay © 2026 [0nigiris](https://github.com/0nigiris) — **GNU GPL v3 or later** ([LICENSE](LICENSE)): you may change and share the code, keeping the authorship and keeping derived versions open under the GPL.
 
-<a id="english"></a>
-
-**English:** the whole page, with English screenshots, is in **[README.en.md](README.en.md)**.
-
-## Лицензия · License
-
-JustDay © 2026 [0nigiris](https://github.com/0nigiris) — **GNU GPL v3 или новее** ([LICENSE](LICENSE)): код можно менять и распространять, сохраняя авторство и открытый исходный код производных версий под GPL.
-
-Сторонние части: иконки [Lucide](https://lucide.dev) (ISC); встроенные голоса созданы моделью Qwen3-TTS (Apache 2.0); идеи интерфейса вдохновлены Dynamic Island, компаньон-окном ChatGPT и Quick AI в Raycast.
+Third-party parts: [Lucide](https://lucide.dev) icons (ISC); the built-in voices were made with Qwen3-TTS (Apache 2.0); the interface is inspired by the Dynamic Island, the ChatGPT companion window and Raycast's Quick AI.
