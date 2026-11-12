@@ -681,5 +681,7 @@
   "Скажет что-нибудь сам раз в три часа": "Says something on its own every three hours",
   "Скажет что-нибудь сам раз в час": "Says something on its own every hour",
   "Скажет что-нибудь сам раз в 20 минут": "Says something on its own every 20 minutes",
-  ". Только когда вы за компьютером и не в игре, не ночью": ". Only while you are at the computer, not gaming, not at night"
+  ". Только когда вы за компьютером и не в игре, не ночью": ". Only while you are at the computer, not gaming, not at night",
+  "Перебивать по имени": "Interrupt by name",
+  "«Джарвис, стоп» посреди ответа — он замолкает и слушает. Для наушников: из колонок он может услышать сам себя": "Say “Jarvis, stop” mid-answer and it goes quiet and listens. Meant for headphones: through speakers it may hear itself"
 }

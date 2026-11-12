@@ -82,6 +82,9 @@ class HearingMixin:
 
     def _wake_by_name(self, prefill, take_tail) -> None:
         """«Джарвис, …» was heard. `prefill` is set when a command follows the name in the same breath."""
+        if self.state == "speaking" and self.cfg["audio"].get("barge_in"):
+            self.stop_speaking()     # П21: перебил по имени — голос замолкает, слушаем его
+            self.state = "thinking" if self.brain.busy else "idle"
         if self.state in ("listening", "transcribing", "speaking") or not self.listen(prefill=prefill):
             take_tail()
             return
@@ -298,7 +301,8 @@ class HearingMixin:
                                            floor=lambda: float(self.cfg["wakeword"].get("name_candidate", 0.0)))
             self._spotter = spotter
             self.mic.subscribe(lambda f: spotter.feed(
-                f, self.state in ("idle", "thinking") and time.monotonic() > max(self._quiet_until, self._wake_cooldown)
+                f, (self.state in ("idle", "thinking") or (self.state == "speaking" and self.cfg["audio"].get("barge_in")))
+                and time.monotonic() > max(self._quiet_until, self._wake_cooldown)
                 and self._name_spotting_allowed(), self._wake_score))
         self.mic.start()
 
