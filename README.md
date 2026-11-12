@@ -292,7 +292,7 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 
 ## Музыка и видео
 
-«Джарвис, включи песню Believer» — через 3–5 секунд она играет, без лишних слов. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно альбом или плейлист целиком («включи альбом Meteora»), исполнителя («включи Linkin Park»), вперемешку или на повтор.
+«Джарвис, включи песню Back in Black» — через 3–5 секунд она играет, без лишних слов. JustDay находит песню на YouTube (оригинал, а не кавер или часовую нарезку), скачивает звук в `~/Music/JustDay/YouTube` и играет в своём плеере. В следующий раз песня звучит с диска, даже без интернета. Можно альбом или плейлист целиком («включи альбом Meteora»), исполнителя («включи Linkin Park»), вперемешку или на повтор.
 
 - Пока играет музыка, сверху висит **живая пилюля**: обложка, название и эквалайзер, а рядом — время, погода и то, что идёт в фоне. Клик открывает плеер с перемоткой, громкостью и очередью; клик по обложке — её крупно.
 - **Цвет острова** — цвет обложки, а если обложка ничего не говорит (чёрная, серая), модель один раз подбирает цвет того, о чём трек: тема персонажа, палитра игры.
@@ -352,7 +352,7 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 ```bash
 justday ask "открой дискорд"          # просьба текстом из терминала
 justday compose                       # открыть поле ввода на острове
-justday play "Imagine Dragons Believer"   # песня с YouTube в свой плеер (count=5 — несколько)
+justday play "AC/DC Back in Black"   # песня с YouTube в свой плеер (count=5 — несколько)
 justday video "черные дыры" where=island  # видео: island | window | browser (без where — спросит)
 justday play "Linkin Park Meteora" playlist=1 shuffle=1   # альбом вперемешку
 justday player repeat one             # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50 | color жёлтый

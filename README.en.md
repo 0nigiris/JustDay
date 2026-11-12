@@ -242,7 +242,7 @@ A detailed list with “verified / with a caveat” marks is in [CAPABILITIES.md
 
 ## Music and video
 
-“Jarvis, play Believer” — it plays in 3–5 seconds, without chatter. JustDay finds the song on YouTube (the original, not a cover or an hour-long loop), downloads the audio to `~/Music/JustDay/YouTube` and plays it in its own player. Next time the song plays from disk, even offline. Whole albums and playlists work (“play the album Meteora”), artists (“play Linkin Park”), shuffled or on repeat.
+“Jarvis, play Back in Black” — it plays in 3–5 seconds, without chatter. JustDay finds the song on YouTube (the original, not a cover or an hour-long loop), downloads the audio to `~/Music/JustDay/YouTube` and plays it in its own player. Next time the song plays from disk, even offline. Whole albums and playlists work (“play the album Meteora”), artists (“play Linkin Park”), shuffled or on repeat.
 
 - While music plays, a **live pill** sits at the top: the cover, the title and the bars, and next to them the time, the weather and whatever runs in the background. A click opens the player with seeking, volume and the queue; a click on the cover shows it large.
 - **The island's colour** is the cover's — and when the cover says nothing (black, grey), the model picks, once, the colour of what the track is about: a character's theme, a game's palette.
@@ -302,7 +302,7 @@ Claude Code telemetry is off. Dangerous actions (deleting, `sudo`, force-push…
 ```bash
 justday ask "open discord"               # a request from the terminal
 justday compose                          # open the text field on the island
-justday play "Imagine Dragons Believer"  # a song from YouTube in its own player (count=5 — several)
+justday play "AC/DC Back in Black"  # a song from YouTube in its own player (count=5 — several)
 justday video "black holes" where=island # video: island | window | browser (no where — it asks)
 justday play "Linkin Park Meteora" playlist=1 shuffle=1   # an album, shuffled
 justday player repeat one                # pause | next | prev | repeat off|all|one | shuffle on|off | seek 60 | volume 50 | color yellow

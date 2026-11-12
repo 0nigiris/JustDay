@@ -14,7 +14,7 @@ error ("не нашёл …") or when the user asked a question. Never read file
 ## Music
 | Want | Command |
 |---|---|
-| a song | `justday play "Imagine Dragons Believer"` — write the query as it would be on YouTube (artist + title in their original language/spelling: «имэджин драгонс» → `Imagine Dragons`) |
+| a song | `justday play "AC/DC Back in Black"` — write the query as it would be on YouTube (artist + title in their original language/spelling: «эйси диси» → `AC/DC`) |
 | an album / a playlist / "best of" | `justday play "Linkin Park Meteora" playlist=1` — the whole album in order (official uploads preferred); a YouTube playlist link works too |
 | shuffled | add `shuffle=1` («включи вперемешку …», «перемешай») |
 | several songs / an artist / a mood | `justday play "Linkin Park" count=8`, `justday play "lofi hip hop for studying" count=10` — the first starts in ~3 s, the rest queue up in the background |
