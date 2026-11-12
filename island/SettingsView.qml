@@ -2714,6 +2714,24 @@ Item {
                     }
                 }
                 Row {
+                    // 17.1: чужому человеку (и на Windows) вход в Claude нужен первым делом, а `claude auth login`
+                    // в терминале он сам не найдёт.
+                    visible: mp.provider === "claude" && mp.info.claude_login !== undefined
+                    title: JD.tr("Аккаунт Claude")
+                    subtitle: mp.info.claude_login ? JD.tr("Вход выполнен")
+                            : mp.info.claude_login === false ? JD.tr("Войдите подпиской Claude или ключом Anthropic")
+                            : JD.tr("Claude Code не найден")
+                    RowLayout {
+                        spacing: 8
+                        Btn {
+                            visible: mp.info.claude_login === false
+                            text: JD.tr("Войти"); primary: true
+                            onClicked: JD.send({ cmd: "terminal_run", what: "claude_login" })
+                        }
+                        Btn { glyph: "refresh-cw"; text: JD.tr("Проверить"); onClicked: win.reload() }
+                    }
+                }
+                Row {
                     id: ollama
                     visible: !!mp.info.account
                     readonly property var acc: mp.info.account || ({})

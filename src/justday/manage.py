@@ -601,6 +601,19 @@ def undo_setting() -> dict | None:
         return None
 
 
+def claude_signed_in() -> bool | None:
+    """Вошёл ли человек в Claude Code. None — claude не установлен или не ответил.
+    Почту и тариф из ответа не берём: островку нужно только «да/нет»."""
+    exe = shutil.which("claude")
+    if not exe:
+        return None
+    try:
+        r = subprocess.run([exe, "auth", "status", "--json"], capture_output=True, text=True, timeout=10)
+        return bool(json.loads(r.stdout or "{}").get("loggedIn"))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
 def models() -> dict:
     b = config.load()["brain"]
     out = []
@@ -610,6 +623,8 @@ def models() -> dict:
                 "suggested": MODELS.get(name, [])}
         if p.get("cloud_signin"):
             item["account"] = providers.cloud_account()
+        if name == "claude":
+            item["claude_login"] = claude_signed_in()
         out.append(item)
     return {"current": {"provider": b.get("provider", "claude"), "model": b["model"], "base_url": b.get("base_url", ""),
                         "effort": b.get("effort", "low")}, "providers": out}

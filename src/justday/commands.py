@@ -59,6 +59,8 @@ TERMINAL_JOBS = {
                               "secret-tool store --label 'JustDay: fish' service justday key fish && echo 'Сохранено'"], True),
     "setup_voice": ([str(SCRIPTS / "setup-voice.sh")], True),
     "logs": (["justday", "logs", "-f"], False),
+    # Вход в Claude: браузер открывает сам claude, пароль вводится на сайте Anthropic, мы его не видим.
+    "claude_login": (["claude", "auth", "login"], True),
 }
 
 

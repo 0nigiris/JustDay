@@ -697,5 +697,8 @@
   "Убрать": "Remove",
   "Добавить в роутер": "Add to router",
   "Встанет последним. Без ключа ступень пропускается": "Goes last. Without a key the step is skipped",
-  "нет ключа": "no key"
+  "нет ключа": "no key",
+  "Аккаунт Claude": "Claude account",
+  "Войдите подпиской Claude или ключом Anthropic": "Sign in with a Claude subscription or an Anthropic key",
+  "Claude Code не найден": "Claude Code not found"
 }
