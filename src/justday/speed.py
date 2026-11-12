@@ -158,3 +158,60 @@ def report() -> str:
     if slow:
         raise RuntimeError("медленное: " + "; ".join(slow))
     return "всё в пределах"
+
+
+# Кандидаты в «быстрее хайку» для голоса: короткий ответ, где задержка до первого слова важнее ума.
+# Меряем тем же `claude -p`, что и мозг, — иначе цифра не про то, что человек будет ждать.
+CANDIDATES = [
+    ("claude", "haiku"),
+    ("openrouter", "nvidia/nemotron-3.5-lightning:free"),
+    ("openrouter", "google/gemma-4-31b-it:free"),
+    ("openrouter", "openrouter/free"),
+    ("ollama_cloud", "kimi-k3:cloud"),
+    ("ollama_cloud", "glm-5.3-flash:cloud"),
+    ("ollama", "qwen3.5:9b"),
+    ("deepseek", "deepseek-flash"),
+]
+
+
+def _model_turn(cfg: dict, name: str, model: str, timeout: float = 90) -> float:
+    from . import providers
+
+    b = {**cfg["brain"], "provider": name, "model": model}
+    env = {**os.environ, **providers.env({**cfg, "brain": b})}
+    cmd = [shutil.which("claude") or "claude", "-p", "Ответь одним словом: да", "--model", model,
+           "--output-format", "json", "--no-session-persistence", "--strict-mcp-config"]
+    t = time.perf_counter()
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env, cwd=str(config.STATE_DIR))
+    took = time.perf_counter() - t
+    try:
+        data = json.loads(out.stdout or "{}")
+    except ValueError:
+        data = {"is_error": True, "result": (out.stderr or out.stdout)[-80:]}
+    if out.returncode or data.get("is_error"):
+        raise RuntimeError(str(data.get("result") or out.stderr).strip()[:120])
+    return took
+
+
+def models() -> str:
+    """`justday test models`: таблица «до слова» по поставщикам, два прогона, медиана. Ключи не печатаются."""
+    from . import fallback
+
+    cfg = config.load()
+    rows = []
+    for name, model in CANDIDATES:
+        label = f"{name} · {model}"
+        if not fallback.usable(name):
+            print(f"  – {label:<52} нет ключа")
+            continue
+        try:
+            sec = statistics.median([_model_turn(cfg, name, model) for _ in range(2)])
+        except Exception as e:
+            print(f"  – {label:<52} не вышло: {str(e)[:60]}")
+            continue
+        rows.append((sec, label))
+        print(f"  ✔ {label:<52} {sec:>5.1f}s")
+    if not rows:
+        raise RuntimeError("ни одна модель не ответила")
+    best = min(rows)
+    return f"быстрее всех: {best[1]} ({best[0]:.1f}s)"

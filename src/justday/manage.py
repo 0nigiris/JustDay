@@ -26,7 +26,7 @@ MODELS = {  # suggested models per provider (any id works)
     "claude": ["sonnet", "opus", "haiku"],
     "ollama": ["qwen3.5:9b", "qwen3.5:4b", "gemma4:e4b"],
     # ollama.com/search?c=cloud, tool-capable (Sept 2026)
-    "ollama_cloud": ["kimi-k3:cloud", "glm-5.3:cloud", "deepseek-v4-flash:cloud", "minimax-m3:cloud", "qwen3.5:cloud",
+    "ollama_cloud": ["kimi-k3:cloud", "glm-5.3:cloud", "minimax-m3:cloud", "qwen3.5:cloud",
                      "gpt-oss:120b-cloud"],
     # free tool-capable models listed by openrouter.ai/api/v1/models (Sept 2026); the list changes over time.
     # openrouter/free picks whichever free model is up
