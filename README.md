@@ -107,35 +107,18 @@ A detailed list with “verified / with a caveat” marks is in [CAPABILITIES.md
 ## How it looks
 
 <table>
+<tr><td colspan="2" align="center"><img src="docs/assets/en/screen-menu.jpg" alt="The main menu"><br><sub><b>The menu</b> — music, switches, volume, the model and recent requests; a click on the island opens it</sub></td></tr>
 <tr>
-<td width="50%" align="center"><img src="docs/assets/en/island-answer.png" alt="An answer on the island"><br><sub><b>An answer</b> — spoken and written; reply or copy right away</sub></td>
-<td width="50%" align="center"><img src="docs/assets/en/island-compose.png" alt="The text field"><br><sub><b>Meta+K</b> — the text field, with the selected text already attached</sub></td>
+<td width="50%" align="center"><img src="docs/assets/en/screen-music.jpg" alt="Music playing"><br><sub><b>Music</b> — while it plays, the island keeps the cover, the bars, the time and the weather</sub></td>
+<td width="50%" align="center"><img src="docs/assets/en/screen-answer.jpg" alt="An answer on the island"><br><sub><b>An answer</b> — spoken and written; reply or copy right away</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/assets/en/island-media.png" alt="A finished video"><br><sub><b>Studio</b> — a finished video with a preview; long jobs run in the background</sub></td>
-<td align="center"><img src="docs/assets/en/island-message.png" alt="A message draft"><br><sub><b>A message</b> — nothing is sent without your “yes”</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/en/island-player.png" alt="The player"><br><img src="docs/assets/en/island-music.png" alt="Playing" width="60%"><br><sub><b>Music</b> — albums and playlists, queue, shuffle and repeat; while it plays the island shows the cover and bars next to the time and weather</sub></td>
-<td align="center"><img src="docs/assets/en/island-video.png" alt="A video in the island"><br><sub><b>Video right in the island</b> — or in a window, or on YouTube: Jarvis asks</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/en/island-slash.png" alt="Quick commands"><br><sub><b>/</b> — quick commands: new conversation, picture, video, microphone…</sub></td>
-<td align="center"><img src="docs/assets/en/island-menu.png" alt="The menu"><br><sub><b>The menu</b> — music, switches, three volumes (the assistant, the music, the system), the model, notifications and recent requests</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/en/island-notification.png" alt="A notification"><br><sub><b>Notifications</b> — ⌄ opens the whole message, dismisses it, a click opens the app — even from the tray</sub></td>
-<td align="center"><img src="docs/assets/en/island-where.png" alt="Where to play a video"><br><sub><b>Video</b> — it asks where to play it</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/en/island-thinking.png" alt="Working" width="70%"><br><img src="docs/assets/en/island-listening.png" alt="Listening" width="45%"><br><sub>What it is doing right now — in plain words</sub></td>
-<td align="center"><img src="docs/assets/en/island-settings.png" alt="Settings"><br><sub><b>Settings</b> right in the island: 14 sections</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/en/island-cover.png" alt="The cover, large" width="80%"><br><sub><b>The cover</b> — a click shows it large; the island's colour comes from the cover or from what the track is about</sub></td>
-<td align="center"><img src="docs/assets/en/island-character.png" alt="Character"><br><sub><b>Character</b> — butler, friend, calm or your own; swearing and live speech separately</sub></td>
+<td align="center"><img src="docs/assets/en/screen-edit.jpg" alt="Editing the island"><br><sub><b>Editing the island</b> — drag widgets around, drop the extra ones below, take new ones from the shelf</sub></td>
+<td align="center"><img src="docs/assets/en/screen-settings.jpg" alt="Settings"><br><sub><b>Settings</b> right in the island, 14 sections</sub></td>
 </tr>
 </table>
+
+The screenshots show a clean JustDay right after installation. Wallpaper: MacTahoe by vinceliuice, CC BY-SA 4.0.
 
 ## Voice or keyboard
 

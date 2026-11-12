@@ -73,18 +73,21 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 | Подписка Claude **или** бесплатная модель | «мозг»: Claude, облако Ollama, OpenRouter, DeepSeek, локальная Ollama |
 | Видеокарта NVIDIA — *по желанию* | живой голос, быстрое распознавание, локальные модели и студия. Без неё JustDay работает: текстом, простым голосом и с облачной моделью |
 
-## Что видно на экране
+## Как выглядит
 
 <table>
+<tr><td colspan="2" align="center"><img src="docs/assets/screen-menu.jpg" alt="Главное меню"><br><sub><b>Меню</b> — музыка, переключатели, громкость, модель и недавнее; открывается нажатием на островок</sub></td></tr>
 <tr>
-<td width="58%" align="center"><img src="docs/assets/ui-settings.png" alt="Настройки острова"><br><sub><b>Настройки</b> прямо в острове: язык, голос, вид, почта и календарь, кнопки</sub></td>
-<td width="42%" align="center"><img src="docs/assets/ui-menu-edit.png" alt="Правка главного меню"><br><sub><b>Правка меню</b>: порядок стрелками, показать или скрыть каждый блок</sub></td>
+<td width="50%" align="center"><img src="docs/assets/screen-music.jpg" alt="Играет музыка"><br><sub><b>Музыка</b> — пока играет, островок держит обложку, эквалайзер, время и погоду</sub></td>
+<td width="50%" align="center"><img src="docs/assets/screen-answer.jpg" alt="Ответ на островке"><br><sub><b>Ответ</b> — голосом и текстом, можно сразу ответить или скопировать</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/assets/ui-mixer.png" alt="Микшер"><br><sub><b>Микшер</b> — громкость каждой программы и выбор устройства</sub></td>
-<td align="center"><img src="docs/assets/ui-dock.png" alt="Док"><br><br><img src="docs/assets/ui-tools.png" alt="Полка инструментов"><br><sub><b>Док</b> появляется сразу при входе, <b>полка</b>: эмодзи, буфер, звук, планы, история</sub></td>
+<td align="center"><img src="docs/assets/screen-edit.jpg" alt="Правка островка"><br><sub><b>Правка островка</b> — виджеты перетаскиваются, лишние уходят вниз, новые достаются из полки</sub></td>
+<td align="center"><img src="docs/assets/screen-settings.jpg" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове, 14 разделов</sub></td>
 </tr>
 </table>
+
+Снимки — чистый JustDay сразу после установки. Обои — MacTahoe, автор vinceliuice, лицензия CC BY-SA 4.0.
 
 ## Что умеет
 
@@ -131,39 +134,6 @@ curl -fsSL https://raw.githubusercontent.com/0nigiris/JustDay/main/install.sh | 
 - Та же просьба и тот же плеер с телефона или из Telegram, через [телефонную половину](phone/README.md). Выключенный компьютер можно разбудить с телефона.
 
 Подробный список с пометками — в [docs/ВОЗМОЖНОСТИ.md](docs/ВОЗМОЖНОСТИ.md); инструменты — в [docs/ИНСТРУМЕНТЫ.md](docs/ИНСТРУМЕНТЫ.md).
-
-## Как выглядит
-
-<table>
-<tr>
-<td width="50%" align="center"><img src="docs/assets/island-answer.png" alt="Ответ на острове"><br><sub><b>Ответ</b> — голосом и текстом, можно сразу ответить или скопировать</sub></td>
-<td width="50%" align="center"><img src="docs/assets/island-compose.png" alt="Поле ввода"><br><sub><b>Meta+K</b> — поле ввода, выделенный текст уже прикреплён</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-media.png" alt="Готовое видео"><br><sub><b>Студия</b> — готовое видео с превью; долгие задачи идут в фоне</sub></td>
-<td align="center"><img src="docs/assets/island-message.png" alt="Черновик сообщения"><br><sub><b>Сообщение</b> — ничего не уходит без вашего «да»</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-player.png" alt="Плеер"><br><img src="docs/assets/island-music.png" alt="Играет" width="40%"><br><sub><b>Музыка</b> — альбомы и плейлисты, очередь, перемешивание и повтор; пока играет, сверху обложка и эквалайзер</sub></td>
-<td align="center"><img src="docs/assets/island-video.png" alt="Видео в острове"><br><sub><b>Видео прямо в острове</b> — или в окне, или на YouTube: Джарвис спросит</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-slash.png" alt="Быстрые команды"><br><sub><b>/</b> — быстрые команды: новый разговор, картинка, видео, микрофон…</sub></td>
-<td align="center"><img src="docs/assets/island-menu.png" alt="Меню"><br><sub><b>Меню</b> — музыка, переключатели, три громкости (ассистент, музыка, система), модель, уведомления и недавнее</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-notification.png" alt="Уведомление"><br><sub><b>Уведомления</b> — ⌄ раскрывает всё сообщение, убирает, клик открывает приложение — даже если оно свёрнуто в трей</sub></td>
-<td align="center"><img src="docs/assets/island-where.png" alt="Где включить видео"><br><sub><b>Видео</b> — сам спросит, где показать</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-thinking.png" alt="Работает" width="70%"><br><img src="docs/assets/island-listening.png" alt="Слушает" width="45%"><br><sub>Что делает прямо сейчас — человеческими словами</sub></td>
-<td align="center"><img src="docs/assets/island-settings.png" alt="Настройки"><br><sub><b>Настройки</b> прямо в острове: 14 разделов</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/island-cover.png" alt="Обложка крупно" width="80%"><br><sub><b>Обложка</b> — клик показывает её крупно; цвет острова берётся из обложки или из темы трека</sub></td>
-<td align="center"><img src="docs/assets/island-character.png" alt="Характер"><br><sub><b>Характер</b> — дворецкий, друг, спокойный или свой; мат и живая речь отдельно</sub></td>
-</tr>
-</table>
 
 ## Голосом или с клавиатуры
 
