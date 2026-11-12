@@ -1980,9 +1980,9 @@ def _parts_cmd(action: str, names: list[str]) -> int:
         for name, part in parts.PARTS.items():
             here = parts.have(name)
             mark = "✓" if here else "·"
-            print(f"  {mark} {name:<8} {part.size:>8}  {part.what}")
+            print(f"  {mark} {name:<9} {part.size:>8}  {part.what}")
             if not here:
-                print(f"    {'':<8} {'':>8}  без неё: {part.without}")
+                print(f"    {'':<9} {'':>8}  без неё: {part.without}")
         rest = [n for n in parts.suggested() if not parts.have(n)]
         print()
         if rest:
@@ -1994,6 +1994,17 @@ def _parts_cmd(action: str, names: list[str]) -> int:
     if not names:
         print(f"что именно {action}? {' | '.join(parts.PARTS)}")
         return 2
+    scripted = [n for n in names if n in parts.PARTS and parts.PARTS[n].script]
+    if scripted and action != "add":
+        print(f"{', '.join(scripted)}: ставится скриптом, убирать руками (папка ~/.local/share/justday/)")
+        return 2
+    for n in scripted:   # студия и локальная модель — свои скрипты, uv тут ни при чём
+        if subprocess.run([str(config.REPO_DIR / "scripts" / parts.PARTS[n].script)]).returncode:
+            print(f"{n}: не получилось")
+            return 1
+    names = [n for n in names if n not in scripted]
+    if not names:
+        return 0
     add_, drop = (tuple(names), ()) if action == "add" else ((), tuple(names))
     ok, cmd = parts.sync(add_, drop, dry=True)
     if not ok:

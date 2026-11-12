@@ -27,6 +27,7 @@ class Part:
     size: str
     what: str            # что появляется вместе с ней
     without: str         # как живётся без неё
+    script: str = ""     # не пакет Python, а своя установка скриптом из scripts/ (студия, локальная модель)
 
 
 PARTS: dict[str, Part] = {
@@ -50,6 +51,19 @@ PARTS: dict[str, Part] = {
         "распознавание речи на видеокарте NVIDIA — в несколько раз быстрее",
         "речь распознаётся на процессоре",
     ),
+    # П6: студия и локальная модель — не в ядре и не галочкой установщика, а кнопкой, когда захотелось.
+    "studio": Part(
+        "studio", "", "~25 ГБ",
+        "студия на видеокарте: картинки и увеличение, дальше правка, видео, музыка и 3D по мере надобности",
+        "монтаж, субтитры и озвучка работают и так",
+        script="setup-studio.sh",
+    ),
+    "local_llm": Part(
+        "local_llm", "", "~8 ГБ",
+        "своя модель на видеокарте (Ollama · Qwen 3.5 9B): почта и мелкие задачи не уходят в облако",
+        "всё думает облачная модель",
+        script="setup-local-llm.sh",
+    ),
 }
 
 
@@ -58,6 +72,11 @@ def have(name: str) -> bool:
     part = PARTS.get(name)
     if part is None:
         return False
+    if name == "studio":
+        from . import studio
+        return studio.settings()["comfy"] is not None
+    if name == "local_llm":
+        return bool(shutil.which("ollama")) or (config.DATA_DIR / "ollama/bin/ollama").exists()
     try:
         return importlib.util.find_spec(part.module) is not None
     except (ImportError, ValueError):
@@ -95,7 +114,7 @@ def sync(add: tuple[str, ...] = (), drop: tuple[str, ...] = (), dry: bool = Fals
     uv = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
     cmd = [uv, "sync", "--python", "3.12"]
     for name in PARTS:                       # порядок как в PARTS: предсказуемая команда в логах
-        if name in want:
+        if name in want and not PARTS[name].script:
             cmd += ["--extra", name]
     if dry:
         return True, " ".join(cmd)
