@@ -474,14 +474,9 @@ Item {
                         anchors.topMargin: 10
                         spacing: 4
 
-                        ShelfDot { icon: "volume-2"; note: "Звук"; onPicked: { JD.closeMenu(); JD.openTools("mixer") } }
-                        ShelfDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
-                        ShelfDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
-                        ShelfDot { icon: "cpu"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
-
                         Label2 {
                             Layout.fillWidth: true
-                            Layout.leftMargin: 8
+                            Layout.leftMargin: 6
                             font.pixelSize: 12
                             elide: Text.ElideRight
                             color: sp.askingName ? JD.accentRed : JD.text3
@@ -491,16 +486,10 @@ Item {
                             Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                         }
 
-                        // Не луна: луна — это «сон» среди кнопок питания.
-                        ShelfDot {
-                            icon: JD.serverMode ? "sun" : "hard-drive"
-                            note: JD.serverMode ? "Вернуть машину" : "Режим сервера"
-                            onPicked: { JD.closeMenu(); JD.toggleServerMode() }
-                        }
-                        // Не круговые стрелки: так нарисована перезагрузка.
-                        ShelfDot { icon: "download"; note: "Проверить обновление"; onPicked: { JD.closeMenu(); JD.checkUpdate() } }
+                        // Полка — только имя, настройки и питание. Звук, эмодзи, буфер и нагрузка
+                        // живут в доке и лотке, режим сервера — в плитках пульта, обновление — в MenuView; здесь они
+                        // делали из меню пульт на 13 кнопок («сделать минималистичнее», 14 нояб.).
                         ShelfDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
-                        ShelfDot { icon: "sliders-horizontal"; note: "Настройки системы (KDE)"; onPicked: { JD.closeMenu(); JD.systemSettings("") } }
 
                         Repeater {
                             model: JD.sessionActions
