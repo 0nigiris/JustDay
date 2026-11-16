@@ -78,10 +78,15 @@ Loader {
             }
             readonly property bool shown: trayReveal.shown
 
+            // Полоса вызова — только напротив самого трея, а не на всю высоту экрана. Спрятанный
+            // трей держал невидимую полосу в 28 px от верха до низа, и она съедала клики: кнопка
+            // «назад» в браузере и кнопки в углу Террарии не нажимались, пока трей не вызовешь
+            // (его жалоба 16 нояб.). Окна прижимают свои кнопки к углам, трей стоит посередине.
             Item {
                 id: trayEdge
                 width: trayReveal.revealZone
-                height: parent.height
+                height: Math.max(80, tray.restLength)
+                y: Math.max(0, trayWin.trayRestY + (tray.restLength - height) / 2)
                 x: trayWin.atRight ? parent.width - width : 0
                 HoverHandler {
                     onPointChanged: if (trayReveal.needHide) trayReveal.onEdgePoint(point, trayEdge.width)
