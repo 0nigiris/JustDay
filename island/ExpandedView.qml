@@ -141,6 +141,9 @@ View {
         rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
         transform: Translate { x: ev.dragId === gt.bid ? ev.dragDx : 0; y: ev.dragId === gt.bid ? ev.dragDy : 0 }
         z: ev.dragId === bid ? 5 : 0
+        // В правке плитка — предмет, а не выключатель: нажатие на её красный минус включало
+        // заодно и саму плитку (Wi‑Fi гас, когда его убирали, 16 нояб.).
+        pressEnabled: !ev.editing
     }
     // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
     // `forced` держит порядок до ответа демона: иначе блок после броска на миг прыгал бы обратно.
@@ -169,8 +172,43 @@ View {
         return r
     }
     function flagKey(id) { return id === "notifs" ? "island.show_notifications" : "island.menu_" + id }
-    function hide(id) { JD.setConfig(flagKey(id), false) }
-    function unhide(id) { JD.setConfig(flagKey(id), true) }
+    // Удаление и возврат — с движением: «хоп, и всё удалилось» выглядело как сбой (16 нояб.).
+    // Виджет сжимается и гаснет, и только потом прячется; возвращённый вырастает из 0.6.
+    function hide(id) {
+        const b = blocks[id]
+        if (!b || !b.visible || !JD.animOn) { JD.setConfig(flagKey(id), false); return }
+        outAnim.stop()
+        outAnim.target = b; outAnim.bid = id
+        outAnim.start()
+    }
+    function unhide(id) {
+        const b = blocks[id]
+        if (b && JD.animOn) { b.opacity = 0; b.scale = 0.6; inAnim.target = b; inAnim.restart() }
+        JD.setConfig(flagKey(id), true)
+    }
+    ParallelAnimation {
+        id: outAnim
+        property Item target
+        property string bid
+        NumberAnimation { target: outAnim.target; property: "scale"; to: 0.6; duration: 200; easing.type: Easing.InCubic }
+        NumberAnimation { target: outAnim.target; property: "opacity"; to: 0; duration: 200; easing.type: Easing.InCubic }
+        onFinished: {
+            JD.setConfig(ev.flagKey(bid), false)
+            // Вернуть вид сразу: спрятанный блок невидим и так, а пропусти мы это — он однажды
+            // вернётся из «Спрятано» прозрачным.
+            target.scale = 1; target.opacity = 1
+        }
+    }
+    SequentialAnimation {
+        id: inAnim
+        property Item target
+        // ответ демона приходит не сразу: без паузы блок вырос бы ещё невидимым
+        PauseAnimation { duration: 120 }
+        ParallelAnimation {
+            NumberAnimation { target: inAnim.target; property: "scale"; to: 1; duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+            NumberAnimation { target: inAnim.target; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
+        }
+    }
     function sign(id) { return order.indexOf(id) % 2 ? -1 : 1 }   // соседние блоки качаются в разные стороны
     function resetMenu() {
         forced = null
@@ -1038,8 +1076,9 @@ View {
                         border.width: 2
                         border.color: Qt.rgba(0, 0, 0, 0.6)
                         Icon { anchors.centerIn: parent; name: "minus"; implicitSize: 14 }
-                        TapHandler { onTapped: ev.hide(modelData.id) }
-                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        // MouseArea, а не TapHandler: тот берёт захват пассивно, и нажатие проваливалось
+                        // в плитку под минусом.
+                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: ev.hide(parent.modelData.id) }
                     }
                 }
             }

@@ -2050,7 +2050,9 @@ Singleton {
         flashTimer.interval = act ? 7000 : 2200
         flashText = textValue
         flashIcon = iconName || ""
-        flashColor = color
+        // Без цвета — зелёный по умолчанию. Голое undefined роняло функцию до flashTimer.restart(),
+        // и надпись («Режим сервера: гашу экраны») висела на островке вечно (16 нояб.).
+        flashColor = color || accentGreen
         flashTimer.restart()
     }
     Timer { id: flashTimer; interval: 2200; onTriggered: { jd.flashText = ""; jd.flashAct = null } }
