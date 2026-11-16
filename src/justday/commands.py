@@ -134,6 +134,14 @@ class CommandsMixin:
         self.listen()
         return {"ok": True}
 
+    async def _cmd_hush(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Замолчать только в этом ответе: текст дописывается на экране, а голос вернётся со
+        следующим ходом. Просил так (16 нояб.): выключать звук насовсем ради одного длинного
+        ответа — потом забываешь включить обратно."""
+        self._hushed = True
+        self.stop_speaking()
+        return {"ok": True}
+
     async def _cmd_stop(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         await self.cancel_all()
         return {"ok": True}

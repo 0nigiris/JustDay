@@ -357,6 +357,8 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
     # ---------------- speech output ----------------
     def silent(self) -> str:
         """Why the answer is only shown, not spoken: "off", "game", "focus", or "" when the voice is on."""
+        if getattr(self, "_hushed", False):
+            return "hush"
         t = self.cfg["tts"]
         if t["engine"] == "none" or t.get("muted"):
             return "off"
@@ -840,6 +842,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
     async def run_turn(self, text: str, source: str = "voice") -> str:
         self.state = "thinking"
         self._turn_text = text
+        self._hushed = False   # «замолчи» действует на один ответ, следующий снова слышно
         spoken_before = self._spoken
         gen = self._cancel_gen
         if time.monotonic() < self._cloud_down_until:  # it just failed: don't wait out the same timeout again

@@ -33,6 +33,12 @@ View {
                 visible: JD.dstate === "listening"
                 Layout.preferredWidth: 40; Layout.preferredHeight: 20
             }
+            // Замолчать только в этом ответе: текст остаётся, следующий ответ снова слышно (16 нояб.).
+            IconButton {
+                visible: JD.dstate === "speaking"
+                icon: "volume-x"; size: 26
+                onClicked: JD.send({ cmd: "hush" })
+            }
             // Выделено что-то — кнопка забирает выделенное и остаётся на месте: человек
             // продолжает читать. Не выделено — забирает весь ответ и уходит, как раньше.
             IconButton {
