@@ -154,7 +154,8 @@ View {
         Layout.fillHeight: true
         rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
         transform: [Scale { xScale: ev.fl(gt.bid).sx; yScale: ev.fl(gt.bid).sy },
-                    Translate { x: (ev.dragId === gt.bid ? ev.dragDx : 0) + ev.fl(gt.bid).x; y: (ev.dragId === gt.bid ? ev.dragDy : 0) + ev.fl(gt.bid).y }]
+                    Translate { x: (ev.dragId === gt.bid ? ev.dragDx : 0) + ev.fl(gt.bid).x; y: (ev.dragId === gt.bid ? ev.dragDy : 0) + ev.fl(gt.bid).y },
+                    Translate { y: gt.hovered && !ev.editing ? -2 : 0; Behavior on y { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } } }]
         z: ev.dragId === bid ? 5 : 0
         // В правке плитка — предмет, а не выключатель: нажатие на её красный минус включало
         // заодно и саму плитку (Wi‑Fi гас, когда его убирали, 16 нояб.).
@@ -175,11 +176,15 @@ View {
         Layout.fillHeight: true
         implicitHeight: 62
         radius: 18
-        color: JD.fill1
+        property color tint: JD.fill1   // свой оттенок виджета, как у плиток
+        color: Qt.tint(gbHover.hovered && !ev.editing ? JD.fill2 : JD.fill1, Qt.rgba(tint.r, tint.g, tint.b, 0.06))
+        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+        HoverHandler { id: gbHover }
         clip: true
         rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
         transform: [Scale { xScale: ev.fl(gb.bid).sx; yScale: ev.fl(gb.bid).sy },
-                    Translate { x: (ev.dragId === gb.bid ? ev.dragDx : 0) + ev.fl(gb.bid).x; y: (ev.dragId === gb.bid ? ev.dragDy : 0) + ev.fl(gb.bid).y }]
+                    Translate { x: (ev.dragId === gb.bid ? ev.dragDx : 0) + ev.fl(gb.bid).x; y: (ev.dragId === gb.bid ? ev.dragDy : 0) + ev.fl(gb.bid).y },
+                    Translate { y: gbHover.hovered && !ev.editing ? -2 : 0; Behavior on y { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } } }]
         z: ev.dragId === bid ? 5 : 0
     }
     // Плитка-действие: не выключатель, а кнопка «сделай» — круг значка не загорается.
@@ -272,10 +277,18 @@ View {
     property real flipT: 0
     property var dropAt: null   // брошенный блок едет из-под пальца, а не из своей старой клетки
     readonly property var flipNone: ({ x: 0, y: 0, sx: 1, sy: 1 })
+    // «Кирпичики» (16 нояб.: «чтобы перемещение ощущалось не группой, а кирпичиками»): flipT идёт
+    // линейно, а у каждого блока свой отрезок внутри него — волна по порядку чтения, свой перелёт
+    // и лёгкий подъём в полёте, будто блок взяли рукой и поставили на новое место.
+    readonly property int flipStep: 45
     function fl(id) {
         const f = flipFrom[id], t = flipT
         if (!f || t === 0) return flipNone
-        return { x: f.dx * t, y: f.dy * t, sx: 1 + (f.sw - 1) * t, sy: 1 + (f.sh - 1) * t }
+        const total = JD.durSlow + flipStep * f.n
+        const u = Math.max(0, Math.min(1, ((1 - t) * total - flipStep * f.i) / JD.durSlow))
+        const c = 1.7, e = 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2)   // OutBack
+        const k = 1 - e, lift = 1 + 0.025 * Math.sin(Math.PI * u)
+        return { x: f.dx * k, y: f.dy * k, sx: (1 + (f.sw - 1) * k) * lift, sy: (1 + (f.sh - 1) * k) * lift }
     }
     function geo() {
         const out = {}
@@ -296,7 +309,11 @@ View {
                 if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) + Math.abs(a[3] - b[3]) < 1) continue
                 from[id] = { dx: a[0] - b[0], dy: a[1] - b[1], sw: a[2] / b[2], sh: a[3] / b[3] }
             }
-            if (!Object.keys(from).length) return
+            const ids = Object.keys(from)
+            if (!ids.length) return
+            ids.sort((p, q) => (now[p][1] - now[q][1]) || (now[p][0] - now[q][0]))
+            ids.forEach((id, i) => { from[id].i = i; from[id].n = ids.length - 1 })
+            flipAnim.duration = JD.durSlow + flipStep * (ids.length - 1)
             flipAnim.stop()
             flipFrom = from
             flipT = 1
@@ -306,9 +323,7 @@ View {
     NumberAnimation {
         id: flipAnim
         target: ev; property: "flipT"; to: 0
-        duration: JD.durSlow
-        // лёгкий перелёт: блок «встаёт» на место, а не въезжает в стену
-        easing.type: Easing.OutBack; easing.overshoot: 0.9
+        // линейно: перелёт и задержку каждому блоку считает fl()
     }
     function drop() {
         const id = dragId
@@ -679,7 +694,7 @@ View {
 
         // ── виджеты из галереи (16 нояб.)
         GBox {
-            id: wClock; bid: "w_clock"
+            id: wClock; bid: "w_clock"; tint: JD.accentBlue
             ColumnLayout {
                 anchors.centerIn: parent
                 spacing: 0
@@ -689,7 +704,7 @@ View {
             }
         }
         GBox {
-            id: wWeather; bid: "w_weather"
+            id: wWeather; bid: "w_weather"; tint: JD.accentOrange
             readonly property bool big: height > 100
             GridLayout {
                 anchors.centerIn: parent
@@ -707,7 +722,7 @@ View {
             }
         }
         GBox {
-            id: wLoad; bid: "w_load"
+            id: wLoad; bid: "w_load"; tint: JD.accentGreen
             // Процессор и память — те же цифры, что у кошки в доке (демон шлёт их раз в две секунды).
             ColumnLayout {
                 anchors { fill: parent; margins: 12 }
@@ -734,7 +749,7 @@ View {
             HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
         GBox {
-            id: wNote; bid: "w_note"
+            id: wNote; bid: "w_note"; tint: JD.accentPurple
             // Заметка живёт в настройках островка (island.menu_note_text): одна, короткая, «не забыть».
             Flickable {
                 anchors { fill: parent; margins: 12 }

@@ -17,7 +17,9 @@ Pressable {
     Layout.preferredWidth: 1
     implicitHeight: 62
     radius: 18
-    color: hovered ? JD.fill2 : JD.fill1
+    // Свой оттенок у каждого вида плитки (16 нояб.: блоки должны ощущаться «индивидуально»): капля
+    // цвета значка в фоне. 6% — на тёмном фоне контраст текста почти не меняется.
+    color: Qt.tint(hovered ? JD.fill2 : JD.fill1, Qt.rgba(tint.r, tint.g, tint.b, 0.06))
     Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
     RowLayout {
         anchors { fill: parent; leftMargin: 11; rightMargin: 10 }
