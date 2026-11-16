@@ -523,6 +523,9 @@ DEFAULTS: dict = {
         "menu_order": ["ask", "player", "t_mic", "t_voice", "t_sounds", "t_notifs", "t_coffee", "t_wifi", "t_bt",
                        "t_server", "sound", "event", "model", "lists"],   # порядок виджетов пульта
         "menu_sizes": [],          # размеры виджетов пульта: «id:2x1»; пусто — у каждого свой по умолчанию
+        "menu_tools": [],          # порядок кружков полки Alt+Space; «|» — место подписи; пусто — свой
+        "menu_tools_off": [],      # спрятанные кружки полки
+        "menu_layout": "grid",     # программы в меню: "grid" плитками или "list" строками
         "menu_t_server": False,    # плитка «Режим сервера» гасит экраны: по умолчанию спрятана
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         # Where toast/shade notifications appear (Telegram-style), independent of the island pill:

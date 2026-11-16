@@ -1612,7 +1612,7 @@ Singleton {
         "check", "chevron-down", "circle-help", "timer", "code", "gamepad-2", "git-branch", "chevron-right", "chevron-up", "circle-alert", "circle-play", "cloud", "cloud-fog",
         "cloud-lightning", "cloud-rain", "cloud-snow", "cloud-sun", "copy", "cpu", "download", "external-link",
         "file-text", "folder-open", "globe", "headphones", "house", "image", "info", "keyboard", "key-round",
-        "layout-grid", "list-music", "log-out", "mail", "maximize-2", "message-circle", "message-square-plus", "mic",
+        "layout-grid", "list", "list-music", "log-out", "mail", "maximize-2", "message-circle", "message-square-plus", "mic",
         "monitor", "moon", "mouse-pointer-click", "music", "package", "palette", "panel-top", "pause", "play", "plus", "power",
         "brackets", "refresh-cw", "repeat", "repeat-1", "rotate-ccw", "search", "settings", "shield", "shuffle", "skip-back",
         "skip-forward", "sparkles", "square", "sun", "terminal", "text-cursor", "trash", "user-round", "users",

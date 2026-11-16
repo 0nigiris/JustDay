@@ -29,13 +29,20 @@ Item {
     // колонок — это пять в ряд и одна под ними, и выглядит это как недогруженный список; те же
     // шесть в три колонки — ровный блок, который видно целиком одним взглядом.
     readonly property bool spotlight: JD.menuSearchMode
+    // Список вместо сетки (island.menu_layout = "list"): строка со значком и именем, как в
+    // Spotlight, но с полкой и разделами полного меню. Он просил выбор: сетка или список (16 нояб.).
+    readonly property bool asList: spotlight || (!pad && JD.island.menu_layout === "list")
     // Launchpad: карточка во весь экран, значки крупнее, справа колонка плиток управления. Список,
     // поиск и разделы те же — меняется только то, сколько места им дали.
     readonly property bool pad: JD.menuLaunchpad
     readonly property real controlsW: 280
     // Spotlight — одна колонка-список; полное меню — сетка плиток.
-    readonly property int columns: spotlight ? 1
+    readonly property int columns: asList ? 1
                                  : pad ? Math.max(3, Math.floor((width - controlsW - 80) / padTile))
+                                 // При поиске сетка постоянная и прижата к верху слева: найденное
+                                 // встаёт прямо под строкой, куда смотрит глаз и тянется рука. Раньше
+                                 // одна находка («bottle») садилась посреди пустого окна (16 нояб.).
+                                 : JD.menuSearching ? 5
                                  : shown.length <= 4 ? Math.max(1, shown.length)
                                  : shown.length <= 9 ? 3
                                  : shown.length <= 16 ? 4 : 5
@@ -45,7 +52,7 @@ Item {
     // Нижняя граница высоты ряда. Настоящая высота растягивается так, чтобы в окно вошло целое
     // число рядов (grid.rowH): при постоянных 116 третий ряд резался пополам, и меню звало крутить
     // ради четырёх значков (9 нояб.).
-    readonly property real tile: spotlight ? 52 : pad ? padTile : 96
+    readonly property real tile: asList ? 52 : pad ? padTile : 96
 
     // Размер меню больше не считается по содержимому — и это починка, а не упрощение. Раньше
     // высота карточки равнялась высоте сетки: шесть закреплённых программ и сто пятьдесят семь
@@ -75,22 +82,115 @@ Item {
         return ""
     }
 
-    // Кнопка-кружок нижней полки. Своя, а не IconButton: тот берёт островные 8% белого, которых на
-    // этой карточке не видно, и подписи у него нет — а безымянный кружок не нажимают.
-    component ToolDot: Pressable {
-        id: dot
-        property string icon: ""
-        property string note: ""
-        property color accent: JD.text3
-        signal picked()
-        implicitWidth: 30
-        implicitHeight: 30
-        radius: 15
-        color: hovered ? JD.menuFill3 : "transparent"
-        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-        onHoveredChanged: mv.hintFor(hovered, dot.note)
-        onClicked: picked()
-        Icon { anchors.centerIn: parent; name: dot.icon; implicitSize: 16; tint: dot.hovered ? JD.text1 : dot.accent }
+    // ───────────── полка: что на ней и в каком порядке ─────────────
+    // Полка собирается из списка `island.menu_tools`: «|» — место подписи (имя и машина), слева от
+    // неё — левые кнопки, справа — правые. Спрятанные лежат в `island.menu_tools_off`. Правка —
+    // правой кнопкой по любому кружку: он хотел убирать лишние значки и переставлять их (16 нояб.).
+    readonly property var toolDefs: ({
+        mixer: { icon: "volume-2", note: "Звук", act: () => { JD.closeMenu(); JD.openTools("mixer") } },
+        emoji: { icon: "smile", note: "Эмодзи", act: () => { JD.closeMenu(); JD.openTools("emoji") } },
+        clip: { icon: "clipboard", note: "Буфер обмена", act: () => { JD.closeMenu(); JD.openTools("clip") } },
+        load: { icon: "cpu", note: "Нагрузка машины", act: () => { JD.closeMenu(); JD.openTools("load") } },
+        // Режим сервера прямо из меню: «включил и лёг спать» не должно начинаться с терминала.
+        // Не луна: луна — это «сон» рядом, две одинаковые кнопки путали.
+        server: { icon: JD.serverMode ? "sun" : "hard-drive", note: JD.serverMode ? "Вернуть машину" : "Режим сервера",
+                  act: () => { JD.closeMenu(); JD.toggleServerMode() } },
+        // Не круговые стрелки: так нарисована перезагрузка в той же полке.
+        update: { icon: "download", note: "Проверить обновление", act: () => { JD.closeMenu(); JD.checkUpdate() } },
+        settings: { icon: "settings", note: "Настройки", act: () => { JD.closeMenu(); JD.openSettings("general") } },
+        // Плазма под оболочкой осталась: за обоями, экранами и клавишами человек идёт туда.
+        kde: { icon: "sliders-horizontal", note: "Настройки системы (KDE)", act: () => { JD.closeMenu(); JD.systemSettings("") } }
+    })
+    readonly property var toolDefault: ["mixer", "emoji", "clip", "load", "|", "server", "update", "settings", "kde"]
+        .concat(JD.sessionActions.map(a => "s:" + a.id))
+    function toolKnown(id) { return id === "|" || !!toolDefs[id] || JD.sessionActions.some(a => "s:" + a.id === id) }
+    property var toolsForced: null
+    readonly property var toolOrder: {
+        if (toolsForced) return toolsForced
+        const saved = (Array.isArray(JD.island.menu_tools) ? JD.island.menu_tools : []).filter((x, i, a) => toolKnown(x) && a.indexOf(x) === i)
+        if (!saved.length) return toolDefault
+        if (!saved.includes("|")) saved.push("|")
+        return saved.concat(toolDefault.filter(x => !saved.includes(x)))
+    }
+    readonly property var toolsOff: Array.isArray(JD.island.menu_tools_off) ? JD.island.menu_tools_off : []
+    property bool toolsEdit: false
+    Connections { target: JD; function onIslandChanged() { mv.toolsForced = null } }
+    function toolShown(id) { return toolsEdit || !toolsOff.includes(id) }
+    readonly property var toolsLeft: toolOrder.slice(0, toolOrder.indexOf("|")).filter(x => toolShown(x))
+    readonly property var toolsRight: toolOrder.slice(toolOrder.indexOf("|") + 1).filter(x => toolShown(x))
+    function toolToggle(id) {
+        JD.setConfig("island.menu_tools_off", toolsOff.includes(id) ? toolsOff.filter(x => x !== id) : toolsOff.concat([id]))
+    }
+    // Брошенный кружок встаёт перед тем, над чьей серединой его отпустили; за подпись («|»)
+    // перебрасывается на другую сторону полки.
+    function toolDrop(id, sceneX) {
+        let target = "", best = 1e9
+        for (const d of toolDots) {
+            if (!d || d.tid === id || !d.visible) continue
+            const p = d.mapToItem(null, d.width / 2, 0), dist = Math.abs(p.x - sceneX)
+            if (dist < best) { best = dist; target = d.tid; var after = sceneX > p.x }
+        }
+        if (!target) return
+        const next = toolOrder.filter(x => x !== id)
+        next.splice(next.indexOf(target) + (after ? 1 : 0), 0, id)
+        toolsForced = next
+        JD.setConfig("island.menu_tools", next)
+    }
+    property var toolDots: []
+    Shortcut { sequence: "Escape"; enabled: mv.toolsEdit; onActivated: mv.toolsEdit = false }
+
+    Component {
+        id: toolDelegate
+        Item {
+            id: td
+            required property string modelData
+            readonly property string tid: modelData
+            readonly property bool sess: tid.startsWith("s:")
+            readonly property var sa: sess ? JD.sessionActions.find(a => "s:" + a.id === tid) : null
+            readonly property var def: sess ? null : mv.toolDefs[tid]
+            readonly property bool off: mv.toolsOff.includes(tid)
+            readonly property bool asking: !!sa && JD.menuConfirm === sa.id
+            implicitWidth: 30
+            implicitHeight: 30
+            opacity: off ? 0.35 : 1
+            Component.onCompleted: mv.toolDots = mv.toolDots.concat([td])
+            Component.onDestruction: mv.toolDots = mv.toolDots.filter(x => x !== td)
+            transform: Translate { id: tdMove }
+            Pressable {
+                id: dot
+                anchors.fill: parent
+                radius: 15
+                // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
+                // краснеет, а про второй щелчок говорит подпись полки. Размер не меняется — иначе
+                // соседние кнопки уезжают из-под курсора.
+                color: td.asking ? JD.accentRed : (hovered || mv.toolsEdit ? JD.menuFill3 : "transparent")
+                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                onHoveredChanged: if (!mv.toolsEdit) mv.hintFor(hovered, td.sa ? (td.sa.danger ? td.sa.name + "  ·  нажать дважды" : td.sa.name) : td.def.note)
+                onClicked: {
+                    if (mv.toolsEdit) mv.toolToggle(td.tid)
+                    else if (td.sa) JD.sessionDo(td.sa.id, td.sa.danger)
+                    else td.def.act()
+                }
+                Icon { anchors.centerIn: parent; name: td.sa ? td.sa.icon : td.def.icon; implicitSize: td.sa ? 15 : 16
+                       tint: td.asking || dot.hovered ? JD.text1 : JD.text3 }
+                TapHandler { acceptedButtons: Qt.RightButton; onTapped: mv.toolsEdit = !mv.toolsEdit }
+                DragHandler {
+                    enabled: mv.toolsEdit
+                    target: null
+                    yAxis.enabled: false
+                    onTranslationChanged: tdMove.x = translation.x
+                    onActiveChanged: if (!active) { const sx = td.mapToItem(null, td.width / 2, 0).x; tdMove.x = 0; mv.toolDrop(td.tid, sx) }
+                }
+            }
+            Rectangle {
+                visible: mv.toolsEdit
+                width: 12; height: 12; radius: 6
+                anchors { top: parent.top; right: parent.right; margins: -2 }
+                color: td.off ? JD.accentGreen : JD.accentRed
+                Rectangle { anchors.centerIn: parent; width: 6; height: 2; color: "white" }
+                Rectangle { visible: td.off; anchors.centerIn: parent; width: 2; height: 6; color: "white" }
+            }
+        }
     }
 
     function move(step) {
@@ -107,7 +207,7 @@ Item {
     // ловим при создании. Повторное, пока вид жив: ловим по номеру. И третий, из-за которого это
     // вообще написано, — окно уже показано, а фокус слою выдали мгновением позже.
     Component.onCompleted: grab.restart()
-    onVisibleChanged: if (visible) grab.restart()
+    onVisibleChanged: { if (visible) grab.restart(); else toolsEdit = false }
     Connections {
         target: JD
         function onMenuSerialChanged() { grab.restart() }
@@ -280,17 +380,17 @@ Item {
                 // Программ меньше, чем помещается, — сетка стоит посередине, а не жмётся к левому
                 // верхнему углу, оставив вокруг себя дыру. Дыра поровну со всех сторон читается как
                 // замысел; дыра с двух — как незаполненная форма.
-                readonly property real cell: mv.spotlight
+                readonly property real cell: mv.asList
                     ? parent.width
                     : Math.min(Math.floor((parent.width - 6) / mv.columns), mv.pad ? 180 : 150)
-                width: mv.spotlight ? parent.width : cell * mv.columns
+                width: mv.asList ? parent.width : cell * mv.columns
                 // Только целые ряды: ряд, срезанный пополам, звал крутить, а крутить было почти нечего.
-                readonly property real rowH: mv.spotlight ? mv.tile
+                readonly property real rowH: mv.asList ? mv.tile
                     : parent.height / Math.max(1, Math.floor(parent.height / mv.tile))
                 height: Math.min(parent.height, contentHeight)
                 anchors.horizontalCenter: parent.horizontalCenter
                 // Spotlight: список сверху; полное меню: сетка по центру.
-                y: mv.spotlight ? 0 : Math.max(0, (parent.height - height) / 2)
+                y: mv.asList || JD.menuSearching ? 0 : Math.max(0, (parent.height - height) / 2)
                 clip: true
                 cellWidth: cell
                 cellHeight: rowH
@@ -330,14 +430,14 @@ Item {
                     Pressable {
                         id: appTile
                         anchors.fill: parent
-                        anchors.margins: mv.spotlight ? 2 : 4
-                        radius: mv.spotlight ? 10 : 12
+                        anchors.margins: mv.asList ? 2 : 4
+                        radius: mv.asList ? 10 : 12
                         color: index === JD.menuPick ? JD.menuFill2 : (appTile.hovered ? JD.menuFill1 : "transparent")
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
 
                         // Spotlight: строка значок+имя; полное меню: плитка.
                         RowLayout {
-                            visible: mv.spotlight
+                            visible: mv.asList
                             anchors.fill: parent
                             anchors.leftMargin: 12
                             anchors.rightMargin: 12
@@ -379,7 +479,7 @@ Item {
                             }
                         }
                         ColumnLayout {
-                            visible: !mv.spotlight
+                            visible: !mv.asList
                             anchors.fill: parent
                             anchors.topMargin: 12
                             anchors.bottomMargin: 8
@@ -409,7 +509,7 @@ Item {
                         // Звёздочка в углу: закреплённое видно, не наводя мышь.
                         Icon {
                             anchors { top: parent.top; right: parent.right; topMargin: 6; rightMargin: 6 }
-                            visible: !mv.spotlight && modelData.kind !== "file" && modelData.kind !== "window" && JD.isPinned(modelData) && !JD.menuSearching
+                            visible: !mv.asList && modelData.kind !== "file" && modelData.kind !== "window" && JD.isPinned(modelData) && !JD.menuSearching
                             name: "star"
                             implicitSize: 13
                             tint: JD.accentOrange
@@ -417,7 +517,7 @@ Item {
                         // Открытое окно — это переход к нему, а не второй запуск, и об этом надо сказать.
                         Label2 {
                             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: -2 }
-                            visible: !mv.spotlight && (modelData.kind === "window" || modelData.kind === "file")
+                            visible: !mv.asList && (modelData.kind === "window" || modelData.kind === "file")
                             color: modelData.kind === "file" ? JD.text3 : JD.accentCyan
                             font.pixelSize: 11
                             text: modelData.kind === "file" ? "файл" : "открыто"
@@ -529,10 +629,7 @@ Item {
                 anchors.fill: parent
                 anchors.topMargin: 10
                 spacing: 4
-                ToolDot { icon: "volume-2"; note: "Звук"; onPicked: { JD.closeMenu(); JD.openTools("mixer") } }
-                ToolDot { icon: "smile"; note: "Эмодзи"; onPicked: { JD.closeMenu(); JD.openTools("emoji") } }
-                ToolDot { icon: "clipboard"; note: "Буфер обмена"; onPicked: { JD.closeMenu(); JD.openTools("clip") } }
-                ToolDot { icon: "cpu"; note: "Нагрузка машины"; onPicked: { JD.closeMenu(); JD.openTools("load") } }
+                Repeater { model: mv.toolsLeft; delegate: toolDelegate }
 
                 Label2 {
                     Layout.fillWidth: true
@@ -543,64 +640,23 @@ Item {
                     // Раньше про «точно?» писала сама кнопка — и, раздуваясь, уводила соседние
                     // кнопки из-под курсора: человек целился в «выключить», а попадал в «сон».
                     color: mv.askingName ? JD.accentRed : JD.text3
-                    text: mv.askingName ? mv.askingName + "  ·  нажмите ещё раз"
+                    text: mv.toolsEdit ? "Правка полки: нажатие прячет и возвращает, перетаскивание двигает · Esc — готово"
+                                        : mv.askingName ? mv.askingName + "  ·  нажмите ещё раз"
                                         : (mv.hint || (mv.user.name ? mv.user.name + (mv.user.host ? "  ·  " + mv.user.host : "") : ""))
                     opacity: (mv.askingName || mv.hint) ? 1 : 0.55
                     Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
                 }
 
-                // Режим сервера прямо из меню: «включил и лёг спать» не должно начинаться с
-                // терминала. Включённый режим виден по значку — солнце возвращает машину.
-                ToolDot {
-                    // Не луна: луна — это «сон» справа, две одинаковые кнопки рядом путали.
-                    icon: JD.serverMode ? "sun" : "hard-drive"
-                    note: JD.serverMode ? "Вернуть машину" : "Режим сервера"
-                    onPicked: { JD.closeMenu(); JD.toggleServerMode() }
-                }
-                // Проверить обновление быстро, не уходя в настройки: кнопка там была, но на самом
-                // дне страницы «О программе», и человек её попросту не находил.
-                ToolDot {
-                    // Не круговые стрелки: так нарисована перезагрузка в той же полке.
-                    icon: "download"
-                    note: "Проверить обновление"
-                    onPicked: { JD.closeMenu(); JD.checkUpdate() }
-                }
-                ToolDot { icon: "settings"; note: "Настройки"; onPicked: { JD.closeMenu(); JD.openSettings("general") } }
-                // Настройки самой плазмы: оболочка заменила панель и меню, но плазма под ней
-                // осталась, и за обоями, экранами и клавишами человек идёт туда. Искать их через
-                // поиск программ, когда меню уже открыто, — лишний круг.
-                ToolDot {
-                    icon: "sliders-horizontal"
-                    note: "Настройки системы (KDE)"
-                    onPicked: { JD.closeMenu(); JD.systemSettings("") }
-                }
-
-                // Опасное подтверждается второй раз той же кнопкой, а не окном поверх окна: она
-                // краснеет, а словами про второй щелчок говорит подпись полки. Кнопка при этом
-                // остаётся того же размера: раздувать её значит сдвигать соседние, и второй щелчок
-                // человека уходит не туда, куда он целился. Блокировка и сон не теряют ничего и
-                // спрашивать не должны — иначе защита превращается в помеху.
-                Repeater {
-                    model: JD.sessionActions
-                    delegate: Pressable {
-                        id: pow
-                        required property var modelData
-                        readonly property bool asking: JD.menuConfirm === modelData.id
-                        implicitWidth: 30
-                        implicitHeight: 30
-                        radius: 15
-                        color: asking ? JD.accentRed : (pow.hovered ? JD.menuFill3 : "transparent")
-                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
-                        Icon {
-                            anchors.centerIn: parent
-                            name: pow.modelData.icon
-                            implicitSize: 15
-                            tint: pow.asking || pow.hovered ? JD.text1 : JD.text3
-                        }
-                        onHoveredChanged: mv.hintFor(hovered, pow.modelData.danger ? pow.modelData.name + "  ·  нажать дважды"
-                                                                                   : pow.modelData.name)
-                        onClicked: JD.sessionDo(pow.modelData.id, pow.modelData.danger)
-                    }
+                Repeater { model: mv.toolsRight; delegate: toolDelegate }
+                // Вид программ меняется здесь же, в правке полки: отдельная страница настроек ради
+                // одного переключателя — лишний круг.
+                Pressable {
+                    visible: mv.toolsEdit && !mv.pad
+                    implicitWidth: 30; implicitHeight: 30; radius: 15
+                    color: JD.accentBlue
+                    onHoveredChanged: mv.hintFor(hovered, mv.asList ? "Показать сеткой" : "Показать списком")
+                    onClicked: JD.setConfig("island.menu_layout", mv.asList ? "grid" : "list")
+                    Icon { anchors.centerIn: parent; name: mv.asList ? "layout-grid" : "list"; implicitSize: 16; tint: "white" }
                 }
             }
         }
