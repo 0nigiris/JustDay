@@ -1107,5 +1107,12 @@
   "Режим сервера": "Server mode",
   "Вернуть машину": "Give the machine back",
   "Проверить обновление": "Check for updates",
-  "Настройки системы (KDE)": "System settings (KDE)"
+  "Настройки системы (KDE)": "System settings (KDE)",
+  "Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, синяя метка — размер.": "The red minus or right click hides a widget, dragging changes the order, the blue tag changes the size.",
+  "Плитка уведомлений": "Notifications tile",
+  "Списки": "Lists",
+  "включён": "on",
+  "выключен": "off",
+  "обычная работа": "normal work",
+  "экраны погашены": "screens off"
 }

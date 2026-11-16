@@ -21,9 +21,66 @@ View {
     // и возвращается нажатием. Порядок хранит GridLayout (Layout.row у блоков), поэтому блоки не пришлось
     // дробить на компоненты; поверх них в режиме правки лежит слой с перехватом мыши (`eo`).
     readonly property bool editing: JD.menuEditing
-    readonly property var blockIds: ["ask", "player", "sound", "event", "model", "lists"]
-    readonly property var blocks: ({ ask: blkAsk, player: blkPlayer, sound: blkSound, event: blkEvent, model: blkModel, lists: blkLists })
-    readonly property var blockNames: ({ ask: JD.tr("Строка запроса"), player: JD.tr("Музыка и плитки"),
+    // Пульт — сетка на четыре колонки, как виджеты на айфоне. Раньше плеер и плитки были одним блоком:
+    // спрятать плеер значило спрятать и кофе, а кофе занимал две клетки, потому что пятой плитке
+    // в сетке на две колонки было больше негде стоять. Теперь каждая плитка — свой виджет со своим
+    // размером (`island.menu_sizes`, «id:размер»), а порядок общий (`island.menu_order`).
+    readonly property var blockIds: ["ask", "player", "t_mic", "t_voice", "t_sounds", "t_notifs",
+        "t_coffee", "t_wifi", "t_bt", "t_server", "sound", "event", "model", "lists"]
+    readonly property var blocks: ({ ask: blkAsk, player: blkPlayer, sound: blkSound, event: blkEvent, model: blkModel, lists: blkLists,
+        t_mic: tMic, t_voice: tVoice, t_sounds: tSounds, t_notifs: tNotifs, t_coffee: tCoffee, t_wifi: tWifi, t_bt: tBt, t_server: tServer })
+    readonly property var tileSizes: ["1x1", "2x1", "4x1"]
+    readonly property var sizeChoices: ({ ask: ["4x1", "2x1"], player: ["2x2", "3x2", "4x2"], sound: ["4x1", "2x1", "2x2v", "1x2v"],
+        event: ["4x1", "2x1"], model: ["4x1"], lists: ["4x1"] })
+    function choices(id) { return sizeChoices[id] || tileSizes }
+    function sizeOf(id) {
+        const all = Array.isArray(JD.island.menu_sizes) ? JD.island.menu_sizes : []
+        for (const x of (forcedSizes || all)) { const kv = String(x).split(":"); if (kv[0] === id && choices(id).includes(kv[1])) return kv[1] }
+        return choices(id)[0]
+    }
+    function vert(id) { return sizeOf(id).endsWith("v") }
+    property var forcedSizes: null
+    function cycleSize(id) {
+        const c = choices(id), next = c[(c.indexOf(sizeOf(id)) + 1) % c.length]
+        const rest = (forcedSizes || (Array.isArray(JD.island.menu_sizes) ? JD.island.menu_sizes : [])).filter(x => String(x).split(":")[0] !== id)
+        forcedSizes = rest.concat([id + ":" + next])
+        JD.setConfig("island.menu_sizes", forcedSizes)
+    }
+    // Есть ли что показать: спрятанное и пустое (нет события, нет уведомлений) места не занимает.
+    function present(id) {
+        if (id === "lists") return (JD.notifications.length > 0 && JD.island.show_notifications !== false) || (JD.history.length > 0 && JD.island.menu_recent !== false)
+        if (id === "event") return !!JD.nextEvent && isShown(id)
+        return isShown(id)
+    }
+    // Раскладка: по порядку, каждый виджет в первое свободное место не выше предыдущего. Однострочный
+    // виджет, после которого ряд до конца пуст, растягивается до края — иначе одна плитка в ряду
+    // оставляла бы дыру (как было с кофе).
+    readonly property var grid: {
+        const busy = [], out = {}
+        const free = (r, c, w, h) => { for (let y = r; y < r + h; y++) for (let x = c; x < c + w; x++) if (x > 3 || (busy[y] && busy[y][x])) return false; return true }
+        let top = 0
+        for (const id of order) {
+            if (!present(id)) continue
+            const m = sizeOf(id).match(/(\d)x(\d)/), w = +m[1], h = +m[2]
+            let r = top, c = 0
+            while (!free(r, c, w, h)) { if (++c > 4 - w) { c = 0; r++ } }
+            for (let y = r; y < r + h; y++) { busy[y] = busy[y] || []; for (let x = c; x < c + w; x++) busy[y][x] = id }
+            out[id] = { r: r, c: c, w: w, h: h }
+            top = r
+        }
+        for (const id in out) {
+            const g = out[id]
+            if (g.h !== 1) continue
+            let end = g.c + g.w
+            while (end < 4 && !busy[g.r][end]) end++
+            if (end === 4 && busy[g.r].slice(g.c + g.w).every(x => !x)) g.w = 4 - g.c
+        }
+        return out
+    }
+    function g(id) { return grid[id] || ({ r: 0, c: 0, w: 4, h: 1 }) }
+    readonly property var blockNames: ({ ask: JD.tr("Строка запроса"), player: JD.tr("Музыка"),
+        t_mic: JD.tr("Микрофон"), t_voice: JD.tr("Голос"), t_sounds: JD.tr("Звуки"), t_notifs: JD.tr("Плитка уведомлений"),
+        t_coffee: JD.tr("Кофе"), t_wifi: "Wi‑Fi", t_bt: "Bluetooth", t_server: JD.tr("Режим сервера"), lists: JD.tr("Списки"),
         sound: JD.tr("Громкость"), event: JD.tr("Ближайшее событие"), model: JD.tr("Модель"),
         notifs: JD.tr("Уведомления"), recent: JD.tr("Недавнее"),
         top_chat: JD.tr("Кнопка чата"), top_tools: JD.tr("Кнопка инструментов"), top_settings: JD.tr("Кнопка настроек") })
@@ -34,15 +91,35 @@ View {
         property string bid
         property var act
         size: 32
-        visible: ev.isShown(tb.bid)
-        onClicked: ev.editing ? ev.hide(tb.bid) : tb.act()
+        // В правке спрятанная кнопка остаётся на своём месте, тусклая и с зелёным плюсом: раньше
+        // убранное пропадало, и где его вернуть, было не догадаться.
+        readonly property bool off: !ev.isShown(tb.bid)
+        visible: !off || ev.editing
+        opacity: off ? 0.35 : 1
+        onClicked: ev.editing ? (off ? ev.unhide(tb.bid) : ev.hide(tb.bid)) : tb.act()
         Rectangle {
             visible: ev.editing
             width: 14; height: 14; radius: 7
             anchors { top: parent.top; right: parent.right; margins: -3 }
-            color: JD.accentRed
+            color: tb.off ? JD.accentGreen : JD.accentRed
             Rectangle { anchors.centerIn: parent; width: 7; height: 2; color: "white" }
+            Rectangle { visible: tb.off; anchors.centerIn: parent; width: 2; height: 7; color: "white" }
         }
+    }
+    component GTile: Tile {
+        id: gt
+        property string bid
+        visible: ev.present(bid)
+        Layout.row: 10 + ev.g(bid).r
+        Layout.column: ev.g(bid).c
+        Layout.rowSpan: ev.g(bid).h
+        Layout.columnSpan: ev.g(bid).w
+        Layout.preferredWidth: 0
+        Layout.minimumWidth: 0
+        Layout.fillHeight: true
+        rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
+        transform: Translate { x: ev.dragId === gt.bid ? ev.dragDx : 0; y: ev.dragId === gt.bid ? ev.dragDy : 0 }
+        z: ev.dragId === bid ? 5 : 0
     }
     // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
     // `forced` держит порядок до ответа демона: иначе блок после броска на миг прыгал бы обратно.
@@ -50,14 +127,22 @@ View {
     readonly property var order: {
         if (forced) return forced
         const saved = Array.isArray(JD.island.menu_order) ? JD.island.menu_order.filter((x, i, a) => blockIds.includes(x) && a.indexOf(x) === i) : []
-        return saved.concat(blockIds.filter(x => !saved.includes(x)))
+        // Новый виджет встаёт за тем, за кем стоит по умолчанию: плитки, вынутые из старого блока
+        // «player», оказываются сразу за плеером, а не в самом низу.
+        for (let i = 0; i < blockIds.length; i++) {
+            const id = blockIds[i]
+            if (saved.includes(id)) continue
+            const at = i ? saved.indexOf(blockIds[i - 1]) : -1
+            saved.splice(at + 1, 0, id)
+        }
+        return saved
     }
-    Connections { target: JD; function onIslandChanged() { ev.forced = null } }
-    function row(id) { return 10 + 2 * order.indexOf(id) }   // через один: между блоками остаётся место для хвоста (пересадка модели)
-    function isShown(id) { return JD.island["menu_" + id] !== false }
+    Connections { target: JD; function onIslandChanged() { ev.forced = null; ev.forcedSizes = null } }
+    // Режим сервера гасит экраны — случайное нажатие слишком дорого, поэтому плитка по умолчанию спрятана.
+    function isShown(id) { const v = JD.island["menu_" + id]; return id === "t_server" ? v === true : v !== false }
     // Спрятанное, что можно вернуть: пять блоков и две половины нижнего ряда.
     readonly property var hidden: {
-        const r = ["ask", "player", "sound", "event", "model"].concat(topIds).filter(id => JD.island["menu_" + id] === false)
+        const r = blockIds.filter(id => id !== "lists").concat(topIds).filter(id => !ev.isShown(id))
         if (JD.island.show_notifications === false) r.push("notifs")
         if (JD.island.menu_recent === false) r.push("recent")
         return r
@@ -68,12 +153,16 @@ View {
     function sign(id) { return order.indexOf(id) % 2 ? -1 : 1 }   // соседние блоки качаются в разные стороны
     function resetMenu() {
         forced = null
+        forcedSizes = []
         JD.setConfig("island.menu_order", blockIds)
-        for (const id of ["ask", "player", "sound", "event", "model", "notifs", "recent"].concat(topIds)) unhide(id)
+        JD.setConfig("island.menu_sizes", [])
+        for (const id of blockIds.filter(x => x !== "lists" && x !== "t_server").concat(["notifs", "recent"], topIds)) unhide(id)
+        hide("t_server")
     }
 
     // Перетаскивание: пока блок тянут, он едет за пальцем (dragDy), порядок меняется при отпускании.
     property string dragId: ""
+    property real dragDx: 0
     property real dragDy: 0
     property real wig: 0
     SequentialAnimation on wig {
@@ -86,16 +175,18 @@ View {
     function drop() {
         const id = dragId
         if (!id) return
-        const b = blocks[id], down = dragDy > 0, c = b.y + b.height / 2 + dragDy
+        const b = blocks[id], cx = b.x + b.width / 2 + dragDx, cy = b.y + b.height / 2 + dragDy
         let hit = ""
         for (const o of order) {
             const t = blocks[o]
-            if (o !== id && t.visible && c >= t.y && c <= t.y + t.height) { hit = o; break }
+            if (o !== id && t.visible && cx >= t.x && cx <= t.x + t.width && cy >= t.y && cy <= t.y + t.height) { hit = o; break }
         }
-        dragId = ""; dragDy = 0
+        dragId = ""; dragDx = 0; dragDy = 0
         if (!hit) return
+        // Брошенный встаёт на место того, в кого попал: тянули вперёд — за ним, назад — перед ним.
+        const fwd = order.indexOf(hit) > order.indexOf(id)
         const next = order.filter(x => x !== id)
-        next.splice(next.indexOf(hit) + (down ? 1 : 0), 0, id)
+        next.splice(next.indexOf(hit) + (fwd ? 1 : 0), 0, id)
         forced = next
         JD.setConfig("island.menu_order", next)
     }
@@ -127,13 +218,22 @@ View {
         x: 20
         y: 20
         width: evFlick.width - 40
-        columns: 1
-        rowSpacing: 14
-        columnSpacing: 0
+        columns: 4
+        rowSpacing: 12
+        columnSpacing: 12
+
+        // Ряд-распорка: по одной нулевой ячейке в колонку, чтобы четыре колонки были равными, а не
+        // по ширине того, что в них попало.
+        Repeater {
+            model: 4
+            Item { required property int index; Layout.row: 9; Layout.column: index; Layout.fillWidth: true
+                   Layout.preferredWidth: 1000; Layout.minimumWidth: 0; implicitHeight: 0 }
+        }
 
         // ── header: who, what it is doing · time, date, weather · settings
         RowLayout {
             Layout.row: 0
+            Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 14
             Orb { visible: JD.orbsOn; main: true; size: 36 }
@@ -197,6 +297,7 @@ View {
         Rectangle {
             visible: !!JD.update
             Layout.row: 1
+            Layout.columnSpan: 4
             Layout.fillWidth: true
             implicitHeight: 46
             radius: 16
@@ -213,11 +314,17 @@ View {
 
         // ── ask by text (or the mic)
         Rectangle {
-            visible: ev.isShown("ask")
+            visible: ev.present("ask")
             id: blkAsk
-            Layout.row: ev.row("ask")
+            Layout.row: 10 + ev.g("ask").r
+            Layout.column: ev.g("ask").c
+            Layout.rowSpan: ev.g("ask").h
+            Layout.columnSpan: ev.g("ask").w
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
+            Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("ask") : 0
-            transform: Translate { y: ev.dragId === "ask" ? ev.dragDy : 0 }
+            transform: Translate { x: ev.dragId === "ask" ? ev.dragDx : 0; y: ev.dragId === "ask" ? ev.dragDy : 0 }
             z: ev.dragId === "ask" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: 46
@@ -241,25 +348,30 @@ View {
             TapHandler { onTapped: JD.openCompose() }
         }
 
-        // ── now playing  |  toggles
-        RowLayout {
-            visible: ev.isShown("player")
+        // ── now playing
+        Item {
+            visible: ev.present("player")
             id: blkPlayer
-            Layout.row: ev.row("player")
+            Layout.row: 10 + ev.g("player").r
+            Layout.column: ev.g("player").c
+            Layout.rowSpan: ev.g("player").h
+            Layout.columnSpan: ev.g("player").w
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
+            Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("player") : 0
-            transform: Translate { y: ev.dragId === "player" ? ev.dragDy : 0 }
+            transform: Translate { x: ev.dragId === "player" ? ev.dragDx : 0; y: ev.dragId === "player" ? ev.dragDy : 0 }
             z: ev.dragId === "player" ? 5 : 0
             Layout.fillWidth: true
-            spacing: 12
+            implicitHeight: np.implicitHeight
             Rectangle {
                 id: np
+                anchors.fill: parent
                 readonly property bool own: JD.musicOn
                 readonly property bool any: own || !!ev.player
                 readonly property var p: JD.player || ({})
                 property color tint: own ? JD.artTint(p.color) : JD.accentPink
                 Behavior on tint { enabled: JD.animOn; ColorAnimation { duration: JD.durSlow; easing.type: JD.easeOut } }
-                Layout.fillWidth: true
-                Layout.preferredWidth: 1.15
                 implicitHeight: 136 + (seek.visible ? 22 : 0)
                 radius: 20
                 color: JD.fill1
@@ -394,49 +506,63 @@ View {
                     }
                 }
             }
-            GridLayout {
-                Layout.fillWidth: true
-                Layout.preferredWidth: 1
-                columns: 2
-                rowSpacing: 12
-                columnSpacing: 12
-                Tile { icon: JD.micOn ? "mic" : "mic-off"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
-                       on: JD.micOn; tint: JD.accentCyan; onToggled: ev.setting("audio.microphone", !JD.micOn) }
-                Tile { icon: "audio-speakers"; title: JD.tr("Голос")
-                       onText: JD.tr("отвечает вслух")
-                       offText: JD.muted ? JD.tr("молчит по просьбе") : JD.tr("только текстом")
-                       on: JD.voiceOn; tint: JD.accentBlue; onToggled: ev.toggleVoice() }
-                Tile { icon: "audio-lines"; title: JD.tr("Звуки"); onText: JD.tr("сигналы"); offText: JD.tr("тишина")
-                       on: !!JD.settings.earcons; tint: JD.accentOrange
-                       onToggled: ev.setting("audio.earcons", !JD.settings.earcons) }
-                Tile { icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); onText: JD.tr("на острове"); offText: JD.tr("не беспокоить")
-                       on: JD.island.show_notifications !== false; tint: JD.accentPurple
-                       onToggled: ev.setting("island.show_notifications", JD.island.show_notifications === false) }
-                // Во всю ширину: пятая плитка в сетке на две колонки иначе висела бы одна с дырой рядом.
-                Tile { icon: "coffee"; title: JD.tr("Кофе"); onText: JD.tr("экран не гаснет"); offText: JD.tr("экран гаснет сам")
-                       on: JD.coffeeOn; tint: JD.accentOrange; Layout.columnSpan: 2
-                       onToggled: ev.setting("desktop.coffee", !JD.coffeeOn) }
-            }
         }
+
+        // ── плитки: каждая своим виджетом
+        GTile { id: tMic; bid: "t_mic"; icon: JD.micOn ? "mic" : "mic-off"; title: JD.tr("Микрофон"); onText: JD.tr("голос и текст"); offText: JD.tr("только текст")
+                on: JD.micOn; tint: JD.accentCyan; onToggled: ev.setting("audio.microphone", !JD.micOn) }
+        GTile { id: tVoice; bid: "t_voice"; icon: "audio-speakers"; title: JD.tr("Голос")
+                onText: JD.tr("отвечает вслух")
+                offText: JD.muted ? JD.tr("молчит по просьбе") : JD.tr("только текстом")
+                on: JD.voiceOn; tint: JD.accentBlue; onToggled: ev.toggleVoice() }
+        GTile { id: tSounds; bid: "t_sounds"; icon: "audio-lines"; title: JD.tr("Звуки"); onText: JD.tr("сигналы"); offText: JD.tr("тишина")
+                on: !!JD.settings.earcons; tint: JD.accentOrange
+                onToggled: ev.setting("audio.earcons", !JD.settings.earcons) }
+        GTile { id: tNotifs; bid: "t_notifs"; icon: "preferences-desktop-notification-bell"; title: JD.tr("Уведомления"); onText: JD.tr("на острове"); offText: JD.tr("не беспокоить")
+                on: JD.island.show_notifications !== false; tint: JD.accentPurple
+                onToggled: ev.setting("island.show_notifications", JD.island.show_notifications === false) }
+        GTile { id: tCoffee; bid: "t_coffee"; icon: "coffee"; title: JD.tr("Кофе"); onText: JD.tr("экран не гаснет"); offText: JD.tr("экран гаснет сам")
+                on: JD.coffeeOn; tint: JD.accentOrange
+                onToggled: ev.setting("desktop.coffee", !JD.coffeeOn) }
+        GTile { id: tWifi; bid: "t_wifi"; icon: JD.wifiOn ? "wifi" : "wifi-off"; title: "Wi‑Fi"
+                onText: JD.netKind === "wifi" && JD.netName ? JD.netName : JD.tr("включён"); offText: JD.tr("выключен")
+                on: JD.wifiOn; tint: JD.accentBlue; onToggled: JD.setWifi(!JD.wifiOn) }
+        GTile { id: tBt; bid: "t_bt"; icon: "bluetooth"; title: "Bluetooth"
+                onText: JD.tr("включён"); offText: JD.tr("выключен")
+                on: JD.btOn; tint: JD.accentBlue; onToggled: JD.setBt(!JD.btOn) }
+        GTile { id: tServer; bid: "t_server"; icon: "moon"; title: JD.tr("Режим сервера"); onText: JD.tr("экраны погашены"); offText: JD.tr("обычная работа")
+                on: JD.serverMode; tint: JD.accentPurple; onToggled: JD.toggleServerMode() }
 
         // ── sound: the assistant, the music, the whole computer. Three knobs in one card, each one only
         //    moves what it names — turning the assistant down leaves every other app where it was.
         Rectangle {
-            visible: ev.isShown("sound")
+            visible: ev.present("sound")
             id: blkSound
-            Layout.row: ev.row("sound")
+            Layout.row: 10 + ev.g("sound").r
+            Layout.column: ev.g("sound").c
+            Layout.rowSpan: ev.g("sound").h
+            Layout.columnSpan: ev.g("sound").w
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
+            Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("sound") : 0
-            transform: Translate { y: ev.dragId === "sound" ? ev.dragDy : 0 }
+            transform: Translate { x: ev.dragId === "sound" ? ev.dragDx : 0; y: ev.dragId === "sound" ? ev.dragDy : 0 }
             z: ev.dragId === "sound" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: sndCol.implicitHeight + 24
             radius: 20
             color: JD.fill1
-            ColumnLayout {
+            // Стоймя ползунки встают рядом, по одному на каждую ручку.
+            GridLayout {
                 id: sndCol
-                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 16 }
-                spacing: 6
+                readonly property bool v: ev.vert("sound")
+                columns: v ? 3 : 1
+                uniformCellWidths: v
+                columnSpacing: 4
+                rowSpacing: 6
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: v ? 8 : 10; rightMargin: v ? 8 : 16 }
                 VolumeRow {
+                    vertical: sndCol.v
                     icon: "sparkles"; label: JD.assistantName; tint: JD.accentBlue
                     value: JD.volume / 100
                     onMoved: v => JD.setVolume(v * 100)
@@ -447,6 +573,7 @@ View {
                 // не трогала, а «Компьютер» убавлял заодно и всё остальное.
                 VolumeRow {
                     id: otherVol
+                    vertical: sndCol.v
                     readonly property var pl: JD.musicOn ? null : ev.player
                     readonly property bool viaMpris: !!pl && pl.volumeSupported && pl.canControl
                     readonly property var stream: pl && !viaMpris ? JD.playerStream(pl) : null
@@ -460,6 +587,7 @@ View {
                     onMuteToggled: { const now = value; put(now > 0 ? 0 : (was || 0.7)); was = now }
                 }
                 VolumeRow {
+                    vertical: sndCol.v
                     visible: !otherVol.visible
                     readonly property int level: JD.player && JD.player.volume !== undefined ? JD.player.volume : (JD.mediaCfg.volume !== undefined ? JD.mediaCfg.volume : 70)
                     icon: "audio-x-generic"; label: JD.tr("Музыка")
@@ -469,6 +597,7 @@ View {
                     onMuteToggled: { JD.media("volume", level > 0 ? 0 : (ev.musicWas || 70)); ev.musicWas = level }
                 }
                 VolumeRow {
+                    vertical: sndCol.v
                     visible: !!ev.sink && !!ev.sink.audio
                     icon: "monitor"; label: JD.tr("Система"); tint: "#f5f5f7"
                     value: ev.sink && ev.sink.audio ? (ev.sink.audio.muted ? 0 : ev.sink.audio.volume) : 0
@@ -482,6 +611,7 @@ View {
         ColumnLayout {
             visible: JD.jobs.length > 0
             Layout.row: 2
+            Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 6
             Repeater {
@@ -526,6 +656,7 @@ View {
         ColumnLayout {
             visible: JD.reminders.length > 0
             Layout.row: 3
+            Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 6
             Repeater {
@@ -564,11 +695,17 @@ View {
 
         // ── next event
         Rectangle {
-            visible: !!JD.nextEvent && ev.isShown("event")
+            visible: ev.present("event")
             id: blkEvent
-            Layout.row: ev.row("event")
+            Layout.row: 10 + ev.g("event").r
+            Layout.column: ev.g("event").c
+            Layout.rowSpan: ev.g("event").h
+            Layout.columnSpan: ev.g("event").w
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
+            Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("event") : 0
-            transform: Translate { y: ev.dragId === "event" ? ev.dragDy : 0 }
+            transform: Translate { x: ev.dragId === "event" ? ev.dragDx : 0; y: ev.dragId === "event" ? ev.dragDy : 0 }
             z: ev.dragId === "event" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: 40
@@ -585,11 +722,17 @@ View {
 
         // ── model
         RowLayout {
-            visible: ev.isShown("model")
+            visible: ev.present("model")
             id: blkModel
-            Layout.row: ev.row("model")
+            Layout.row: 10 + ev.g("model").r
+            Layout.column: ev.g("model").c
+            Layout.rowSpan: ev.g("model").h
+            Layout.columnSpan: ev.g("model").w
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
+            Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("model") : 0
-            transform: Translate { y: ev.dragId === "model" ? ev.dragDy : 0 }
+            transform: Translate { x: ev.dragId === "model" ? ev.dragDx : 0; y: ev.dragId === "model" ? ev.dragDy : 0 }
             z: ev.dragId === "model" ? 5 : 0
             Layout.fillWidth: true
             spacing: 10
@@ -629,7 +772,8 @@ View {
         }
         RowLayout {
             visible: !!ev.pendingProvider && ev.pendingProvider !== JD.settings.provider
-            Layout.row: ev.row("model") + 1
+            Layout.row: 99
+            Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 10
             Label2 { text: JD.tr("Модель сменится после перезапуска (текущий разговор начнётся заново)"); Layout.fillWidth: true }
@@ -638,11 +782,17 @@ View {
 
         // ── notifications | recent
         RowLayout {
-            visible: (JD.notifications.length > 0 && JD.island.show_notifications !== false) || (JD.history.length > 0 && JD.island.menu_recent !== false)
+            visible: ev.present("lists")
             id: blkLists
-            Layout.row: ev.row("lists")
+            Layout.row: 10 + ev.g("lists").r
+            Layout.column: ev.g("lists").c
+            Layout.rowSpan: ev.g("lists").h
+            Layout.columnSpan: ev.g("lists").w
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
+            Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("lists") : 0
-            transform: Translate { y: ev.dragId === "lists" ? ev.dragDy : 0 }
+            transform: Translate { x: ev.dragId === "lists" ? ev.dragDx : 0; y: ev.dragId === "lists" ? ev.dragDy : 0 }
             z: ev.dragId === "lists" ? 5 : 0
             Layout.fillWidth: true
             spacing: 14
@@ -726,9 +876,10 @@ View {
         ColumnLayout {
             visible: ev.editing
             Layout.row: 100
+            Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 8
-            Label2 { text: ev.hidden.length ? JD.tr("Спрятано, нажмите, чтобы вернуть:") : JD.tr("Красный минус или правая кнопка прячет блок, перетаскивание меняет порядок."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Label2 { text: ev.hidden.length ? JD.tr("Спрятано, нажмите, чтобы вернуть:") : JD.tr("Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, синяя метка — размер."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
             Flow {
                 Layout.fillWidth: true
                 spacing: 8
@@ -765,7 +916,7 @@ View {
                 readonly property bool hasNotifs: JD.notifications.length > 0 && JD.island.show_notifications !== false
                 readonly property bool hasRecent: JD.history.length > 0 && JD.island.menu_recent !== false
                 visible: !!blk && blk.visible
-                x: col.x + blk.x
+                x: col.x + blk.x + (ev.dragId === modelData ? ev.dragDx : 0)
                 y: col.y + blk.y + (ev.dragId === modelData ? ev.dragDy : 0)
                 width: blk.width
                 height: blk.height
@@ -784,9 +935,8 @@ View {
                     cursorShape: ev.dragId === slot.modelData ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                     DragHandler {
                         target: null
-                        xAxis.enabled: false
-                        onActiveChanged: { if (active) { ev.dragId = slot.modelData; ev.dragDy = 0 } else ev.drop() }
-                        onTranslationChanged: if (active) ev.dragDy = translation.y
+                        onActiveChanged: { if (active) { ev.dragId = slot.modelData; ev.dragDx = 0; ev.dragDy = 0 } else ev.drop() }
+                        onTranslationChanged: if (active) { ev.dragDx = translation.x; ev.dragDy = translation.y }
                     }
                     TapHandler {
                         acceptedButtons: Qt.RightButton
@@ -796,6 +946,19 @@ View {
                             else if (slot.hasRecent) ev.hide("recent")
                         }
                     }
+                }
+                // Размер: нажатие перебирает доступные для этого виджета (1×1 → 2×1 → 4×1 …).
+                Rectangle {
+                    visible: ev.choices(slot.modelData).length > 1
+                    anchors { right: parent.right; bottom: parent.bottom; margins: -6 }
+                    width: szText.implicitWidth + 14; height: 22; radius: 11
+                    color: JD.accentBlue
+                    border.width: 2
+                    border.color: Qt.rgba(0, 0, 0, 0.6)
+                    Text { id: szText; anchors.centerIn: parent; color: "white"; font.family: JD.fontFamily; font.pixelSize: 11; font.weight: Font.DemiBold
+                           text: ev.sizeOf(slot.modelData).replace("x", "×").replace("v", " ↕") }
+                    TapHandler { onTapped: ev.cycleSize(slot.modelData) }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
                 }
                 // красный минус: у нижнего ряда их два, по одному на половину
                 Repeater {

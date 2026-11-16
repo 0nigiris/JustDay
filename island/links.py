@@ -41,4 +41,7 @@ for line in out(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--acti
         break
 
 bt = out(["bluetoothctl", "show"]).lower()
-print(json.dumps({"net": net, "kind": kind, "name": name, "vpn": vpn, "bt": "powered: yes" in bt}, ensure_ascii=False))
+# Радио Wi‑Fi отдельно от «подключено»: плитка в пульте включает и выключает именно радио.
+wifi = out(["nmcli", "radio", "wifi"]).strip() == "enabled"
+print(json.dumps({"net": net, "kind": kind, "name": name, "vpn": vpn, "bt": "powered: yes" in bt, "wifi": wifi},
+                 ensure_ascii=False))

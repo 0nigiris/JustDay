@@ -520,7 +520,10 @@ DEFAULTS: dict = {
         "menu_top_chat": True,      # верхние кнопки меню: прячутся в правке
         "menu_top_tools": True,
         "menu_top_settings": True,
-        "menu_order": ["ask", "player", "sound", "event", "model", "lists"],   # порядок блоков главного меню
+        "menu_order": ["ask", "player", "t_mic", "t_voice", "t_sounds", "t_notifs", "t_coffee", "t_wifi", "t_bt",
+                       "t_server", "sound", "event", "model", "lists"],   # порядок виджетов пульта
+        "menu_sizes": [],          # размеры виджетов пульта: «id:2x1»; пусто — у каждого свой по умолчанию
+        "menu_t_server": False,    # плитка «Режим сервера» гасит экраны: по умолчанию спрятана
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         # Where toast/shade notifications appear (Telegram-style), independent of the island pill:
         # screen: "" = same monitor as the island; "primary" | "secondary" | output name (HDMI-A-1, DP-2…)

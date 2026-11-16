@@ -702,6 +702,12 @@ Singleton {
     property string vpnName: ""
     readonly property bool vpnOn: vpnName !== ""
     property bool btOn: false
+    property bool wifiOn: false
+    // Плитки Wi‑Fi и Bluetooth в пульте: переключили — сразу показываем новое, а через секунду
+    // спрашиваем правду (радио может не включиться, если его держит rfkill).
+    function setWifi(on) { wifiOn = on; Quickshell.execDetached(["nmcli", "radio", "wifi", on ? "on" : "off"]); linkLater.restart() }
+    function setBt(on) { btOn = on; Quickshell.execDetached(["bluetoothctl", "power", on ? "on" : "off"]); linkLater.restart() }
+    Timer { id: linkLater; interval: 1500; onTriggered: jd.askLinks() }
     readonly property bool barNet: (settings.island || ({})).bar_net !== false
     readonly property bool barBt: (settings.island || ({})).bar_bt !== false
     readonly property bool barLang: (settings.island || ({})).bar_lang !== false
@@ -709,7 +715,7 @@ Singleton {
     // Спрашиваем, только когда есть кому показывать. Это три внешние программы на каждый опрос,
     // и каждые пять секунд круглые сутки — это пятьдесят тысяч запусков в день ради значка,
     // который меняется раз в час. При островке и вырезе правого края полосы вовсе нет.
-    readonly property bool linksWanted: islandStyle === "bar" && (barNet || barBt)
+    readonly property bool linksWanted: islandStyle === "bar" && (barNet || barBt) || expanded
     Timer {
         interval: 15000
         running: jd.linksWanted
@@ -729,6 +735,7 @@ Singleton {
                     jd.netName = o.name || ""
                     jd.vpnName = o.vpn || ""
                     jd.btOn = !!o.bt
+                    jd.wifiOn = !!o.wifi
                 } catch (e) {}
             }
         }
