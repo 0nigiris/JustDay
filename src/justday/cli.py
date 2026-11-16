@@ -623,6 +623,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("alarm", help="set an alarm: `justday alarm 7:30 подъём` [--daily] · `justday alarm` lists them")
     sp.add_argument("args", nargs="*")
     sp.add_argument("--daily", action="store_true", help="ring every day at that time")
+    sub.add_parser("school", help="школьный Aules: ближайшие сроки и непрочитанное")
     sp = sub.add_parser("reminders", help="what is waiting: list | cancel [timer|alarm|ID]")
     sp.add_argument("action", nargs="?", default="list", choices=["list", "cancel"])
     sp.add_argument("args", nargs="*")
@@ -1492,6 +1493,9 @@ def main(argv: list[str] | None = None) -> None:
         _print(control("new_session", timeout=120))
     elif a.cmd == "secret":
         _secret_cmd(a)
+    elif a.cmd == "school":
+        from . import school
+        _print(school.news())
     elif a.cmd == "mail":
         _mail_cmd(a)
 
