@@ -24,6 +24,7 @@ Item {
         anchors.fill: parent
         spacing: 6
         Label2 {
+            visible: vr.width >= 260
             text: Math.round(vr.shown * 100) + "%"
             color: JD.text2; font.pixelSize: 11; font.features: { "tnum": 1 }
             Layout.alignment: Qt.AlignHCenter
@@ -62,7 +63,8 @@ Item {
             Icon { anchors.centerIn: parent; name: vr.shown === 0 ? "audio-volume-muted" : vr.icon; implicitSize: 16; tint: vr.tint }
             MouseArea { id: vrMute; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: vr.muteToggled() }
         }
-        Label1 { text: vr.label; font.pixelSize: 13; font.weight: Font.Medium; Layout.preferredWidth: 86 }
+        // Узкая ручка (громкость 1x1) — без подписи и процентов, иначе ползунку не оставалось места
+        Label1 { visible: vr.width >= 260; text: vr.label; font.pixelSize: 13; font.weight: Font.Medium; Layout.preferredWidth: 86 }
         JSlider {
             id: vrTrack
             Layout.fillWidth: true
