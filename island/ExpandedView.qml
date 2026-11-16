@@ -585,10 +585,12 @@ View {
                 onToggled: ev.setting("desktop.coffee", !JD.coffeeOn) }
         GTile { id: tWifi; bid: "t_wifi"; icon: JD.wifiOn ? "wifi" : "wifi-off"; title: "Wi‑Fi"
                 onText: JD.netKind === "wifi" && JD.netName ? JD.netName : JD.tr("включён"); offText: JD.tr("выключен")
-                on: JD.wifiOn; tint: JD.accentBlue; onToggled: JD.setWifi(!JD.wifiOn) }
+                on: JD.wifiOn; tint: JD.accentBlue; onToggled: JD.setWifi(!JD.wifiOn)
+                holdable: true; onHeld: radioSheet.show("wifi") }
         GTile { id: tBt; bid: "t_bt"; icon: "bluetooth"; title: "Bluetooth"
                 onText: JD.tr("включён"); offText: JD.tr("выключен")
-                on: JD.btOn; tint: JD.accentBlue; onToggled: JD.setBt(!JD.btOn) }
+                on: JD.btOn; tint: JD.accentBlue; onToggled: JD.setBt(!JD.btOn)
+                holdable: true; onHeld: radioSheet.show("bt") }
         GTile { id: tServer; bid: "t_server"; icon: "moon"; title: JD.tr("Режим сервера"); onText: JD.tr("экраны погашены"); offText: JD.tr("обычная работа")
                 on: JD.serverMode; tint: JD.accentPurple; onToggled: JD.toggleServerMode() }
 
@@ -1084,5 +1086,13 @@ View {
             }
         }
     }
+    }
+
+    // Долгое нажатие на Wi‑Fi или Bluetooth — список сетей или устройств поверх пульта.
+    RadioSheet {
+        id: radioSheet
+        anchors.fill: parent
+        z: 50
+        Connections { target: ev; function onVisibleChanged() { if (!ev.visible) radioSheet.close() } }
     }
 }

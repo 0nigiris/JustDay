@@ -11,6 +11,10 @@ Rectangle {
     property alias hovered: hover.hovered
     property alias pressed: tap.pressed
     signal clicked()
+    // Долгое нажатие — вход в подробный вид (Bluetooth → устройства, Wi‑Fi → сети). Только у тех,
+    // кто его просит: иначе зажатая по ошибке кнопка молча не срабатывала бы никак.
+    property bool holdable: false
+    signal held()
     // Наведение: лёгкий свет поверх, одинаковый у всего, что нажимается. Он просил, чтобы любая
     // кнопка под курсором давала понять «на меня можно нажать» (16 нояб., «невероятно важно»).
     // Свой цвет при наведении у многих кнопок есть, но не у всех, и разный — этот слой общий.
@@ -33,5 +37,6 @@ Rectangle {
     // достаётся заодно всем обработчикам выше: стрелка «развернуть» на острове разворачивала текст
     // и тут же открывала поверх него панель управления. ReleaseWithinBounds берёт захват
     // исключительно — родитель молчит.
-    TapHandler { id: tap; enabled: p.pressEnabled; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: { if (p.sound) JD.sfx(p.sound); p.clicked() } }
+    TapHandler { id: tap; enabled: p.pressEnabled; gesturePolicy: TapHandler.ReleaseWithinBounds; onTapped: { if (p.sound) JD.sfx(p.sound); p.clicked() }
+                 longPressThreshold: p.holdable ? 0.45 : 0.8; onLongPressed: if (p.holdable) { JD.sfx("click"); p.held() } }
 }

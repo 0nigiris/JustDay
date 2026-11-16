@@ -1114,5 +1114,16 @@
   "включён": "on",
   "выключен": "off",
   "обычная работа": "normal work",
-  "экраны погашены": "screens off"
+  "экраны погашены": "screens off",
+  "Сеть закрыта — пароль вводится в настройках системы": "The network is locked — enter its password in system settings",
+  "Ищу…": "Searching…",
+  "Сетей не видно": "No networks in range",
+  "Известных устройств нет": "No known devices",
+  "подключаю…": "connecting…",
+  "подключено": "connected",
+  "сохранена": "saved",
+  "с паролем": "password",
+  "открытая": "open",
+  "не подключено": "not connected",
+  "Настройки системы…": "System settings…"
 }
