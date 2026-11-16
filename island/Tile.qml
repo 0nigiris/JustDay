@@ -11,6 +11,7 @@ Pressable {
     property string offText: JD.tr("Выкл")
     property bool on: false
     property color tint: JD.accentBlue
+    property bool lit: on   // цветной ли значок: у плитки-действия цветной всегда
     signal toggled()
     onClicked: toggled()
     Layout.fillWidth: true
@@ -26,9 +27,16 @@ Pressable {
         spacing: 10
         Rectangle {
             implicitWidth: 38; implicitHeight: 38; radius: 19
-            color: tile.on ? tile.tint : JD.fill2
+            // Есть полоска Kubai — объёмный значок сам по себе цветной, круг под ним не нужен
+            color: kb.ok ? "transparent" : tile.on ? tile.tint : JD.fill2
             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
-            Icon { anchors.centerIn: parent; name: tile.icon; implicitSize: 18 }
+            KubaiIcon {
+                id: kb
+                anchors.centerIn: parent; width: 32; height: 32
+                name: tile.icon; hovered: tile.hovered
+                color: tile.lit ? tile.tint : "#8e8e93"
+            }
+            Icon { anchors.centerIn: parent; name: tile.icon; implicitSize: 18; visible: !kb.ok }
         }
         ColumnLayout {
             spacing: 0

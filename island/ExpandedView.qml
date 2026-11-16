@@ -188,7 +188,7 @@ View {
         z: ev.dragId === bid ? 5 : 0
     }
     // Плитка-действие: не выключатель, а кнопка «сделай» — круг значка не загорается.
-    component ATile: GTile { on: false; offText: onText; sound: "click" }
+    component ATile: GTile { on: false; lit: true; offText: onText; sound: "click" }
     // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
     // `forced` держит порядок до ответа демона: иначе блок после броска на миг прыгал бы обратно.
     property var forced: null
