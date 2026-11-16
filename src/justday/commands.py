@@ -878,7 +878,10 @@ class CommandsMixin:
 
     async def _cmd_edit(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Режим правки в островке: значки дрожат и переставляются (`justday edit`)"""
-        self.publish(edit="toggle" if req.get("toggle") else bool(req.get("on", True)))
+        if req.get("pult"):   # правка пульта, а не островка: без неё до неё не дотянуться без мыши
+            self.publish(menuEdit=True)
+        else:
+            self.publish(edit="toggle" if req.get("toggle") else bool(req.get("on", True)))
         return {"ok": True}
 
     async def _cmd_clip_list(self, req: dict, writer: asyncio.StreamWriter) -> dict:
