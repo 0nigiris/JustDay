@@ -14,12 +14,6 @@ model_list:
   # Через переводчик не работает; в оболочке OpenCode он и так есть.
   - model_name: cf-gpt-oss
     litellm_params: {model: hosted_vllm/@cf/openai/gpt-oss-120b, api_key: os.environ/CLOUDFLARE_API_KEY, api_base: os.environ/CLOUDFLARE_OPENAI_BASE}
-  # Без ключа и без регистрации (Pollinations, анонимный доступ): так у человека без подписки Claude
-  # Джарвис думает с первой минуты и не грузит его компьютер. Новый адрес gen.pollinations.ai пускает
-  # без ключа, только если заголовка нет вовсе, а Claude Code шлёт его всегда → 401; старый text.* ключ
-  # не проверяет. Ключ-пустышка — только чтобы LiteLLM не ругался на пустой.
-  - model_name: free
-    litellm_params: {model: openai/openai, api_base: https://text.pollinations.ai/openai, api_key: os.environ/POLLINATIONS_API_KEY}
 litellm_settings:
   drop_params: true   # Claude Code шлёт поля Anthropic (thinking, cache_control), которых у них нет
 general_settings:
