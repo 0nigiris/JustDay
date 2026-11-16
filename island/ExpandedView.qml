@@ -1,6 +1,7 @@
 // Вынесено из shell.qml (Р-80).
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Services.Pipewire
 
@@ -41,10 +42,30 @@ View {
     function vert(id) { return sizeOf(id).endsWith("v") }
     property var forcedSizes: null
     function cycleSize(id) {
-        const c = choices(id), next = c[(c.indexOf(sizeOf(id)) + 1) % c.length]
+        const c = choices(id)
+        setSize(id, c[(c.indexOf(sizeOf(id)) + 1) % c.length], true)
+    }
+    function setSize(id, size, save) {
+        if (size === sizeOf(id) && !save) return
         const rest = (forcedSizes || (Array.isArray(JD.island.menu_sizes) ? JD.island.menu_sizes : [])).filter(x => String(x).split(":")[0] !== id)
-        forcedSizes = rest.concat([id + ":" + next])
-        JD.setConfig("island.menu_sizes", forcedSizes)
+        forcedSizes = rest.concat([id + ":" + size])
+        if (save) JD.setConfig("island.menu_sizes", forcedSizes)
+    }
+    // Растягивание за уголок (16 нояб.: «брать за правый нижний кончик и тянуть»). Рамка идёт за
+    // курсором свободно, а виджет на ходу встаёт в ближайший из своих размеров — сетка
+    // перестраивается прямо под рукой, сохраняется по отпусканию.
+    property string resizeId: ""
+    property real resizeW: 0
+    property real resizeH: 0
+    function resizeTo(id, w, h, rowH) {
+        const cw = (col.width + col.columnSpacing) / 4, rh = rowH + col.rowSpacing
+        const wantW = (w + col.columnSpacing) / cw, wantH = (h + col.rowSpacing) / rh
+        let best = sizeOf(id), bestD = 1e9
+        for (const c of choices(id)) {
+            const m = c.match(/(\d)x(\d)/), d = Math.abs(+m[1] - wantW) + Math.abs(+m[2] - wantH)
+            if (d < bestD - 0.01) { bestD = d; best = c }
+        }
+        setSize(id, best, false)
     }
     // Есть ли что показать: спрятанное и пустое (нет события, нет уведомлений) места не занимает.
     function present(id) {
@@ -879,7 +900,7 @@ View {
             Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 8
-            Label2 { text: ev.hidden.length ? JD.tr("Спрятано, нажмите, чтобы вернуть:") : JD.tr("Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, синяя метка — размер."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Label2 { text: ev.hidden.length ? JD.tr("Спрятано, нажмите, чтобы вернуть:") : JD.tr("Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, уголок справа снизу тянется — так меняется размер."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
             Flow {
                 Layout.fillWidth: true
                 spacing: 8
@@ -947,18 +968,61 @@ View {
                         }
                     }
                 }
-                // Размер: нажатие перебирает доступные для этого виджета (1×1 → 2×1 → 4×1 …).
+                // Призрак размера: пока тянут уголок, рамка идёт за курсором, а виджет под ней
+                // прыгает в ближайший свой размер — видно и куда тянешь, и что получится.
                 Rectangle {
-                    visible: ev.choices(slot.modelData).length > 1
-                    anchors { right: parent.right; bottom: parent.bottom; margins: -6 }
-                    width: szText.implicitWidth + 14; height: 22; radius: 11
-                    color: JD.accentBlue
+                    visible: ev.resizeId === slot.modelData
+                    width: Math.max(40, ev.resizeW); height: Math.max(40, ev.resizeH)
+                    radius: 16
+                    color: Qt.rgba(1, 1, 1, 0.05)
                     border.width: 2
-                    border.color: Qt.rgba(0, 0, 0, 0.6)
-                    Text { id: szText; anchors.centerIn: parent; color: "white"; font.family: JD.fontFamily; font.pixelSize: 11; font.weight: Font.DemiBold
-                           text: ev.sizeOf(slot.modelData).replace("x", "×").replace("v", " ↕") }
+                    border.color: JD.accentBlue
+                }
+                // Уголок размера справа снизу. Тянуть — менять размер, нажать — следующий размер
+                // (на случай, когда тянуть неудобно, например на тачпаде).
+                Item {
+                    id: corner
+                    visible: ev.choices(slot.modelData).length > 1
+                    readonly property int span: { const m = ev.sizeOf(slot.modelData).match(/x(\d)/); return m ? +m[1] : 1 }
+                    width: 34; height: 34
+                    x: (ev.resizeId === slot.modelData ? ev.resizeW : slot.width) - width + 8
+                    y: (ev.resizeId === slot.modelData ? ev.resizeH : slot.height) - height + 8
+                    z: 5
+                    Shape {
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        preferredRendererType: Shape.CurveRenderer
+                        ShapePath {
+                            strokeColor: "white"; strokeWidth: 4; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                            startX: 22; startY: 4
+                            PathArc { x: 4; y: 22; radiusX: 18; radiusY: 18 }
+                        }
+                        // дуга идёт вдоль скругления карточки, по ту сторону рамки — как у виджетов айфона
+                        scale: cornerHover.hovered || ev.resizeId === slot.modelData ? 1.2 : 1
+                        Behavior on scale { enabled: JD.animOn; NumberAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+                    }
+                    HoverHandler { id: cornerHover; cursorShape: Qt.SizeFDiagCursor }
                     TapHandler { onTapped: ev.cycleSize(slot.modelData) }
-                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    DragHandler {
+                        target: null
+                        property real w0: 0
+                        property real h0: 0
+                        property real rowH: 0
+                        onActiveChanged: {
+                            if (active) {
+                                w0 = slot.width; h0 = slot.height
+                                rowH = (slot.height - (corner.span - 1) * col.rowSpacing) / corner.span
+                                ev.resizeW = w0; ev.resizeH = h0; ev.resizeId = slot.modelData
+                            } else {
+                                ev.setSize(slot.modelData, ev.sizeOf(slot.modelData), true)
+                                ev.resizeId = ""
+                            }
+                        }
+                        onTranslationChanged: if (active) {
+                            ev.resizeW = w0 + translation.x; ev.resizeH = h0 + translation.y
+                            ev.resizeTo(slot.modelData, ev.resizeW, ev.resizeH, rowH)
+                        }
+                    }
                 }
                 // красный минус: у нижнего ряда их два, по одному на половину
                 Repeater {

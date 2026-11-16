@@ -1108,7 +1108,7 @@
   "Вернуть машину": "Give the machine back",
   "Проверить обновление": "Check for updates",
   "Настройки системы (KDE)": "System settings (KDE)",
-  "Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, синяя метка — размер.": "The red minus or right click hides a widget, dragging changes the order, the blue tag changes the size.",
+  "Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, уголок справа снизу тянется — так меняется размер.": "The red minus or right click hides a widget, dragging changes the order, drag the bottom-right corner to resize.",
   "Плитка уведомлений": "Notifications tile",
   "Списки": "Lists",
   "включён": "on",
