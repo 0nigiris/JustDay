@@ -153,7 +153,8 @@ View {
         Layout.minimumWidth: 0
         Layout.fillHeight: true
         rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
-        transform: Translate { x: ev.dragId === gt.bid ? ev.dragDx : 0; y: ev.dragId === gt.bid ? ev.dragDy : 0 }
+        transform: [Scale { xScale: ev.fl(gt.bid).sx; yScale: ev.fl(gt.bid).sy },
+                    Translate { x: (ev.dragId === gt.bid ? ev.dragDx : 0) + ev.fl(gt.bid).x; y: (ev.dragId === gt.bid ? ev.dragDy : 0) + ev.fl(gt.bid).y }]
         z: ev.dragId === bid ? 5 : 0
         // В правке плитка — предмет, а не выключатель: нажатие на её красный минус включало
         // заодно и саму плитку (Wi‑Fi гас, когда его убирали, 16 нояб.).
@@ -177,7 +178,8 @@ View {
         color: JD.fill1
         clip: true
         rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
-        transform: Translate { x: ev.dragId === gb.bid ? ev.dragDx : 0; y: ev.dragId === gb.bid ? ev.dragDy : 0 }
+        transform: [Scale { xScale: ev.fl(gb.bid).sx; yScale: ev.fl(gb.bid).sy },
+                    Translate { x: (ev.dragId === gb.bid ? ev.dragDx : 0) + ev.fl(gb.bid).x; y: (ev.dragId === gb.bid ? ev.dragDy : 0) + ev.fl(gb.bid).y }]
         z: ev.dragId === bid ? 5 : 0
     }
     // Плитка-действие: не выключатель, а кнопка «сделай» — круг значка не загорается.
@@ -261,6 +263,53 @@ View {
         NumberAnimation { to: -0.45; duration: 220 }
         NumberAnimation { to: 0; duration: 110 }
     }
+    // Перестройка сетки — плавно (16 нояб.: «чтобы анимация изменения размера была плавнее»).
+    // GridLayout ставит блоки сразу на новое место, Behavior на его x/width не срабатывает: раскладка
+    // пишет их мимо QML. Поэтому FLIP: запомнили, где блок был, после раскладки сдвинули его
+    // трансформом назад на старое место и в старый размер, а потом один общий flipT отпускает всех
+    // к нулю. Одна анимация на весь пульт, а не по одной на каждый из двух десятков блоков.
+    property var flipFrom: ({})
+    property real flipT: 0
+    property var dropAt: null   // брошенный блок едет из-под пальца, а не из своей старой клетки
+    readonly property var flipNone: ({ x: 0, y: 0, sx: 1, sy: 1 })
+    function fl(id) {
+        const f = flipFrom[id], t = flipT
+        if (!f || t === 0) return flipNone
+        return { x: f.dx * t, y: f.dy * t, sx: 1 + (f.sw - 1) * t, sy: 1 + (f.sh - 1) * t }
+    }
+    function geo() {
+        const out = {}
+        for (const id of blockIds) { const b = blocks[id]; if (b && b.visible) out[id] = [b.x, b.y, b.width, b.height] }
+        return out
+    }
+    onGridChanged: {
+        if (!JD.animOn || !shown) return
+        const was = geo(), d = dropAt
+        dropAt = null
+        if (d && was[d.id]) { was[d.id][0] += d.dx; was[d.id][1] += d.dy }
+        Qt.callLater(() => {
+            col.ensurePolished()   // раскладка — сейчас, а не в следующем кадре: иначе кадр мелькнул бы без сдвига
+            const now = geo(), from = {}
+            for (const id in now) {
+                const a = was[id], b = now[id]
+                if (!a || b[2] <= 0 || b[3] <= 0) continue
+                if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) + Math.abs(a[3] - b[3]) < 1) continue
+                from[id] = { dx: a[0] - b[0], dy: a[1] - b[1], sw: a[2] / b[2], sh: a[3] / b[3] }
+            }
+            if (!Object.keys(from).length) return
+            flipAnim.stop()
+            flipFrom = from
+            flipT = 1
+            flipAnim.start()
+        })
+    }
+    NumberAnimation {
+        id: flipAnim
+        target: ev; property: "flipT"; to: 0
+        duration: JD.durSlow
+        // лёгкий перелёт: блок «встаёт» на место, а не въезжает в стену
+        easing.type: Easing.OutBack; easing.overshoot: 0.9
+    }
     function drop() {
         const id = dragId
         if (!id) return
@@ -270,8 +319,10 @@ View {
             const t = blocks[o]
             if (o !== id && t.visible && cx >= t.x && cx <= t.x + t.width && cy >= t.y && cy <= t.y + t.height) { hit = o; break }
         }
+        const moved = { id: id, dx: dragDx, dy: dragDy }
         dragId = ""; dragDx = 0; dragDy = 0
         if (!hit) return
+        dropAt = moved
         // Брошенный встаёт на место того, в кого попал: тянули вперёд — за ним, назад — перед ним.
         const fwd = order.indexOf(hit) > order.indexOf(id)
         const next = order.filter(x => x !== id)
@@ -413,7 +464,8 @@ View {
             Layout.minimumWidth: 0
             Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("ask") : 0
-            transform: Translate { x: ev.dragId === "ask" ? ev.dragDx : 0; y: ev.dragId === "ask" ? ev.dragDy : 0 }
+            transform: [Scale { xScale: ev.fl("ask").sx; yScale: ev.fl("ask").sy },
+                        Translate { x: (ev.dragId === "ask" ? ev.dragDx : 0) + ev.fl("ask").x; y: (ev.dragId === "ask" ? ev.dragDy : 0) + ev.fl("ask").y }]
             z: ev.dragId === "ask" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: 46
@@ -449,7 +501,8 @@ View {
             Layout.minimumWidth: 0
             Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("player") : 0
-            transform: Translate { x: ev.dragId === "player" ? ev.dragDx : 0; y: ev.dragId === "player" ? ev.dragDy : 0 }
+            transform: [Scale { xScale: ev.fl("player").sx; yScale: ev.fl("player").sy },
+                        Translate { x: (ev.dragId === "player" ? ev.dragDx : 0) + ev.fl("player").x; y: (ev.dragId === "player" ? ev.dragDy : 0) + ev.fl("player").y }]
             z: ev.dragId === "player" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: np.implicitHeight
@@ -731,7 +784,8 @@ View {
             Layout.minimumWidth: 0
             Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("sound") : 0
-            transform: Translate { x: ev.dragId === "sound" ? ev.dragDx : 0; y: ev.dragId === "sound" ? ev.dragDy : 0 }
+            transform: [Scale { xScale: ev.fl("sound").sx; yScale: ev.fl("sound").sy },
+                        Translate { x: (ev.dragId === "sound" ? ev.dragDx : 0) + ev.fl("sound").x; y: (ev.dragId === "sound" ? ev.dragDy : 0) + ev.fl("sound").y }]
             z: ev.dragId === "sound" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: sndCol.implicitHeight + 24
@@ -890,7 +944,8 @@ View {
             Layout.minimumWidth: 0
             Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("event") : 0
-            transform: Translate { x: ev.dragId === "event" ? ev.dragDx : 0; y: ev.dragId === "event" ? ev.dragDy : 0 }
+            transform: [Scale { xScale: ev.fl("event").sx; yScale: ev.fl("event").sy },
+                        Translate { x: (ev.dragId === "event" ? ev.dragDx : 0) + ev.fl("event").x; y: (ev.dragId === "event" ? ev.dragDy : 0) + ev.fl("event").y }]
             z: ev.dragId === "event" ? 5 : 0
             Layout.fillWidth: true
             implicitHeight: 40
@@ -917,7 +972,8 @@ View {
             Layout.minimumWidth: 0
             Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("model") : 0
-            transform: Translate { x: ev.dragId === "model" ? ev.dragDx : 0; y: ev.dragId === "model" ? ev.dragDy : 0 }
+            transform: [Scale { xScale: ev.fl("model").sx; yScale: ev.fl("model").sy },
+                        Translate { x: (ev.dragId === "model" ? ev.dragDx : 0) + ev.fl("model").x; y: (ev.dragId === "model" ? ev.dragDy : 0) + ev.fl("model").y }]
             z: ev.dragId === "model" ? 5 : 0
             Layout.fillWidth: true
             spacing: 10
@@ -977,7 +1033,8 @@ View {
             Layout.minimumWidth: 0
             Layout.fillHeight: true
             rotation: ev.editing ? ev.wig * ev.sign("lists") : 0
-            transform: Translate { x: ev.dragId === "lists" ? ev.dragDx : 0; y: ev.dragId === "lists" ? ev.dragDy : 0 }
+            transform: [Scale { xScale: ev.fl("lists").sx; yScale: ev.fl("lists").sy },
+                        Translate { x: (ev.dragId === "lists" ? ev.dragDx : 0) + ev.fl("lists").x; y: (ev.dragId === "lists" ? ev.dragDy : 0) + ev.fl("lists").y }]
             z: ev.dragId === "lists" ? 5 : 0
             Layout.fillWidth: true
             spacing: 14
