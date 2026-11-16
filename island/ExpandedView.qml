@@ -40,10 +40,19 @@ View {
         t_mic: tMic, t_voice: tVoice, t_sounds: tSounds, t_notifs: tNotifs, t_coffee: tCoffee, t_wifi: tWifi, t_bt: tBt, t_server: tServer,
         w_clock: wClock, w_weather: wWeather, w_load: wLoad, w_note: wNote,
         a_shot: aShot, a_emoji: aEmoji, a_clip: aClip, a_mixer: aMixer, a_load: aLoad, a_files: aFiles, a_kde: aKde, a_update: aUpdate })
-    readonly property var tileSizes: ["1x1", "2x1", "4x1"]
-    readonly property var sizeChoices: ({ ask: ["4x1", "2x1"], player: ["2x2", "3x2", "4x2"], sound: ["4x1", "2x1", "2x2v", "1x2v"],
-        event: ["4x1", "2x1"], model: ["4x1"], lists: ["4x1"],
-        w_clock: ["2x1", "4x1", "2x2"], w_weather: ["2x1", "2x2", "4x1"], w_load: ["2x1", "4x1", "2x2"], w_note: ["2x2", "4x1", "2x1", "4x2"] })
+    // Размеры пишутся в четвертях ширины, как раньше («2x1» — половина пульта в один ряд), а сетка
+    // внутри на восемь колонок: так появилась плитка «h» шириной в полколонки — одна иконка
+    // (16 нояб.: «кнопки размером в иконку»), и сохранённые размеры не поехали. Хвост «v» — стоймя.
+    // Первый размер в списке — размер по умолчанию.
+    readonly property var tileSizes: ["1x1", "hx1", "2x1", "1x2", "4x1"]
+    readonly property var sizeChoices: ({ ask: ["4x1", "2x1", "3x1", "1x1", "hx1"],
+        player: ["2x2", "3x2", "4x2", "4x1", "2x1", "1x1", "1x2"],
+        sound: ["4x1", "2x1", "2x2v", "1x2v", "1x1", "hx2v"],
+        event: ["4x1", "2x1", "1x1", "2x2"], model: ["4x1", "2x2"], lists: ["4x1"],
+        w_clock: ["2x1", "4x1", "2x2", "1x1", "1x2"], w_weather: ["2x1", "2x2", "4x1", "1x1", "1x2"],
+        w_load: ["2x1", "4x1", "2x2", "1x1", "1x2"], w_note: ["2x2", "4x1", "2x1", "4x2", "1x1", "1x2"] })
+    // [ширина в восьмых, высота в рядах]
+    function dims(sz) { const m = String(sz).match(/^([h\d])x(\d)/); return m ? [m[1] === "h" ? 1 : 2 * +m[1], +m[2]] : [8, 1] }
     function choices(id) { return sizeChoices[id] || tileSizes }
     function sizeOf(id) {
         const all = Array.isArray(JD.island.menu_sizes) ? JD.island.menu_sizes : []
@@ -69,11 +78,11 @@ View {
     property real resizeW: 0
     property real resizeH: 0
     function resizeTo(id, w, h, rowH) {
-        const cw = (col.width + col.columnSpacing) / 4, rh = rowH + col.rowSpacing
+        const cw = (col.width + col.columnSpacing) / 8, rh = rowH + col.rowSpacing
         const wantW = (w + col.columnSpacing) / cw, wantH = (h + col.rowSpacing) / rh
         let best = sizeOf(id), bestD = 1e9
         for (const c of choices(id)) {
-            const m = c.match(/(\d)x(\d)/), d = Math.abs(+m[1] - wantW) + Math.abs(+m[2] - wantH)
+            const m = dims(c), d = Math.abs(m[0] - wantW) / 2 + Math.abs(m[1] - wantH)
             if (d < bestD - 0.01) { bestD = d; best = c }
         }
         setSize(id, best, false)
@@ -89,27 +98,30 @@ View {
     // оставляла бы дыру (как было с кофе).
     readonly property var grid: {
         const busy = [], out = {}
-        const free = (r, c, w, h) => { for (let y = r; y < r + h; y++) for (let x = c; x < c + w; x++) if (x > 3 || (busy[y] && busy[y][x])) return false; return true }
+        const free = (r, c, w, h) => { for (let y = r; y < r + h; y++) for (let x = c; x < c + w; x++) if (x > 7 || (busy[y] && busy[y][x])) return false; return true }
         let top = 0
         for (const id of order) {
             if (!present(id)) continue
-            const m = sizeOf(id).match(/(\d)x(\d)/), w = +m[1], h = +m[2]
+            const m = dims(sizeOf(id)), w = m[0], h = m[1]
             let r = top, c = 0
-            while (!free(r, c, w, h)) { if (++c > 4 - w) { c = 0; r++ } }
+            while (!free(r, c, w, h)) { if (++c > 8 - w) { c = 0; r++ } }
             for (let y = r; y < r + h; y++) { busy[y] = busy[y] || []; for (let x = c; x < c + w; x++) busy[y][x] = id }
             out[id] = { r: r, c: c, w: w, h: h }
             top = r
         }
+        // Растягиваем только размер по умолчанию: выбранный руками остаётся каким выбран. Иначе
+        // уменьшить последний в ряду виджет было нельзя — он тут же вырастал обратно до края (16 нояб.).
         for (const id in out) {
             const g = out[id]
-            if (g.h !== 1) continue
+            if (g.h !== 1 || chosen(id)) continue
             let end = g.c + g.w
-            while (end < 4 && !busy[g.r][end]) end++
-            if (end === 4 && busy[g.r].slice(g.c + g.w).every(x => !x)) g.w = 4 - g.c
+            while (end < 8 && !busy[g.r][end]) end++
+            if (end === 8 && busy[g.r].slice(g.c + g.w).every(x => !x)) g.w = 8 - g.c
         }
         return out
     }
-    function g(id) { return grid[id] || ({ r: 0, c: 0, w: 4, h: 1 }) }
+    function g(id) { return grid[id] || ({ r: 0, c: 0, w: 8, h: 1 }) }
+    function chosen(id) { return (forcedSizes || (Array.isArray(JD.island.menu_sizes) ? JD.island.menu_sizes : [])).some(x => String(x).split(":")[0] === id) }
     readonly property var blockNames: ({ ask: JD.tr("Строка запроса"), player: JD.tr("Музыка"),
         t_mic: JD.tr("Микрофон"), t_voice: JD.tr("Голос"), t_sounds: JD.tr("Звуки"), t_notifs: JD.tr("Плитка уведомлений"),
         t_coffee: JD.tr("Кофе"), t_wifi: "Wi‑Fi", t_bt: "Bluetooth", t_server: JD.tr("Режим сервера"), lists: JD.tr("Списки"),
@@ -373,14 +385,14 @@ View {
         x: 20
         y: 20
         width: evFlick.width - 40
-        columns: 4
+        columns: 8
         rowSpacing: 12
         columnSpacing: 12
 
-        // Ряд-распорка: по одной нулевой ячейке в колонку, чтобы четыре колонки были равными, а не
+        // Ряд-распорка: по одной нулевой ячейке в колонку, чтобы восемь колонок были равными, а не
         // по ширине того, что в них попало.
         Repeater {
-            model: 4
+            model: 8
             Item { required property int index; Layout.row: 9; Layout.column: index; Layout.fillWidth: true
                    Layout.preferredWidth: 1000; Layout.minimumWidth: 0; implicitHeight: 0 }
         }
@@ -388,7 +400,7 @@ View {
         // ── header: who, what it is doing · time, date, weather · settings
         RowLayout {
             Layout.row: 0
-            Layout.columnSpan: 4
+            Layout.columnSpan: 8
             Layout.fillWidth: true
             spacing: 14
             Orb { visible: JD.orbsOn; main: true; size: 36 }
@@ -452,7 +464,7 @@ View {
         Rectangle {
             visible: !!JD.update
             Layout.row: 1
-            Layout.columnSpan: 4
+            Layout.columnSpan: 8
             Layout.fillWidth: true
             implicitHeight: 46
             radius: 16
@@ -487,18 +499,21 @@ View {
             radius: 23
             color: askHover.hovered ? JD.fill2 : JD.fill1
             Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast; easing.type: JD.easeOut } }
+            // Узкая строка — короче подпись, без подсказки клавиши; в полколонки — одна лупа.
+            readonly property bool tiny: width < 120
             RowLayout {
-                anchors { fill: parent; leftMargin: 16; rightMargin: 6 }
+                anchors { fill: parent; leftMargin: blkAsk.tiny ? 0 : 16; rightMargin: blkAsk.tiny ? 0 : 6 }
                 spacing: 8
-                Icon { name: "search"; fallback: "edit-find"; implicitSize: 16; opacity: 0.6 }
-                Text { font.family: JD.fontFamily; text: JD.tr("Спросите или попросите что-нибудь…"); color: JD.text3; font.pixelSize: 14; Layout.fillWidth: true }
+                Icon { name: "search"; fallback: "edit-find"; implicitSize: blkAsk.tiny ? 20 : 16; opacity: 0.6; Layout.alignment: Qt.AlignCenter; Layout.fillWidth: blkAsk.tiny }
+                Text { visible: !blkAsk.tiny; font.family: JD.fontFamily; text: blkAsk.width < 320 ? JD.tr("Спросить…") : JD.tr("Спросите или попросите что-нибудь…")
+                       color: JD.text3; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
                 Rectangle {
-                    visible: !!JD.hotkeys.type
+                    visible: !!JD.hotkeys.type && blkAsk.width > 420
                     implicitWidth: hk.implicitWidth + 12; implicitHeight: 22; radius: 6
                     color: JD.fill1
                     Text { id: hk; anchors.centerIn: parent; text: JD.hotkeys.type || ""; color: JD.text2; font.family: JD.fontFamily; font.pixelSize: 11 }
                 }
-                IconButton { visible: JD.micOn; icon: "audio-input-microphone"; size: 34; onClicked: { JD.expanded = false; JD.send({ cmd: "listen" }) } }
+                IconButton { visible: JD.micOn && !blkAsk.tiny; icon: "audio-input-microphone"; size: 34; onClicked: { JD.expanded = false; JD.send({ cmd: "listen" }) } }
             }
             HoverHandler { id: askHover; cursorShape: Qt.IBeamCursor }
             TapHandler { onTapped: JD.openCompose() }
@@ -520,9 +535,14 @@ View {
                         Translate { x: (ev.dragId === "player" ? ev.dragDx : 0) + ev.fl("player").x; y: (ev.dragId === "player" ? ev.dragDy : 0) + ev.fl("player").y }]
             z: ev.dragId === "player" ? 5 : 0
             Layout.fillWidth: true
-            implicitHeight: np.implicitHeight
+            // В один ряд плеер не тянет за собой высоту полного вида — иначе ряд раздувался бы до 136
+            implicitHeight: ev.g("player").h >= 2 ? np.implicitHeight : 62
             Rectangle {
                 id: np
+                // Маленький плеер (16 нояб.: «разные размеры каждого виджета»): в ряд — обложка,
+                // название и кнопки; узкий стоячий — обложка над кнопками.
+                readonly property bool small: height < 110 || width < 260
+                readonly property bool stack: small && height >= 110
                 anchors.fill: parent
                 readonly property bool own: JD.musicOn
                 readonly property bool any: own || !!ev.player
@@ -543,9 +563,51 @@ View {
                         GradientStop { position: 1; color: "transparent" }
                     }
                 }
+                GridLayout {
+                    visible: np.small
+                    anchors { fill: parent; margins: 10 }
+                    columns: np.stack ? 1 : 3
+                    columnSpacing: 10; rowSpacing: 6
+                    Art {
+                        Layout.alignment: Qt.AlignCenter
+                        size: np.stack ? Math.min(64, np.width - 20) : Math.min(44, np.height - 18)
+                        tint: np.tint; src: np.own ? (np.p.thumb || "") : (ev.player ? ev.player.trackArtUrl || "" : "")
+                    }
+                    ColumnLayout {
+                        visible: np.stack || np.width >= 300
+                        spacing: 0
+                        Layout.fillWidth: true
+                        Label1 { text: !np.any ? JD.tr("Ничего не играет") : np.own ? (np.p.title || "") : ev.player ? (JD.cleanTitle(ev.player.trackTitle) || ev.player.identity) : ""
+                                 font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight
+                                 horizontalAlignment: np.stack ? Text.AlignHCenter : Text.AlignLeft }
+                        Label2 { visible: np.any; text: np.own ? (np.p.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""
+                                 font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight
+                                 horizontalAlignment: np.stack ? Text.AlignHCenter : Text.AlignLeft }
+                    }
+                    Item { visible: !np.stack && np.width < 300; Layout.fillWidth: true }
+                    RowLayout {
+                        Layout.alignment: Qt.AlignCenter
+                        spacing: 2
+                        IconButton { visible: np.any && (np.stack || np.width >= 220); icon: "media-skip-backward"; size: 28
+                                     onClicked: np.own ? JD.media("prev") : ev.player.previous() }
+                        Rectangle {
+                            implicitWidth: 34; implicitHeight: 34; radius: 17
+                            color: np.tint
+                            PlayGlyph { anchors.centerIn: parent; size: 13; tint: "black"; paused: !np.any || (np.own ? !!np.p.paused : !(ev.player && ev.player.isPlaying)) }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: {
+                                if (!np.any) { JD.expanded = false; JD.playerPage = "library"; JD.libRefresh(); JD.playerOpen = true }
+                                else if (np.own) JD.media("toggle")
+                                else ev.player.togglePlaying()
+                            } }
+                        }
+                        IconButton { visible: np.any; icon: "media-skip-forward"; size: 28
+                                     onClicked: np.own ? JD.media("next") : ev.player.next() }
+                    }
+                }
                 // something plays
                 ColumnLayout {
-                    visible: np.any
+                    visible: np.any && !np.small
                     anchors { fill: parent; margins: 12 }
                     spacing: 8
                     RowLayout {
@@ -630,7 +692,7 @@ View {
                 }
                 // nothing plays
                 ColumnLayout {
-                    visible: !np.any
+                    visible: !np.any && !np.small
                     anchors { fill: parent; margins: 14 }
                     spacing: 6
                     RowLayout {
@@ -699,8 +761,8 @@ View {
                 anchors.centerIn: parent
                 spacing: 0
                 Text { Layout.alignment: Qt.AlignHCenter; text: Qt.formatTime(evClock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily
-                       font.pixelSize: wClock.height > 100 ? 52 : 30; font.weight: Font.Bold; font.features: { "tnum": 1 } }
-                Label2 { Layout.alignment: Qt.AlignHCenter; text: evClock.date.toLocaleDateString(Qt.locale(JD.lang === "en" ? "en_US" : "ru_RU"), "dddd, d MMMM"); font.pixelSize: 11 }
+                       font.pixelSize: Math.min(wClock.height > 100 ? 52 : 30, wClock.width / 3.3); font.weight: Font.Bold; font.features: { "tnum": 1 } }
+                Label2 { Layout.alignment: Qt.AlignHCenter; text: evClock.date.toLocaleDateString(Qt.locale(JD.lang === "en" ? "en_US" : "ru_RU"), wClock.width < 200 ? "ddd, d MMM" : "dddd, d MMMM"); font.pixelSize: 11 }
             }
         }
         GBox {
@@ -810,13 +872,16 @@ View {
             GridLayout {
                 id: sndCol
                 readonly property bool v: ev.vert("sound")
-                columns: v ? 3 : 1
+                // Маленькая громкость (1x1, полколонки стоймя) — одна ручка, общая для компьютера
+                readonly property bool one: ["1x1", "hx2v"].includes(ev.sizeOf("sound"))
+                columns: v && !one ? 3 : 1
                 uniformCellWidths: v
                 columnSpacing: 4
                 rowSpacing: 6
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: v ? 8 : 10; rightMargin: v ? 8 : 16 }
                 VolumeRow {
                     vertical: sndCol.v
+                    visible: !sndCol.one
                     icon: "sparkles"; label: JD.assistantName; tint: JD.accentBlue
                     value: JD.volume / 100
                     onMoved: v => JD.setVolume(v * 100)
@@ -833,7 +898,7 @@ View {
                     readonly property var stream: pl && !viaMpris ? JD.playerStream(pl) : null
                     PwObjectTracker { objects: otherVol.stream ? [otherVol.stream] : [] }
                     property real was: 0.7
-                    visible: viaMpris || (!!stream && !!stream.audio)
+                    visible: !sndCol.one && (viaMpris || (!!stream && !!stream.audio))
                     icon: "audio-x-generic"; label: pl ? pl.identity : ""; tint: JD.accentPink
                     value: viaMpris ? pl.volume : (stream && stream.audio ? stream.audio.volume : 0)
                     function put(v) { if (viaMpris) pl.volume = v; else if (stream && stream.audio) stream.audio.volume = v }
@@ -842,7 +907,7 @@ View {
                 }
                 VolumeRow {
                     vertical: sndCol.v
-                    visible: !otherVol.visible
+                    visible: !otherVol.visible && !sndCol.one
                     readonly property int level: JD.player && JD.player.volume !== undefined ? JD.player.volume : (JD.mediaCfg.volume !== undefined ? JD.mediaCfg.volume : 70)
                     icon: "audio-x-generic"; label: JD.tr("Музыка")
                     tint: JD.musicOn ? JD.artTint(JD.player.color) : JD.accentPink
@@ -865,7 +930,7 @@ View {
         ColumnLayout {
             visible: JD.jobs.length > 0
             Layout.row: 2
-            Layout.columnSpan: 4
+            Layout.columnSpan: 8
             Layout.fillWidth: true
             spacing: 6
             Repeater {
@@ -910,7 +975,7 @@ View {
         ColumnLayout {
             visible: JD.reminders.length > 0
             Layout.row: 3
-            Layout.columnSpan: 4
+            Layout.columnSpan: 8
             Layout.fillWidth: true
             spacing: 6
             Repeater {
@@ -966,17 +1031,26 @@ View {
             implicitHeight: 40
             radius: 14
             color: JD.fill1
-            RowLayout {
-                anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                spacing: 10
-                Rectangle { implicitWidth: 4; implicitHeight: 22; radius: 2; color: JD.accentOrange }
-                Label1 { text: JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") : ""; color: JD.accentOrange }
-                Label1 { text: JD.nextEvent ? JD.nextEvent.title : ""; font.weight: Font.Normal; Layout.fillWidth: true }
+            // Высокое событие — время крупно, название в несколько строк; узкое — время над названием.
+            readonly property bool tall: height > 100
+            readonly property bool narrow: width < 260
+            Rectangle { x: 12; y: 12; width: 4; height: parent.height - 24; radius: 2; color: JD.accentOrange }
+            GridLayout {
+                anchors { fill: parent; leftMargin: 26; rightMargin: 12; topMargin: blkEvent.tall ? 12 : 0; bottomMargin: blkEvent.tall ? 12 : 0 }
+                columns: blkEvent.tall || blkEvent.narrow ? 1 : 2
+                columnSpacing: 10; rowSpacing: blkEvent.tall ? 4 : 0
+                Label1 { text: JD.nextEvent ? Qt.formatTime(new Date(JD.nextEvent.start), "HH:mm") : ""; color: JD.accentOrange
+                         font.pixelSize: blkEvent.tall ? 28 : 13; font.weight: blkEvent.tall ? Font.Bold : Font.DemiBold
+                         Layout.alignment: blkEvent.tall ? Qt.AlignTop : Qt.AlignVCenter }
+                Label1 { text: JD.nextEvent ? JD.nextEvent.title : ""; font.weight: Font.Normal; Layout.fillWidth: true
+                         Layout.fillHeight: blkEvent.tall; verticalAlignment: blkEvent.tall ? Text.AlignTop : Text.AlignVCenter
+                         wrapMode: blkEvent.tall ? Text.WordWrap : Text.NoWrap; maximumLineCount: 4; elide: Text.ElideRight }
             }
         }
 
         // ── model
-        RowLayout {
+        // Квадратная «Модель» (2x2) — кнопки в два столбца, а не в одну строку
+        GridLayout {
             visible: ev.present("model")
             id: blkModel
             Layout.row: 10 + ev.g("model").r
@@ -991,8 +1065,9 @@ View {
                         Translate { x: (ev.dragId === "model" ? ev.dragDx : 0) + ev.fl("model").x; y: (ev.dragId === "model" ? ev.dragDy : 0) + ev.fl("model").y }]
             z: ev.dragId === "model" ? 5 : 0
             Layout.fillWidth: true
-            spacing: 10
-            SectionLabel { text: JD.tr("МОДЕЛЬ") }
+            columns: ev.g("model").w >= 8 ? 6 : 2
+            columnSpacing: 10; rowSpacing: 8
+            SectionLabel { text: JD.tr("МОДЕЛЬ"); Layout.alignment: Qt.AlignVCenter }
             Repeater {
                 model: [
                     { id: "claude", label: "Claude", model: "sonnet", hint: JD.tr("подписка") },
@@ -1029,7 +1104,7 @@ View {
         RowLayout {
             visible: !!ev.pendingProvider && ev.pendingProvider !== JD.settings.provider
             Layout.row: 99
-            Layout.columnSpan: 4
+            Layout.columnSpan: 8
             Layout.fillWidth: true
             spacing: 10
             Label2 { text: JD.tr("Модель сменится после перезапуска (текущий разговор начнётся заново)"); Layout.fillWidth: true }
@@ -1133,7 +1208,7 @@ View {
         ColumnLayout {
             visible: ev.editing
             Layout.row: 100
-            Layout.columnSpan: 4
+            Layout.columnSpan: 8
             Layout.fillWidth: true
             spacing: 8
             Label2 { text: JD.tr("Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, уголок справа снизу тянется — так меняется размер."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
@@ -1212,13 +1287,21 @@ View {
                     id: corner
                     visible: ev.choices(slot.modelData).length > 1
                     readonly property int span: { const m = ev.sizeOf(slot.modelData).match(/x(\d)/); return m ? +m[1] : 1 }
-                    width: 34; height: 34
-                    x: (ev.resizeId === slot.modelData ? ev.resizeW : slot.width) - width + 8
-                    y: (ev.resizeId === slot.modelData ? ev.resizeH : slot.height) - height + 8
+                    // Ловится с запасом (16 нояб.: «нужно прям очень наводиться»): дуга та же, а
+                    // зона захвата — квадрат 52 вглубь карточки и за её край. У плитки в иконку
+                    // поменьше, иначе за саму плитку было бы не взяться.
+                    width: slot.width < 120 ? 38 : 52; height: width
+                    x: (ev.resizeId === slot.modelData ? ev.resizeW : slot.width) - width + 14
+                    y: (ev.resizeId === slot.modelData ? ev.resizeH : slot.height) - height + 14
                     z: 5
+                    Rectangle {   // подсветка зоны, чтобы было видно, что взялся
+                        anchors.fill: parent; radius: width / 2
+                        color: Qt.rgba(1, 1, 1, cornerHover.hovered || ev.resizeId === slot.modelData ? 0.08 : 0)
+                        Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast } }
+                    }
                     Shape {
-                        anchors.fill: parent
-                        anchors.margins: 6
+                        x: parent.width - 34; y: parent.height - 34
+                        width: 22; height: 22
                         preferredRendererType: Shape.CurveRenderer
                         ShapePath {
                             strokeColor: "white"; strokeWidth: 4; fillColor: "transparent"; capStyle: ShapePath.RoundCap
@@ -1306,13 +1389,17 @@ View {
     Rectangle {
         id: gallery
         visible: ev.editing
-        anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
-        width: ev.galW
+        // Отдельная скруглённая карточка с отступом от края островка: прямоугольник во всю высоту
+        // торчал углами из скругления, а нижние карточки резались его краем (16 нояб., скриншот).
+        anchors { top: parent.top; bottom: parent.bottom; right: parent.right; margins: 8 }
+        width: ev.galW - 8
+        radius: 22
         color: JD.fill1
-        Rectangle { width: 1; height: parent.height; color: JD.fill2 }
+        clip: true
         ListView {
             id: galList
-            anchors { fill: parent; margins: 14 }
+            anchors { fill: parent; margins: 12; bottomMargin: 0 }
+            footer: Item { width: 1; height: 16 }
             clip: true
             spacing: 8
             boundsBehavior: Flickable.StopAtBounds
@@ -1340,10 +1427,10 @@ View {
                         readonly property var look: ev.galLook[modelData] || ["square", "tile", ""]
                         readonly property bool on: ev.onBoard(modelData)
                         readonly property string sz: ev.choices(modelData)[0] || (look[1] === "dot" ? "1x1" : "4x1")
-                        readonly property int cw: Number(sz.split("x")[0])
-                        readonly property int ch: Number(sz.split("x")[1])
+                        readonly property int cw: ev.dims(sz)[0]
+                        readonly property int ch: ev.dims(sz)[1]
                         // Широкие виджеты — во всю ширину, узкие по два в ряд: как они лягут на пульте.
-                        width: card.cw >= 4 && card.look[1] !== "dot" ? grp.width : (grp.width - 8) / 2
+                        width: card.cw >= 8 && card.look[1] !== "dot" ? grp.width : (grp.width - 8) / 2
                         height: pv.height + 46
                         radius: 16
                         color: hovered ? JD.fill2 : "transparent"
@@ -1363,8 +1450,12 @@ View {
                                 visible: ["tile", "bar", "slider", "event"].includes(card.look[1])
                                 anchors { fill: parent; leftMargin: 8; rightMargin: 10 }
                                 spacing: 8
-                                Rectangle { visible: card.look[1] === "tile"; implicitWidth: 28; implicitHeight: 28; radius: 14; color: card.modelData.startsWith("a_") ? JD.fill1 : JD.accentBlue
-                                            Icon { anchors.centerIn: parent; name: card.look[0]; implicitSize: 14 } }
+                                // Тот же объёмный значок, что на пульте, в цвете своей плитки; нет полоски — прежний круг
+                                Rectangle { visible: card.look[1] === "tile"; implicitWidth: 28; implicitHeight: 28; radius: 14
+                                            color: gk.ok ? "transparent" : card.modelData.startsWith("a_") ? JD.fill1 : JD.accentBlue
+                                            KubaiIcon { id: gk; anchors.centerIn: parent; width: 28; height: 28; name: card.look[0]; hovered: card.hovered
+                                                        color: ev.blocks[card.modelData] && ev.blocks[card.modelData].tint !== undefined ? ev.blocks[card.modelData].tint : JD.accentBlue }
+                                            Icon { anchors.centerIn: parent; name: card.look[0]; implicitSize: 14; visible: !gk.ok } }
                                 Icon { visible: card.look[1] === "bar" || card.look[1] === "slider"; name: card.look[0]; implicitSize: 16 }
                                 Rectangle { visible: card.look[1] === "event"; implicitWidth: 3; implicitHeight: 18; radius: 1.5; color: JD.accentOrange }
                                 ColumnLayout {
