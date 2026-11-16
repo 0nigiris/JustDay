@@ -521,12 +521,28 @@ DEFAULTS: dict = {
         "menu_top_tools": True,
         "menu_top_settings": True,
         "menu_order": ["ask", "player", "t_mic", "t_voice", "t_sounds", "t_notifs", "t_coffee", "t_wifi", "t_bt",
-                       "t_server", "sound", "event", "model", "lists"],   # порядок виджетов пульта
+                       "t_server", "sound", "event", "model", "lists",
+                       "w_clock", "w_weather", "w_load", "w_note", "a_shot", "a_emoji", "a_clip", "a_mixer",
+                       "a_load", "a_files", "a_kde", "a_update"],   # порядок виджетов пульта
         "menu_sizes": [],          # размеры виджетов пульта: «id:2x1»; пусто — у каждого свой по умолчанию
         "menu_tools": [],          # порядок кружков полки Alt+Space; «|» — место подписи; пусто — свой
         "menu_tools_off": [],      # спрятанные кружки полки
         "menu_layout": "grid",     # программы в меню: "grid" плитками или "list" строками
         "menu_t_server": False,    # плитка «Режим сервера» гасит экраны: по умолчанию спрятана
+        # виджеты из галереи правки пульта: по умолчанию не на пульте, их добавляют сами
+        "menu_w_clock": False,
+        "menu_w_weather": False,
+        "menu_w_load": False,
+        "menu_w_note": False,
+        "menu_a_shot": False,
+        "menu_a_emoji": False,
+        "menu_a_clip": False,
+        "menu_a_mixer": False,
+        "menu_a_load": False,
+        "menu_a_files": False,
+        "menu_a_kde": False,
+        "menu_a_update": False,
+        "menu_note_text": "",      # текст виджета «Заметка»
         "show_notifications": True,  # mirror desktop notifications on the island (they never leave the computer)
         # Where toast/shade notifications appear (Telegram-style), independent of the island pill:
         # screen: "" = same monitor as the island; "primary" | "secondary" | output name (HDMI-A-1, DP-2…)

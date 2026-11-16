@@ -17,9 +17,12 @@ def test_menu_order_default_lists_every_block():
     qml = (Path(__file__).parent.parent / "island" / "ExpandedView.qml").read_text(encoding="utf-8")
     ids = re.findall(r'"(\w+)"', re.search(r"blockIds: \[(.*?)\]", qml, re.S).group(1))
     assert isl["menu_order"] == ids
-    # у нижнего ряда свои флаги (уведомления и недавнее), режим сервера гасит экраны и спрятан нарочно
-    assert all(isl.get(f"menu_{b}", True) is True for b in ids if b not in ("lists", "t_server"))
-    assert isl["menu_t_server"] is False
+    # у нижнего ряда свои флаги (уведомления и недавнее); режим сервера гасит экраны, а виджеты
+    # из галереи берут сами — эти спрятаны нарочно и в конфиге выключены
+    opt = re.findall(r'"(\w+)"', re.search(r"optIn: \[(.*?)\]", qml, re.S).group(1))
+    assert "t_server" in opt
+    assert all(isl.get(f"menu_{b}", True) is True for b in ids if b != "lists" and b not in opt)
+    assert all(isl.get(f"menu_{b}") is False for b in opt)
 
 
 def test_persona_does_not_claim_plasma6_wayland_on_x11(monkeypatch):

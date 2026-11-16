@@ -14,8 +14,10 @@ View {
     readonly property var sink: Pipewire.defaultAudioSink
     PwObjectTracker { objects: ev.sink ? [ev.sink] : [] }
     SystemClock { id: evClock; precision: SystemClock.Minutes }
-    implicitWidth: 740
-    implicitHeight: Math.min(col.implicitHeight + 40, 800)
+    // В правке справа выезжает галерея виджетов: пульт раздвигается, а не теснится.
+    readonly property int galW: 300
+    implicitWidth: 740 + (editing ? galW : 0)
+    implicitHeight: editing ? Math.max(620, Math.min(col.implicitHeight + 40, 800)) : Math.min(col.implicitHeight + 40, 800)
 
     // Правка самого меню, как раскладка значков на айфоне: блоки подрагивают, у каждого красный минус
     // (или правая кнопка мыши) прячет его, перетаскиванием меняется порядок, а спрятанное лежит внизу
@@ -27,12 +29,21 @@ View {
     // в сетке на две колонки было больше негде стоять. Теперь каждая плитка — свой виджет со своим
     // размером (`island.menu_sizes`, «id:размер»), а порядок общий (`island.menu_order`).
     readonly property var blockIds: ["ask", "player", "t_mic", "t_voice", "t_sounds", "t_notifs",
-        "t_coffee", "t_wifi", "t_bt", "t_server", "sound", "event", "model", "lists"]
+        "t_coffee", "t_wifi", "t_bt", "t_server", "sound", "event", "model", "lists",
+        "w_clock", "w_weather", "w_load", "w_note",
+        "a_shot", "a_emoji", "a_clip", "a_mixer", "a_load", "a_files", "a_kde", "a_update"]
+    // Новые виджеты (16 нояб.) по умолчанию не на пульте: их берут из галереи справа в правке.
+    // Пульт у всех уже настроен — внезапно выросший вдвое он был бы не подарком, а беспорядком.
+    readonly property var optIn: ["t_server", "w_clock", "w_weather", "w_load", "w_note",
+        "a_shot", "a_emoji", "a_clip", "a_mixer", "a_load", "a_files", "a_kde", "a_update"]
     readonly property var blocks: ({ ask: blkAsk, player: blkPlayer, sound: blkSound, event: blkEvent, model: blkModel, lists: blkLists,
-        t_mic: tMic, t_voice: tVoice, t_sounds: tSounds, t_notifs: tNotifs, t_coffee: tCoffee, t_wifi: tWifi, t_bt: tBt, t_server: tServer })
+        t_mic: tMic, t_voice: tVoice, t_sounds: tSounds, t_notifs: tNotifs, t_coffee: tCoffee, t_wifi: tWifi, t_bt: tBt, t_server: tServer,
+        w_clock: wClock, w_weather: wWeather, w_load: wLoad, w_note: wNote,
+        a_shot: aShot, a_emoji: aEmoji, a_clip: aClip, a_mixer: aMixer, a_load: aLoad, a_files: aFiles, a_kde: aKde, a_update: aUpdate })
     readonly property var tileSizes: ["1x1", "2x1", "4x1"]
     readonly property var sizeChoices: ({ ask: ["4x1", "2x1"], player: ["2x2", "3x2", "4x2"], sound: ["4x1", "2x1", "2x2v", "1x2v"],
-        event: ["4x1", "2x1"], model: ["4x1"], lists: ["4x1"] })
+        event: ["4x1", "2x1"], model: ["4x1"], lists: ["4x1"],
+        w_clock: ["2x1", "4x1", "2x2"], w_weather: ["2x1", "2x2", "4x1"], w_load: ["2x1", "4x1", "2x2"], w_note: ["2x2", "4x1", "2x1", "4x2"] })
     function choices(id) { return sizeChoices[id] || tileSizes }
     function sizeOf(id) {
         const all = Array.isArray(JD.island.menu_sizes) ? JD.island.menu_sizes : []
@@ -104,6 +115,9 @@ View {
         t_coffee: JD.tr("Кофе"), t_wifi: "Wi‑Fi", t_bt: "Bluetooth", t_server: JD.tr("Режим сервера"), lists: JD.tr("Списки"),
         sound: JD.tr("Громкость"), event: JD.tr("Ближайшее событие"), model: JD.tr("Модель"),
         notifs: JD.tr("Уведомления"), recent: JD.tr("Недавнее"),
+        w_clock: JD.tr("Часы"), w_weather: JD.tr("Погода"), w_load: JD.tr("Нагрузка"), w_note: JD.tr("Заметка"),
+        a_shot: JD.tr("Снимок экрана"), a_emoji: JD.tr("Эмодзи"), a_clip: JD.tr("Буфер обмена"), a_mixer: JD.tr("Микшер"),
+        a_load: JD.tr("Диспетчер"), a_files: JD.tr("Файлы"), a_kde: JD.tr("Настройки KDE"), a_update: JD.tr("Обновление"),
         top_chat: JD.tr("Кнопка чата"), top_tools: JD.tr("Кнопка инструментов"), top_settings: JD.tr("Кнопка настроек") })
     readonly property var topIds: ["top_chat", "top_tools", "top_settings"]
     // Верхняя кнопка: в правке нажатие прячет её (красный минус в углу), в обычном режиме — делает своё.
@@ -145,6 +159,29 @@ View {
         // заодно и саму плитку (Wi‑Fi гас, когда его убирали, 16 нояб.).
         pressEnabled: !ev.editing
     }
+    // Карточка-виджет в сетке пульта: место, размер, покачивание в правке — как у плитки.
+    component GBox: Rectangle {
+        id: gb
+        property string bid
+        visible: ev.present(bid)
+        Layout.row: 10 + ev.g(bid).r
+        Layout.column: ev.g(bid).c
+        Layout.rowSpan: ev.g(bid).h
+        Layout.columnSpan: ev.g(bid).w
+        Layout.preferredWidth: 0
+        Layout.minimumWidth: 0
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        implicitHeight: 62
+        radius: 18
+        color: JD.fill1
+        clip: true
+        rotation: ev.editing ? ev.wig * ev.sign(bid) : 0
+        transform: Translate { x: ev.dragId === gb.bid ? ev.dragDx : 0; y: ev.dragId === gb.bid ? ev.dragDy : 0 }
+        z: ev.dragId === bid ? 5 : 0
+    }
+    // Плитка-действие: не выключатель, а кнопка «сделай» — круг значка не загорается.
+    component ATile: GTile { on: false; offText: onText; sound: "click" }
     // Неизвестное из конфига отбрасываем, пропавшее (новый блок после обновления) дописываем в конец.
     // `forced` держит порядок до ответа демона: иначе блок после броска на миг прыгал бы обратно.
     property var forced: null
@@ -163,14 +200,7 @@ View {
     }
     Connections { target: JD; function onIslandChanged() { ev.forced = null; ev.forcedSizes = null } }
     // Режим сервера гасит экраны — случайное нажатие слишком дорого, поэтому плитка по умолчанию спрятана.
-    function isShown(id) { const v = JD.island["menu_" + id]; return id === "t_server" ? v === true : v !== false }
-    // Спрятанное, что можно вернуть: пять блоков и две половины нижнего ряда.
-    readonly property var hidden: {
-        const r = blockIds.filter(id => id !== "lists").concat(topIds).filter(id => !ev.isShown(id))
-        if (JD.island.show_notifications === false) r.push("notifs")
-        if (JD.island.menu_recent === false) r.push("recent")
-        return r
-    }
+    function isShown(id) { const v = JD.island["menu_" + id]; return optIn.includes(id) ? v === true : v !== false }
     function flagKey(id) { return id === "notifs" ? "island.show_notifications" : "island.menu_" + id }
     // Удаление и возврат — с движением: «хоп, и всё удалилось» выглядело как сбой (16 нояб.).
     // Виджет сжимается и гаснет, и только потом прячется; возвращённый вырастает из 0.6.
@@ -215,8 +245,8 @@ View {
         forcedSizes = []
         JD.setConfig("island.menu_order", blockIds)
         JD.setConfig("island.menu_sizes", [])
-        for (const id of blockIds.filter(x => x !== "lists" && x !== "t_server").concat(["notifs", "recent"], topIds)) unhide(id)
-        hide("t_server")
+        for (const id of blockIds.filter(x => x !== "lists" && !optIn.includes(x)).concat(["notifs", "recent"], topIds)) unhide(id)
+        for (const id of optIn) if (isShown(id)) hide(id)
     }
 
     // Перетаскивание: пока блок тянут, он едет за пальцем (dragDy), порядок меняется при отпускании.
@@ -266,7 +296,7 @@ View {
 
     Flickable {
         id: evFlick
-        anchors.fill: parent
+        anchors { fill: parent; rightMargin: ev.editing ? ev.galW : 0 }
         contentHeight: col.implicitHeight + 40
         clip: true
         interactive: contentHeight > height
@@ -593,6 +623,100 @@ View {
                 holdable: true; onHeld: radioSheet.show("bt") }
         GTile { id: tServer; bid: "t_server"; icon: "moon"; title: JD.tr("Режим сервера"); onText: JD.tr("экраны погашены"); offText: JD.tr("обычная работа")
                 on: JD.serverMode; tint: JD.accentPurple; onToggled: JD.toggleServerMode() }
+
+        // ── виджеты из галереи (16 нояб.)
+        GBox {
+            id: wClock; bid: "w_clock"
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 0
+                Text { Layout.alignment: Qt.AlignHCenter; text: Qt.formatTime(evClock.date, "HH:mm"); color: JD.text1; font.family: JD.fontFamily
+                       font.pixelSize: wClock.height > 100 ? 52 : 30; font.weight: Font.Bold; font.features: { "tnum": 1 } }
+                Label2 { Layout.alignment: Qt.AlignHCenter; text: evClock.date.toLocaleDateString(Qt.locale(JD.lang === "en" ? "en_US" : "ru_RU"), "dddd, d MMMM"); font.pixelSize: 11 }
+            }
+        }
+        GBox {
+            id: wWeather; bid: "w_weather"
+            readonly property bool big: height > 100
+            GridLayout {
+                anchors.centerIn: parent
+                columns: wWeather.big ? 1 : 2
+                columnSpacing: 12; rowSpacing: 4
+                Image { Layout.alignment: Qt.AlignHCenter; source: JD.weather ? Quickshell.shellDir + "/icons/" + JD.weather.icon + ".svg" : ""
+                        sourceSize: Qt.size(64, 64); Layout.preferredWidth: wWeather.big ? 44 : 30; Layout.preferredHeight: Layout.preferredWidth }
+                ColumnLayout {
+                    spacing: 0
+                    Text { Layout.alignment: wWeather.big ? Qt.AlignHCenter : Qt.AlignLeft
+                           text: JD.weather ? (JD.weather.temp > 0 ? "+" : "") + JD.weather.temp + "°" : "—"; color: JD.text1; font.family: JD.fontFamily
+                           font.pixelSize: wWeather.big ? 30 : 22; font.weight: Font.Bold }
+                    Label2 { Layout.alignment: wWeather.big ? Qt.AlignHCenter : Qt.AlignLeft; text: JD.weather ? JD.tr(JD.weather.text || "") : JD.tr("нет данных"); font.pixelSize: 11 }
+                }
+            }
+        }
+        GBox {
+            id: wLoad; bid: "w_load"
+            // Процессор и память — те же цифры, что у кошки в доке (демон шлёт их раз в две секунды).
+            ColumnLayout {
+                anchors { fill: parent; margins: 12 }
+                spacing: 6
+                Repeater {
+                    model: [{ n: JD.tr("Процессор"), v: JD.cpu, c: JD.accentBlue }, { n: JD.tr("Память"), v: JD.mem, c: JD.accentPurple }]
+                    ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 3
+                        RowLayout {
+                            Label2 { text: modelData.n; font.pixelSize: 11; Layout.fillWidth: true }
+                            Label1 { text: Math.round(modelData.v) + "%"; font.pixelSize: 11; font.features: { "tnum": 1 } }
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true; implicitHeight: 5; radius: 2.5; color: JD.fill2
+                            Rectangle { width: parent.width * Math.min(1, modelData.v / 100); height: parent.height; radius: 2.5; color: modelData.c
+                                        Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.durSlow; easing.type: Easing.OutCubic } } }
+                        }
+                    }
+                }
+            }
+            TapHandler { enabled: !ev.editing; onTapped: JD.openTools("load") }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+        }
+        GBox {
+            id: wNote; bid: "w_note"
+            // Заметка живёт в настройках островка (island.menu_note_text): одна, короткая, «не забыть».
+            Flickable {
+                anchors { fill: parent; margins: 12 }
+                contentHeight: noteEdit.implicitHeight
+                clip: true
+                TextEdit {
+                    id: noteEdit
+                    width: parent.width
+                    wrapMode: TextEdit.Wrap
+                    color: JD.text1
+                    font.family: JD.fontFamily
+                    font.pixelSize: 13
+                    selectByMouse: true
+                    Component.onCompleted: text = JD.island.menu_note_text || ""
+                    onTextChanged: noteSave.restart()
+                    Label2 {
+                        visible: !noteEdit.text && !noteEdit.activeFocus
+                        text: JD.tr("Заметка: нажмите и пишите")
+                        font.pixelSize: 13
+                    }
+                }
+            }
+            Timer { id: noteSave; interval: 700; onTriggered: if (noteEdit.text !== (JD.island.menu_note_text || "")) JD.setConfig("island.menu_note_text", noteEdit.text) }
+        }
+        ATile { id: aShot; bid: "a_shot"; icon: "camera"; title: JD.tr("Снимок"); onText: JD.tr("область экрана")
+                onToggled: { JD.closeAll(); Quickshell.execDetached(["spectacle", "-r"]) } }
+        ATile { id: aEmoji; bid: "a_emoji"; icon: "smile"; title: JD.tr("Эмодзи"); onText: JD.tr("найти и вставить"); onToggled: JD.openTools("emoji") }
+        ATile { id: aClip; bid: "a_clip"; icon: "clipboard"; title: JD.tr("Буфер"); onText: JD.tr("что копировали"); onToggled: JD.openTools("clip") }
+        ATile { id: aMixer; bid: "a_mixer"; icon: "volume-2"; title: JD.tr("Микшер"); onText: JD.tr("звук программ"); onToggled: JD.openTools("mixer") }
+        ATile { id: aLoad; bid: "a_load"; icon: "cpu"; title: JD.tr("Диспетчер"); onText: JD.tr("что грузит машину"); onToggled: JD.openTools("load") }
+        ATile { id: aFiles; bid: "a_files"; icon: "folder-open"; title: JD.tr("Файлы"); onText: JD.tr("домашняя папка")
+                onToggled: { JD.closeAll(); Quickshell.execDetached(["xdg-open", Quickshell.env("HOME")]) } }
+        ATile { id: aKde; bid: "a_kde"; icon: "sliders-horizontal"; title: JD.tr("Система"); onText: JD.tr("настройки KDE")
+                onToggled: { JD.closeAll(); JD.systemSettings("") } }
+        ATile { id: aUpdate; bid: "a_update"; icon: "download"; title: JD.tr("Обновление"); onText: JD.tr("проверить сейчас"); onToggled: JD.checkUpdate() }
 
         // ── sound: the assistant, the music, the whole computer. Three knobs in one card, each one only
         //    moves what it names — turning the assistant down leaves every other app where it was.
@@ -940,15 +1064,7 @@ View {
             Layout.columnSpan: 4
             Layout.fillWidth: true
             spacing: 8
-            Label2 { text: ev.hidden.length ? JD.tr("Спрятано, нажмите, чтобы вернуть:") : JD.tr("Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, уголок справа снизу тянется — так меняется размер."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: ev.hidden
-                    PillButton { required property string modelData; label: "+ " + ev.blockNames[modelData]; onClicked: ev.unhide(modelData) }
-                }
-            }
+            Label2 { text: JD.tr("Красный минус или правая кнопка прячет виджет, перетаскивание меняет порядок, уголок справа снизу тянется — так меняется размер."); Layout.fillWidth: true; wrapMode: Text.WordWrap }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -1089,6 +1205,157 @@ View {
     }
 
     // Долгое нажатие на Wi‑Fi или Bluetooth — список сетей или устройств поверх пульта.
+    // ── Галерея виджетов (16 нояб.): «отдельное меню справа, гигантский список, который можно
+    // крутить, и визуальный пример». Раньше спрятанное лежало строкой кнопок под пультом — и
+    // выглядело как список текста, а не как выбор виджета.
+    readonly property var galGroups: [
+        { name: JD.tr("Плитки"), ids: ["t_mic", "t_voice", "t_sounds", "t_notifs", "t_coffee", "t_wifi", "t_bt", "t_server"] },
+        { name: JD.tr("Виджеты"), ids: ["w_clock", "w_weather", "w_load", "w_note", "player", "ask", "sound", "event", "model"] },
+        { name: JD.tr("Действия"), ids: ["a_shot", "a_emoji", "a_clip", "a_mixer", "a_load", "a_files", "a_kde", "a_update"] },
+        { name: JD.tr("Остальное"), ids: ["notifs", "recent", "top_chat", "top_tools", "top_settings"] }]
+    readonly property var galLook: ({
+        t_mic: ["mic", "tile", JD.tr("Вкл")], t_voice: ["volume-2", "tile", JD.tr("Вкл")], t_sounds: ["audio-lines", "tile", JD.tr("Вкл")],
+        t_notifs: ["bell", "tile", JD.tr("Вкл")], t_coffee: ["coffee", "tile", JD.tr("не засыпать")], t_wifi: ["wifi", "tile", JD.tr("сеть")],
+        t_bt: ["bluetooth", "tile", JD.tr("Вкл")], t_server: ["moon", "tile", JD.tr("гасит экраны")],
+        w_clock: ["timer", "clock", ""], w_weather: ["cloud-sun", "big", "+21°"], w_load: ["cpu", "bars", ""], w_note: ["pencil", "note", ""],
+        player: ["music", "player", ""], ask: ["message-circle", "bar", JD.tr("Спросить…")], sound: ["volume-2", "slider", ""],
+        event: ["calendar-clock", "event", "10:30"], model: ["brain", "bar", "Haiku"],
+        a_shot: ["camera", "tile", JD.tr("область экрана")], a_emoji: ["smile", "tile", JD.tr("найти и вставить")],
+        a_clip: ["clipboard", "tile", JD.tr("что копировали")], a_mixer: ["volume-2", "tile", JD.tr("звук программ")],
+        a_load: ["cpu", "tile", JD.tr("что грузит машину")], a_files: ["folder-open", "tile", JD.tr("домашняя папка")],
+        a_kde: ["sliders-horizontal", "tile", JD.tr("настройки KDE")], a_update: ["download", "tile", JD.tr("проверить сейчас")],
+        notifs: ["bell-ring", "lines", ""], recent: ["list", "lines", ""],
+        top_chat: ["message-circle", "dot", ""], top_tools: ["wand-sparkles", "dot", ""], top_settings: ["settings", "dot", ""] })
+    function onBoard(id) {
+        if (id === "notifs") return JD.island.show_notifications !== false
+        if (id === "recent") return JD.island.menu_recent !== false
+        return isShown(id)
+    }
+    Rectangle {
+        id: gallery
+        visible: ev.editing
+        anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
+        width: ev.galW
+        color: JD.fill1
+        Rectangle { width: 1; height: parent.height; color: JD.fill2 }
+        ListView {
+            id: galList
+            anchors { fill: parent; margins: 14 }
+            clip: true
+            spacing: 8
+            boundsBehavior: Flickable.StopAtBounds
+            model: ev.galGroups
+            header: ColumnLayout {
+                width: galList.width
+                spacing: 2
+                Label1 { text: JD.tr("Виджеты"); font.pixelSize: 17; font.weight: Font.Bold }
+                Label2 { text: JD.tr("Нажмите, чтобы добавить на пульт или убрать."); font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap; Layout.bottomMargin: 6 }
+            }
+            delegate: ColumnLayout {
+                id: grp
+                required property var modelData
+                width: galList.width
+                spacing: 8
+                SectionLabel { text: grp.modelData.name.toUpperCase(); Layout.topMargin: 6 }
+                Flow {
+                  Layout.fillWidth: true
+                  spacing: 8
+                  Repeater {
+                    model: grp.modelData.ids
+                    Pressable {
+                        id: card
+                        required property string modelData
+                        readonly property var look: ev.galLook[modelData] || ["square", "tile", ""]
+                        readonly property bool on: ev.onBoard(modelData)
+                        readonly property string sz: ev.choices(modelData)[0] || (look[1] === "dot" ? "1x1" : "4x1")
+                        readonly property int cw: Number(sz.split("x")[0])
+                        readonly property int ch: Number(sz.split("x")[1])
+                        // Широкие виджеты — во всю ширину, узкие по два в ряд: как они лягут на пульте.
+                        width: card.cw >= 4 && card.look[1] !== "dot" ? grp.width : (grp.width - 8) / 2
+                        height: pv.height + 46
+                        radius: 16
+                        color: hovered ? JD.fill2 : "transparent"
+                        border.width: 1
+                        border.color: on ? Qt.rgba(JD.accentBlue.r, JD.accentBlue.g, JD.accentBlue.b, 0.55) : JD.fill2
+                        onClicked: card.on ? ev.hide(modelData) : ev.unhide(modelData)
+                        // Пример: уменьшенный вид виджета в его собственной пропорции.
+                        Rectangle {
+                            id: pv
+                            x: 10; y: 10
+                            width: card.look[1] === "dot" ? 40 : card.width - 20
+                            height: card.look[1] === "dot" ? 40 : 46 * card.ch + (card.ch - 1) * 8
+                            radius: card.look[1] === "dot" ? 20 : 12
+                            color: JD.fill2
+                            opacity: card.on ? 1 : 0.85
+                            RowLayout {
+                                visible: ["tile", "bar", "slider", "event"].includes(card.look[1])
+                                anchors { fill: parent; leftMargin: 8; rightMargin: 10 }
+                                spacing: 8
+                                Rectangle { visible: card.look[1] === "tile"; implicitWidth: 28; implicitHeight: 28; radius: 14; color: card.modelData.startsWith("a_") ? JD.fill1 : JD.accentBlue
+                                            Icon { anchors.centerIn: parent; name: card.look[0]; implicitSize: 14 } }
+                                Icon { visible: card.look[1] === "bar" || card.look[1] === "slider"; name: card.look[0]; implicitSize: 16 }
+                                Rectangle { visible: card.look[1] === "event"; implicitWidth: 3; implicitHeight: 18; radius: 1.5; color: JD.accentOrange }
+                                ColumnLayout {
+                                    visible: card.look[1] !== "slider"
+                                    spacing: 0; Layout.fillWidth: true
+                                    Rectangle { visible: card.look[1] === "tile"; implicitWidth: 44; implicitHeight: 6; radius: 3; color: JD.text2; Layout.bottomMargin: 4 }
+                                    Label2 { text: card.look[2]; font.pixelSize: 10; Layout.fillWidth: true; elide: Text.ElideRight
+                                             color: card.look[1] === "event" ? JD.accentOrange : JD.text2 }
+                                }
+                                Rectangle { visible: card.look[1] === "slider"; Layout.fillWidth: true; implicitHeight: 5; radius: 2.5; color: JD.fill1
+                                            Rectangle { width: parent.width * 0.6; height: parent.height; radius: 2.5; color: JD.text1 } }
+                            }
+                            Icon { visible: card.look[1] === "dot"; anchors.centerIn: parent; name: card.look[0]; implicitSize: 18 }
+                            Text { visible: card.look[1] === "clock"; anchors.centerIn: parent; text: Qt.formatTime(evClock.date, "HH:mm")
+                                   color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 22; font.weight: Font.Bold; font.features: { "tnum": 1 } }
+                            RowLayout {
+                                visible: card.look[1] === "big"; anchors.centerIn: parent; spacing: 6
+                                Icon { name: card.look[0]; implicitSize: 20 }
+                                Text { text: card.look[2]; color: JD.text1; font.family: JD.fontFamily; font.pixelSize: 18; font.weight: Font.Bold }
+                            }
+                            Column {
+                                visible: card.look[1] === "bars" || card.look[1] === "lines" || card.look[1] === "note"
+                                anchors { fill: parent; margins: 10 }
+                                spacing: card.look[1] === "bars" ? 9 : 6
+                                Repeater {
+                                    model: card.look[1] === "bars" ? [0.35, 0.62] : card.look[1] === "note" ? [0.9, 0.7, 0.8] : [0.8, 0.55]
+                                    Rectangle {
+                                        required property real modelData
+                                        required property int index
+                                        width: parent.width * (card.look[1] === "bars" ? 1 : modelData); height: card.look[1] === "bars" ? 5 : 6; radius: 3
+                                        color: card.look[1] === "bars" ? JD.fill1 : JD.text3
+                                        Rectangle { visible: card.look[1] === "bars"; width: parent.width * modelData; height: parent.height; radius: 3
+                                                    color: index ? JD.accentPurple : JD.accentBlue }
+                                    }
+                                }
+                            }
+                            RowLayout {
+                                visible: card.look[1] === "player"; anchors { fill: parent; margins: 10 } spacing: 10
+                                Rectangle { implicitWidth: pv.height - 20; implicitHeight: implicitWidth; radius: 8; color: JD.accentPink
+                                            Icon { anchors.centerIn: parent; name: "music"; implicitSize: 18 } }
+                                ColumnLayout { spacing: 6; Layout.fillWidth: true
+                                    Rectangle { Layout.fillWidth: true; implicitHeight: 6; radius: 3; color: JD.text3 }
+                                    Rectangle { Layout.preferredWidth: parent.width * 0.6; implicitHeight: 6; radius: 3; color: JD.fill1 } }
+                            }
+                        }
+                        RowLayout {
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 12; rightMargin: 10; bottomMargin: 8 }
+                            spacing: 8
+                            Label1 { text: ev.blockNames[card.modelData] || card.modelData; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
+                            Rectangle {
+                                implicitWidth: 22; implicitHeight: 22; radius: 11
+                                color: card.on ? JD.accentBlue : JD.accentGreen
+                                Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durBase } }
+                                Icon { anchors.centerIn: parent; name: card.on ? "check" : "plus"; implicitSize: 13 }
+                            }
+                        }
+                    }
+                  }
+                }
+            }
+        }
+    }
+
     RadioSheet {
         id: radioSheet
         anchors.fill: parent
