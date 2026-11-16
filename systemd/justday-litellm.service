@@ -1,0 +1,7 @@
+[Unit]
+Description=JustDay: переводчик для бесплатных моделей (LiteLLM, только 127.0.0.1)
+
+[Service]
+ExecStart=@REPO@/scripts/litellm.sh
+Restart=on-failure
+RestartSec=10

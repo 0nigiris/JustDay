@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from justday import manage, providers
 
-OURS = {11434}  # ollama — её ставит и запускает установщик
+OURS = {11434, 4000}  # ollama и переводчик LiteLLM (systemd/justday-litellm.service) — их ставит установщик
 
 
 def test_every_local_provider_points_at_a_service_we_run():

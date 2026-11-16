@@ -1,0 +1,20 @@
+# LiteLLM переводит Anthropic-протокол Claude Code в OpenAI-протокол бесплатных поставщиков.
+# Без него NVIDIA NIM и Cloudflare в голосовой мозг не подключить: оба отвечают 400 на /v1/messages.
+# Ключей здесь нет: их подставляет scripts/litellm.sh из связки ключей.
+model_list:
+  - model_name: nim-deepseek
+    litellm_params: {model: nvidia_nim/deepseek-ai/deepseek-v4.1-flash, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: nim-glm
+    litellm_params: {model: nvidia_nim/z-ai/glm-5.3-flash, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: nim-nemotron
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  - model_name: nim-lightning   # быстрая: отвечает за полсекунды, когда крупные NIM висят
+    litellm_params: {model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b, api_key: os.environ/NVIDIA_NIM_API_KEY}
+  # Cloudflare принимает content только строкой, а Claude Code шлёт список частей → 400 «string not in array».
+  # Через переводчик не работает; в оболочке OpenCode он и так есть.
+  - model_name: cf-gpt-oss
+    litellm_params: {model: hosted_vllm/@cf/openai/gpt-oss-120b, api_key: os.environ/CLOUDFLARE_API_KEY, api_base: os.environ/CLOUDFLARE_OPENAI_BASE}
+litellm_settings:
+  drop_params: true   # Claude Code шлёт поля Anthropic (thinking, cache_control), которых у них нет
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

@@ -38,6 +38,10 @@ PROVIDERS: dict[str, dict] = {
                 "desc": "MiniMax напрямую; ключ на platform.minimax.io (для Китая адрес api.minimaxi.com через custom)"},
     "moonshot": {"base_url": "https://api.moonshot.ai/anthropic", "secret": "moonshot",
                  "desc": "Kimi (Moonshot) напрямую; ключ на platform.moonshot.ai"},
+    # Свой переводчик (systemd/justday-litellm.service): бесплатные NVIDIA NIM и Cloudflare говорят только
+    # OpenAI-протоколом, а Claude Code — только Anthropic. Модели: nim-deepseek, nim-glm, nim-nemotron, cf-gpt-oss.
+    "litellm": {"base_url": "http://127.0.0.1:4000", "secret": "litellm", "context": 128000,
+                "desc": "бесплатно: NVIDIA NIM и Cloudflare через свой переводчик LiteLLM на этом компьютере"},
     "custom": {"secret": "custom", "desc": "любой Anthropic-совместимый адрес (brain.base_url), например LiteLLM"},
 }
 
@@ -122,6 +126,9 @@ def env(cfg: dict) -> dict[str, str]:
     p = PROVIDERS.get(name)
     if p is None:
         raise ValueError(f"unknown brain.provider {name!r}; choose from {', '.join(PROVIDERS)}")
+    if name == "litellm":
+        # переводчик держит ~300 МБ памяти: включаем его, только когда до него дошла очередь
+        subprocess.run(["systemctl", "--user", "start", "--no-block", "justday-litellm"], check=False, timeout=10)
     token = p.get("token") or secret_get(p["secret"])
     if not token:
         raise RuntimeError(f"no API key for {name}: run `justday secret set {p['secret']}`")

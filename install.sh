@@ -703,6 +703,12 @@ services() {
   systemctl --user daemon-reload
   systemctl --user enable justday.service
   systemctl --user restart justday.service
+  # Переводчик для бесплатных моделей ставится, только если LiteLLM уже есть (uv tool install 'litellm[proxy]'):
+  # тянуть сотни мегабайт каждому, кто сидит на подписке, незачем.
+  if [[ -x "$HOME/.local/bin/litellm" ]]; then
+    sed "s|@REPO@|$APP_DIR|" "$APP_DIR/systemd/justday-litellm.service" > "$UNIT_DIR/justday-litellm.service"
+    systemctl --user daemon-reload
+  fi
   face_service
   # Что именно поднялось — спрашиваем у той же программы, которая это и решает: два ответа на один
   # вопрос расходятся, один — нет.
