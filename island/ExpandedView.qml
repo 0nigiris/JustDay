@@ -348,12 +348,21 @@ View {
         }
         const moved = { id: id, dx: dragDx, dy: dragDy }
         dragId = ""; dragDx = 0; dragDy = 0
-        if (!hit) return
-        dropAt = moved
-        // Брошенный встаёт на место того, в кого попал: тянули вперёд — за ним, назад — перед ним.
-        const fwd = order.indexOf(hit) > order.indexOf(id)
         const next = order.filter(x => x !== id)
-        next.splice(next.indexOf(hit) + (fwd ? 1 : 0), 0, id)
+        if (hit) {
+            // Брошенный встаёт на место того, в кого попал: тянули вперёд — за ним, назад — перед ним.
+            const fwd = order.indexOf(hit) > order.indexOf(id)
+            next.splice(next.indexOf(hit) + (fwd ? 1 : 0), 0, id)
+        } else {
+            // Брошен в пустое место (16 нояб.: «пытаюсь перенести — не получается»: Микшер в дыру
+            // после Bluetooth возвращался назад). Встаёт перед первым блоком, который по порядку
+            // чтения идёт после точки броска, а если такого нет — в конец.
+            const after = next.find(o => { const t = blocks[o]
+                return t && t.visible && (cy < t.y || (cy <= t.y + t.height && cx < t.x + t.width / 2)) })
+            next.splice(after ? next.indexOf(after) : next.length, 0, id)
+            if (next.join() === order.join()) return
+        }
+        dropAt = moved
         forced = next
         JD.setConfig("island.menu_order", next)
     }
@@ -1279,10 +1288,41 @@ View {
                     anchors.fill: parent
                     acceptedButtons: Qt.AllButtons
                     cursorShape: ev.dragId === slot.modelData ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                    // Один обработчик на всю карточку, а что делать — решает место нажатия: из уголка
+                    // тянется размер, из остального — перенос. Раньше у уголка был свой DragHandler, и
+                    // жест забирал обработчик карточки: размер менялся только с полоски за краем
+                    // (16 нояб., «в третий раз говорю, размер менять неудобно»).
                     DragHandler {
+                        id: slotDrag
                         target: null
-                        onActiveChanged: { if (active) { ev.dragId = slot.modelData; ev.dragDx = 0; ev.dragDy = 0 } else ev.drop() }
-                        onTranslationChanged: if (active) { ev.dragDx = translation.x; ev.dragDy = translation.y }
+                        property bool sizing: false
+                        property real w0: 0
+                        property real h0: 0
+                        property real rowH: 0
+                        onActiveChanged: {
+                            if (active) {
+                                const p = centroid.pressPosition
+                                sizing = corner.visible && p.x >= slot.width - corner.width && p.y >= slot.height - corner.height
+                                if (sizing) {
+                                    w0 = slot.width; h0 = slot.height
+                                    rowH = (slot.height - (corner.span - 1) * col.rowSpacing) / corner.span
+                                    ev.resizeW = w0; ev.resizeH = h0; ev.resizeId = slot.modelData
+                                } else { ev.dragId = slot.modelData; ev.dragDx = 0; ev.dragDy = 0 }
+                            } else if (sizing) {
+                                ev.setSize(slot.modelData, ev.sizeOf(slot.modelData), true)
+                                ev.resizeId = ""
+                            } else ev.drop()
+                        }
+                        // Сдвиг по сцене: карточка сама едет (за курсором или в новую клетку), и
+                        // translation, посчитанный от неё, гулял.
+                        onCentroidChanged: if (active) {
+                            const dx = centroid.scenePosition.x - centroid.scenePressPosition.x
+                            const dy = centroid.scenePosition.y - centroid.scenePressPosition.y
+                            if (sizing) {
+                                ev.resizeW = w0 + dx; ev.resizeH = h0 + dy
+                                ev.resizeTo(slot.modelData, ev.resizeW, ev.resizeH, rowH)
+                            } else { ev.dragDx = dx; ev.dragDy = dy }
+                        }
                     }
                     TapHandler {
                         acceptedButtons: Qt.RightButton
@@ -1338,30 +1378,6 @@ View {
                     }
                     HoverHandler { id: cornerHover; cursorShape: Qt.SizeFDiagCursor }
                     TapHandler { onTapped: ev.cycleSize(slot.modelData) }
-                    DragHandler {
-                        target: null
-                        property real w0: 0
-                        property real h0: 0
-                        property real rowH: 0
-                        onActiveChanged: {
-                            if (active) {
-                                w0 = slot.width; h0 = slot.height
-                                rowH = (slot.height - (corner.span - 1) * col.rowSpacing) / corner.span
-                                ev.resizeW = w0; ev.resizeH = h0; ev.resizeId = slot.modelData
-                            } else {
-                                ev.setSize(slot.modelData, ev.sizeOf(slot.modelData), true)
-                                ev.resizeId = ""
-                            }
-                        }
-                        // Сдвиг по сцене, а не translation: уголок сам едет за курсором, и сдвиг,
-                        // посчитанный от него, гулял — рамка отставала и дёргалась.
-                        onCentroidChanged: if (active) {
-                            const dx = centroid.scenePosition.x - centroid.scenePressPosition.x
-                            const dy = centroid.scenePosition.y - centroid.scenePressPosition.y
-                            ev.resizeW = w0 + dx; ev.resizeH = h0 + dy
-                            ev.resizeTo(slot.modelData, ev.resizeW, ev.resizeH, rowH)
-                        }
-                    }
                 }
                 // красный минус: у нижнего ряда их два, по одному на половину
                 Repeater {
