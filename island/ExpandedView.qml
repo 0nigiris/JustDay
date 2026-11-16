@@ -537,12 +537,19 @@ View {
             Layout.fillWidth: true
             // В один ряд плеер не тянет за собой высоту полного вида — иначе ряд раздувался бы до 136
             implicitHeight: ev.g("player").h >= 2 ? np.implicitHeight : 62
+            // Сетка делит высоту двухрядного блока по рядам как вздумается: рядом с громкостью
+            // в 2x1 плеер получал меньше своего, и кнопки обрезались снизу (16 нояб., скриншот).
+            Layout.minimumHeight: ev.g("player").h >= 2 ? np.implicitHeight : 0
             Rectangle {
                 id: np
                 // Маленький плеер (16 нояб.: «разные размеры каждого виджета»): в ряд — обложка,
                 // название и кнопки; узкий стоячий — обложка над кнопками.
                 readonly property bool small: height < 110 || width < 260
                 readonly property bool stack: small && height >= 110
+                // Невысокий полный плеер: сетка отдаёт двум рядам меньше, чем ему нужно, и нижняя
+                // строка кнопок обрезалась (16 нояб.: «посмотри же на эту красоту»). Тогда кнопки
+                // встают справа от названия, а снизу остаётся одна полоса времени.
+                readonly property bool low: !small && height < 168
                 anchors.fill: parent
                 readonly property bool own: JD.musicOn
                 readonly property bool any: own || !!ev.player
@@ -621,10 +628,23 @@ View {
                             spacing: 1
                             Layout.fillWidth: true
                             SectionLabel { text: np.own ? (np.p.source ? np.p.source.toUpperCase() : JD.tr("СЕЙЧАС ИГРАЕТ")) : (ev.player ? ev.player.identity.toUpperCase() : ""); color: np.tint; elide: Text.ElideRight; Layout.fillWidth: true }
-                            Label1 { text: np.own ? (np.p.title || "") : ev.player ? (JD.cleanTitle(ev.player.trackTitle) || ev.player.identity) : ""; font.pixelSize: 14; Layout.fillWidth: true }
-                            Label2 { text: np.own ? (np.p.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true }
+                            Label1 { text: np.own ? (np.p.title || "") : ev.player ? (JD.cleanTitle(ev.player.trackTitle) || ev.player.identity) : ""; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
+                            Label2 { text: np.own ? (np.p.artist || "") : ev.player ? (ev.player.trackArtist || "") : ""; Layout.fillWidth: true; elide: Text.ElideRight }
                         }
-                        IconButton { visible: np.own; icon: "view-fullscreen"; size: 28; Layout.alignment: Qt.AlignTop
+                        RowLayout {
+                            visible: np.low
+                            spacing: 2
+                            IconButton { icon: "media-skip-backward"; size: 30; onClicked: np.own ? JD.media("prev") : ev.player.previous() }
+                            Rectangle {
+                                implicitWidth: 38; implicitHeight: 38; radius: 19
+                                color: np.tint
+                                PlayGlyph { anchors.centerIn: parent; size: 14; tint: "black"; paused: np.own ? !!np.p.paused : !(ev.player && ev.player.isPlaying) }
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: np.own ? JD.media("toggle") : ev.player.togglePlaying() }
+                            }
+                            IconButton { icon: "media-skip-forward"; size: 30; onClicked: np.own ? JD.media("next") : ev.player.next() }
+                        }
+                        IconButton { visible: np.own && !np.low; icon: "view-fullscreen"; size: 28; Layout.alignment: Qt.AlignTop
                                      onClicked: { JD.expanded = false; JD.playerOpen = true } }
                     }
                     // Полоса времени чужого плеера: где мы в треке, и потянуть — перемотать.
@@ -671,6 +691,7 @@ View {
                         Label2 { text: JD.fmtTime(seek.pl ? seek.pl.length : 0); font.pixelSize: 11; font.features: { "tnum": 1 } }
                     }
                     RowLayout {
+                        visible: !np.low
                         spacing: 8
                         ModeButton { visible: np.own; icon: "media-playlist-shuffle"; on: !!np.p.shuffle; tint: np.tint
                                      onClicked: JD.media("shuffle", np.p.shuffle ? "off" : "on") }
@@ -1245,7 +1266,8 @@ View {
                 width: blk.width
                 height: blk.height
                 z: ev.dragId === modelData ? 10 : 1
-                rotation: ev.editing ? ev.wig * ev.sign(modelData) : 0
+                // Пока целятся в уголок или тянут его — не качается: в качающийся угол не попасть
+                rotation: ev.editing && !cornerHover.hovered && ev.resizeId !== modelData ? ev.wig * ev.sign(modelData) : 0
                 Rectangle {
                     anchors.fill: parent
                     radius: 16
@@ -1290,9 +1312,11 @@ View {
                     // Ловится с запасом (16 нояб.: «нужно прям очень наводиться»): дуга та же, а
                     // зона захвата — квадрат 52 вглубь карточки и за её край. У плитки в иконку
                     // поменьше, иначе за саму плитку было бы не взяться.
-                    width: slot.width < 120 ? 38 : 52; height: width
-                    x: (ev.resizeId === slot.modelData ? ev.resizeW : slot.width) - width + 14
-                    y: (ev.resizeId === slot.modelData ? ev.resizeH : slot.height) - height + 14
+                    // Зона целиком внутри карточки: выступ за край накрывала соседняя карточка
+                    // (она выше по порядку), и вместо размера начиналось перетаскивание соседа.
+                    width: Math.min(64, slot.width * 0.5); height: Math.min(64, slot.height * 0.6)
+                    x: (ev.resizeId === slot.modelData ? ev.resizeW : slot.width) - width
+                    y: (ev.resizeId === slot.modelData ? ev.resizeH : slot.height) - height
                     z: 5
                     Rectangle {   // подсветка зоны, чтобы было видно, что взялся
                         anchors.fill: parent; radius: width / 2
@@ -1300,7 +1324,7 @@ View {
                         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast } }
                     }
                     Shape {
-                        x: parent.width - 34; y: parent.height - 34
+                        x: parent.width - 20; y: parent.height - 20
                         width: 22; height: 22
                         preferredRendererType: Shape.CurveRenderer
                         ShapePath {
@@ -1329,8 +1353,12 @@ View {
                                 ev.resizeId = ""
                             }
                         }
-                        onTranslationChanged: if (active) {
-                            ev.resizeW = w0 + translation.x; ev.resizeH = h0 + translation.y
+                        // Сдвиг по сцене, а не translation: уголок сам едет за курсором, и сдвиг,
+                        // посчитанный от него, гулял — рамка отставала и дёргалась.
+                        onCentroidChanged: if (active) {
+                            const dx = centroid.scenePosition.x - centroid.scenePressPosition.x
+                            const dy = centroid.scenePosition.y - centroid.scenePressPosition.y
+                            ev.resizeW = w0 + dx; ev.resizeH = h0 + dy
                             ev.resizeTo(slot.modelData, ev.resizeW, ev.resizeH, rowH)
                         }
                     }
