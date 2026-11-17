@@ -25,7 +25,8 @@ QtObject {
     readonly property Window window: w
     default property alias data: w.data
 
-    readonly property var _s: screen || Quickshell.screens[0]
+    // При выходе экраны разбираются раньше окон: без запасного значения каждое окно сыпало TypeError.
+    readonly property var _s: screen || Quickshell.screens[0] || ({ name: "", x: 0, y: 0, width: 1, height: 1 })
     readonly property bool _wide: anchors.left && anchors.right
     readonly property bool _tall: anchors.top && anchors.bottom
 
