@@ -1,0 +1,52 @@
+name: windows
+
+# Островок для Windows: тот же QML, хозяин окна на PySide6 (island/host.py), собранный в .exe.
+# Своего Windows у нас нет, поэтому сборка проверяет себя сама: собранный .exe открывает пульт
+# вне экрана и снимает его — снимок лежит рядом с архивом, по нему видно, что островок жив.
+on:
+  push:
+    branches: [main]
+    paths: ["island/**", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Зависимости
+        run: python -m pip install --disable-pip-version-check PySide6==6.12.0 pyinstaller
+      - name: Сборка
+        shell: bash
+        run: |
+          # qmldir нужен чистому Qt, чтобы найти синглтон JD; в живую папку на Linux его не кладём.
+          echo "singleton JD 1.0 JD.qml" > island/qmldir
+          rm -rf island/__pycache__ island/kwin-effects
+          pyinstaller --noconfirm --windowed --name JustDay \
+            --add-data "island;island" \
+            --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtQuickControls2 \
+            island/host.py
+      - name: Проверка снимком
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+          JUSTDAY_SHOT: ${{ github.workspace }}\shot.png
+        run: |
+          ./dist/JustDay/JustDay.exe
+          test -s shot.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JustDay-windows
+          path: dist/JustDay
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shot
+          path: shot.png

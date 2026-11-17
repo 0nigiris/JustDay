@@ -486,6 +486,9 @@ def _stage() -> Path:
 
 
 def main() -> int:
+    if sys.platform == "win32":
+        # На Windows нет unix-сокета: демон слушает TCP на 127.0.0.1 (docs/WINDOWS.md).
+        os.environ.setdefault("JUSTDAY_SOCKET", "tcp:47615")
     app = QGuiApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     _register_qml()
@@ -496,7 +499,30 @@ def main() -> int:
     eng.load(QUrl.fromLocalFile(str(root / os.environ.get("JUSTDAY_ROOT_QML", "shell.qml"))))
     if not eng.rootObjects():
         return 1
+    if shot := os.environ.get("JUSTDAY_SHOT"):
+        _shoot(app, eng, shot)
     return app.exec()
+
+
+def _shoot(app, eng, path: str) -> None:
+    """Проверка сборки: открыть пульт, снять самое большое окно и выйти.
+
+    Так сборка на машине без человека показывает, как островок выглядит на самом деле, а не только
+    что он не упал.
+    """
+    from PySide6.QtCore import QTimer
+    from PySide6.QtQml import QQmlEngine, QQmlExpression
+
+    r = eng.rootObjects()[0]
+    QTimer.singleShot(1500, lambda: QQmlExpression(QQmlEngine.contextForObject(r), r, "JD.expanded = true").evaluate())
+
+    def grab():
+        wins = [w for w in app.topLevelWindows() if w.isVisible() and hasattr(w, "grabWindow")]
+        if wins:
+            max(wins, key=lambda w: w.width() * w.height()).grabWindow().save(path)
+        app.exit(0 if wins else 2)
+
+    QTimer.singleShot(5000, grab)
 
 
 if __name__ == "__main__":
