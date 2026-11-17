@@ -87,8 +87,8 @@ class Quickshell(QObject):
         if isinstance(cmd, dict):
             cmd = cmd.get("command", [])
         cmd = [str(x) for x in cmd]
-        if cmd and shutil.which(cmd[0]):
-            QProcess.startDetached(cmd[0], cmd[1:])
+        if cmd and _which(cmd[0]):
+            QProcess.startDetached(_which(cmd[0]), cmd[1:])
 
     @Slot(str, result=str)
     @Slot(str, bool, result=str)
@@ -217,7 +217,7 @@ class Process(QObject):
             self._p.terminate()
 
     def _start(self) -> None:
-        if not self._cmd or not shutil.which(self._cmd[0]):
+        if not self._cmd or not _which(self._cmd[0]):
             # Команды из Linux (nmcli, pactl…) на Windows нет: тихо «завершилась с ошибкой».
             self.exited.emit(127, 0)
             return
@@ -236,7 +236,7 @@ class Process(QObject):
         p.readyReadStandardError.connect(lambda: self._err and self._err.feed(bytes(p.readAllStandardError()).decode(errors="replace")))
         p.finished.connect(self._done)
         self._p = p
-        p.start(self._cmd[0], self._cmd[1:])
+        p.start(_which(self._cmd[0]), self._cmd[1:])
         self.runningChanged.emit()
         self.started.emit()
 
@@ -469,6 +469,19 @@ class ThemeIcons(QQuickImageProvider):
         return pm if not pm.isNull() else QPixmap(1, 1)
 
 
+def _which(name: str) -> str | None:
+    """Путь к программе, но никогда не к нам самим.
+
+    Windows ищет программу сначала в текущей папке и не различает регистр: кнопки островка зовут
+    `justday …`, а рядом лежит JustDay.exe — и каждая кнопка открывала ещё один островок (issue #6).
+    """
+    path = shutil.which(name)
+    # Только в собранном .exe: из репозитория sys.executable — это python, и python3 запускать можно.
+    if path and getattr(sys, "frozen", False) and Path(path).resolve() == Path(sys.executable).resolve():
+        return None
+    return path
+
+
 def _stage() -> Path:
     """Папка островка с qmldir.
 
@@ -489,6 +502,7 @@ def main() -> int:
     if sys.platform == "win32":
         # На Windows нет unix-сокета: демон слушает TCP на 127.0.0.1 (docs/WINDOWS.md).
         os.environ.setdefault("JUSTDAY_SOCKET", "tcp:47615")
+        os.environ.setdefault("JUSTDAY_ISLAND_ONLY", "1")
     app = QGuiApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     _register_qml()

@@ -152,7 +152,9 @@ Singleton {
     //
     // Настроение считается здесь, а не в самом существе: про ассистента островок знает больше, чем
     // нарисованное лицо, и знание это нужно ещё в двух местах. Само существо только показывает.
-    readonly property bool buddyOn: island.buddy !== false
+    // Как в config.py: по умолчанию выключен. Без демона (Windows) настроек нет, и «!== false» включал
+    // другу кота вместо шарика — «на острове старый маскот» (issue #6).
+    readonly property bool buddyOn: island.buddy === true
     // Скины маскота: список от демона и выбранный. Пусто — рисуем своего, кодом.
     property var mascots: ({})
     readonly property var mascotSkin: mascots.picked || null
@@ -688,12 +690,15 @@ Singleton {
     readonly property var dockCfg: settings.dock || ({})
     readonly property bool coffeeOn: !!(settings.desktop || {}).coffee   // «кофе»: экран не гаснет (Р3-30)
     readonly property var trayCfg: settings.tray || ({})
-    readonly property bool dockOn: dockCfg.enabled !== false
+    // На Windows едет только островок (docs/WINDOWS.md): без демона настроек нет, и «по умолчанию
+    // включено» вытаскивало другу док и лоток, кнопки которых зовут линуксовые программы (issue #6).
+    readonly property bool islandOnly: Quickshell.env("JUSTDAY_ISLAND_ONLY") === "1"
+    readonly property bool dockOn: dockCfg.enabled !== false && !islandOnly
     // Полоса лотка: 0 — как в настройках, 1 — показана кнопкой, −1 — спрятана кнопкой.
     // Кнопка в доке должна делать ровно то, что кнопка: показывать спрятанное и прятать показанное.
     property int trayPeek: 0
     function trayToggle() { trayPeek = trayOn ? -1 : 1 }
-    readonly property bool trayOn: trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false)
+    readonly property bool trayOn: !islandOnly && (trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false))
     // Выкл. — лоток не занимает край рабочего стола. Значки сети, Bluetooth и языка остаются на полосе.
     readonly property bool trayDesktop: trayCfg.on_desktop !== false
     property bool netOn: false
