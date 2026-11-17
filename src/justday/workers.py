@@ -78,7 +78,13 @@ def _bg(cwd: str, prompt: str, resume: str | None = None, model: str | None = No
 
 def start(cwd: str, prompt: str, model: str | None = None) -> dict:
     cwd = str(Path(cwd).expanduser().resolve())
-    sid = _bg(cwd, prompt + WORKER_RULES, model=model)
+    from .cli import memory_dir
+    # Рабочий читает память Джарвиса о человеке, а пишет только в свой журнал (П5, 17 нояб.):
+    # иначе две сессии правили бы одну память наперегонки.
+    mem = memory_dir() / "MEMORY.md"
+    rules = WORKER_RULES + (f"\n(Что ассистент знает о человеке: {mem} — читай, если задача о его делах; "
+                            "туда не пиши, свои заметки веди в ПЕРЕДАЧА.md рабочей папки.)" if mem.exists() else "")
+    sid = _bg(cwd, prompt + rules, model=model)
     time.sleep(1.5)
     info = _find(sid) or {"id": sid}
     _register(sid, cwd=cwd, task=prompt, session_id=info.get("sessionId"), started=time.time(), reported_state=None)

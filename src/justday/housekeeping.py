@@ -131,7 +131,8 @@ class HousekeepingMixin:
                                f"«{r['state']}»" + (f" (ждёт: {r['waiting_for']})" if r.get("waiting_for") else "") +
                                f". Её задача: {r.get('task', '')[:500]}\nПроверь результат (`justday claude result {r['id']}`, "
                                "git diff, тесты) и действуй по исходной цели пользователя: если нужно — отправь Claude "
-                               "уточнение через `justday claude send`; если всё готово или нужен пользователь — кратко доложи голосом.")
+                               "уточнение через `justday claude send`. Если всё готово — ответь ровно «Готово.»: подробности он "
+                               "посмотрит сам, рабочий вслух не отчитывается (П5, 17 нояб.). Нужен пользователь — одна фраза, что от него нужно.")
                         self._event_queue.put_nowait(msg)
                 if not self._event_queue.empty() and not self.brain.busy and self.state == "idle":
                     spawn(self.run_turn(self._event_queue.get_nowait(), source="event"))
