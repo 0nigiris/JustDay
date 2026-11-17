@@ -37,6 +37,8 @@ jobs:
         shell: bash
         env:
           QT_QPA_PLATFORM: offscreen
+          # Вне экрана Qt не видит шрифты Windows сам и рисует квадратики; живому окну это не нужно.
+          QT_QPA_FONTDIR: C:\Windows\Fonts
           JUSTDAY_SHOT: ${{ github.workspace }}\shot.png
         run: |
           ./dist/JustDay/JustDay.exe
