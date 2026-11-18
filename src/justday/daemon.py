@@ -1150,7 +1150,14 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
 
         if linux:
             await loop.run_in_executor(None, manage.refresh_hotkeys)  # первый снимок настроек уже с клавишами
-        await self.brain.start()
+        try:
+            await self.brain.start()
+        except Exception as e:
+            # Нет Claude Code или не вошли (на Windows у нового человека — обычное дело): без мозга
+            # островок, будильники и голос всё равно должны жить, а мозг подключится при первом вопросе.
+            log.warning("мозг не подключился: %s", e)
+            self.brain.client = None
+            self.notify(t("Войдите в модель: Настройки → Модель"), icon="dialog-information")
         if linux and await self.music.attach():  # music that kept playing through a daemon restart
             log.info("music player reattached")
         self._reschedule()  # alarms survive a restart
