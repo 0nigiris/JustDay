@@ -17,6 +17,7 @@ dependencies = [
     "segno>=1.6",           # QR-коды для карточки в островке (qr.py), чистый Python
     "pycaw>=20240316; sys_platform == 'win32'",  # громкость на Windows (winaudio.py)
     "keyring>=25; sys_platform == 'win32'",      # ключи в «Диспетчере учётных данных» Windows
+    "sounddevice>=0.5; sys_platform == 'win32'", # микрофон на Windows (audio.Microphone)
 ]
 
 # Необязательное. Речь и голос — это гигабайты, и они нужны не всем: без микрофона

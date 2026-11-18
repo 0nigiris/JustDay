@@ -68,3 +68,30 @@ def chat(messages: list[dict], *, json_mode: bool = False, max_tokens: int = 700
             errors.append(f"{p['id']}: {type(e).__name__}")
             log.info("бесплатная модель %s не ответила: %s", p["id"], e)
     raise RuntimeError("; ".join(errors) or "нет ни одного ключа")
+
+
+def transcribe(pcm16, rate: int = 16000, language: str = "ru") -> str:
+    """Речь в текст бесплатным Whisper у Groq: на Windows нет faster-whisper (полгигабайта в exe)."""
+    import io
+    import uuid
+    import wave
+
+    key = providers.secret_get("groq")
+    if not key:
+        raise RuntimeError("нет ключа Groq: распознаёт речь только он")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm16.tobytes())
+    edge = uuid.uuid4().hex
+    parts = [f'--{edge}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+             for k, v in (("model", "whisper-large-v3-turbo"), ("language", language or "ru"), ("response_format", "json"))]
+    parts.append(f'--{edge}\r\nContent-Disposition: form-data; name="file"; filename="a.wav"\r\n'
+                 f"Content-Type: audio/wav\r\n\r\n".encode() + buf.getvalue() + f"\r\n--{edge}--\r\n".encode())
+    req = urllib.request.Request("https://api.groq.com/openai/v1/audio/transcriptions", data=b"".join(parts),
+                                 headers={"Authorization": f"Bearer {key}",
+                                          "Content-Type": f"multipart/form-data; boundary={edge}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r).get("text", "").strip()

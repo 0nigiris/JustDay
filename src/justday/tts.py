@@ -119,6 +119,8 @@ def sapi(sentence: str, speed: float, lang: str) -> np.ndarray:
     voices = voice.GetVoices("Language=419" if lang == "ru" else "Language=409")
     if voices.Count:
         voice.Voice = voices.Item(0)
+    else:  # английский голос кириллицу пропускает молча — без этой строки не понять, почему тишина
+        log.warning("в Windows нет голоса для %s: Параметры → Время и язык → Речь → Добавить голоса", lang)
     voice.Rate = max(-10, min(10, round((speed - 1) * 10)))
     voice.Speak(sentence)
     return np.frombuffer(bytes(bytearray(out.GetData())), dtype=np.int16)

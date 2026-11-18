@@ -1139,7 +1139,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         # Warm up models in the background so the first command is fast.
         if self.mic_on():  # keyboard-only setups never load speech recognition
             loop.run_in_executor(None, self.stt.load)
-        elif self.cfg["audio"].get("microphone", True) and not parts.have("speech"):
+        elif self.cfg["audio"].get("microphone", True) and not parts.have("speech") and not config.WINDOWS:
             # Микрофон в настройках есть, а распознавания в окружении нет: молча превращаться
             # в «кнопка ничего не делает» нельзя — так и выглядела бы поломка.
             log.warning("%s", parts.missing_note("speech"))

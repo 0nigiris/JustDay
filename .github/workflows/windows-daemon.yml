@@ -43,8 +43,10 @@ jobs:
           python -c "from pycaw.pycaw import AudioUtilities as A; print(A.GetSpeakers().EndpointVolume)" || true
       - name: Джарвис говорит голосом Windows
         # espeak-ng на Windows нет; SAPI есть всегда. Пустой звук — значит Джарвис молчал бы.
+        # На машине GitHub только английские голоса, поэтому фраза английская.
         run: |
-          python -c "from justday import tts; p = tts.sapi('Привет, я Джарвис', 1.0, 'ru'); print('pcm', len(p)); assert len(p) > 10000"
+          python -c "import sounddevice; from justday import audio; audio.LoudnessVAD()"
+          python -c "from justday import tts; p = tts.sapi('Hello, I am Jarvis', 1.0, 'en'); print('pcm', len(p)); assert len(p) > 10000"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

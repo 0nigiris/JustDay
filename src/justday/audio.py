@@ -39,7 +39,7 @@ class Microphone:
     RESTART_DELAY = 2.0   # первая пауза перед перезапуском pw-record; дальше удваивается до 30 с
 
     def __init__(self, source_substring: str = ""):
-        self.source = find_node(source_substring) if source_substring else None
+        self.source = find_node(source_substring) if source_substring and not config.WINDOWS else None
         self._proc: subprocess.Popen | None = None
         self._thread: threading.Thread | None = None
         self._subscribers: list = []
@@ -47,7 +47,29 @@ class Microphone:
         self.seq = 0  # number of the frame being delivered (read it inside a subscriber)
         self._deaths = 0  # сколько раз подряд pw-record умер быстро: от этого пауза перед новым
 
+    def _start_windows(self) -> None:
+        """pw-record на Windows нет: тот же поток кадров по 80 мс через PortAudio (sounddevice)."""
+        import sounddevice as sd
+
+        def cb(data, frames, when, status) -> None:
+            frame = np.frombuffer(bytes(data), dtype=np.int16)
+            self.seq += 1
+            with self._lock:
+                subs = list(self._subscribers)
+            for sub in subs:
+                try:
+                    sub(frame)
+                except Exception:
+                    log.exception("mic subscriber failed")
+
+        self._proc = sd.RawInputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME, callback=cb)
+        self._proc.start()
+
     def start(self) -> None:
+        if config.WINDOWS:
+            if self._proc is None:
+                self._start_windows()
+            return
         if self._proc and self._proc.poll() is None:
             return
         cmd = ["pw-record", "--rate", str(RATE), "--channels", "1", "--format", "s16", "--raw"]
@@ -61,7 +83,10 @@ class Microphone:
 
     def stop(self) -> None:
         if self._proc:
-            self._proc.terminate()
+            if config.WINDOWS:
+                self._proc.close()
+            else:
+                self._proc.terminate()
             self._proc = None
 
     def _reader(self) -> None:
@@ -121,8 +146,30 @@ def onnx_model(name: str) -> str:
     return str(path)
 
 
+class LoudnessVAD:
+    """Конец фразы по громкости — для Windows, где нет openwakeword и onnxruntime.
+
+    Речь — это кадр на 12 дБ громче тишины комнаты; тишину узнаём сами, медленно подтягивая её
+    к самым тихим кадрам. ponytail: громкий фон (вентилятор, музыка) примет за речь; тогда — Silero
+    VAD в onnxruntime, как на Linux."""
+
+    def __init__(self):
+        self.reset_states()
+
+    def reset_states(self) -> None:
+        self.floor = -50.0
+
+    def predict(self, frame: np.ndarray, frame_size: int = 640) -> float:
+        rms = float(np.sqrt((frame.astype(np.float32) ** 2).mean())) / 32768.0
+        db = 20 * np.log10(rms + 1e-9)
+        self.floor = min(db, self.floor + 0.05)  # вниз сразу, вверх — по 0,05 дБ за кадр
+        return 1.0 if db > self.floor + 12 else 0.0
+
+
 def voice_activity_model():
     """Silero VAD: what tells the recorder that the phrase is over."""
+    if config.WINDOWS:
+        return LoudnessVAD()
     from openwakeword.vad import VAD
 
     return VAD(model_path=onnx_model("silero_vad.onnx"))
