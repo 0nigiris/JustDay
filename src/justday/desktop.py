@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 HOME = Path.home()
+WINDOWS = os.name == "nt"  # не config.WINDOWS: desktop нарочно не тянет config
 
 
 # ---------------- applications ----------------
@@ -62,8 +63,27 @@ def list_apps() -> list[dict]:
     return _apps_cache[1]
 
 
+def _scan_windows_apps() -> list[dict]:
+    """Всё из меню «Пуск» с именами на языке системы: и ярлыки, и программы из Store (Блокнот и
+    Калькулятор в Windows 11 — уже не .lnk, по ярлыкам их не найти). Запуск — по AppID."""
+    out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                          "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-StartApps | ConvertTo-Json -Compress"],
+                         capture_output=True, text=True, encoding="utf-8", timeout=20,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    try:
+        got = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return []
+    return [{"id": a["AppID"], "name": a["Name"], "name_ru": "", "generic": "", "exec": "", "keywords": "",
+             "path": "", "categories": "", "icon": "", "wmclass": ""}
+            for a in ([got] if isinstance(got, dict) else got) if a.get("AppID")]
+
+
 def _scan_apps() -> list[dict]:
     global _apps_cache
+    if WINDOWS:
+        _apps_cache = (time.monotonic(), _scan_windows_apps())
+        return _apps_cache[1]
     apps: dict[str, dict] = {}
     for d in _app_dirs():
         for f in d.rglob("*.desktop"):
@@ -238,6 +258,9 @@ def launch_app_id(desktop_id: str, files: list[str] | None = None) -> None:
     gtk-launch принимает пути следом за именем — и это правильный путь: он читает .desktop и
     подставляет файлы туда, куда программа просила (%f, %U), вместо того чтобы угадывать за неё.
     """
+    if WINDOWS:  # AppID из Get-StartApps: так открываются и ярлыки, и программы из Store
+        subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{desktop_id}", *[str(f) for f in (files or [])]])
+        return
     name = _gtk_name(desktop_id)
     args = ["gtk-launch", name, *[str(f) for f in (files or []) if str(f).strip()]]
     subprocess.Popen(detached(args), start_new_session=True,
@@ -257,7 +280,7 @@ def launch_app(query: str) -> dict:
     flat = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())  # noqa: E731
     parts = [p for p in hits[0]["id"].split(".") if p.lower() not in ("org", "com", "io", "net", "desktop", "app")]
     keys = [k for k in (*map(flat, parts), flat(hits[0].get("name", ""))) if len(k) > 3]
-    for item in tray_items():
+    for item in ([] if WINDOWS else tray_items()):
         hay = flat(item["id"]) + " " + flat(item["title"])
         if any(k in hay for k in keys) and tray_activate(item):
             return hits[0]

@@ -41,6 +41,10 @@ jobs:
           python src/justday/winaudio.py
           python -c "from justday import winaudio as w; print('vol', w.run(['wpctl','set-volume','@DEFAULT_AUDIO_SINK@','30%'])); assert w.run(['playerctl','next'])"
           python -c "from pycaw.pycaw import AudioUtilities as A; print(A.GetSpeakers().EndpointVolume)" || true
+      - name: «Открой блокнот» находит программы Windows
+        # Каталог программ был из .desktop-файлов Linux: на Windows он пуст, и «открой …» не находило ничего.
+        run: |
+          python -c "from justday import desktop as d; a = d.list_apps(); print(len(a), d.find_apps('notepad', 2)); assert a"
       - name: Джарвис говорит голосом Windows
         # espeak-ng на Windows нет; SAPI есть всегда. Пустой звук — значит Джарвис молчал бы.
         # На машине GitHub только английские голоса, поэтому фраза английская.
