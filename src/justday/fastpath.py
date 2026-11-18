@@ -66,6 +66,10 @@ def unfinished(text: str) -> bool:
 
 
 def _run(*cmd: str) -> bool:
+    if config.WINDOWS:
+        from . import winaudio
+
+        return winaudio.run(cmd)
     return subprocess.run(cmd, capture_output=True, timeout=5).returncode == 0
 
 

@@ -912,8 +912,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
                 said = t("Не нашёл «{q}»", q=query)
         elif action == "volume":
             step = {"+": "10%+", "-": "10%-"}.get(query) or f"{max(0, min(100, int(query or 50)))}%"
-            await loop.run_in_executor(None, lambda: subprocess.run(
-                ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", step], capture_output=True, timeout=5))
+            await loop.run_in_executor(None, fastpath._run, "wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", step)
             said = t("готово")
         else:
             said = got["answer"] or t("Облако сейчас недоступно.")

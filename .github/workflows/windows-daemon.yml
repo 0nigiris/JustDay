@@ -34,6 +34,13 @@ jobs:
           done
           echo "$out"
           echo "$out" | grep -q '"ok": true'
+      - name: Голосовые команды звука доходят до Windows
+        # У машины GitHub может не быть звуковой карты: тогда громкость честно отвечает False, а падать
+        # (ImportError, AttributeError в pycaw) нельзя. Мультимедийная клавиша жмётся всегда.
+        run: |
+          python src/justday/winaudio.py
+          python -c "from justday import winaudio as w; print('vol', w.run(['wpctl','set-volume','@DEFAULT_AUDIO_SINK@','30%'])); assert w.run(['playerctl','next'])"
+          python -c "from pycaw.pycaw import AudioUtilities as A; print(A.GetSpeakers().EndpointVolume)" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

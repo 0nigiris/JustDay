@@ -105,8 +105,7 @@ def plan(text: str, inputs: list[dict] | None = None) -> list[Action] | None:
 def apply(action: Action) -> bool:
     """Всё, что делается командой; громкость плеера — дело демона."""
     if action.kind == "system":
-        cmd = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{action.level}%"]
-        return subprocess.run(cmd, capture_output=True, timeout=5).returncode == 0
+        return fastpath._run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{action.level}%")
     ok = True
     for index in action.streams:
         r = subprocess.run(["pactl", "set-sink-input-volume", str(index), f"{action.level}%"], capture_output=True,

@@ -15,6 +15,7 @@ dependencies = [
     "icalendar>=6",
     "recurring-ical-events>=3",
     "segno>=1.6",           # QR-коды для карточки в островке (qr.py), чистый Python
+    "pycaw>=20240316; sys_platform == 'win32'",  # громкость на Windows (winaudio.py)
 ]
 
 # Необязательное. Речь и голос — это гигабайты, и они нужны не всем: без микрофона
