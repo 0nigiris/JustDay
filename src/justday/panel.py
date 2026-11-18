@@ -16,7 +16,6 @@ import json
 import logging
 import queue
 import re
-import socket
 import subprocess
 import threading
 import time
@@ -49,9 +48,7 @@ STATE_WORDS = {
 def send(cmd: str, **kw) -> dict:
     """Одна команда демону — та же, что шлёт остров и командная строка."""
     try:
-        with socket.socket(socket.AF_UNIX) as s:
-            s.settimeout(10)
-            s.connect(str(config.SOCKET_PATH))
+        with config.control_socket(10) as s:
             s.sendall((json.dumps({"cmd": cmd, **kw}, ensure_ascii=False) + "\n").encode())
             return json.loads(s.makefile("r", encoding="utf-8").readline() or "{}")
     except (OSError, ValueError) as e:
@@ -71,9 +68,7 @@ class Bus(threading.Thread):
     def run(self) -> None:
         while True:
             try:
-                with socket.socket(socket.AF_UNIX) as s:
-                    s.settimeout(30)
-                    s.connect(str(config.SOCKET_PATH))
+                with config.control_socket(30) as s:
                     s.sendall(b'{"cmd": "subscribe"}\n')
                     self.box.put({"_link": True})
                     fh = s.makefile("r", encoding="utf-8")

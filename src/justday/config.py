@@ -11,11 +11,23 @@ import tomllib
 from pathlib import Path
 
 HOME = Path.home()
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "justday"
-DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share")) / "justday"
-STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "justday"
-RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+WINDOWS = os.name == "nt"
+if WINDOWS:
+    # Папок XDG и /run/user на Windows нет: настройки в профиле (Roaming), остальное — в Local.
+    _roam = Path(os.environ.get("APPDATA", HOME / "AppData/Roaming"))
+    _local = Path(os.environ.get("LOCALAPPDATA", HOME / "AppData/Local"))
+    CONFIG_DIR, DATA_DIR, STATE_DIR = _roam / "JustDay", _local / "JustDay", _local / "JustDay/state"
+    RUNTIME_DIR = STATE_DIR
+else:
+    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "justday"
+    DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share")) / "justday"
+    STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "justday"
+    RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
 SOCKET_PATH = RUNTIME_DIR / "justday.sock"
+# На Windows у asyncio нет unix-сокета: демон слушает TCP только на 127.0.0.1 (docs/WINDOWS.md), а чтобы
+# им не командовал любой процесс машины, первой строкой клиент шлёт токен из файла в профиле человека.
+CONTROL_PORT = int(os.environ.get("JUSTDAY_PORT", "47615"))
+TOKEN_FILE = CONFIG_DIR / "control.token"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 MODELS_DIR = DATA_DIR / "models"  # wake word, voice activity, Silero TTS: downloaded once, kept across reinstalls
 EVENTS_FILE = STATE_DIR / "events.jsonl"
@@ -1069,3 +1081,43 @@ def set_cycle_steps(steps: list[dict]) -> None:
 def ensure_dirs() -> None:
     for d in (CONFIG_DIR, DATA_DIR, STATE_DIR):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def control_socket(timeout: float | None = 10):
+    """Подключённый управляющий сокет демона: unix на Linux, 127.0.0.1 + токен на Windows.
+
+    Одно место на всех клиентов, чтобы Windows не пришлось чинить в каждом из них. Ошибки
+    подключения (FileNotFoundError, ConnectionRefusedError) летят вызывающему, как и раньше."""
+    import socket
+
+    if not WINDOWS:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        try:
+            s.connect(str(SOCKET_PATH))
+        except BaseException:
+            s.close()
+            raise
+        return s
+    token = TOKEN_FILE.read_text().strip()  # нет файла — демон не запускался: FileNotFoundError
+    s = socket.create_connection(("127.0.0.1", CONTROL_PORT), timeout=timeout)
+    s.sendall((token + "\n").encode())
+    return s
+
+
+def lock(f, wait: bool = True) -> None:
+    """Замок на открытый файл между процессами, держится до его закрытия. На Windows нет fcntl.
+
+    Не дождались (wait=False, а замок чужой) — BlockingIOError, как у flock."""
+    if WINDOWS:
+        import msvcrt
+
+        try:
+            # ponytail: LK_LOCK ждёт ~10 с и сдаётся; для коротких записей состояния хватает.
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK if wait else msvcrt.LK_NBLCK, 1)
+        except OSError as e:
+            raise BlockingIOError(str(e)) from e
+        return
+    import fcntl
+
+    fcntl.flock(f, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))

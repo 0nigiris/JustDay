@@ -7,7 +7,6 @@ import os
 import re
 import shlex
 import shutil
-import socket
 import subprocess
 import sys
 import time
@@ -28,10 +27,8 @@ def manage_hotkeys():
 
 
 def control(cmd: str, timeout: float | None = 10, **kw) -> dict:
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(timeout)
     try:
-        s.connect(str(config.SOCKET_PATH))
+        s = config.control_socket(timeout)
     except (FileNotFoundError, ConnectionRefusedError):
         return {"ok": False, "error": "daemon is not running (systemctl --user start justday)"}
     s.sendall((json.dumps({"cmd": cmd, **kw}, ensure_ascii=False) + "\n").encode())

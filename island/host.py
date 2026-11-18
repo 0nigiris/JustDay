@@ -323,6 +323,16 @@ class FileView(QObject):
 
 
 @QmlElement
+def _token() -> str:
+    """Токен демона; лежит там же, где его кладёт config.TOKEN_FILE."""
+    path = os.environ.get("JUSTDAY_TOKEN_FILE") or str(
+        Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "JustDay" / "control.token")
+    try:
+        return Path(path).read_text().strip()
+    except OSError:
+        return ""
+
+
 class Socket(QObject):
     """Связь с демоном. Путь `tcp:ПОРТ` — TCP на 127.0.0.1 (Windows), иначе локальный сокет."""
 
@@ -368,6 +378,10 @@ class Socket(QObject):
             s.connectToServer(self._path)
 
     def _on_up(self) -> None:
+        if isinstance(self._s, QTcpSocket):
+            # Демон на TCP пускает только с токеном первой строкой (daemon._serve_tcp): порт на
+            # 127.0.0.1 видят все процессы машины, а файл с токеном — только этот человек.
+            self._s.write((_token() + "\n").encode())
         self._up = True
         self.connectedChanged.emit()
 

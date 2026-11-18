@@ -1,0 +1,41 @@
+name: windows-daemon
+
+# Джарвис (демон) на Windows. Своего Windows у нас нет: машина GitHub ставит пакет, запускает демона
+# и стучится к нему так же, как островок, — по 127.0.0.1 с токеном. Журнал демона лежит в артефакте.
+on:
+  push:
+    branches: [main]
+    paths: ["src/**", "pyproject.toml", ".github/workflows/windows-daemon.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  daemon:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Установка
+        run: python -m pip install --disable-pip-version-check -e .
+      - name: Демон отвечает
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          justday daemon > daemon.log 2>&1 &
+          for i in $(seq 1 60); do
+            out=$(justday status 2>&1) && echo "$out" | grep -q '"ok": true' && break
+            sleep 2
+          done
+          echo "$out"
+          echo "$out" | grep -q '"ok": true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: daemon-log
+          path: daemon.log

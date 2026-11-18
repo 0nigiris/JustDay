@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import getpass
 import os
-import pwd
 import shutil
 import socket
 import subprocess
@@ -105,8 +104,10 @@ def user() -> dict:
     """
     login = getpass.getuser()
     try:
+        import pwd  # только на Linux: на Windows сюда не доходим
+
         full = pwd.getpwnam(login).pw_gecos.split(",")[0].strip()
-    except (KeyError, OSError):
+    except (KeyError, OSError, ImportError):
         full = ""
     avatar = ""
     for p in (Path.home() / ".face.icon", Path.home() / ".face",

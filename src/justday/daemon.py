@@ -1097,6 +1097,26 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
 
     # ---------------- control socket ----------------
 
+    async def _serve_tcp(self):
+        """Windows: TCP только на 127.0.0.1, первой строкой — токен (config.control_socket)."""
+        import secrets
+
+        token = secrets.token_hex(16)
+        config.TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.TOKEN_FILE.write_text(token)
+
+        async def gate(reader, writer):
+            try:
+                line = await asyncio.wait_for(reader.readline(), 5)
+            except (TimeoutError, ConnectionError):
+                line = b""
+            if not secrets.compare_digest(line.strip(), token.encode()):
+                writer.close()
+                return
+            await self._client(reader, writer)
+
+        return await asyncio.start_server(gate, "127.0.0.1", config.CONTROL_PORT)
+
     async def run(self) -> None:
         config.ensure_dirs()
         if self.cfg["desktop"]["accessibility"]:
@@ -1106,10 +1126,13 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         loop = asyncio.get_running_loop()
         self._loop = loop
         events.subscribe(self._on_event)
-        if config.SOCKET_PATH.exists():
-            config.SOCKET_PATH.unlink()
-        server = await asyncio.start_unix_server(self._client, path=str(config.SOCKET_PATH))
-        os.chmod(config.SOCKET_PATH, 0o600)
+        if config.WINDOWS:
+            server = await self._serve_tcp()
+        else:
+            if config.SOCKET_PATH.exists():
+                config.SOCKET_PATH.unlink()
+            server = await asyncio.start_unix_server(self._client, path=str(config.SOCKET_PATH))
+            os.chmod(config.SOCKET_PATH, 0o600)
         spawn(self._speech_worker())
         # Warm up models in the background so the first command is fast.
         if self.mic_on():  # keyboard-only setups never load speech recognition
@@ -1188,7 +1211,10 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop.set)
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except NotImplementedError:  # Windows: процесс гасят снаружи, ждать сигнала нечем
+                pass
         await stop.wait()
         # Python 3.12's Server.wait_closed() waits for every client, and the island never hangs up — close them first.
         server.close()

@@ -11,7 +11,6 @@
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import re
@@ -124,7 +123,7 @@ def run(name: str) -> int:
     # шага «обновить» шли бы параллельно и топтали одну установку. Держится, пока жив процесс.
     with open(DIR / "run.lock", "w") as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            config.lock(lock, wait=False)
         except BlockingIOError:
             print(f"другой шаг цикла уже идёт — «{name}» не запускаю")
             return 75

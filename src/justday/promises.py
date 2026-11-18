@@ -5,7 +5,6 @@
 сказали голосом или написали в письме: встречи никто не слушает, и без его отдельного «да» слушать нельзя."""
 from __future__ import annotations
 
-import fcntl
 import json
 import time
 from contextlib import contextmanager
@@ -36,7 +35,7 @@ def _locked():
     брали один и тот же список, выдавали одинаковые номера, и вторая запись затирала первую."""
     FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(FILE.with_suffix(".lock"), "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        config.lock(lock)
         yield
 
 

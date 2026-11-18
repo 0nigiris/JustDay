@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
 import logging
 import os
@@ -85,7 +84,7 @@ def save_state(**updates: Any) -> dict:
     чужие ключи терялись между чтением и записью (Р-14). Замок общий для процессов, tmp у каждого свой."""
     config.STATE_DIR.mkdir(parents=True, exist_ok=True)
     with open(config.STATE_DIR / "state.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        config.lock(lock)
         state = load_state()
         state.update(updates)
         fd, tmp = tempfile.mkstemp(dir=config.STATE_DIR, prefix=".state.", suffix=".tmp")
