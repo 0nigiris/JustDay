@@ -6,7 +6,7 @@ name: windows
 on:
   push:
     branches: [main]
-    paths: ["island/**", "src/**", "data/**", ".github/workflows/windows.yml"]
+    paths: ["island/**", "src/**", "data/**", "installer/**", "brand/justday.ico", ".github/workflows/windows.yml"]
   workflow_dispatch:
 
 concurrency:
@@ -30,7 +30,7 @@ jobs:
           # qmldir нужен чистому Qt, чтобы найти синглтон JD; в живую папку на Linux его не кладём.
           echo "singleton JD 1.0 JD.qml" > island/qmldir
           rm -rf island/__pycache__ island/kwin-effects
-          pyinstaller --noconfirm --windowed --name JustDay \
+          pyinstaller --noconfirm --windowed --name JustDay --icon brand/justday.ico \
             --add-data "island;island" \
             --add-data "src/justday/brain;justday/brain" --add-data "data;data" --add-data "pyproject.toml;." \
             --collect-submodules justday --collect-submodules keyring --collect-submodules pycaw \
@@ -55,6 +55,35 @@ jobs:
           for i in $(seq 30); do sleep 2; ./dist/JustDay/JustDay.exe status > status.txt 2>&1 && break; done
           cat status.txt; tail -30 daemon.log
           grep -q '"ok": true' status.txt
+      - name: Установщик
+        # Другу нужна установка, а не папка: ярлык в «Пуске», удаление из «Параметров», автозапуск по желанию.
+        shell: bash
+        run: |
+          choco install innosetup -y --no-progress > /dev/null
+          ver=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q "-DAppVersion=$ver" installer/justday.iss
+          ls -la dist/*.exe
+      - name: Установка, запуск и удаление
+        # Проверяем то, что получит друг: тихая установка, Джарвис из установленной папки отвечает,
+        # удаление убирает программу.
+        shell: bash
+        run: |
+          taskkill //F //IM JustDay.exe || true  # демон из прошлого шага держит порт: отвечал бы он, а не установленный
+          sleep 2
+          ./dist/JustDay-Setup-*.exe //VERYSILENT //SUPPRESSMSGBOXES //NORESTART
+          app="$LOCALAPPDATA/Programs/JustDay"
+          test -f "$app/JustDay.exe"
+          ls "$APPDATA/Microsoft/Windows/Start Menu/Programs/JustDay"
+          "$app/JustDay.exe" daemon > installed.log 2>&1 &
+          for i in $(seq 30); do sleep 2; "$app/JustDay.exe" status > st.txt 2>&1 && break; done
+          grep -q '"ok": true' st.txt
+          "$app/unins000.exe" //VERYSILENT //SUPPRESSMSGBOXES
+          for i in $(seq 15); do sleep 2; test -f "$app/JustDay.exe" || break; done
+          ! test -f "$app/JustDay.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JustDay-Setup
+          path: dist/JustDay-Setup-*.exe
       - uses: actions/upload-artifact@v4
         with:
           name: JustDay-windows

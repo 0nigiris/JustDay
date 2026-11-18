@@ -1098,8 +1098,29 @@ View {
             columns: ev.g("model").w >= 8 ? 6 : 2
             columnSpacing: 10; rowSpacing: 8
             SectionLabel { text: JD.tr("МОДЕЛЬ"); Layout.alignment: Qt.AlignVCenter }
+            // На Windows думают только бесплатные модели по ключу (freellm): Claude Code и локальной
+            // модели там нет, и выбор «Claude/Локальная» молча ничего не менял. Вместо него — ключи.
             Repeater {
-                model: [
+                model: Qt.platform.os === "windows" ? JD.freeProviders : []
+                Component.onCompleted: if (Qt.platform.os === "windows") JD.send({ cmd: "free_key" })
+                Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    radius: 12
+                    color: keyHover.hovered ? JD.fill2 : JD.fill1
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: -1
+                        Text { font.family: JD.fontFamily; text: modelData.name; color: JD.text1; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
+                        Text { font.family: JD.fontFamily; text: modelData.has ? JD.tr("ключ есть") : JD.tr("вставить ключ"); color: modelData.has ? JD.text3 : JD.accentBlue; font.pixelSize: 10; Layout.alignment: Qt.AlignHCenter }
+                    }
+                    HoverHandler { id: keyHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: JD.openTools("welcome") }
+                }
+            }
+            Repeater {
+                model: Qt.platform.os === "windows" ? [] : [
                     { id: "claude", label: "Claude", model: "sonnet", hint: JD.tr("подписка") },
                     { id: "ollama_cloud", label: JD.tr("Бесплатная"), model: "kimi-k3:cloud", hint: JD.tr("облако") },
                     { id: "ollama", label: JD.tr("Локальная"), model: "qwen3.5:9b", hint: JD.tr("приватно") },
