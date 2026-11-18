@@ -1149,14 +1149,22 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
 
         if linux:
             await loop.run_in_executor(None, manage.refresh_hotkeys)  # первый снимок настроек уже с клавишами
-        try:
-            await self.brain.start()
-        except Exception as e:
-            # Нет Claude Code или не вошли (на Windows у нового человека — обычное дело): без мозга
-            # островок, будильники и голос всё равно должны жить, а мозг подключится при первом вопросе.
-            log.warning("мозг не подключился: %s", e)
-            self.brain.client = None
-            self.notify(t("Войдите в модель: Настройки → Модель"), icon="dialog-information")
+        if config.WINDOWS and not shutil.which(self.cfg["brain"]["claude_cli"]):
+            # У друга на Windows Claude Code нет, и ждать его незачем: думают бесплатные модели. Совет
+            # «войдите в модель» вёл бы не туда — ему нужен ключ, и он вставляется в первом знакомстве.
+            from . import freellm
+
+            if not await loop.run_in_executor(None, freellm.ready):
+                self.notify(t("Вставьте бесплатный ключ в островке — без него Джарвису нечем думать"), icon="dialog-information")
+        else:
+            try:
+                await self.brain.start()
+            except Exception as e:
+                # Нет Claude Code или не вошли: без мозга островок, будильники и голос всё равно должны
+                # жить, а мозг подключится при первом вопросе.
+                log.warning("мозг не подключился: %s", e)
+                self.brain.client = None
+                self.notify(t("Войдите в модель: Настройки → Модель"), icon="dialog-information")
         if linux and await self.music.attach():  # music that kept playing through a daemon restart
             log.info("music player reattached")
         self._reschedule()  # alarms survive a restart

@@ -58,10 +58,18 @@ def vocabulary(cfg: dict) -> str:
     return (base.rstrip(". ") + ", " + ", ".join(extra[:40]) + ".") if extra else base
 
 
+def _free_keys() -> bool:
+    from . import freellm
+
+    return bool(freellm.ready())
+
+
 def settings_snapshot(cfg: dict) -> dict:
     b, m = cfg["brain"], cfg["mail"]
     return {"provider": b.get("provider", "claude"), "model": b["model"], "assistant_name": cfg["user"]["assistant_name"], "user_name": cfg["user"].get("name", ""),
-            "onboarded": cfg["user"].get("onboarded", True),
+            # На Windows установщика нет, и «первый запуск» никто не отметит: знакомство с ключами
+            # показывается, пока нет ни одного бесплатного ключа, — без него Джарвису нечем думать.
+            "onboarded": cfg["user"].get("onboarded", True) and not (config.WINDOWS and not _free_keys()),
             "language": cfg["user"].get("language", "ru"),
             "earcons": cfg["audio"]["earcons"], "notifications": cfg["ui"]["notifications"],
             "wakeword": cfg["wakeword"]["enabled"], "mail": bool(m["address"]), "mail_announce": m["announce"],

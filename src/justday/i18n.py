@@ -116,6 +116,7 @@ EN = {
     "Новое письмо от {who}.": "New email from {who}.",
     "{n} новых письма: {who}.": "{n} new emails: {who}.",
     "Войдите в модель: Настройки → Модель": "Sign in to a model: Settings → Model",
+    "Вставьте бесплатный ключ в островке — без него Джарвису нечем думать": "Paste a free key in the island: without it Jarvis has nothing to think with",
     "У этой сессии нет окна: она идёт в фоне или в tmux": "This session has no window: it runs in the background or in tmux",
 }
 
