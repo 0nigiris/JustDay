@@ -1119,7 +1119,10 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
 
     async def run(self) -> None:
         config.ensure_dirs()
-        if self.cfg["desktop"]["accessibility"]:
+        # Windows: Джарвис и островок без рабочего стола KDE (docs/WINDOWS.md). Всё, что ниже держится
+        # на dbus, Wayland, KWin и Plasma, там не запускаем — иначе демон падал на первой же busctl.
+        linux = not config.WINDOWS
+        if linux and self.cfg["desktop"]["accessibility"]:
             # Qt/GTK apps then publish their widgets over AT-SPI (exact click targets for `look`/`act`)
             subprocess.run(["busctl", "--user", "set-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status",
                             "IsEnabled", "b", "true"], capture_output=True, timeout=5)
@@ -1145,9 +1148,10 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         loop.run_in_executor(None, self.tts.load)
         from . import manage
 
-        await loop.run_in_executor(None, manage.refresh_hotkeys)  # первый снимок настроек уже с клавишами
+        if linux:
+            await loop.run_in_executor(None, manage.refresh_hotkeys)  # первый снимок настроек уже с клавишами
         await self.brain.start()
-        if await self.music.attach():  # music that kept playing through a daemon restart
+        if linux and await self.music.attach():  # music that kept playing through a daemon restart
             log.info("music player reattached")
         self._reschedule()  # alarms survive a restart
         self._setup_wakeword()
@@ -1155,15 +1159,16 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         spawn(self._heartbeat())
         spawn(self._load_loop())
         spawn(self._sessions_loop())
-        spawn(self._clip_watch())
-        spawn(self._file_index_loop())
-        if shutil.which("dbus-monitor"):
-            spawn(self._watch_notifications())
-        spawn(self._watch_windows())
-        spawn(self._watch_layout())
-        spawn(self._watch_brightness())
         spawn(self._telegram_loop())
         spawn(self._cpu_loop())
+        if linux:
+            spawn(self._clip_watch())
+            spawn(self._file_index_loop())
+            if shutil.which("dbus-monitor"):
+                spawn(self._watch_notifications())
+            spawn(self._watch_windows())
+            spawn(self._watch_layout())
+            spawn(self._watch_brightness())
         # Каталог дока уходит по живому сокету. Перезапускать ради него оболочку не надо.
         async def _warm_dock() -> None:
             # Пробуем, пока не опознаются закреплённые значки: пустой док поверх острова не шлём.
@@ -1192,21 +1197,23 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             if isinstance(last, dict) and (last.get("items") or []):
                 self._dock = last
                 self.publish(dock=last)
-        spawn(_warm_dock())
-        if self.cfg["desktop"].get("coffee"):  # службы «кофе» не переживают перезагрузку, настройка — да
+        if linux:
+            spawn(_warm_dock())
+        if linux and self.cfg["desktop"].get("coffee"):  # службы «кофе» не переживают перезагрузку, настройка — да
             spawn(asyncio.to_thread(server_mod.coffee, True))
         # Остров — единственное место для уведомлений, если так попросили.
         want_popups = bool(self.cfg["island"].get("system_popups", False))
-        if notifications.system_popups().get("popups") != want_popups:
+        if linux and notifications.system_popups().get("popups") != want_popups:
             await loop.run_in_executor(None, notifications.system_popups, want_popups)
         # Mute Plasma volume/brightness/keyboard OSD when JustDay show_osd owns the HUD.
-        await loop.run_in_executor(
-            None,
-            lambda: notifications.sync_plasma_osd(
-                show_osd=self.cfg["island"].get("show_osd", True),
-                system_popups=want_popups,
-            ),
-        )
+        if linux:
+            await loop.run_in_executor(
+                None,
+                lambda: notifications.sync_plasma_osd(
+                    show_osd=self.cfg["island"].get("show_osd", True),
+                    system_popups=want_popups,
+                ),
+            )
         events.emit("daemon_ready", socket=str(config.SOCKET_PATH), mic=self.mic.source, wakeword=bool(self._wake))
         self._inbox_soon(delay=20)  # то, что оставили с телефона, пока компьютера не было
         stop = asyncio.Event()
