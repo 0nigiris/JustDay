@@ -332,7 +332,8 @@ def running_game() -> str:
     if time.monotonic() - _running_cache[0] < 5:
         return _running_cache[1]
     name = ""
-    for proc in Path("/proc").iterdir():
+    # На Windows нет /proc: iterdir падал и ронял каждый `justday status` (silent() спрашивает об игре).
+    for proc in Path("/proc").iterdir() if Path("/proc").is_dir() else ():
         if not proc.name.isdigit():
             continue
         try:
