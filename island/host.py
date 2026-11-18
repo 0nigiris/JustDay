@@ -322,7 +322,6 @@ class FileView(QObject):
             self._text = s
 
 
-@QmlElement
 def _token() -> str:
     """Токен демона; лежит там же, где его кладёт config.TOKEN_FILE."""
     path = os.environ.get("JUSTDAY_TOKEN_FILE") or str(
@@ -333,6 +332,7 @@ def _token() -> str:
         return ""
 
 
+@QmlElement
 class Socket(QObject):
     """Связь с демоном. Путь `tcp:ПОРТ` — TCP на 127.0.0.1 (Windows), иначе локальный сокет."""
 
