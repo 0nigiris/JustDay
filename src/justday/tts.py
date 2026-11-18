@@ -104,6 +104,26 @@ def latin_mode(cfg: dict) -> str:
     return "keep" if cfg.get("engine") in MULTILINGUAL else "translit"
 
 
+def sapi(sentence: str, speed: float, lang: str) -> np.ndarray:
+    """Голос Windows (SAPI) в 22050 Гц моно — тот же формат, что у espeak-ng, ниже он так и пересчитывается."""
+    import comtypes
+    import comtypes.client
+
+    comtypes.CoInitialize()  # синтез идёт в потоке исполнителя, а COM живёт по потокам
+    voice = comtypes.client.CreateObject("SAPI.SpVoice")
+    fmt = comtypes.client.CreateObject("SAPI.SpAudioFormat")
+    fmt.Type = 22  # SAFT22kHz16BitMono
+    out = comtypes.client.CreateObject("SAPI.SpMemoryStream")
+    out.Format = fmt
+    voice.AudioOutputStream = out
+    voices = voice.GetVoices("Language=419" if lang == "ru" else "Language=409")
+    if voices.Count:
+        voice.Voice = voices.Item(0)
+    voice.Rate = max(-10, min(10, round((speed - 1) * 10)))
+    voice.Speak(sentence)
+    return np.frombuffer(bytes(bytearray(out.GetData())), dtype=np.int16)
+
+
 class TTS:
     def __init__(self, cfg: dict):
         self.cfg = cfg
@@ -134,7 +154,7 @@ class TTS:
         return config.MODELS_DIR / self.cfg["silero_model_url"].rsplit("/", 1)[1]
 
     def load(self) -> None:
-        if self.cfg["engine"] in ("silero", "chatterbox", *CLOUD):  # у них Silero — запасной
+        if self.cfg["engine"] in ("silero", "chatterbox", *CLOUD) and not config.WINDOWS:  # у них Silero — запасной
             # Служба голоса держит torch у себя; демон только просит её подняться. Нет службы — как раньше.
             if self.path_exists() and self.nudge("warm", engine="silero", model=str(self._silero_path())):
                 return
@@ -394,7 +414,7 @@ class TTS:
         lang = self.cfg.get("lang", "ru")
         # Chatterbox и ElevenLabs сюда попадают, только когда сами не смогли (занята видеокарта,
         # кончились кредиты) — и тогда говорит Silero.
-        if engine in ("silero", "chatterbox", *CLOUD) and lang == "ru" and not self._silero_gone:  # Silero voices here are Russian-only
+        if engine in ("silero", "chatterbox", *CLOUD) and lang == "ru" and not self._silero_gone and not config.WINDOWS:  # Silero voices here are Russian-only
             try:
                 try:
                     pcm = self.silero_remote(sentence)
@@ -417,9 +437,12 @@ class TTS:
                 log.exception("silero failed on %r, using espeak", sentence)
         if engine == "none":
             return np.zeros(0, dtype=np.int16)
-        words = str(int(175 * self.speed))  # espeak has a speed of its own: no need to stretch it afterwards
-        wav = subprocess.run(["espeak-ng", "-v", lang if lang in ("ru", "en") else "ru", "-s", words, "--stdout", sentence],
-                             capture_output=True).stdout
-        pcm = np.frombuffer(wav[44:], dtype=np.int16)  # espeak: 22050 Hz mono WAV
+        if config.WINDOWS:  # espeak-ng там нет, а голос Windows есть у всех; русский — если стоит пакет речи
+            pcm = sapi(sentence, self.speed, lang)
+        else:
+            words = str(int(175 * self.speed))  # espeak has a speed of its own: no need to stretch it afterwards
+            wav = subprocess.run(["espeak-ng", "-v", lang if lang in ("ru", "en") else "ru", "-s", words, "--stdout",
+                                  sentence], capture_output=True).stdout
+            pcm = np.frombuffer(wav[44:], dtype=np.int16)  # espeak: 22050 Hz mono WAV
         idx = np.linspace(0, len(pcm) - 1, int(len(pcm) * self.rate / 22050)).astype(int)
         return pcm[idx] if len(pcm) else pcm

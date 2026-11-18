@@ -273,7 +273,7 @@ class Player:
     made quieter without touching the system volume — and without touching what other apps play."""
 
     def __init__(self, sink_substring: str = "", volume: int = 100):
-        self.sink = find_node(sink_substring, "sinks") if sink_substring else None
+        self.sink = find_node(sink_substring, "sinks") if sink_substring and not config.WINDOWS else None
         self.volume = volume
         self._proc: asyncio.subprocess.Process | None = None
 
@@ -284,7 +284,30 @@ class Player:
             cmd += ["--target", self.sink]
         return [*cmd, "-"]
 
+    async def _play_windows(self, pcm: np.ndarray, rate: int) -> None:
+        """pw-play на Windows нет; winsound есть в самом Python. Громкость Джарвиса — масштабом звука,
+        системную не трогаем, как и на Linux.
+        ponytail: фраза целиком, без потока — для облачных голосов речь начнётся на полсекунды позже."""
+        import io
+        import wave
+        import winsound
+
+        pcm = (pcm.astype(np.float32) * max(0, min(100, int(self.volume))) / 100).astype(np.int16)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes(pcm.tobytes())
+        self._proc = True  # type: ignore[assignment]  # для `playing`
+        try:
+            await asyncio.to_thread(winsound.PlaySound, buf.getvalue(), winsound.SND_MEMORY)
+        finally:
+            self._proc = None
+
     async def play(self, pcm: np.ndarray, rate: int) -> None:
+        if config.WINDOWS:
+            return await self._play_windows(pcm, rate)
         cmd = self._cmd(rate)
         self._proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
@@ -304,6 +327,9 @@ class Player:
 
     async def play_stream(self, chunks, rate: int) -> None:
         """Play PCM chunks as they are generated (neural voice: speech starts before synthesis ends)."""
+        if config.WINDOWS:
+            data = b"".join([c async for c in chunks])
+            return await self._play_windows(np.frombuffer(data, dtype=np.int16), rate)
         cmd = self._cmd(rate)
         self._proc = proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
@@ -324,6 +350,11 @@ class Player:
             self._proc = None
 
     def stop(self) -> None:
+        if config.WINDOWS:
+            import winsound
+
+            winsound.PlaySound(None, 0)  # обрывает и ту фразу, что играет в другом потоке
+            return
         if self._proc and self._proc.returncode is None:
             self._proc.kill()
 

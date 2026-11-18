@@ -845,7 +845,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self._hushed = False   # «замолчи» действует на один ответ, следующий снова слышно
         spoken_before = self._spoken
         gen = self._cancel_gen
-        if time.monotonic() < self._cloud_down_until or not shutil.which(self.cfg["brain"]["claude_cli"]):  # it just failed: don't wait out the same timeout again
+        if time.monotonic() < self._cloud_down_until or (config.WINDOWS and not shutil.which(self.cfg["brain"]["claude_cli"])):  # it just failed: don't wait out the same timeout again
             return await self.offline_turn(text)
         await self._try_home()
         # Одна модель на разговор: раньше после ответа демон возвращался к модели из конфига (sonnet),
