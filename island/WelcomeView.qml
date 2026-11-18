@@ -16,6 +16,19 @@ Item {
         { id: "openrouter", label: "OpenRouter", model: "openrouter/free", hint: JD.tr("50 запросов в день") },
     ]
 
+    // На Windows нет Claude Code и Ollama: мозг — бесплатная модель по ключу (freellm.py). Список
+    // поставщиков со ссылками даёт демон, чтобы адреса жили в одном месте.
+    readonly property bool win: Qt.platform.os === "windows"
+    Component.onCompleted: if (win) JD.send({ cmd: "free_key" })
+    property string saving: ""
+    Connections {
+        target: JD
+        function onFreeResultChanged() {
+            wl.saving = ""
+            if (JD.freeResult.ok) JD.send({ cmd: "free_key" })
+        }
+    }
+
     function finish() {
         JD.setConfig("user.onboarded", true)
         JD.closeTools()
@@ -101,9 +114,60 @@ Item {
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
                     spacing: 12
                     Text { text: JD.tr("Чем он будет думать"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
-                    Text { width: parent.width; wrapMode: Text.Wrap; text: JD.tr("Бесплатное работает сразу. Claude нужен вход по подписке."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
+                    Text { width: parent.width; wrapMode: Text.Wrap; text: wl.win ? JD.tr("Возьмите хотя бы один бесплатный ключ: вход аккаунтом, минута времени. Два — надёжнее: если один упрётся в лимит, ответит другой.") : JD.tr("Бесплатное работает сразу. Claude нужен вход по подписке."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
                     Repeater {
-                        model: wl.models
+                        model: wl.win ? JD.freeProviders : []
+                        Rectangle {
+                            id: fp
+                            required property var modelData
+                            width: parent.width; height: 96; radius: 16
+                            color: JD.fill1
+                            border.width: 1
+                            border.color: modelData.has ? JD.accentBlue : "transparent"
+                            Text { x: 16; y: 10; text: modelData.name + (fp.modelData.has ? "  ✓" : ""); font.family: JD.fontFamily; font.pixelSize: 15; font.weight: Font.DemiBold; color: JD.text1 }
+                            Text { x: 16; y: 31; width: parent.width - 150; elide: Text.ElideRight; text: JD.tr(modelData.note); font.family: JD.fontFamily; font.pixelSize: 11; color: JD.text3 }
+                            Text {
+                                anchors { right: parent.right; rightMargin: 16; top: parent.top; topMargin: 12 }
+                                text: JD.tr("Взять ключ ↗"); font.family: JD.fontFamily; font.pixelSize: 12; color: JD.accentBlue
+                                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: Qt.openUrlExternally(fp.modelData.keys) }
+                            }
+                            Rectangle {
+                                x: 12; y: 52; width: parent.width - 24; height: 34; radius: 10
+                                color: JD.fill2
+                                TextInput {
+                                    id: keyIn
+                                    anchors { fill: parent; leftMargin: 12; rightMargin: 80 }
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    echoMode: TextInput.Password
+                                    font.family: JD.fontFamily; font.pixelSize: 13; color: JD.text1; clip: true
+                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: !keyIn.text; text: fp.modelData.has ? JD.tr("ключ сохранён") : JD.tr("вставьте ключ"); color: JD.text3; font: keyIn.font }
+                                    onAccepted: saveBtn.save()
+                                }
+                                Text {
+                                    id: saveBtn
+                                    anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                                    visible: !!keyIn.text
+                                    text: wl.saving === fp.modelData.id ? JD.tr("проверяю…") : JD.tr("Сохранить")
+                                    font.family: JD.fontFamily; font.pixelSize: 12; font.weight: Font.DemiBold; color: JD.accentBlue
+                                    function save() {
+                                        wl.saving = fp.modelData.id
+                                        JD.send({ cmd: "free_key", id: fp.modelData.id, key: keyIn.text })
+                                        keyIn.text = ""
+                                    }
+                                    TapHandler { onTapped: saveBtn.save() }
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap; font.family: JD.fontFamily; font.pixelSize: 12
+                        visible: wl.win && JD.freeResult.error !== undefined && JD.freeResult.error !== ""
+                        color: "#ff6b6b"
+                        text: JD.tr("Ключ сохранён, но модель не ответила: ") + (JD.freeResult.error || "")
+                    }
+                    Repeater {
+                        model: wl.win ? [] : wl.models
                         Card {
                             required property var modelData
                             width: parent.width

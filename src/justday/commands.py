@@ -33,6 +33,7 @@ from . import (
     mascot,
     media,
     notifications,
+    providers,
     reminders,
     scenes,
     session,
@@ -995,6 +996,27 @@ class CommandsMixin:
         except ValueError as e:
             return {"ok": False, "error": str(e)}
         return {"ok": True, "value": value, "restart_needed": self.reload_settings()}
+
+    async def _cmd_free_key(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Бесплатный ключ из первого знакомства в островке: прямо в связку, мимо файлов и командной строки.
+
+        Список поставщиков нужен и для ответа без ключа: островок рисует по нему карточки со ссылками."""
+        from . import freellm
+
+        if not req.get("id"):
+            return {"ok": True, "free": [{**p, "has": bool(providers.secret_get(p["id"]))} for p in freellm.FREE]}
+        if self._peer_is_ai(writer):
+            return {"ok": False, "error": "ключи кладёт только человек"}
+        pid, key = str(req["id"]), str(req.get("key", "")).strip()
+        if pid not in {p["id"] for p in freellm.FREE} or not key:
+            return {"ok": False, "error": "нет такого поставщика или пустой ключ"}
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, providers.secret_set, pid, key)
+        try:
+            await loop.run_in_executor(None, freellm.chat, [{"role": "user", "content": "Скажи одно слово: работаю"}])
+        except RuntimeError as e:
+            return {"ok": False, "free_saved": pid, "error": str(e)}
+        return {"ok": True, "free_saved": pid, "error": ""}
 
     async def _cmd_wake_check(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Кнопка «Проверить» у имени: 4 секунды слушаем и говорим, что услышали и то ли это имя."""

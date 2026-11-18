@@ -87,7 +87,11 @@ def secret_get(name: str) -> str:
     if hit and time.monotonic() < hit[0]:
         return hit[1]
     value = ""
-    if shutil.which("secret-tool") and not config.KEYRING_DEAD[0]:
+    if config.WINDOWS:  # связка Windows — «Диспетчер учётных данных»; secret-tool там нет
+        import keyring
+
+        value = keyring.get_password("justday", name) or ""
+    elif shutil.which("secret-tool") and not config.KEYRING_DEAD[0]:
         try:
             r = subprocess.run(["secret-tool", "lookup", *SECRET_ATTRS, "key", name], capture_output=True,
                                text=True, timeout=5)
@@ -106,6 +110,12 @@ def secret_forget(name: str) -> None:
 
 
 def secret_set(name: str, value: str) -> None:
+    if config.WINDOWS:
+        import keyring
+
+        keyring.set_password("justday", name, value)
+        secret_forget(name)
+        return
     subprocess.run(["secret-tool", "store", "--label", f"JustDay: {name}", *SECRET_ATTRS, "key", name],
                    input=value, text=True, check=True, timeout=15)
     config.KEYRING_DEAD[0] = False  # записала — значит, жива: ключ должен находиться сразу

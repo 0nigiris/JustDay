@@ -15,6 +15,26 @@ import shutil
 import sys
 from pathlib import Path
 
+# Собранный JustDay.exe — это и островок, и Джарвис, и команды: `JustDay.exe daemon`, `JustDay.exe status`.
+# Другу не надо ставить Python и pip: всё, что кнопки островка зовут как `justday …`, идёт сюда же.
+if getattr(sys, "frozen", False) and len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+    # Exe собран оконным (--windowed), и у него sys.stdout = None: `JustDay.exe status` молчал бы,
+    # а островок не получил бы ответа команды. Берём то, что дал родитель: трубу, файл или консоль.
+    for _fd, _name in ((1, "stdout"), (2, "stderr")):
+        if getattr(sys, _name) is None:
+            try:
+                os.fstat(_fd)
+                setattr(sys, _name, open(_fd, "w", encoding="utf-8", errors="replace", closefd=False))  # noqa: SIM115 — живёт до выхода
+            except OSError:
+                import ctypes
+
+                if ctypes.windll.kernel32.AttachConsole(-1):  # запущен из cmd/PowerShell
+                    setattr(sys, _name, open("CONOUT$", "w", encoding="utf-8", errors="replace"))  # noqa: SIM115
+    from justday.cli import main as _cli
+
+    _cli(sys.argv[1:])
+    sys.exit(0)
+
 from PySide6.QtCore import Property, QFileSystemWatcher, QObject, QProcess, QProcessEnvironment, QRect, QSaveFile, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QPixmap, QRegion
 from PySide6.QtNetwork import QLocalSocket, QTcpSocket
@@ -489,6 +509,8 @@ def _which(name: str) -> str | None:
     Windows ищет программу сначала в текущей папке и не различает регистр: кнопки островка зовут
     `justday …`, а рядом лежит JustDay.exe — и каждая кнопка открывала ещё один островок (issue #6).
     """
+    if getattr(sys, "frozen", False) and name == "justday":
+        return sys.executable  # см. начало файла: команды живут в том же .exe
     path = shutil.which(name)
     # Только в собранном .exe: из репозитория sys.executable — это python, и python3 запускать можно.
     if path and getattr(sys, "frozen", False) and Path(path).resolve() == Path(sys.executable).resolve():
@@ -512,11 +534,31 @@ def _stage() -> Path:
     return dst
 
 
+def _wake_jarvis() -> None:
+    """Запустить демона, если он ещё не слушает: на Windows нет systemd, и поднимать его некому, кроме нас."""
+    import socket
+    import subprocess
+
+    try:
+        socket.create_connection(("127.0.0.1", int(os.environ.get("JUSTDAY_PORT", "47615"))), timeout=1).close()
+        return
+    except OSError:
+        pass
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    state = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "JustDay" / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    with open(state / "daemon.log", "ab") as log:  # окна у демона нет: журнал — единственное, что расскажет о беде
+        subprocess.Popen([sys.executable, "daemon"], creationflags=flags, close_fds=True,
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+
+
 def main() -> int:
     if sys.platform == "win32":
         # На Windows нет unix-сокета: демон слушает TCP на 127.0.0.1 (docs/WINDOWS.md).
         os.environ.setdefault("JUSTDAY_SOCKET", "tcp:47615")
-        os.environ.setdefault("JUSTDAY_ISLAND_ONLY", "1")
+        os.environ.setdefault("JUSTDAY_ISLAND_ONLY", "1")  # без дока и лотка: их на Windows включают сами
+        if getattr(sys, "frozen", False) and not os.environ.get("JUSTDAY_SHOT"):
+            _wake_jarvis()
     app = QGuiApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     _register_qml()

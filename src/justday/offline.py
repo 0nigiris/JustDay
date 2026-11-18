@@ -33,9 +33,52 @@ def available() -> bool:
     return localllm.available()
 
 
+CLOUD = """%(character)s
+
+Ты — голосовой ассистент на компьютере человека (%(os)s). Отвечаешь вслух: коротко, живо, без
+разметки, без списков, одно-три предложения, если не просят подробно. Обращение: «%(address)s».
+Кроме разговора умеешь: app — открыть программу (query = её название), music — включить скачанную
+музыку (query = песня или пусто), volume — громкость (query = число 0-100 или "+"/"-").
+Отвечай ТОЛЬКО JSON: {"action": "app|music|volume|answer", "query": "...", "answer": "что сказать вслух"}.
+Установленные программы: %(apps)s"""
+
+# Последние реплики разговора с бесплатной моделью: без них «а теперь погромче» и «а он кто?» не
+# понимались — у каждой реплики была своя память в одну фразу.
+# ponytail: память только до перезапуска демона и только последние 12 реплик.
+_history: list[dict] = []
+
+
+def _cloud(text: str, apps: str) -> dict | None:
+    from . import config, freellm, persona
+
+    if not freellm.ready():
+        return None
+    cfg = config.load()
+    system = CLOUD % {"character": persona.character(cfg), "os": "Windows" if config.WINDOWS else "Linux",
+                      "address": cfg["user"].get("address_as", ""), "apps": apps}
+    try:
+        raw = freellm.chat([{"role": "system", "content": system}, *_history, {"role": "user", "content": text}])
+    except RuntimeError as e:
+        log.info("бесплатные модели молчат: %s", e)
+        return None
+    m = re.search(r"\{.*\}", raw, re.S)
+    try:
+        got = json.loads(m.group(0)) if m else {"action": "answer", "answer": raw}
+    except json.JSONDecodeError:
+        got = {"action": "answer", "answer": raw}
+    _history[:] = [*_history, {"role": "user", "content": text}, {"role": "assistant", "content": raw}][-12:]
+    got["cloud"] = True
+    return got
+
+
 def decide(text: str) -> dict:
-    """The local model's verdict, or a plain heuristic when even it is not there."""
+    """Бесплатная облачная модель, если есть ключ; иначе местная; иначе две регулярки."""
     apps = ", ".join(sorted({a["name"] for a in desktop.list_apps() if a["name"]})[:120])
+    got = _cloud(text, apps)
+    if got is not None:
+        action = str(got.get("action", "answer")).strip().lower()
+        return {"action": action if action in ("app", "music", "volume") else "answer",
+                "query": str(got.get("query", "")).strip(), "answer": str(got.get("answer", "")).strip(), "cloud": True}
     try:
         raw = localllm.chat(PROMPT % {"apps": apps}, text, json_mode=True, max_tokens=200, timeout=60)
         got = json.loads(raw)

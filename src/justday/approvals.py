@@ -13,6 +13,7 @@ import struct
 import time
 
 from . import (
+    config,
     events,
     providers,
 )
@@ -105,6 +106,12 @@ class AskMixin:
     @staticmethod
     def _peer_is_ai(writer: asyncio.StreamWriter) -> bool:
         """Подключился ли к сокету мозг или его потомок (Р-1). Не узнали собеседника — значит нельзя."""
+        if config.WINDOWS:
+            # На Windows нет SO_PEERCRED, и раньше «не узнали — нельзя» запрещало островку любую настройку.
+            # Там к демону пускает только токен из профиля человека (daemon._serve_tcp).
+            # ponytail: если на Windows поставят Claude Code, мозг сможет прочитать токен; тогда — PID по
+            # GetExtendedTcpTable, как SO_PEERCRED на Linux.
+            return False
         try:
             cred = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
         except (OSError, AttributeError):

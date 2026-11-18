@@ -429,7 +429,7 @@ View {
                         // из неё нужно, и она помещается.
                         : ({ idle: JD.tr("Готов · ") + (JD.micOn ? (JD.hotkeys.talk || "Meta+J") : (JD.hotkeys.type || "Meta+K")),
                              listening: JD.tr("Слушаю"), transcribing: JD.tr("Распознаю"), thinking: JD.activity || JD.tr("Работаю"),
-                             speaking: JD.tr("Говорит"), approval: JD.tr("Ждёт подтверждения"), offline: JD.islandOnly ? JD.tr("Джарвис для Windows ещё не готов") : JD.tr("Демон не запущен") })[JD.dstate] || JD.dstate
+                             speaking: JD.tr("Говорит"), approval: JD.tr("Ждёт подтверждения"), offline: JD.islandOnly ? JD.tr("Джарвис запускается…") : JD.tr("Демон не запущен") })[JD.dstate] || JD.dstate
                     color: JD.workers > 0 ? JD.accentPurple : JD.dstate === "offline" ? JD.accentRed : JD.text2
                 }
             }

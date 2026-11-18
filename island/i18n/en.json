@@ -49,7 +49,7 @@
   "Говорит": "Speaking",
   "Ждёт подтверждения": "Waiting for confirmation",
   "Демон не запущен": "Daemon is not running",
-  "Джарвис для Windows ещё не готов": "Jarvis for Windows is not ready yet",
+  "Джарвис запускается…": "Jarvis is starting…",
   "Доступно обновление JustDay": "JustDay update available",
   "Обновить": "Update",
   "Спросите или попросите что-нибудь…": "Ask or tell me to do something…",
@@ -1152,5 +1152,13 @@
   "проверить сейчас": "check now",
   "сеть": "network",
   "что грузит машину": "what loads the PC",
-  "что копировали": "copied items"
+  "что копировали": "copied items",
+  "Взять ключ ↗": "Get a key ↗",
+  "Возьмите хотя бы один бесплатный ключ: вход аккаунтом, минута времени. Два — надёжнее: если один упрётся в лимит, ответит другой.": "Get at least one free key: sign in, takes a minute. Two is safer: if one hits its limit, the other answers.",
+  "Ключ сохранён, но модель не ответила: ": "Key saved, but the model did not answer: ",
+  "ключ сохранён": "key saved",
+  "проверяю…": "checking…",
+  "лучше всех понимает русский; вход аккаунтом Google": "best with Russian; sign in with Google",
+  "самый быстрый ответ — хорош для голоса": "fastest replies, good for voice",
+  "много бесплатных моделей, 50 запросов в день": "many free models, 50 requests a day"
 }

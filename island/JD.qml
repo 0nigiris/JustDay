@@ -692,6 +692,9 @@ Singleton {
     readonly property var trayCfg: settings.tray || ({})
     // На Windows едет только островок (docs/WINDOWS.md): без демона настроек нет, и «по умолчанию
     // включено» вытаскивало другу док и лоток, кнопки которых зовут линуксовые программы (issue #6).
+    // Бесплатные модели по ключу (freellm.py): карточки первого знакомства и ответ на сохранение ключа.
+    property var freeProviders: []
+    property var freeResult: ({})
     readonly property bool islandOnly: Quickshell.env("JUSTDAY_ISLAND_ONLY") === "1"
     readonly property bool dockOn: dockCfg.enabled !== false && !islandOnly
     // Полоса лотка: 0 — как в настройках, 1 — показана кнопкой, −1 — спрятана кнопкой.
@@ -1774,6 +1777,8 @@ Singleton {
             if (settings.onboarded === false && !welcomeShown) { welcomeShown = true; Qt.callLater(() => openTools("welcome")) }
         }
         if (m.history !== undefined) history = m.history
+        if (m.free !== undefined) freeProviders = m.free
+        if (m.free_saved !== undefined) freeResult = { id: m.free_saved, ok: !!m.ok, error: m.error || "" }
         if (m.workers !== undefined) workers = m.workers
         if (m.weather !== undefined) weather = m.weather
         if (m.update !== undefined) update = m.update

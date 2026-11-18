@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import tomllib
 from pathlib import Path
@@ -34,6 +35,8 @@ EVENTS_FILE = STATE_DIR / "events.jsonl"
 STATE_FILE = STATE_DIR / "state.json"
 # The repository this package was installed from (editable install) — holds persona + plugin.
 REPO_DIR = Path(__file__).resolve().parents[2]
+if getattr(sys, "frozen", False):  # JustDay.exe: island/, data/, plugin/ лежат рядом с пакетом внутри сборки
+    REPO_DIR = Path(sys._MEIPASS)
 
 SECRETS_FILE = CONFIG_DIR / "secrets.env"
 
