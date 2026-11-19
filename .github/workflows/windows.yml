@@ -82,7 +82,7 @@ jobs:
           [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp.Save("$PWD\setup-shot.png")
           $done = $p.WaitForExit(120000)
-          Start-Sleep -Seconds 6
+          Start-Sleep -Seconds 30  # холодный пуск exe: демон, островок, шарик и знакомство
           $bmp2 = New-Object System.Drawing.Bitmap $b.Width, $b.Height
           [System.Drawing.Graphics]::FromImage($bmp2).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp2.Save("$PWD\after-setup-shot.png")
