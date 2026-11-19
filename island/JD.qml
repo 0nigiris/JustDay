@@ -707,12 +707,16 @@ Singleton {
     property bool autostartOn: false
     property var freeResult: ({})
     readonly property bool islandOnly: Quickshell.env("JUSTDAY_ISLAND_ONLY") === "1"
-    readonly property bool dockOn: dockCfg.enabled !== false && !islandOnly
+    // Первое впечатление — один островок: док и лоток на чистой системе выглядели мусором (19 нояб.).
+    // Пока идёт знакомство, их не видно; в нём есть шаг «Посмотреть / Включить» (welcomeDock/Tray — показ).
+    property bool welcomeDock: false
+    property bool welcomeTray: false
+    readonly property bool dockOn: !islandOnly && (welcomeDock || (dockCfg.enabled !== false && !mustOnboard))
     // Полоса лотка: 0 — как в настройках, 1 — показана кнопкой, −1 — спрятана кнопкой.
     // Кнопка в доке должна делать ровно то, что кнопка: показывать спрятанное и прятать показанное.
     property int trayPeek: 0
     function trayToggle() { trayPeek = trayOn ? -1 : 1 }
-    readonly property bool trayOn: !islandOnly && (trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false))
+    readonly property bool trayOn: !islandOnly && (welcomeTray || trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false && !mustOnboard))
     // Выкл. — лоток не занимает край рабочего стола. Значки сети, Bluetooth и языка остаются на полосе.
     readonly property bool trayDesktop: trayCfg.on_desktop !== false
     property bool netOn: false

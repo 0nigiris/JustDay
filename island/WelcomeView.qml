@@ -6,7 +6,11 @@ import QtQuick.Layouts
 Item {
     id: wl
     property int step: 0
-    readonly property int last: 3
+    readonly property int last: 4
+    // Шаг «Док и лоток» (3): по умолчанию — нет. На Windows их пока нет вовсе (islandOnly), шаг пропускается.
+    readonly property bool canDock: !JD.islandOnly
+    property bool wantDock: false
+    property bool wantTray: false
     property string provider: JD.settings.provider || "claude"
     property string place: JD.island.position === "bottom-center" ? "bottom" : "top"
     readonly property var models: [
@@ -30,6 +34,12 @@ Item {
     }
 
     function finish() {
+        if (canDock) {
+            JD.setConfig("dock.enabled", wantDock)
+            JD.setConfig("tray.enabled", wantTray)
+        }
+        JD.welcomeDock = false
+        JD.welcomeTray = false
         JD.onboardDone = true  // настройки с демона придут позже, а пускать дальше надо сразу
         JD.setConfig("user.onboarded", true)
         JD.closeTools()
@@ -40,7 +50,8 @@ Item {
             if (botField.text.trim()) JD.setConfig("user.assistant_name", botField.text.trim())
         }
         if (step >= last) finish()
-        else step++
+        else step += (step === 2 && !canDock) ? 2 : 1
+        if (step !== 3) { JD.welcomeDock = false; JD.welcomeTray = false }
     }
 
     // Каждый шаг выезжает справа и гаснет влево: видно, что идёшь вперёд, а не листаешь с нуля.
@@ -194,6 +205,44 @@ Item {
             }
             Slide {
                 at: 3
+                Column {
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+                    spacing: 12
+                    Text { text: JD.tr("Док и лоток"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
+                    Text { width: parent.width; wrapMode: Text.Wrap; text: JD.tr("Можно жить с одним островком. Посмотрите, как они выглядят, и включите, если нравятся."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
+                    Repeater {
+                        model: [
+                            { id: "dock", title: JD.tr("Док"), hint: JD.tr("внизу: закреплённые и открытые программы") },
+                            { id: "tray", title: JD.tr("Лоток"), hint: JD.tr("сбоку: значки фоновых программ") },
+                        ]
+                        Item {
+                            id: dt
+                            required property var modelData
+                            readonly property bool want: modelData.id === "dock" ? wl.wantDock : wl.wantTray
+                            readonly property bool shown: modelData.id === "dock" ? JD.welcomeDock : JD.welcomeTray
+                            width: parent.width; height: 62
+                            Card {
+                                anchors { left: parent.left; right: peek.left; rightMargin: 10; top: parent.top; bottom: parent.bottom }
+                                title: dt.modelData.title + (dt.want ? "  ✓" : "")
+                                hint: dt.want ? JD.tr("будет включён") : dt.modelData.hint
+                                on: dt.want
+                                onPicked: { if (dt.modelData.id === "dock") wl.wantDock = !wl.wantDock; else wl.wantTray = !wl.wantTray }
+                            }
+                            Rectangle {
+                                id: peek
+                                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                                width: 120; radius: 16
+                                color: peekHv.hovered ? JD.fill2 : JD.fill1
+                                Text { anchors.centerIn: parent; text: dt.shown ? JD.tr("Спрятать") : JD.tr("Посмотреть"); font.family: JD.fontFamily; font.pixelSize: 13; color: JD.accentBlue }
+                                HoverHandler { id: peekHv; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: { if (dt.modelData.id === "dock") JD.welcomeDock = !JD.welcomeDock; else JD.welcomeTray = !JD.welcomeTray } }
+                            }
+                        }
+                    }
+                }
+            }
+            Slide {
+                at: 4
                 Column {
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
                     spacing: 12

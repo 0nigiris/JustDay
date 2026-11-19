@@ -1166,5 +1166,12 @@
   "Нажатие на островок — главное меню: в строке сверху можно написать Джарвису, а кнопка микрофона слушает голос. Карандаш меняет виджеты.": "Click the island for the main menu: type to Jarvis in the top line, the mic button listens to your voice. The pencil changes widgets.",
   "Запускать вместе с Windows": "Start with Windows",
   "включено": "on",
-  "выключено": "off"
+  "выключено": "off",
+  "Док и лоток": "Dock and tray",
+  "Можно жить с одним островком. Посмотрите, как они выглядят, и включите, если нравятся.": "The island alone is enough. Take a look at them and turn them on if you like them.",
+  "внизу: закреплённые и открытые программы": "bottom: pinned and open apps",
+  "сбоку: значки фоновых программ": "side: icons of background apps",
+  "будет включён": "will be on",
+  "Спрятать": "Hide",
+  "Посмотреть": "Preview"
 }
