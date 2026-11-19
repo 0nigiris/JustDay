@@ -95,6 +95,11 @@ Quickshell работает только на Linux (Wayland) и, возможн
 
 ## Как устроен JustDay.exe сейчас (19 нояб.)
 
+Другу отдаётся установщик `JustDay-Setup-<версия>.exe` (Inno Setup, `installer/justday.iss`, артефакт
+`JustDay-Setup` сборки windows): ставится в `%LOCALAPPDATA%\Programs\JustDay` без прав администратора,
+ярлыки в «Пуске» и на рабочем столе, автозапуск — галочкой, удаление — из «Параметров». Подписи у
+него нет, поэтому SmartScreen при первом запуске просит «Подробнее → Выполнить в любом случае».
+
 Один файл — три роли. Без аргументов открывает островок и будит демона (`JustDay.exe daemon`,
 журнал в `%LOCALAPPDATA%\JustDay\state\daemon.log`); с аргументами работает как `justday …`.
 
