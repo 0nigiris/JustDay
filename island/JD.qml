@@ -279,7 +279,7 @@ Singleton {
     // ───────────── UI state ─────────────
     property bool expanded: false
     property bool menuEditing: false   // правка главного меню (порядок и видимость блоков)
-    onExpandedChanged: if (!expanded) menuEditing = false
+    onExpandedChanged: { if (!expanded) menuEditing = false; gateWelcome(expanded) }
     // the text field (Meta+K, click, or the talk key in keyboard mode)
     property bool composeOpen: false
     property string composeText: ""
@@ -372,7 +372,7 @@ Singleton {
     }
     function libRefresh() { send({ cmd: "music_library", sort: libSort }) }
     property bool artOpen: false        // the cover, large, inside the player (a click on the cover)
-    onPlayerOpenChanged: if (!playerOpen) artOpen = false   // страницу не сбрасываем: выбор «Медиатека» не должен пропадать
+    onPlayerOpenChanged: { if (!playerOpen) artOpen = false; gateWelcome(playerOpen) }   // страницу не сбрасываем: выбор «Медиатека» не должен пропадать
     property var video: null            // {title, channel, thumb, file, progress} — a video playing inside the island
     // ширина кадра в точках: её тянут за уголок, а запомненная лежит в island.video_width
     property real videoWidth: videoFit(island.video_width || 640)
@@ -465,11 +465,9 @@ Singleton {
     property bool onboardDone: false
     readonly property bool mustOnboard: settings.onboarded === false && !onboardDone
     function gateWelcome(opening) { if (opening && mustOnboard) Qt.callLater(() => openTools("welcome")) }
-    onExpandedChanged: gateWelcome(expanded)
     onMenuOpenChanged: gateWelcome(menuOpen)
     onSettingsOpenChanged: gateWelcome(settingsOpen)
     onComposeOpenChanged: gateWelcome(composeOpen)
-    onPlayerOpenChanged: gateWelcome(playerOpen)
     property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
 
     function openTools(page) {
