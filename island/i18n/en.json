@@ -725,7 +725,6 @@
   "Enter — спросить ": "Enter to ask ",
   "HEX для режима Tinted у дока": "HEX for the dock's Tinted mode",
   "HEX, например #7AC8FF — только для режима Tinted": "HEX, for example #7AC8FF — only for Tinted mode",
-  "Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Остальное (голос, почта, док) добавляется из настроек, когда понадобится.": "Meta+K writes to the assistant. A click on the island opens the main menu; its pencil button changes the widgets. Everything else (voice, mail, dock) can be added from the settings when you need it.",
   "Meta+N открывает N-ю программу слева направо. Забирает слоты у панели задач Plasma.": "Meta+N opens the N-th app from the left. Takes the slots away from the Plasma task manager.",
   "N-я программа слева направо (запуск или фокус)": "N-th app from the left (launch or focus)",
   "VPN не подключён": "VPN is not connected",
@@ -1173,5 +1172,9 @@
   "сбоку: значки фоновых программ": "side: icons of background apps",
   "будет включён": "will be on",
   "Спрятать": "Hide",
-  "Посмотреть": "Preview"
+  "Посмотреть": "Preview",
+  "Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Почта и остальное добавляются из настроек, когда понадобятся.": "Meta+K to write to the assistant. Click the island for the main menu; the pencil there changes widgets. Mail and the rest can be added in settings when you need them.",
+  "Голос и распознавание речи": "Voice and speech recognition",
+  "качается в фоне, по готовности придёт уведомление": "downloading in the background, you'll get a notification when it's done",
+  "скачать в фоне": "download in the background"
 }

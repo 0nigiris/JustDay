@@ -2,6 +2,7 @@
 // модель и место острова человек выбирает здесь, глазами. Показывается один раз (user.onboarded).
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 
 Item {
     id: wl
@@ -25,6 +26,18 @@ Item {
     readonly property bool win: Qt.platform.os === "windows"
     Component.onCompleted: if (win) { JD.send({ cmd: "free_key" }); JD.send({ cmd: "autostart" }) }
     property string saving: ""
+    // Linux: установщик ставит минимум без вопросов, речь и голос докачиваются отсюда в фоне (19 нояб.).
+    property var missingParts: []
+    property bool partsStarted: false
+    Process {
+        running: !wl.win
+        command: ["justday", "parts", "json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { wl.missingParts = JSON.parse(text).filter(p => !p.have && ["speech", "voice"].includes(p.name)) } catch (e) {}
+            }
+        }
+    }
     Connections {
         target: JD
         function onFreeResultChanged() {
@@ -249,13 +262,19 @@ Item {
                     Text { text: JD.tr("Готово"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
                     Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.25
                            text: wl.win ? JD.tr("Нажатие на островок — главное меню: в строке сверху можно написать Джарвису, а кнопка микрофона слушает голос. Карандаш меняет виджеты.")
-                                        : JD.tr("Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Остальное (голос, почта, док) добавляется из настроек, когда понадобится.")
+                                        : JD.tr("Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Почта и остальное добавляются из настроек, когда понадобятся.")
                            font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
                     // На Windows установка не задаёт вопросов (П31): автозапуск выбирается здесь.
                     Card { visible: wl.win; width: parent.width
                            title: JD.tr("Запускать вместе с Windows"); hint: JD.autostartOn ? JD.tr("включено") : JD.tr("выключено")
                            on: JD.autostartOn
                            onPicked: JD.send({ cmd: "autostart", state: JD.autostartOn ? "off" : "on" }) }
+                    Card { visible: !wl.win && wl.missingParts.length > 0; width: parent.width
+                           title: JD.tr("Голос и распознавание речи")
+                           hint: wl.partsStarted ? JD.tr("качается в фоне, по готовности придёт уведомление")
+                                                 : JD.tr("скачать в фоне") + " · " + wl.missingParts.map(p => p.size).join(" + ")
+                           on: wl.partsStarted
+                           onPicked: if (!wl.partsStarted) { wl.partsStarted = true; JD.installParts(wl.missingParts.map(p => p.name)) } }
                 }
             }
         }

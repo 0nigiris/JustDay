@@ -260,6 +260,12 @@ have_part() {
 here=()
 for part in speech voice cuda; do have_part "$part" && here+=("$part"); done
 
+# Первая установка без --setup: в терминале только минимум и без вопросов, дальше всё в островке —
+# там знакомство, а речь и голос докачиваются кнопкой в фоне (19 нояб.: «почему я должен вводить
+# justday setup»). Гигабайты до первого вида островка — худшее первое впечатление.
+if [[ -z "$WANT" && -z "${JUSTDAY_ASK:-}" && ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/justday/config.toml" ]]; then
+  WANT="-"; ASK=0
+fi
 if [[ -z "$WANT" ]]; then                       # ни флага, ни переменной: спросить или решить самим
   guess="speech,voice"; [[ -n "$gpu" ]] && guess="speech,voice,cuda"
   ((${#here[@]})) && guess=$(IFS=,; printf '%s' "${here[*]}")   # уже что-то стоит — не отбирать
@@ -874,7 +880,7 @@ fi
 # ───────────── first run: a few questions ─────────────
 if [[ "${ISLAND_WELCOME:-0}" == 1 && "$FIRST_RUN" == 1 && "${JUSTDAY_SETUP:-}" != 1 ]]; then
   # Остров уже на экране и сам зовёт знакомиться: имя, модель, место. Терминальный мастер — по `justday setup`.
-  printf '\n  %s%s%s\n' "$B" "$(t 'Дальше — в островке на экране. Почту и голос можно позже: justday setup' 'Next, on the island on your screen. Mail and voice later: justday setup')" "$N"
+  printf '\n  %s%s%s\n' "$B" "$(t 'Дальше — в островке на экране: знакомство, а голос и речь докачаются оттуда.' 'Next, on the island on your screen: setup there, voice and speech download from it.')" "$N"
 elif [[ "$FIRST_RUN" == 1 || "${JUSTDAY_SETUP:-}" == 1 ]] && [[ "${JUSTDAY_SETUP:-}" != 0 ]] && { : </dev/tty; } 2>/dev/null; then
   printf '\n  %s%s%s\n  %s%s%s\n\n' "$B" "$(t 'Пара вопросов' 'A few questions')" "$N" "$D" \
     "$(t 'Модель, голос, микрофон, кнопка, почта. Enter оставляет вариант по умолчанию.' 'Model, voice, microphone, button, mail. Enter keeps the default.')" "$N"
@@ -952,7 +958,7 @@ else
   printf '  %s %s%s%s %s\n\n' "$(t 'Нажмите' 'Press')" "$B" "Meta+K" "$N" \
     "$(t 'и напишите «Привет» — распознавания речи в этом наборе нет.' 'and type "Hi" — this selection has no speech recognition.')"
 fi
-printf '  %s%s%s\n' "$C" "$(pad 'justday setup' 18)" "$N$D$(t 'модель, голос, микрофон, почта' 'model, voice, microphone, mail')$N"
+[[ "${ISLAND_WELCOME:-0}" == 1 ]] || printf '  %s%s%s\n' "$C" "$(pad 'justday setup' 18)" "$N$D$(t 'модель, голос, микрофон, почта' 'model, voice, microphone, mail')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday parts' 18)" "$N$D$(t 'доставить речь, голос, ускорение NVIDIA' 'add speech, voice, NVIDIA acceleration')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday doctor' 18)" "$N$D$(t 'проверить, что всё работает' 'check that everything works')$N"
 printf '  %s%s%s\n' "$C" "$(pad 'justday popups' 18)" "$N$D$(t 'island = только JustDay · system = ещё Plasma' 'island = JustDay only · system = Plasma too')$N"
