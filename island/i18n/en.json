@@ -1176,5 +1176,6 @@
   "Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Почта и остальное добавляются из настроек, когда понадобятся.": "Meta+K to write to the assistant. Click the island for the main menu; the pencil there changes widgets. Mail and the rest can be added in settings when you need them.",
   "Голос и распознавание речи": "Voice and speech recognition",
   "качается в фоне, по готовности придёт уведомление": "downloading in the background, you'll get a notification when it's done",
-  "скачать в фоне": "download in the background"
+  "скачать в фоне": "download in the background",
+  "у нижнего края": "at the bottom edge"
 }

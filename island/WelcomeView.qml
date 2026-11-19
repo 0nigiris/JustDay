@@ -212,7 +212,7 @@ Item {
                     Text { width: parent.width; wrapMode: Text.Wrap; text: JD.tr("Он прячется у края экрана и выезжает, когда вы быстро подводите к нему курсор."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
                     Card { width: parent.width; title: JD.tr("Сверху"); hint: JD.tr("как в телефоне"); on: wl.place === "top"
                            onPicked: { wl.place = "top"; JD.setConfig("island.position", "top-center") } }
-                    Card { width: parent.width; title: JD.tr("Снизу"); hint: JD.tr("у дока"); on: wl.place === "bottom"
+                    Card { width: parent.width; title: JD.tr("Снизу"); hint: JD.tr("у нижнего края"); on: wl.place === "bottom"
                            onPicked: { wl.place = "bottom"; JD.setConfig("island.position", "bottom-center") } }
                 }
             }
