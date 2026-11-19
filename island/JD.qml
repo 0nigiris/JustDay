@@ -460,9 +460,20 @@ Singleton {
     property bool clipPaused: false
     property int clipSkipped: 0           // сколько не запомнили как похожее на пароль
     property bool welcomeShown: false
+    // Пока знакомство не пройдено и не пропущено, островок никуда больше не пускает: раньше, закрыв его
+    // на полпути, человек уже не мог в него вернуться (флаг «показано» ставился один раз за запуск).
+    property bool onboardDone: false
+    readonly property bool mustOnboard: settings.onboarded === false && !onboardDone
+    function gateWelcome(opening) { if (opening && mustOnboard) Qt.callLater(() => openTools("welcome")) }
+    onExpandedChanged: gateWelcome(expanded)
+    onMenuOpenChanged: gateWelcome(menuOpen)
+    onSettingsOpenChanged: gateWelcome(settingsOpen)
+    onComposeOpenChanged: gateWelcome(composeOpen)
+    onPlayerOpenChanged: gateWelcome(playerOpen)
     property int toolsSerial: 0           // растёт на каждое открытие: поле ввода снова берёт фокус
 
     function openTools(page) {
+        if (mustOnboard) { page = "welcome"; closeMenu() }
         toolsPage = page || "emoji"
         toolsQuery = ""
         toolsPick = 0

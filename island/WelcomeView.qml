@@ -30,6 +30,7 @@ Item {
     }
 
     function finish() {
+        JD.onboardDone = true  // настройки с демона придут позже, а пускать дальше надо сразу
         JD.setConfig("user.onboarded", true)
         JD.closeTools()
     }
