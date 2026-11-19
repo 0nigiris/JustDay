@@ -132,16 +132,24 @@ begin
 end;
 
 // Inno сам центрирует окно и заново показывает кнопки при каждой странице — возвращаем капсулу
-// наверх и прячем кнопки. Страницу «Готово к установке» Inno показывает, даже когда она выключена,
-// если до неё не было ни одной страницы (снимок CI 19 нояб.: капсула с Install/Cancel ждала щелчка),
-// поэтому её проходим сами.
+// наверх, а кнопки уводим за её край (спрятанную через Visible кнопку Inno не нажимает). Страницу
+// «Готово к установке» Inno показывает, даже выключенную, если до неё не было ни одной страницы
+// (снимки CI 19 нояб.: капсула висела и ждала щелчка), поэтому её пропускаем и сами жмём «Далее».
+const
+  BM_CLICK = $00F5;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := PageID = wpReady;
+end;
+
 procedure CurPageChanged(CurPageID: Integer);
 begin
-  WizardForm.NextButton.Visible := False;
-  WizardForm.BackButton.Visible := False;
-  WizardForm.CancelButton.Visible := False;
+  WizardForm.NextButton.Left := -1000;
+  WizardForm.BackButton.Left := -1000;
+  WizardForm.CancelButton.Left := -1000;
   if CurPageID = wpReady then
-    WizardForm.NextButton.OnClick(WizardForm.NextButton);
+    PostMessage(WizardForm.NextButton.Handle, BM_CLICK, 0, 0);
   WizardForm.Left := (GetSystemMetrics(SM_CXSCREEN) - WizardForm.Width) div 2;
   WizardForm.Top := ScaleY(8);
 end;

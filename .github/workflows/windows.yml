@@ -81,12 +81,15 @@ jobs:
           $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
           [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp.Save("$PWD\setup-shot.png")
-          $p.WaitForExit(240000) | Out-Null
+          $done = $p.WaitForExit(120000)
           Start-Sleep -Seconds 6
           $bmp2 = New-Object System.Drawing.Bitmap $b.Width, $b.Height
           [System.Drawing.Graphics]::FromImage($bmp2).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp2.Save("$PWD\after-setup-shot.png")
-          taskkill /F /IM JustDay.exe 2>$null; exit 0
+          taskkill /F /IM JustDay.exe 2>$null
+          # Установка, которая ждёт щелчка, у друга выглядела бы зависшей.
+          if (-not $done) { $p.Kill(); Write-Error "установщик не закончил за 2 минуты: ждёт щелчка?"; exit 1 }
+          exit 0
       - name: Установка, запуск и удаление
         # Проверяем то, что получит друг: тихая установка, Джарвис из установленной папки отвечает,
         # удаление убирает программу.
