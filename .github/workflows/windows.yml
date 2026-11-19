@@ -63,6 +63,25 @@ jobs:
           ver=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q "-DAppVersion=$ver" installer/justday.iss
           ls -la dist/*.exe
+      - name: Установка глазами — капсула вместо мастера
+        # Обычный запуск, как у друга: снимок экрана через несколько секунд должен показать чёрную
+        # капсулу сверху, а не серое окно «Далее → Далее».
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\JustDay-Setup-*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -PassThru
+          Start-Sleep -Seconds 4
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$PWD\setup-shot.png")
+          $p.WaitForExit(240000) | Out-Null
+          Start-Sleep -Seconds 6
+          $bmp2 = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp2).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp2.Save("$PWD\after-setup-shot.png")
+          taskkill /F /IM JustDay.exe 2>$null; exit 0
       - name: Установка, запуск и удаление
         # Проверяем то, что получит друг: тихая установка, Джарвис из установленной папки отвечает,
         # удаление убирает программу.
@@ -96,4 +115,7 @@ jobs:
         if: always()
         with:
           name: shot
-          path: shot.png
+          path: |
+            shot.png
+            setup-shot.png
+            after-setup-shot.png
