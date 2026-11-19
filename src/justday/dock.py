@@ -33,7 +33,7 @@ SEED: tuple[tuple[str, ...], ...] = (
     ("TerminalEmulator",),
     ("Email",),
     ("InstantMessaging", "Chat", "IRCClient"),
-    ("AudioVideo", "Audio", "Player"),
+    ("Player",),  # не AudioVideo: туда попадают запись экрана и монтаж
     ("TextEditor", "IDE"),
 )
 
@@ -154,9 +154,23 @@ def _seed() -> list[str]:
     if keep:
         return keep[:8]
     apps = desktop.list_apps()
+    # Из подходящих — программа по умолчанию, потом родная для Плазмы, потом любая. Первая по
+    # алфавиту давала новому человеку Nautilus вместо Dolphin и cool-retro-term вместо Konsole (19 нояб.).
+    preferred = set()
+    for mime in ("x-scheme-handler/https", "inode/directory"):
+        try:
+            got = subprocess.run(["xdg-mime", "query", "default", mime], capture_output=True, text=True, timeout=5)
+            preferred.add(got.stdout.strip().removesuffix(".desktop"))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    apps = sorted(apps, key=lambda a: a.get("id") not in preferred)
+    kde_first = sorted(apps, key=lambda a: (a.get("id") not in preferred, not str(a.get("id", "")).startswith("org.kde.")))
     for marks in SEED:
         want = set(marks)
-        hit = next((a for a in apps if want & {m.strip() for m in a.get("categories", "").split(";")}), None)
+        # Родное для Плазмы — только там, где оно и есть привычное (Dolphin, Konsole, Kate):
+        # в «мессенджерах» оно вытаскивало KDE Connect вместо Telegram.
+        pool = kde_first if want & {"FileManager", "TerminalEmulator", "TextEditor", "Player"} else apps
+        hit = next((a for a in pool if want & {m.strip() for m in a.get("categories", "").split(";")}), None)
         if hit and f"app:{hit['id']}" not in keep:
             keep.append(f"app:{hit['id']}")
     if keep:
@@ -252,7 +266,9 @@ def icon_theme() -> str:
                     return line.partition("=")[2].strip()
         except OSError:
             continue
-    return ""
+    # У нового пользователя Плазма тему не записывает — Breeze у неё по умолчанию. Пустой ответ
+    # оставлял док на чистой системе вовсе без значков: серые листки с «!» (19 нояб.).
+    return "breeze" if any((root / "breeze").is_dir() for root in ICON_DIRS) else "hicolor"
 
 
 # Указатель значков: имя → (глубина темы в цепочке, файл). Раньше find_icon обходил всю тему rglob-ом

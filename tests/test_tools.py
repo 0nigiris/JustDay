@@ -877,3 +877,14 @@ def test_the_dock_preview_did_not_shoot_the_lock_screen_nor_the_password_manager
     assert not got["ok"] and shots, "проба не дошла до снимка"
     left = [p for p in (tmp_path / "justday-thumbs").glob("*-full.png")]
     assert not left, "полный снимок экрана остался лежать после неудачной вырезки"
+
+
+def test_fresh_user_dock_is_not_grey_sheets(tmp_path, monkeypatch) -> None:
+    """У нового пользователя Плазма не пишет тему значков — и док был из серых листков с «!» (19 нояб.)."""
+    from justday import dock
+
+    (tmp_path / "breeze").mkdir()
+    monkeypatch.setattr(dock, "ICON_DIRS", (tmp_path,))
+    monkeypatch.setattr(dock.kde, "KREAD", "/nonexistent")
+    monkeypatch.setattr(dock.config, "CONFIG_DIR", tmp_path / "cfg" / "justday")
+    assert dock.icon_theme() == "breeze"
