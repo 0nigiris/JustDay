@@ -458,6 +458,9 @@ ShellRoot {
             easing.type: JD.slideEase
         }
 
+        // Маскот при первом запуске: см. MascotIntro.qml.
+        MascotIntro { z: 2 }
+
         // ───────────── the island ─────────────
         Rectangle {
             id: island
@@ -502,7 +505,7 @@ ShellRoot {
             y: !JD.atTop ? parent.height - height
                : JD.islandStyle === "island" ? JD.topMargin
                : win.barBleed
-            opacity: mode === "hidden" ? 0 : 1
+            opacity: mode === "hidden" || (JD.introOn && mode !== "tools") ? 0 : 1
             scale: 1
             color: JD.ink
             clip: true

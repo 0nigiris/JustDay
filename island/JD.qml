@@ -463,6 +463,7 @@ Singleton {
     // Пока знакомство не пройдено и не пропущено, островок никуда больше не пускает: раньше, закрыв его
     // на полпути, человек уже не мог в него вернуться (флаг «показано» ставился один раз за запуск).
     property bool onboardDone: false
+    property bool introOn: false          // идёт вступление маскота: островок прячется, пока шарик не растянется
     readonly property bool mustOnboard: settings.onboarded === false && !onboardDone
     function gateWelcome(opening) { if (opening && mustOnboard) Qt.callLater(() => openTools("welcome")) }
     onMenuOpenChanged: gateWelcome(menuOpen)
@@ -1784,7 +1785,8 @@ Singleton {
         if (m.settings !== undefined) {
             settings = m.settings
             // Свежая установка: знакомство открывается само, один раз за запуск острова.
-            if (settings.onboarded === false && !welcomeShown) { welcomeShown = true; Qt.callLater(() => openTools("welcome")) }
+            // Свежая установка: сначала маскот (intro в shell.qml), он сам откроет знакомство.
+            if (settings.onboarded === false && !welcomeShown) { welcomeShown = true; if (animOn) introOn = true; else Qt.callLater(() => openTools("welcome")) }
         }
         if (m.history !== undefined) history = m.history
         if (m.free !== undefined) freeProviders = m.free
