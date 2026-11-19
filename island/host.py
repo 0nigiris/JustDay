@@ -107,6 +107,8 @@ class Quickshell(QObject):
         if isinstance(cmd, dict):
             cmd = cmd.get("command", [])
         cmd = [str(x) for x in cmd]
+        if sys.platform == "win32" and cmd and _on_windows(cmd):
+            return
         if cmd and _which(cmd[0]):
             QProcess.startDetached(_which(cmd[0]), cmd[1:])
 
@@ -501,6 +503,48 @@ class ThemeIcons(QQuickImageProvider):
         n = max(requested.width(), requested.height(), 64)
         pm = QIcon.fromTheme(ident.split("?")[0]).pixmap(n, n)
         return pm if not pm.isNull() else QPixmap(1, 1)
+
+
+# Кнопки островка зовут линуксовые программы (xdg-open, wl-copy, nmcli…). На Windows их нет, и
+# execDetached молча ничего не делал — «половина кнопок не работает» у друга (19 нояб.). Здесь
+# каждое такое действие переведено на то, что есть в Windows: открыть, скопировать, перейти в Параметры.
+_MS_SETTINGS = {"nmcli": "ms-settings:network-wifi", "bluetoothctl": "ms-settings:bluetooth",
+                "wpctl": "ms-settings:sound", "systemsettings": "ms-settings:"}
+
+
+def _on_windows(cmd: list[str]) -> bool:
+    """True — действие выполнено (или заведомо невыполнимо на Windows) и запускать cmd не надо."""
+    prog, args = cmd[0], cmd[1:]
+    script = args[1] if prog == "sh" and len(args) > 1 and args[0] == "-c" else ""
+    if prog == "xdg-open":
+        target = args[0] if args else ""
+        if not target or target == os.environ.get("HOME", "~"):
+            target = str(Path.home())
+        elif target.startswith("trash:"):
+            target = "shell:RecycleBinFolder"
+        os.startfile(target)  # type: ignore[attr-defined]  # есть только на Windows
+    elif prog == "wl-copy":
+        QGuiApplication.clipboard().setText(args[-1] if args else "")
+    elif "wl-copy <" in script:                       # CardView: скопировать файл (картинку или текст)
+        f = Path(args[-1])
+        img = QPixmap(str(f))
+        if not img.isNull():
+            QGuiApplication.clipboard().setPixmap(img)
+        else:
+            QGuiApplication.clipboard().setText(f.read_text(errors="replace"))
+    elif "FileManager1" in script:                    # JD.showInFolder
+        QProcess.startDetached("explorer.exe", ["/select,", str(Path(args[3]))])
+    elif "xdg-user-dir MUSIC" in script:
+        os.startfile(str(Path.home() / "Music"))  # type: ignore[attr-defined]
+    elif "systemsettings" in script or prog in _MS_SETTINGS:
+        os.startfile(_MS_SETTINGS.get(prog, "ms-settings:"))  # type: ignore[attr-defined]
+    elif prog == "spectacle":
+        os.startfile("ms-screenclip:")  # type: ignore[attr-defined]
+    elif prog in ("sh", "systemctl", "python3", "notify-send", "kwriteconfig6", "qdbus6"):
+        pass                                          # чисто линуксовое (полоса Plasma, службы systemd)
+    else:
+        return False
+    return True
 
 
 def _which(name: str) -> str | None:

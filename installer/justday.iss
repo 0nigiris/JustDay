@@ -131,9 +131,17 @@ begin
   SetWindowRgn(WizardForm.Handle, CreateRoundRectRgn(0, 0, W + 1, H + 1, H, H), True);
 end;
 
-// Inno сам центрирует окно при показе страницы — возвращаем капсулу наверх.
+// Inno сам центрирует окно и заново показывает кнопки при каждой странице — возвращаем капсулу
+// наверх и прячем кнопки. Страницу «Готово к установке» Inno показывает, даже когда она выключена,
+// если до неё не было ни одной страницы (снимок CI 19 нояб.: капсула с Install/Cancel ждала щелчка),
+// поэтому её проходим сами.
 procedure CurPageChanged(CurPageID: Integer);
 begin
+  WizardForm.NextButton.Visible := False;
+  WizardForm.BackButton.Visible := False;
+  WizardForm.CancelButton.Visible := False;
+  if CurPageID = wpReady then
+    WizardForm.NextButton.OnClick(WizardForm.NextButton);
   WizardForm.Left := (GetSystemMetrics(SM_CXSCREEN) - WizardForm.Width) div 2;
   WizardForm.Top := ScaleY(8);
 end;
