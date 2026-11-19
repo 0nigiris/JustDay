@@ -15,7 +15,14 @@ AppPublisher=0nigiris
 AppPublisherURL=https://github.com/0nigiris/JustDay
 DefaultDirName={localappdata}\Programs\JustDay
 DefaultGroupName=JustDay
+; П31: установка не задаёт вопросов. Двойной щелчок — короткая полоска копирования, и сразу
+; островок со знакомством (имя, ключи, место, автозапуск) с его анимациями. Серый мастер
+; «Далее → Далее» был первым, что видел друг, и выглядел чужим.
+DisableWelcomePage=yes
+DisableDirPage=yes
 DisableProgramGroupPage=yes
+DisableReadyPage=yes
+DisableFinishedPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\dist
 OutputBaseFilename=JustDay-Setup-{#AppVersion}
@@ -34,28 +41,19 @@ RestartApplications=no
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
-[CustomMessages]
-ru.Autostart=Запускать JustDay вместе с Windows
-en.Autostart=Start JustDay with Windows
-ru.Launch=Запустить JustDay
-en.Launch=Launch JustDay
-
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "autostart"; Description: "{cm:Autostart}"; Flags: unchecked
-
 [Files]
 Source: "..\dist\JustDay\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\JustDay"; Filename: "{app}\JustDay.exe"
 Name: "{group}\{cm:UninstallProgram,JustDay}"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\JustDay"; Filename: "{app}\JustDay.exe"; Tasks: desktopicon
-Name: "{userstartup}\JustDay"; Filename: "{app}\JustDay.exe"; Tasks: autostart
+Name: "{userdesktop}\JustDay"; Filename: "{app}\JustDay.exe"
 
 [Run]
-Filename: "{app}\JustDay.exe"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\JustDay.exe"; Flags: nowait skipifsilent
 
 [UninstallRun]
 ; Демон живёт в фоне без окна: не остановив его, удаление оставило бы занятые файлы.
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM JustDay.exe"; Flags: runhidden; RunOnceId: "StopJustDay"
+; Автозапуск включается из островка (manage._autostart_windows) — убираем его вместе с программой.
+Filename: "{sys}\reg.exe"; Parameters: "delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v JustDay /f"; Flags: runhidden; RunOnceId: "DropAutostart"

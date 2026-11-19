@@ -705,7 +705,30 @@ def forget_memory(path: Path) -> dict:
     return r
 
 
+def _autostart_windows(state: str | None) -> dict:
+    """Автозапуск на Windows — значение в ключе Run пользователя (HKCU): без прав администратора, и его же убирает удаление."""
+    import sys
+    import winreg
+
+    path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
+        if state == "on":
+            winreg.SetValueEx(k, "JustDay", 0, winreg.REG_SZ, f'"{sys.executable}"')
+        elif state == "off":
+            try:
+                winreg.DeleteValue(k, "JustDay")
+            except FileNotFoundError:
+                pass
+        try:
+            winreg.QueryValueEx(k, "JustDay")
+            return {"enabled": True}
+        except FileNotFoundError:
+            return {"enabled": False}
+
+
 def autostart(state: str | None = None) -> dict:
+    if config.WINDOWS:
+        return _autostart_windows(state)
     units = [u for u in SERVICES if (Path.home() / ".config/systemd/user" / u).exists()]
     if state in ("on", "off"):
         subprocess.run(["systemctl", "--user", "enable" if state == "on" else "disable", *units], capture_output=True)
@@ -714,6 +737,8 @@ def autostart(state: str | None = None) -> dict:
 
 
 def services() -> list[dict]:
+    if config.WINDOWS:  # служб systemd там нет; демона будит сам островок
+        return []
     out = []
     for u in SERVICES:
         state = subprocess.run(["systemctl", "--user", "is-active", u], capture_output=True, text=True).stdout.strip()

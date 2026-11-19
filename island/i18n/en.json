@@ -1162,5 +1162,9 @@
   "самый быстрый ответ — хорош для голоса": "fastest replies, good for voice",
   "много бесплатных моделей, 50 запросов в день": "many free models, 50 requests a day",
   "ключ есть": "key saved",
-  "вставить ключ": "paste a key"
+  "вставить ключ": "paste a key",
+  "Нажатие на островок — главное меню: в строке сверху можно написать Джарвису, а кнопка микрофона слушает голос. Карандаш меняет виджеты.": "Click the island for the main menu: type to Jarvis in the top line, the mic button listens to your voice. The pencil changes widgets.",
+  "Запускать вместе с Windows": "Start with Windows",
+  "включено": "on",
+  "выключено": "off"
 }

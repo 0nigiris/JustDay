@@ -19,7 +19,7 @@ Item {
     // На Windows нет Claude Code и Ollama: мозг — бесплатная модель по ключу (freellm.py). Список
     // поставщиков со ссылками даёт демон, чтобы адреса жили в одном месте.
     readonly property bool win: Qt.platform.os === "windows"
-    Component.onCompleted: if (win) JD.send({ cmd: "free_key" })
+    Component.onCompleted: if (win) { JD.send({ cmd: "free_key" }); JD.send({ cmd: "autostart" }) }
     property string saving: ""
     Connections {
         target: JD
@@ -198,8 +198,14 @@ Item {
                     spacing: 12
                     Text { text: JD.tr("Готово"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
                     Text { width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.25
-                           text: JD.tr("Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Остальное (голос, почта, док) добавляется из настроек, когда понадобится.")
+                           text: wl.win ? JD.tr("Нажатие на островок — главное меню: в строке сверху можно написать Джарвису, а кнопка микрофона слушает голос. Карандаш меняет виджеты.")
+                                        : JD.tr("Meta+K — написать ассистенту. Нажатие на островок — главное меню, в нём кнопка карандаша меняет виджеты. Остальное (голос, почта, док) добавляется из настроек, когда понадобится.")
                            font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
+                    // На Windows установка не задаёт вопросов (П31): автозапуск выбирается здесь.
+                    Card { visible: wl.win; width: parent.width
+                           title: JD.tr("Запускать вместе с Windows"); hint: JD.autostartOn ? JD.tr("включено") : JD.tr("выключено")
+                           on: JD.autostartOn
+                           onPicked: JD.send({ cmd: "autostart", state: JD.autostartOn ? "off" : "on" }) }
                 }
             }
         }

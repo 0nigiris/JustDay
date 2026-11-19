@@ -997,6 +997,14 @@ class CommandsMixin:
             return {"ok": False, "error": str(e)}
         return {"ok": True, "value": value, "restart_needed": self.reload_settings()}
 
+    async def _cmd_autostart(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Автозапуск из знакомства в островке: на Windows установщик больше не спрашивает это сам."""
+        from . import manage
+
+        state = req.get("state") if req.get("state") in ("on", "off") else None
+        r = await asyncio.get_running_loop().run_in_executor(None, manage.autostart, state)
+        return {"ok": True, "autostart": r["enabled"]}
+
     async def _cmd_free_key(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Бесплатный ключ из первого знакомства в островке: прямо в связку, мимо файлов и командной строки.
 

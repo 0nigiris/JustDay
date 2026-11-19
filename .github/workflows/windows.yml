@@ -77,9 +77,13 @@ jobs:
           "$app/JustDay.exe" daemon > installed.log 2>&1 &
           for i in $(seq 30); do sleep 2; "$app/JustDay.exe" status > st.txt 2>&1 && break; done
           grep -q '"ok": true' st.txt
+          # Автозапуск включается из знакомства в островке; удаление обязано его убрать.
+          "$app/JustDay.exe" autostart on | grep -q true
+          reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' //v JustDay
           "$app/unins000.exe" //VERYSILENT //SUPPRESSMSGBOXES
           for i in $(seq 15); do sleep 2; test -f "$app/JustDay.exe" || break; done
           ! test -f "$app/JustDay.exe"
+          ! reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' //v JustDay
       - uses: actions/upload-artifact@v4
         with:
           name: JustDay-Setup
