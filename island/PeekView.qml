@@ -77,6 +77,24 @@ View {
         onLongPressed: JD.editMode = true
     }
     Timer { interval: 120000; running: JD.editMode; onTriggered: JD.editMode = false }
+    // Правый щелчок по виджету сразу открывает его раздел настроек: искать, где меняется погода или
+    // плеер, по всему пульту он не хотел («ПКМ → настроить, и так везде», 18 нояб.).
+    readonly property var settingsFor: ({ assistant: "character", cat: "panel-top", player: "media", prev: "media",
+        playpause: "media", next: "media", muted: "voice", volume: "voice", event: "mail" })
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: (ev) => {
+            const p = peekRow.mapFromItem(pv, ev.position.x, ev.position.y)
+            for (let k = 0; k < rep.count; k++) {
+                const it = rep.itemAt(k)
+                if (it && it.visible && p.x >= it.x && p.x <= it.x + it.width) {
+                    JD.openSettings(pv.settingsFor[it.modelData] || "widgets")
+                    return
+                }
+            }
+            JD.openSettings("panel-top")  // мимо виджетов — сам островок: его вид живёт в «Верхней панели»
+        }
+    }
     RowLayout {
         id: peekRow
         anchors.horizontalCenter: parent.horizontalCenter

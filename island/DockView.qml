@@ -1945,7 +1945,7 @@ Item {
     function doCtx(what) {
         const e = ctxEntry, wins = ctxWins
         if (what === "menu") JD.toggleStart()
-        else if (what === "settings") JD.openSettings("dock")
+        else if (what === "settings") JD.openSettings("panel-dock")
         else if (what === "trash") Quickshell.execDetached(["xdg-open", "trash:///"])
         else if (what === "empty") JD.send({ cmd: "trash_empty" })
         else if (what === "load") JD.openTools("load")
