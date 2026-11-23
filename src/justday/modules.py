@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from . import config
@@ -70,6 +71,8 @@ def update_in_background(back: bool = False) -> dict:
     """`justday update` отдельной службой systemd: она переживает рестарт демона, который сама и вызывает,
     и ничего не открывает на экране. Остров не перезапускается (`JUSTDAY_KEEP_UI`), QML подхватится сам.
     По окончании приходит обычное уведомление."""
+    if config.WINDOWS and not back:
+        return _exe_update()
     cli = shutil.which("justday")
     if not cli or not shutil.which("systemd-run"):
         return {"ok": False, "error": "нет justday или systemd-run"}
@@ -85,6 +88,33 @@ def update_in_background(back: bool = False) -> dict:
          "--description=JustDay: обновление", "bash", "-c", script],
         capture_output=True, text=True, timeout=15)
     return {"ok": done.returncode == 0, "error": done.stderr.strip()[:200]}
+
+
+def _exe_update() -> dict:
+    """Windows: скачать установщик последнего релиза и поставить его поверх. Установщик сам закрывает
+    JustDay (CloseApplications=force), поэтому ждёт и перезапускает его отдельный PowerShell, а не мы."""
+    import tempfile
+    import threading
+    from urllib.request import urlretrieve
+
+    from . import manage
+
+    st = manage.exe_update_status()
+    if not st.get("ok") or not st.get("url"):
+        return {"ok": False, "error": st.get("error") or "новой версии нет"}
+
+    def go() -> None:
+        setup = os.path.join(tempfile.gettempdir(), "JustDay-Setup-update.exe")
+        urlretrieve(st["url"], setup)
+        # Пути — через окружение, а не в строке команды: в имени папки пользователя бывает кириллица и пробелы.
+        ps = ("Start-Process -Wait $env:JD_SETUP -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART';"
+              "Start-Process $env:JD_EXE")
+        subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
+                         env={**os.environ, "JD_SETUP": setup, "JD_EXE": sys.executable},
+                         creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+
+    threading.Thread(target=go, daemon=True, name="exe-update").start()
+    return {"ok": True}
 
 
 def parts_in_background(names: list[str]) -> dict:

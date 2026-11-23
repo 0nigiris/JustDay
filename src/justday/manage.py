@@ -149,8 +149,35 @@ def voices() -> dict:
             "fish_key": bool(config.secret("FISH_API_KEY"))}
 
 
+RELEASES = "https://api.github.com/repos/0nigiris/JustDay/releases/latest"
+
+
+def _ver(v: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", v.split("-")[0])[:3])
+
+
+def exe_update_status() -> dict:
+    """Windows: git-копии там нет, а друг сам за обновлениями не ходит. Сверяем версию с последним
+    релизом на GitHub; `url` — установщик, который `modules.update_in_background` поставит тихо."""
+    from urllib.request import Request, urlopen
+
+    try:
+        with urlopen(Request(RELEASES, headers={"Accept": "application/vnd.github+json"}), timeout=15) as r:
+            rel = json.load(r)
+    except (OSError, ValueError) as e:
+        return {"ok": False, "error": str(e)[:200] or "нет сети"}
+    tag, cur = str(rel.get("tag_name", "")), app_version().split()[0]
+    url = next((a["browser_download_url"] for a in rel.get("assets", [])
+                if a.get("name", "").lower().endswith(".exe")), "")
+    newer = bool(url) and _ver(tag) > _ver(cur)
+    return {"ok": True, "branch": "release", "on": cur, "behind": int(newer), "changes": [rel.get("name") or tag],
+            "local_changes": False, "current": cur, "url": url}
+
+
 def update_status(fetch: bool = True) -> dict:
     """Is the GitHub copy newer than this install? (git fetch + compare; works for shallow clones too)"""
+    if config.WINDOWS and not (config.REPO_DIR / ".git").exists():
+        return exe_update_status()
     repo = str(config.REPO_DIR)
     git = lambda *a: subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True, timeout=60)  # noqa: E731
     if not (config.REPO_DIR / ".git").exists():
