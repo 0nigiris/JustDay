@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import re
+import shutil
 import socket
 import struct
 import time
@@ -46,7 +47,7 @@ class AskMixin:
         await self.say(speech)
         side: list[asyncio.Task] = []
         proc = None
-        if notify and not self._subs:
+        if notify and not self._subs and shutil.which("notify-send"):  # на Windows его нет: подтверждение падало
             proc = await asyncio.create_subprocess_exec(
                 "notify-send", "-a", "JustDay", "-u", "critical", "-i", "dialog-warning", "--wait",
                 f"--action=allow={t('Разрешить')}", f"--action=deny={t('Отклонить')}",

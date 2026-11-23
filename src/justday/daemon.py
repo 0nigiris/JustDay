@@ -339,6 +339,11 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
     def notify(self, body: str, icon: str = "audio-input-microphone", urgent: bool = False) -> None:
         if not self.cfg["ui"]["notifications"]:
             return
+        if config.WINDOWS:  # notify-send там нет, и подсказка «вставьте ключ» терялась; показываем в островке
+            # ponytail: если островок ещё не подписался, подсказка пропадёт; очередь — если это случится
+            if self._loop:
+                self._loop.call_soon_threadsafe(lambda: self.publish(kind="fast", detail=body[:300], icon=icon))
+            return
         cmd = ["notify-send", "-a", "JustDay", "-i", icon, "-p", "-t", "4000", "-h", "boolean:transient:true"]
         if self._notify_id:
             cmd += ["-r", str(self._notify_id)]

@@ -1,4 +1,4 @@
-"""Звук и плеер на Windows теми же командами, что на Linux.
+"""Звук, плеер, ссылки и блокировка на Windows теми же командами, что на Linux.
 
 Голосовые команды и демон говорят `wpctl set-volume …` и `playerctl next`; на Windows этих программ
 нет, и «громче» молча не работало. Вместо того чтобы учить каждый вызов двум системам, здесь
@@ -29,8 +29,17 @@ def volume_value(cur: float, arg: str) -> float:
 
 
 def run(cmd: tuple[str, ...] | list[str]) -> bool:
-    """Выполнить `wpctl`/`playerctl` по-виндовски. False — не вышло или такой команды нет."""
+    """Выполнить `wpctl`/`playerctl`/`xdg-open`/`loginctl lock-session` по-виндовски. False — не вышло или такой команды нет."""
     try:
+        if cmd[0] == "xdg-open":  # «открой ютуб» из быстрого пути
+            import os
+
+            os.startfile(cmd[1])
+            return True
+        if tuple(cmd) == ("loginctl", "lock-session"):  # «заблокируй экран»
+            import ctypes
+
+            return bool(ctypes.windll.user32.LockWorkStation())
         if cmd[0] == "playerctl" and cmd[-1] in KEYS:
             import ctypes
 
