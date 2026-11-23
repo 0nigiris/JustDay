@@ -304,10 +304,10 @@ View {
                 anchors.centerIn: parent
                 spacing: 5
                 Icon { anchors.verticalCenter: parent.verticalCenter; name: vol.off ? "volume-x" : "volume-2"; implicitSize: 15; tint: pv.fg }
-                Text {
+                Roll {
                     anchors.verticalCenter: parent.verticalCenter
                     text: vol.shown ? Math.round(vol.sink.audio.volume * 100) + "%" : ""
-                    color: vol.off ? pv.fg2 : pv.fg; font.family: JD.fontFamily; font.pixelSize: 13; font.features: { "tnum": 1 }
+                    color: vol.off ? pv.fg2 : pv.fg; pixelSize: 13
                 }
             }
             HoverHandler { id: volHover; cursorShape: Qt.PointingHandCursor }
@@ -451,10 +451,9 @@ View {
             RowLayout {
                 spacing: 5
                 Icon { name: "timer"; implicitSize: 15; tint: JD.accentOrange }
-                Text {
+                Roll {
                     text: JD.reminderLeft(JD.runningTimer)
-                    color: JD.accentOrange; font.family: JD.fontFamily; font.pixelSize: 14
-                    font.weight: Font.DemiBold; font.features: { "tnum": 1 }
+                    color: JD.accentOrange; pixelSize: 14; weight: Font.DemiBold
                 }
             }
         }
