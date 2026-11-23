@@ -2572,6 +2572,11 @@ Item {
                     SSlider { key: "media.volume"; from: 0; to: 130; step: 5; decimals: 0; unit: "%" }
                 }
                 Row {
+                    title: JD.tr("Никогда не включать")
+                    subtitle: JD.tr("Слова через запятую: трек с ними в названии пропускается, например lofi")
+                    Field { key: "media.never" }
+                }
+                Row {
                     title: JD.tr("Скачанная музыка")
                     subtitle: JD.tr("Песни сохраняются и потом играют без интернета")
                     Btn { text: JD.tr("Открыть папку"); onClicked: Quickshell.execDetached(["sh", "-c", 'xdg-open "$(xdg-user-dir MUSIC)/JustDay/YouTube"']) }

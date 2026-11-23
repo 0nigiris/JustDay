@@ -1177,5 +1177,8 @@
   "Голос и распознавание речи": "Voice and speech recognition",
   "качается в фоне, по готовности придёт уведомление": "downloading in the background, you'll get a notification when it's done",
   "скачать в фоне": "download in the background",
-  "у нижнего края": "at the bottom edge"
+  "у нижнего края": "at the bottom edge",
+  "Никогда не включать": "Never play",
+  "Слова через запятую: трек с ними в названии пропускается, например lofi": "Comma-separated words: a track with one in its title is skipped, e.g. lofi",
+  "это в списке «никогда не включать»": "that is on the never-play list"
 }

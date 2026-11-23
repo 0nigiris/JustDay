@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from . import (
+    config,
     events,
     island,
     media,
@@ -266,6 +267,13 @@ class MusicMixin:
                 entries = await loop.run_in_executor(None, media.find, query, "music", max(1, min(25, count)))
                 if count > 1:
                     source = query
+            # «Никогда не включать» (media.never): он не выносит лоу-фай, а держалось это только на
+            # памяти модели, и быстрый путь, который модель не спрашивает, её не видел.
+            never = [w.lower() for w in config.load()["media"].get("never", []) if w.strip()]
+            if never:
+                entries = [e for e in entries if not any(w in str(e.get("title", "")).lower() for w in never)]
+                if not entries:
+                    return {"ok": False, "error": t("это в списке «никогда не включать»")}
             if not entries:
                 raise RuntimeError("nothing found")
             # Одну песню и по названию — уточняем, если название подходит сразу

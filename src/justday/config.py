@@ -826,8 +826,9 @@ DEFAULTS: dict = {
     # does not know. Track titles (never the audio) leave the machine for this, like any other request.
     # video_where_strict: keep the chosen place even when the request names another one
     # ("включи в островке" is honoured by default, whatever video_where says)
+    # never: words that must not be in a track's title ("lofi") — such results are dropped, not played
     "media": {"video_where": "ask", "video_where_strict": False, "volume": 70, "duck": True, "show_player": True,
-              "color": "theme", "color_web": True, "normalize": False},
+              "color": "theme", "color_web": True, "normalize": False, "never": []},
     # Spoken name → desktop id, checked first by the instant path (e.g. "дискорд" = "org.equicord.equibop").
     "apps": {"aliases": {}},
 }
