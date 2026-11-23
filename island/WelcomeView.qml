@@ -72,10 +72,17 @@ Item {
         required property int at
         anchors.fill: parent
         visible: opacity > 0.01
-        opacity: wl.step === at ? 1 : 0
-        x: wl.step === at ? 0 : (wl.step > at ? -40 : 40)
-        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.dur(260); easing.type: JD.easeOut } }
-        Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.dur(320); easing.type: JD.easeOut } }
+        readonly property bool cur: wl.step === at
+        opacity: cur ? 1 : 0
+        x: cur ? 0 : (wl.step > at ? -40 : 40)
+        // Уходящий шаг гаснет быстро, входящий проявляется с задержкой: при равных длительностях оба
+        // полсекунды висели полупрозрачными друг на друге, и на видео это выглядело кашей (23 нояб.).
+        Behavior on opacity { enabled: JD.animOn
+            SequentialAnimation {
+                PauseAnimation { duration: cur ? JD.durFast : 0 }
+                NumberAnimation { duration: cur ? JD.dur(240) : JD.durFast; easing.type: JD.easeOut }
+            } }
+        Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.dur(360); easing.type: JD.easeOut } }
     }
     component Card: Rectangle {
         property bool on: false
