@@ -10,6 +10,7 @@ import time
 
 from . import (
     clipboard,
+    config,
     dock,
     filesearch,
     media,
@@ -50,7 +51,9 @@ class BackgroundMixin:
 
     async def _play_from_clipboard(self) -> str:
         """«Включи из буфера»: читаем буфер только по этой просьбе и берём из него одну ссылку YouTube — остальное не трогаем."""
-        got = await asyncio.to_thread(subprocess.run, ["wl-paste", "--no-newline", "--type", "text"],
+        cmd = (["powershell", "-NoProfile", "-Command", "Get-Clipboard"] if config.WINDOWS  # wl-paste там нет
+               else ["wl-paste", "--no-newline", "--type", "text"])
+        got = await asyncio.to_thread(subprocess.run, cmd,
                                       capture_output=True, text=True, timeout=3)
         link = (got.stdout or "").strip()[:500] if got.returncode == 0 else ""
         if not media.parse_youtube(link):
