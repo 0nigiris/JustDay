@@ -38,12 +38,14 @@ View {
     property real squeeze: 1
     property real hoverScale: JD.islandStyle === "bar" && (midHover.hovered || JD.mode === "expanded" || JD.mode === "settings" || JD.mode === "tools") ? 1.08 : 1
     Behavior on hoverScale { enabled: JD.animOn; NumberAnimation { duration: JD.durBase; easing.type: JD.easeOut } }
-    // Вниз и вверх одинаково. Повторный клик начинает цикл заново, а не ставит его в очередь.
+    // Вниз быстро, обратно с лёгким перелётом, как отпущенная пружина: ровный возврат той же
+    // кривой выглядел механическим («перелёт пружины при отпускании», план). Повторный клик
+    // начинает цикл заново, а не ставит его в очередь.
     function bump() { pulse.restart() }
     SequentialAnimation {
         id: pulse
-        NumberAnimation { target: pv; property: "squeeze"; to: 0.985; duration: 80; easing.type: Easing.InOutCubic }
-        NumberAnimation { target: pv; property: "squeeze"; to: 1; duration: 80; easing.type: Easing.InOutCubic }
+        NumberAnimation { target: pv; property: "squeeze"; to: 0.985; duration: JD.dur(80); easing.type: Easing.InOutCubic }
+        NumberAnimation { target: pv; property: "squeeze"; to: 1; duration: JD.dur(260); easing.type: Easing.OutBack; easing.overshoot: 3 }
     }
     SystemClock { id: clock; precision: SystemClock.Minutes }
     // Порядок и состав полоски — `island.peek` в конфиге (JD.peekLayout). Раньше она была одной
