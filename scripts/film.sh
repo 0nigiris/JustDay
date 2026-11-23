@@ -7,7 +7,7 @@
 # Зачем: склейка неподвижных снимков (shot.sh) выглядела как лагучие анимации, и по ней нельзя
 # понять, есть ли переход на самом деле. Здесь каждый кадр несёт своё время, и видео собирается
 # с настоящими паузами между кадрами, поэтому скорость и плавность движения — как в живом островке.
-# Во втором JS вид доступен как `v`.
+# Во втором JS вид доступен как `v`, синглтон — как `JD`.
 set -euo pipefail
 view=${1:?вид}; out=$(realpath -m "${2:?out.mp4}"); size=${3:-560x460}; props=${4:-"{}"}
 dur=${5:-3000}; prep=${6:-}; acts=${7:-"[]"}
@@ -34,7 +34,7 @@ ShellRoot {
         property bool busy: false
         Timer { interval: 16; repeat: true; running: true; onTriggered: {
             const ms = Date.now() - win.t0
-            while (win.ai < win.acts.length && win.acts[win.ai][0] <= ms) { (new Function("v", win.acts[win.ai][1]))(ld.item); win.ai++ }
+            while (win.ai < win.acts.length && win.acts[win.ai][0] <= ms) { (new Function("v", "JD", win.acts[win.ai][1]))(ld.item, JD); win.ai++ }
             if (ms > $dur) { console.warn("FILM ok"); Qt.exit(0); return }
             if (win.busy) return
             win.busy = true
