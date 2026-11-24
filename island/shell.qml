@@ -453,9 +453,12 @@ ShellRoot {
 
         // Одно раскрытие для полосы, выреза и островка.
         // x и y не анимируются: иначе левый край и ширина едут врозь.
+        // Из шарика маскота карточка вырастает медленнее, со вдохом в начале и пружиной в конце: за обычные 200 мс первое, что
+        // человек видит после установки, проскакивало одним кадром.
         component DropAnim: NumberAnimation {
-            duration: JD.slideMs
-            easing.type: JD.slideEase
+            duration: JD.introOn ? 720 : JD.slideMs
+            easing.type: JD.introOn ? Easing.InOutBack : JD.slideEase
+            easing.overshoot: 0.7
         }
 
         // Маскот при первом запуске: см. MascotIntro.qml.
@@ -477,10 +480,15 @@ ShellRoot {
             readonly property bool barHang: JD.islandStyle === "bar" && (mode === "settings" || mode === "expanded" || mode === "tools")
             readonly property bool menuBar: JD.islandStyle === "bar" && (mode === "peek" || mode === "hidden")
             readonly property bool barDock: menuBar || barHang
+            // Пока маскот падает, капсула ждёт под ним невидимой, размером с шарик (MascotIntro.size):
+            // из него и вырастет знакомство, без стыка.
+            readonly property bool introBall: JD.introOn && mode !== "tools" && JD.islandStyle === "island"
             width: barDock ? Math.max(1, parent.width - win.barBleed * 2)
+                 : introBall ? 44
                  : mode === "hidden" ? 0
                  : Math.max(120, content.implicitWidth)
-            height: mode === "hidden" ? 0
+            height: introBall ? 44
+                  : mode === "hidden" ? 0
                   : barDock ? JD.barHeight
                   : content.implicitHeight
             // Скругление считается от живой высоты каждый кадр: пока карточка растёт, она остаётся пилюлей
@@ -512,6 +520,47 @@ ShellRoot {
             border.width: JD.islandStyle === "bar" || JD.islandStyle === "notch" ? 0 : 1
             border.color: Qt.rgba(1, 1, 1, win.big ? 0.10 : 0.06)
 
+            // Лицо знакомства: глаза шарика маскота, из которого выросла карточка, остаются на ней,
+            // там же, где были (MascotIntro), и смотрят на курсор или на поле, которое заполняют.
+            Item {
+                id: welcomeFace
+                z: 60
+                visible: island.mode === "tools" && JD.toolsPage === "welcome" && JD.islandStyle === "island"
+                width: 44; height: 44
+                anchors.horizontalCenter: parent.horizontalCenter
+                property real eyeH: 9
+                readonly property point at: {
+                    const p = JD.islandHovered && JD.pointerX > -9999 ? Qt.point(JD.pointerX, JD.pointerY) : JD.faceLook
+                    if (!p || !welcomeFace.visible) return Qt.point(0, 0)
+                    const c = welcomeFace.mapToItem(null, welcomeFace.width / 2, welcomeFace.height / 2)
+                    return Qt.point(Math.max(-7, Math.min(7, (p.x - c.x) / 30)), Math.max(-4, Math.min(4, (p.y - c.y) / 30)))
+                }
+                Row {
+                    anchors.centerIn: parent
+                    anchors.verticalCenterOffset: -1 + welcomeFace.at.y
+                    anchors.horizontalCenterOffset: welcomeFace.at.x
+                    spacing: 9
+                    Behavior on anchors.horizontalCenterOffset { enabled: JD.animOn; NumberAnimation { duration: JD.dur(260); easing.type: Easing.OutCubic } }
+                    Behavior on anchors.verticalCenterOffset { enabled: JD.animOn; NumberAnimation { duration: JD.dur(260); easing.type: Easing.OutCubic } }
+                    Repeater {
+                        model: 2
+                        Rectangle { width: 6; height: welcomeFace.eyeH; radius: 3; color: "white"; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                }
+                // Моргать изредка и не в такт: ровный ритм выдаёт машину.
+                Timer {
+                    running: welcomeFace.visible && JD.animOn
+                    repeat: true
+                    interval: 2600 + Math.random() * 2400
+                    onTriggered: { interval = 2600 + Math.random() * 2400; blink.restart() }
+                }
+                SequentialAnimation {
+                    id: blink
+                    NumberAnimation { target: welcomeFace; property: "eyeH"; to: 1; duration: 80 }
+                    NumberAnimation { target: welcomeFace; property: "eyeH"; to: 9; duration: 110 }
+                }
+            }
+
             Rectangle {
                 visible: JD.islandStyle === "bar" && island.mode === "peek"
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
@@ -532,10 +581,11 @@ ShellRoot {
             Behavior on width { enabled: JD.animOn && !JD.videoResizing && !island.barDock; DropAnim {} }
             Behavior on height {
                 enabled: JD.animOn && !JD.videoResizing && (JD.islandStyle !== "bar" || island.barMove)
-                NumberAnimation { duration: island.barMove ? 80 : JD.slideMs; easing.type: island.barMove ? Easing.OutCubic : JD.slideEase }
+                NumberAnimation { duration: island.barMove ? 80 : JD.introOn ? 720 : JD.slideMs; easing.type: island.barMove ? Easing.OutCubic : JD.introOn ? Easing.InOutBack : JD.slideEase; easing.overshoot: 0.7 }
             }
+            // Из шарика маскота островок появляется подменой в один кадр, без проявления (MascotIntro).
             Behavior on opacity {
-                enabled: JD.animOn
+                enabled: JD.animOn && !JD.introOn
                 NumberAnimation { duration: island.barMove ? 80 : JD.slideMs; easing.type: island.barMove ? Easing.OutCubic : JD.slideEase }
             }
 

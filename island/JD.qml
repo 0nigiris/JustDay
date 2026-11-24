@@ -463,6 +463,8 @@ Singleton {
     // Пока знакомство не пройдено и не пропущено, островок никуда больше не пускает: раньше, закрыв его
     // на полпути, человек уже не мог в него вернуться (флаг «показано» ставился один раз за запуск).
     property bool onboardDone: false
+    // Куда смотрят глаза на карточке знакомства (точка сцены): на поле, которое заполняют. null — прямо.
+    property var faceLook: null
     property bool introOn: false          // идёт вступление маскота: островок прячется, пока шарик не растянется
     readonly property bool mustOnboard: settings.onboarded === false && !onboardDone
     function gateWelcome(opening) { if (opening && mustOnboard) Qt.callLater(() => openTools("welcome")) }

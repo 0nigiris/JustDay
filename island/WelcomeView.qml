@@ -53,6 +53,7 @@ Item {
         }
         JD.welcomeDock = false
         JD.welcomeTray = false
+        JD.faceLook = null
         JD.onboardDone = true  // настройки с демона придут позже, а пускать дальше надо сразу
         JD.setConfig("user.onboarded", true)
         JD.closeTools()
@@ -113,6 +114,8 @@ Item {
         Text { x: 16; y: 7; text: label; font.family: JD.fontFamily; font.pixelSize: 10; color: JD.text3 }
         TextInput {
             id: inp
+            // Глаза на карточке смотрят на поле, пока его заполняют.
+            onActiveFocusChanged: JD.faceLook = activeFocus ? mapToItem(null, width / 3, height / 2) : null
             x: 16; y: 22; width: parent.width - 32
             font.family: JD.fontFamily; font.pixelSize: 16; color: JD.text1
             selectByMouse: true; clip: true
