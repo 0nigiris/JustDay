@@ -1,9 +1,3 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- JustDay. Геометрия и цвета — docs/логотип.json. Надпись переведена в кривые:
-     знак не должен зависеть от того, установлен ли Inter на чужой машине. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 288 120" width="288" height="120" role="img" aria-label="JustDay">
-  <title>JustDay</title>
-    <rect x="0" y="0" width="288" height="120" rx="60" fill="#0A0A0D"/>
-    <circle cx="92.16" cy="60" r="20.4" fill="#0A84FF"/>
-    <rect x="163.296" y="53.064" width="65.28" height="13.872" rx="6.936" fill="#64D2FF" opacity="0.7"/>
-</svg>
+<!-- JustDay. Собрано scripts/brand.py — править там, а не здесь. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 122 118" width="122" height="118" role="img" aria-label="JustDay"><title>JustDay</title><g transform="translate(7 23) scale(1)"><g fill="none" stroke="#0A0A0D" stroke-width="14" stroke-linecap="round"><path d="M38 14 V62 a18 18 0 0 1 -36 0"/><path d="M58 12 V88"/><path d="M58 12 H70 a38 38 0 0 1 0 76 H58"/></g><circle cx="38" cy="-14" r="9" fill="#0060DF"/></g></svg>
