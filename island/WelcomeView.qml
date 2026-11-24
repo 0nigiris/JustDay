@@ -59,6 +59,8 @@ Item {
         JD.closeTools()
     }
     function next() {
+        nextPress.restart()
+        JD.facePing("next")
         if (step === 0) {
             if (nameField.text.trim()) JD.setConfig("user.name", nameField.text.trim())
             if (botField.text.trim()) JD.setConfig("user.assistant_name", botField.text.trim())
@@ -70,6 +72,7 @@ Item {
 
     // Каждый шаг выезжает справа и гаснет влево: видно, что идёшь вперёд, а не листаешь с нуля.
     component Slide: Item {
+        id: sl
         required property int at
         anchors.fill: parent
         visible: opacity > 0.01
@@ -84,24 +87,75 @@ Item {
                 NumberAnimation { duration: cur ? JD.dur(240) : JD.durFast; easing.type: JD.easeOut }
             } }
         Behavior on x { enabled: JD.animOn; NumberAnimation { duration: JD.dur(360); easing.type: JD.easeOut } }
+        // Строки шага всплывают по очереди снизу, а не все разом: целый блок, въехавший одной
+        // плитой, на видео читался как смена картинки, а не как живой интерфейс (24 нояб.).
+        property real enter: 1
+        onCurChanged: if (cur && JD.animOn) { enter = 0; enterWait.duration = 0; enterAnim.restart() }
+        // Первый шаг ждёт, пока карточка дорастёт из шарика: иначе строки всплывали бы за краем.
+        Component.onCompleted: if (cur && JD.animOn) { enter = 0; enterWait.duration = 420; enterAnim.restart() }
+        SequentialAnimation {
+            id: enterAnim
+            PauseAnimation { id: enterWait; duration: 0 }
+            NumberAnimation { target: sl; property: "enter"; to: 1; duration: JD.dur(760) }
+        }
+        onEnterChanged: {
+            const lines = children.length ? children[0].children : []
+            for (let i = 0; i < lines.length; i++) {
+                const ch = lines[i]
+                if (!ch.transform.length) ch.transform = [Qt.createQmlObject("import QtQuick; Translate {}", ch)]
+                const t = Math.max(0, Math.min(1, (enter - i * 0.09) / 0.55))
+                const e = 1 - Math.pow(1 - t, 3)
+                ch.opacity = e
+                ch.transform[0].y = 18 * (1 - e)
+            }
+        }
+    }
+    // Подсветка выбора одна на столбец и перетекает к выбранной карточке: передний край приходит
+    // быстро, задний догоняет с пружинкой, и на ходу она вытягивается каплей. Заливка самих
+    // карточек под ней прозрачная, поэтому видно, как она проходит сквозь соседние.
+    component Puck: Rectangle {
+        property Item target: null
+        property Item column: null
+        readonly property real goal: target && column ? column.y + target.y : 0
+        property real head: goal
+        property real tail: goal
+        Behavior on head { enabled: JD.animOn; NumberAnimation { duration: JD.dur(240); easing.type: Easing.OutCubic } }
+        Behavior on tail { enabled: JD.animOn; NumberAnimation { duration: JD.dur(560); easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
+        z: -1
+        visible: !!target
+        opacity: target ? target.opacity : 0   // всплывает вместе со своей карточкой, а не раньше неё
+        x: column ? column.x : 0
+        width: column ? column.width : 0
+        y: Math.min(head, tail)
+        height: (target ? target.height : 0) + Math.abs(head - tail)
+        radius: 16
+        color: JD.text1
     }
     component Card: Rectangle {
+        id: cd
         property bool on: false
+        property Puck puck: null
         property string title: ""
         property string hint: ""
         signal picked()
         implicitHeight: 62
         radius: 16
-        color: on ? JD.text1 : (hv.hovered ? JD.fill2 : JD.fill1)
+        color: on ? (puck ? "transparent" : JD.text1) : (hv.hovered ? JD.fill2 : JD.fill1)
         Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.durFast } }
+        onOnChanged: if (on && puck) puck.target = cd
+        Component.onCompleted: if (on && puck) puck.target = cd
         Column {
             anchors.centerIn: parent
             spacing: 2
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: title; font.family: JD.fontFamily; font.pixelSize: 15; font.weight: Font.DemiBold; color: on ? "black" : JD.text1 }
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: hint; font.family: JD.fontFamily; font.pixelSize: 11; color: on ? Qt.rgba(0, 0, 0, 0.55) : JD.text3 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: cd.title; font.family: JD.fontFamily; font.pixelSize: 15; font.weight: Font.DemiBold; color: cd.on ? "black" : JD.text1
+                   Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.dur(260) } } }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: cd.hint; font.family: JD.fontFamily; font.pixelSize: 11; color: cd.on ? Qt.rgba(0, 0, 0, 0.55) : JD.text3
+                   Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.dur(260) } } }
         }
         HoverHandler { id: hv; cursorShape: Qt.PointingHandCursor }
         TapHandler { onTapped: picked() }
+        // Глаза смотрят на выбранное и довольно щурятся.
+        onPicked: { JD.faceLook = mapToItem(null, width / 2, height / 2); JD.facePing("happy") }
     }
     component Field: Rectangle {
         property alias text: inp.text
@@ -120,6 +174,8 @@ Item {
             font.family: JD.fontFamily; font.pixelSize: 16; color: JD.text1
             selectByMouse: true; clip: true
             onAccepted: wl.next()
+            // На каждую букву глаза чуть кивают: видно, что его слушают.
+            onTextChanged: if (activeFocus) JD.facePing("nod")
         }
     }
 
@@ -205,6 +261,7 @@ Item {
                         model: wl.win ? [] : wl.models
                         Card {
                             required property var modelData
+                            puck: modelPuck
                             width: parent.width
                             title: modelData.label; hint: modelData.hint
                             on: wl.provider === modelData.id
@@ -212,6 +269,7 @@ Item {
                         }
                     }
                 }
+                Puck { id: modelPuck; column: parent.children[0] }
             }
             Slide {
                 at: 2
@@ -220,11 +278,12 @@ Item {
                     spacing: 12
                     Text { text: JD.tr("Где жить островку"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
                     Text { width: parent.width; wrapMode: Text.Wrap; text: JD.tr("Он прячется у края экрана и выезжает, когда вы быстро подводите к нему курсор."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
-                    Card { width: parent.width; title: JD.tr("Сверху"); hint: JD.tr("как в телефоне"); on: wl.place === "top"
+                    Card { puck: placePuck; width: parent.width; title: JD.tr("Сверху"); hint: JD.tr("как в телефоне"); on: wl.place === "top"
                            onPicked: { wl.place = "top"; JD.setConfig("island.position", "top-center") } }
-                    Card { width: parent.width; title: JD.tr("Снизу"); hint: JD.tr("у нижнего края"); on: wl.place === "bottom"
+                    Card { puck: placePuck; width: parent.width; title: JD.tr("Снизу"); hint: JD.tr("у нижнего края"); on: wl.place === "bottom"
                            onPicked: { wl.place = "bottom"; JD.setConfig("island.position", "bottom-center") } }
                 }
+                Puck { id: placePuck; column: parent.children[0] }
             }
             Slide {
                 at: 3
@@ -292,16 +351,30 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
-            Row {
-                spacing: 6
-                Repeater {
-                    model: wl.last + 1
-                    Rectangle {
-                        required property int index
-                        width: wl.step === index ? 22 : 7; height: 7; radius: 3.5
-                        color: wl.step >= index ? JD.accentBlue : JD.fill2
-                        Behavior on width { enabled: JD.animOn; NumberAnimation { duration: JD.dur(220); easing.type: JD.easeOut } }
+            // Текущий шаг — капля поверх точек: голова уходит к следующей точке, хвост догоняет.
+            Item {
+                implicitWidth: (wl.last + 1) * 13 - 6 + 12; implicitHeight: 7
+                Row {
+                    x: 6; spacing: 6
+                    Repeater {
+                        model: wl.last + 1
+                        Rectangle {
+                            required property int index
+                            width: 7; height: 7; radius: 3.5
+                            color: wl.step > index ? Qt.alpha(JD.accentBlue, 0.5) : JD.fill2
+                            Behavior on color { enabled: JD.animOn; ColorAnimation { duration: JD.dur(400) } }
+                        }
                     }
+                }
+                Rectangle {
+                    id: drop
+                    property real head: 6 + wl.step * 13 + 3.5
+                    property real tail: head
+                    Behavior on head { enabled: JD.animOn; NumberAnimation { duration: JD.dur(220); easing.type: Easing.OutCubic } }
+                    Behavior on tail { enabled: JD.animOn; NumberAnimation { duration: JD.dur(520); easing.type: Easing.OutBack; easing.overshoot: 1.6 } }
+                    x: Math.min(head, tail) - 9; width: Math.abs(head - tail) + 18
+                    height: 7; radius: 3.5
+                    color: JD.accentBlue
                 }
             }
             Item { Layout.fillWidth: true }
@@ -309,8 +382,14 @@ Item {
                      HoverHandler { cursorShape: Qt.PointingHandCursor }
                      TapHandler { onTapped: wl.finish() } }
             Rectangle {
+                id: nextBtn
                 implicitWidth: 120; implicitHeight: 40; radius: 20
                 color: JD.accentBlue
+                SequentialAnimation {
+                    id: nextPress
+                    NumberAnimation { target: nextBtn; property: "scale"; to: 0.92; duration: JD.dur(90); easing.type: Easing.OutCubic }
+                    NumberAnimation { target: nextBtn; property: "scale"; to: 1; duration: JD.dur(420); easing.type: Easing.OutBack; easing.overshoot: 2.2 }
+                }
                 Text { anchors.centerIn: parent; text: wl.step >= wl.last ? JD.tr("Начать") : JD.tr("Дальше"); color: "white"; font.family: JD.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: wl.next() }

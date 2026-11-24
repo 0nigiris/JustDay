@@ -535,7 +535,38 @@ ShellRoot {
                     const c = welcomeFace.mapToItem(null, welcomeFace.width / 2, welcomeFace.height / 2)
                     return Qt.point(Math.max(-7, Math.min(7, (p.x - c.x) / 30)), Math.max(-4, Math.min(4, (p.y - c.y) / 30)))
                 }
+                // Реакции поверх взгляда: кивок, прищур, взгляд вперёд. Отдельным сдвигом, потому что
+                // плавное следование за курсором размазало бы быстрый кивок в ничто.
+                property real nod: 0
+                property real glance: 0
+                Connections {
+                    target: JD
+                    enabled: welcomeFace.visible && JD.animOn
+                    function onFacePing(kind) {
+                        if (kind === "nod") nodAnim.restart()
+                        else if (kind === "happy") happyAnim.restart()
+                        else if (kind === "next") nextAnim.restart()
+                    }
+                }
+                SequentialAnimation {
+                    id: nodAnim
+                    NumberAnimation { target: welcomeFace; property: "nod"; to: 2.5; duration: JD.dur(60); easing.type: Easing.OutQuad }
+                    NumberAnimation { target: welcomeFace; property: "nod"; to: 0; duration: JD.dur(260); easing.type: Easing.OutBack; easing.overshoot: 3 }
+                }
+                SequentialAnimation {
+                    id: happyAnim
+                    NumberAnimation { target: welcomeFace; property: "eyeH"; to: 3; duration: JD.dur(120); easing.type: Easing.OutQuad }
+                    PauseAnimation { duration: JD.dur(380) }
+                    NumberAnimation { target: welcomeFace; property: "eyeH"; to: 9; duration: JD.dur(360); easing.type: Easing.OutBack; easing.overshoot: 2.5 }
+                }
+                SequentialAnimation {
+                    id: nextAnim
+                    NumberAnimation { target: welcomeFace; property: "glance"; to: 7; duration: JD.dur(140); easing.type: Easing.OutCubic }
+                    PauseAnimation { duration: JD.dur(160) }
+                    NumberAnimation { target: welcomeFace; property: "glance"; to: 0; duration: JD.dur(420); easing.type: Easing.OutBack; easing.overshoot: 1.8 }
+                }
                 Row {
+                    transform: Translate { x: welcomeFace.glance; y: welcomeFace.nod }
                     anchors.centerIn: parent
                     anchors.verticalCenterOffset: -1 + welcomeFace.at.y
                     anchors.horizontalCenterOffset: welcomeFace.at.x

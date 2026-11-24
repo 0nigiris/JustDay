@@ -465,6 +465,8 @@ Singleton {
     property bool onboardDone: false
     // Куда смотрят глаза на карточке знакомства (точка сцены): на поле, которое заполняют. null — прямо.
     property var faceLook: null
+    // Короткая реакция лица знакомства: "nod" на букву, "happy" на выбор, "next" на шаг вперёд.
+    signal facePing(string kind)
     property bool introOn: false          // идёт вступление маскота: островок прячется, пока шарик не растянется
     readonly property bool mustOnboard: settings.onboarded === false && !onboardDone
     function gateWelcome(opening) { if (opening && mustOnboard) Qt.callLater(() => openTools("welcome")) }
