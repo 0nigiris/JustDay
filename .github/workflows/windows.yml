@@ -23,7 +23,7 @@ jobs:
           python-version: "3.13"
       - name: Зависимости
         # Сам Джарвис (пакет justday) едет внутри того же .exe: другу не ставить ни Python, ни pip.
-        run: python -m pip install --disable-pip-version-check . PySide6==6.12.0 pyinstaller
+        run: python -m pip install --disable-pip-version-check ".[speech]" PySide6==6.12.0 pyinstaller
       - name: Кнопки островка делают что-то и на Windows
         # Здесь есть PySide6, которого нет в Linux-окружении тестов: там этот тест пропускается.
         run: |
@@ -39,6 +39,7 @@ jobs:
             --add-data "island;island" \
             --add-data "src/justday/brain;justday/brain" --add-data "data;data" --add-data "pyproject.toml;." \
             --collect-submodules justday --collect-submodules keyring --collect-submodules pycaw \
+            --collect-all faster_whisper --collect-all openwakeword --collect-all ctranslate2 --collect-all onnxruntime \
             --hidden-import PySide6.QtMultimedia --hidden-import PySide6.QtQuickControls2 \
             island/host.py
       - name: Проверка снимком
@@ -89,6 +90,11 @@ jobs:
           grep -qi notepad apps.txt
           ./dist/JustDay/JustDay.exe
           test -s spotlight.png
+      - name: Слух — своя речь внутри exe
+        # Имя и «Hey Jarvis» слушаются только своей речью: облаку не отдаём всё, что звучит в комнате.
+        # Если сборка потеряла Whisper, Джарвис тихо вернулся бы к кнопке и к ключу Groq.
+        shell: bash
+        run: ./dist/JustDay/JustDay.exe test stt
       - name: Филин — встаёт на стражу и снимается
         # Срабатывание здесь не проверить: нажатия робота помечены injected, и Филин их нарочно
         # пропускает. Проверяется то, что ломается тихо: процесс поднялся, хуки встали, «off» его снял.

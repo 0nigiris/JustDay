@@ -11,7 +11,11 @@ import time
 
 import numpy as np
 
-from . import config
+from . import config, parts
+
+# На Windows речь едет внутри JustDay.exe; облачный Whisper (Groq) — только если её там нет:
+# иначе каждое слово в комнате уходило бы наружу, а без ключа микрофон молчал бы вовсе.
+CLOUD = config.WINDOWS and not parts.have("speech")
 
 log = logging.getLogger("justday.stt")
 
@@ -62,7 +66,7 @@ class STT:
 
     def load(self):
         self.last_use = time.monotonic()
-        if config.WINDOWS:  # там распознаёт облако (freellm.transcribe), грузить нечего
+        if CLOUD:  # распознаёт облако (freellm.transcribe), грузить нечего
             return None
         if self._model is not None:
             return self._model
@@ -151,7 +155,7 @@ class STT:
         """The first second or two of a phrase, to hear whether it starts with the assistant's name.
         No prompt on purpose: with the names as a prompt Whisper "hears" them in any unclear speech.
         Returns (text, [(word, probability)…], highest no-speech probability)."""
-        if config.WINDOWS:
+        if CLOUD:
             return self.transcribe(pcm16), [], 0.0
         segments = self._run(pcm16.astype(np.float32) / 32768.0, language=self.cfg["language"] or None,
                              beam_size=1, condition_on_previous_text=False, word_timestamps=True)
@@ -160,7 +164,7 @@ class STT:
         return " ".join(seg.text.strip() for seg in segments).strip(), words, no_speech
 
     def transcribe(self, pcm16: np.ndarray) -> str:
-        if config.WINDOWS:
+        if CLOUD:
             from . import freellm
 
             text = freellm.transcribe(pcm16, language=self.cfg["language"] or "ru")

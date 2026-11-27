@@ -12,11 +12,11 @@ import numpy as np
 
 from . import (
     audio,
-    config,
     events,
     fastpath,
     namespot,
     parts,
+    stt,
     voiceprint,
 )
 from .aio import blocking, spawn
@@ -69,7 +69,7 @@ class HearingMixin:
         """Есть ли с чего слушать. Без установленного распознавания речи микрофон бесполезен:
         кнопка «говорить» открывает поле ввода, а не запись, — иначе первое же слово упало бы
         в ImportError. Доставить: justday parts add speech."""
-        if config.WINDOWS:  # там распознаёт бесплатный Whisper у Groq: нет его ключа — только печатать
+        if stt.CLOUD:  # распознаёт бесплатный Whisper у Groq: нет его ключа — только печатать
             from . import providers
 
             return self.cfg["audio"].get("microphone", True) and bool(providers.secret_get("groq"))
@@ -268,9 +268,9 @@ class HearingMixin:
 
     def _setup_wakeword(self) -> None:
         w = self.cfg["wakeword"]
-        # На Windows слова пробуждения нет: openwakeword там не собран, а слушать имя облачным Whisper
-        # значило бы слать в Groq всё, что звучит в комнате. Там говорят кнопкой микрофона в островке.
-        if not w["enabled"] or not self.mic_on() or config.WINDOWS:
+        # Без своей речи (облачный Whisper) имя не слушаем: это значило бы слать в Groq всё, что
+        # звучит в комнате. Тогда говорят кнопкой микрофона в островке.
+        if not w["enabled"] or not self.mic_on() or stt.CLOUD:
             return
         self._wake = self._wake_model()
         loop = asyncio.get_running_loop()

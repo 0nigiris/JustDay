@@ -147,7 +147,7 @@ def onnx_model(name: str) -> str:
 
 
 class LoudnessVAD:
-    """Конец фразы по громкости — для Windows, где нет openwakeword и onnxruntime.
+    """Конец фразы по громкости — для Windows без части «речь» (нет openwakeword и onnxruntime).
 
     Речь — это кадр на 12 дБ громче тишины комнаты; тишину узнаём сами, медленно подтягивая её
     к самым тихим кадрам. ponytail: громкий фон (вентилятор, музыка) примет за речь; тогда — Silero
@@ -168,9 +168,10 @@ class LoudnessVAD:
 
 def voice_activity_model():
     """Silero VAD: what tells the recorder that the phrase is over."""
-    if config.WINDOWS:
+    try:
+        from openwakeword.vad import VAD
+    except ImportError:
         return LoudnessVAD()
-    from openwakeword.vad import VAD
 
     return VAD(model_path=onnx_model("silero_vad.onnx"))
 

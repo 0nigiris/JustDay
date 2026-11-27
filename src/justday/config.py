@@ -267,8 +267,10 @@ DEFAULTS: dict = {
     # swearing and live_speech (pauses, «ну», slips) go with any of them
     "persona": {"character": "jarvis", "swearing": False, "swearing_level": 40, "live_speech": False, "custom": ""},
     "stt": {
-        "model": "large-v3-turbo",
-        "device": "cuda",
+        # На Windows — small на процессоре: CUDA-библиотек в JustDay.exe нет, а большая модель на
+        # процессоре слушала бы имя по нескольку секунд. ponytail: друзьям с NVIDIA — докачка cuBLAS.
+        "model": "small" if WINDOWS else "large-v3-turbo",
+        "device": "cpu" if WINDOWS else "cuda",
         # Столько же для распознавания речи (~1,1 ГБ видеопамяти). Возврат около трёх секунд и
         # прячется за нажатием «говорить»: модель поднимается, пока фразу ещё договаривают.
         "idle_unload_minutes": 15,

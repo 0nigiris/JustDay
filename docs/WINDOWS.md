@@ -108,13 +108,17 @@ Quickshell работает только на Linux (Wayland) и, возможн
 | Мозг | Claude Code | бесплатные модели по ключу: Gemini, Groq, OpenRouter (`freellm.py`) |
 | Ключи | secret-tool | «Диспетчер учётных данных» (keyring) |
 | Голос | Silero / espeak-ng → pw-play | голос Windows (SAPI) → winsound |
-| Микрофон | pw-record, Silero VAD, faster-whisper | sounddevice, конец фразы по громкости, Whisper у Groq |
-| Слово пробуждения | есть | нет: кнопка микрофона в островке |
+| Микрофон | pw-record, Silero VAD, faster-whisper | sounddevice, Silero VAD, faster-whisper (small, процессор) |
+| Слово пробуждения | «Hey Jarvis» и имя | то же |
+| Окна | скрипт KWin | user32 (`winwindows.py`) |
+| Spotlight | Alt+Space через KDE | Alt+Space через RegisterHotKey |
+| Филин | /dev/input, loginctl | хуки клавиатуры и мыши, LockWorkStation |
 | «Открой …» | .desktop | меню «Пуск» (Get-StartApps) |
 | Громкость, плеер | wpctl, playerctl | pycaw, мультимедийные клавиши (`winaudio.py`) |
 
-Ключи вставляются в первом знакомстве островка, там же ссылки, где их взять. Для голосового
-ввода нужен ключ Groq. Русский голос есть, если в Windows стоит русский речевой пакет; иначе
+Ключи вставляются в первом знакомстве островка, там же ссылки, где их взять. Речь распознаётся
+на самом компьютере; модель Whisper (~480 МБ) скачивается при первой фразе. Ключ Groq нужен,
+только если речи в сборке нет. Русский голос есть, если в Windows стоит русский речевой пакет; иначе
 в журнале будет строка, куда его добавить.
 
 ## Установка
