@@ -154,7 +154,8 @@ Item {
                       : (hit ? hit.key : "win:" + a)
             if (!byKey[key]) {
                 // Unmatched .exe (Wine) → wine icon, not the theme's generic gear fallback.
-                const rawIcon = hit ? hit.icon : (a.endsWith(".exe") ? "wine" : a)
+                // На Windows окно само несёт значок своего exe (winwindows): темы, где искать по имени, там нет.
+                const rawIcon = hit ? hit.icon : (w.icon || (a.endsWith(".exe") ? "wine" : a))
                 const label = split
                     ? ((w.title || "").trim() || (hit ? hit.name : (w.app || "")))
                     : (hit ? hit.name : (w.app || ""))

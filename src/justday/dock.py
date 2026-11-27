@@ -27,6 +27,9 @@ PIN_MAX = 32
 # Чем док заполняется в первый запуск. Пустой док — это не «чистый лист», а сломанная полоса: по
 # ней нечего нажать и непонятно, зачем она. Берём по одной вещи каждого рода из того, что реально
 # установлено, — ровно как на новой макоси.
+# AppID Проводника и имена exe самых обычных программ: браузеры, почта, мессенджеры, музыка, редактор.
+WIN_SEED = ("Microsoft.Windows.Explorer", "chrome", "msedge", "firefox", "brave", "opera", "telegram",
+            "discord", "spotify", "code", "steam", "notepad")
 SEED: tuple[tuple[str, ...], ...] = (
     ("WebBrowser",),
     ("FileManager",),
@@ -154,6 +157,11 @@ def _seed() -> list[str]:
     if keep:
         return keep[:8]
     apps = desktop.list_apps()
+    if config.WINDOWS:
+        # Категорий у программ Windows нет. Берём то, что обычно закреплено на панели задач, в этом порядке.
+        by = {a.get("id"): a for a in apps} | {a.get("wmclass", "").lower(): a for a in apps if a.get("wmclass")}
+        keys = [f"app:{by[k]['id']}" for k in WIN_SEED if k in by]
+        return list(dict.fromkeys(keys))[:8]
     # Из подходящих — программа по умолчанию, потом родная для Плазмы, потом любая. Первая по
     # алфавиту давала новому человеку Nautilus вместо Dolphin и cool-retro-term вместо Konsole (19 нояб.).
     preferred = set()

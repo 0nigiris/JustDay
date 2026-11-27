@@ -63,20 +63,44 @@ def list_apps() -> list[dict]:
     return _apps_cache[1]
 
 
+# Ярлыки «Пуска» знают путь к exe, Get-StartApps — нет. По пути окно узнаёт свою программу в доке
+# (у окна есть только имя exe), и по нему же Проводник отдаёт значок.
+_WIN_APPS_PS = """[Console]::OutputEncoding=[Text.Encoding]::UTF8
+$sh = New-Object -ComObject WScript.Shell; $t = @{}
+foreach ($d in "$env:ProgramData\\Microsoft\\Windows\\Start Menu", "$env:APPDATA\\Microsoft\\Windows\\Start Menu") {
+  Get-ChildItem $d -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
+    try { $t[$_.BaseName] = $sh.CreateShortcut($_.FullName).TargetPath } catch {} } }
+Get-StartApps | ForEach-Object { [pscustomobject]@{Name=$_.Name; AppID=$_.AppID; Exe=$t[$_.Name]} } | ConvertTo-Json -Compress"""
+
+
+def win_icon(target: str) -> str:
+    """Значок Windows для островка: его рисует island/host.py (ThemeIcons) из exe или из AppID."""
+    from urllib.parse import quote
+    return "image://icon/win:" + quote(target, safe="") if target else ""
+
+
 def _scan_windows_apps() -> list[dict]:
     """Всё из меню «Пуск» с именами на языке системы: и ярлыки, и программы из Store (Блокнот и
     Калькулятор в Windows 11 — уже не .lnk, по ярлыкам их не найти). Запуск — по AppID."""
-    out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                          "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-StartApps | ConvertTo-Json -Compress"],
-                         capture_output=True, text=True, encoding="utf-8", timeout=20,
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", _WIN_APPS_PS],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30,
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
     try:
         got = json.loads(out or "[]")
     except json.JSONDecodeError:
         return []
-    return [{"id": a["AppID"], "name": a["Name"], "name_ru": "", "generic": "", "exec": "", "keywords": "",
-             "path": "", "categories": "", "icon": "", "wmclass": ""}
-            for a in ([got] if isinstance(got, dict) else got) if a.get("AppID")]
+    rows = []
+    for a in [got] if isinstance(got, dict) else got:
+        if not a.get("AppID"):
+            continue
+        exe = str(a.get("Exe") or "")
+        if not exe.lower().endswith(".exe"):
+            exe = a["AppID"] if a["AppID"].lower().endswith(".exe") else ""
+        stem = re.split(r"[\\/]", exe)[-1][:-4] if exe else ""
+        rows.append({"id": a["AppID"], "name": a["Name"], "name_ru": "", "generic": "", "exec": stem,
+                     "keywords": "", "path": "", "categories": "", "wmclass": stem,
+                     "icon": win_icon(exe if os.path.isfile(exe) else "shell:AppsFolder\\" + a["AppID"])})
+    return rows
 
 
 def _scan_apps() -> list[dict]:

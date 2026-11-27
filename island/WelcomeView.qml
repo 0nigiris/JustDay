@@ -9,7 +9,7 @@ Item {
     id: wl
     property int step: 0
     readonly property int last: 4
-    // Шаг «Док и лоток» (3): по умолчанию — нет. На Windows их пока нет вовсе (islandOnly), шаг пропускается.
+    // Шаг «Док и лоток» (3): по умолчанию — нет. На Windows — только док: лотка там нет (JD.trayOn).
     readonly property bool canDock: !JD.islandOnly
     property bool wantDock: false
     property bool wantTray: false
@@ -368,13 +368,13 @@ Item {
                 Column {
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
                     spacing: 12
-                    Text { text: JD.tr("Док и лоток"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
+                    Text { text: wl.win ? JD.tr("Док") : JD.tr("Док и лоток"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
                     Text { width: parent.width; wrapMode: Text.Wrap; text: JD.tr("Можно жить с одним островком. Посмотрите, как они выглядят, и включите, если нравятся."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
                     Repeater {
                         model: [
                             { id: "dock", title: JD.tr("Док"), hint: JD.tr("внизу: закреплённые и открытые программы") },
                             { id: "tray", title: JD.tr("Лоток"), hint: JD.tr("сбоку: значки фоновых программ") },
-                        ]
+                        ].slice(0, wl.win ? 1 : 2)
                         Item {
                             id: dt
                             required property var modelData

@@ -14,6 +14,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 # Собранный JustDay.exe — это и островок, и Джарвис, и команды: `JustDay.exe daemon`, `JustDay.exe status`.
 # Другу не надо ставить Python и pip: всё, что кнопки островка зовут как `justday …`, идёт сюда же.
@@ -35,8 +36,8 @@ if getattr(sys, "frozen", False) and len(sys.argv) > 1 and not sys.argv[1].start
     _cli(sys.argv[1:])
     sys.exit(0)
 
-from PySide6.QtCore import Property, QFileSystemWatcher, QObject, QProcess, QProcessEnvironment, QRect, QSaveFile, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication, QIcon, QPixmap, QRegion
+from PySide6.QtCore import Property, QFileSystemWatcher, QObject, QProcess, QProcessEnvironment, QRect, QSaveFile, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QGuiApplication, QIcon, QImage, QPixmap, QRegion
 from PySide6.QtNetwork import QLocalSocket, QTcpSocket
 from PySide6.QtQml import QJSValue, QmlAttached, QmlElement, QmlSingleton, QQmlApplicationEngine, qmlRegisterSingletonType, qmlRegisterType
 from PySide6.QtQuick import QQuickImageProvider
@@ -60,18 +61,22 @@ QML_IMPORT_MAJOR_VERSION = 1
 
 
 class Screen(QObject):
-    """Экран в виде Quickshell: x/y/width/height, а настоящий QScreen — для окна."""
+    """Экран в виде Quickshell: x/y/width/height, а настоящий QScreen — для окна.
+
+    Размеры — рабочей области, без панели задач: иначе док вставал поверх неё. Когда панель
+    спрятана (настройка «Панель задач»), рабочая область — весь экран, и док садится на край."""
 
     def __init__(self, s, parent=None):
         super().__init__(parent)
         self._s = s
+        s.availableGeometryChanged.connect(self.changed)
 
     changed = Signal()
     name = Property(str, lambda self: self._s.name(), notify=changed)
-    x = Property(int, lambda self: self._s.geometry().x(), notify=changed)
-    y = Property(int, lambda self: self._s.geometry().y(), notify=changed)
-    width = Property(int, lambda self: self._s.geometry().width(), notify=changed)
-    height = Property(int, lambda self: self._s.geometry().height(), notify=changed)
+    x = Property(int, lambda self: self._s.availableGeometry().x(), notify=changed)
+    y = Property(int, lambda self: self._s.availableGeometry().y(), notify=changed)
+    width = Property(int, lambda self: self._s.availableGeometry().width(), notify=changed)
+    height = Property(int, lambda self: self._s.availableGeometry().height(), notify=changed)
     qscreen = Property(QObject, lambda self: self._s, constant=True)
 
 
@@ -111,6 +116,11 @@ class Quickshell(QObject):
             return
         if cmd and _which(cmd[0]):
             QProcess.startDetached(_which(cmd[0]), cmd[1:])
+
+    @Slot(bool)
+    def taskbar(self, hide: bool) -> None:
+        """Панель задач Windows: спрятать вместо неё док или вернуть как было (настройка dock.hide_taskbar)."""
+        _taskbar(hide)
 
     @Slot(str, result=str)
     @Slot(str, bool, result=str)
@@ -501,6 +511,52 @@ def _register_qml() -> None:
     t("Quickshell.Services.Notifications", "NotificationServer")
 
 
+_TASKBAR = {"hidden": False, "was": None, "timer": None}
+
+
+def _taskbar(hide: bool) -> None:
+    """Прячем обратимо: автоскрытие (рабочая область становится весь экран, окна разворачиваются до
+    низа) плюс само окно панели. Ничего не пишем в реестр: вернуть — то же действие наоборот, а
+    перезапуск Проводника и так возвращает панель. Прежнее автоскрытие человека запоминаем и
+    восстанавливаем, а не включаем «как нам кажется»."""
+    if sys.platform != "win32" or hide == _TASKBAR["hidden"]:
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class APPBARDATA(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uCallbackMessage", wintypes.UINT),
+                    ("uEdge", wintypes.UINT), ("rc", wintypes.RECT), ("lParam", wintypes.LPARAM)]
+
+    user32, shell32 = ctypes.windll.user32, ctypes.windll.shell32
+    shell32.SHAppBarMessage.restype = ctypes.c_size_t
+    abd = APPBARDATA(cbSize=ctypes.sizeof(APPBARDATA))
+    if hide and _TASKBAR["was"] is None:
+        _TASKBAR["was"] = int(shell32.SHAppBarMessage(4, ctypes.byref(abd)))  # ABM_GETSTATE
+    abd.lParam = 1 if hide else (_TASKBAR["was"] or 0)  # ABS_AUTOHIDE
+    shell32.SHAppBarMessage(10, ctypes.byref(abd))  # ABM_SETSTATE
+    _TASKBAR["hidden"] = hide
+
+    def apply():
+        for cls in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd"):  # главная и панели на других мониторах
+            h = user32.FindWindowW(cls, None)
+            while h:
+                if bool(user32.IsWindowVisible(h)) == _TASKBAR["hidden"]:
+                    user32.ShowWindow(h, 0 if _TASKBAR["hidden"] else 5)  # SW_HIDE / SW_SHOW
+                h = user32.FindWindowExW(None, h, cls, None)
+
+    apply()
+    if _TASKBAR["timer"] is None:
+        # Проводник перезапустился или клавиша Win вытащила панель — прячем снова. Раз в 2 с хватает:
+        # панель, мелькнувшая на миг, не беда, а опрос чаще — работа впустую.
+        t = _TASKBAR["timer"] = QTimer()
+        t.setInterval(2000)
+        t.timeout.connect(lambda: _TASKBAR["hidden"] and apply())
+        t.start()
+        # JustDay закрыли — панель возвращается: без него у человека не осталось бы ни дока, ни панели.
+        QGuiApplication.instance().aboutToQuit.connect(lambda: _taskbar(False))
+
+
 class ThemeIcons(QQuickImageProvider):
     """`image://icon/имя` — значок из темы системы, как у Quickshell. На Windows темы нет: пусто,
     и островок рисует свой значок из `icons/`."""
@@ -510,8 +566,68 @@ class ThemeIcons(QQuickImageProvider):
 
     def requestPixmap(self, ident, size, requested):
         n = max(requested.width(), requested.height(), 64)
+        if ident.startswith("win:") and sys.platform == "win32":
+            img = _win_icon(unquote(ident[4:]), n)
+            return QPixmap.fromImage(img) if img is not None else QPixmap(1, 1)
         pm = QIcon.fromTheme(ident.split("?")[0]).pixmap(n, n)
         return pm if not pm.isNull() else QPixmap(1, 1)
+
+
+def _win_icon(target: str, n: int):
+    """Значок, как его рисует Проводник: exe, ярлык или `shell:AppsFolder\\AppID` (программы из Store).
+
+    IShellItemImageFactory — один вызов на всё; иначе пришлось бы отдельно доставать ресурс из exe,
+    отдельно — картинку пакета Store. Вызов через таблицу методов COM: comtypes ради одного
+    интерфейса не тащим."""
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("a", ctypes.c_uint32), ("b", ctypes.c_uint16), ("c", ctypes.c_uint16), ("d", ctypes.c_ubyte * 8)]
+
+    class SIZE(ctypes.Structure):
+        _fields_ = [("cx", ctypes.c_long), ("cy", ctypes.c_long)]
+
+    class BITMAPINFOHEADER(ctypes.Structure):
+        _fields_ = [("biSize", ctypes.c_uint32), ("biWidth", ctypes.c_long), ("biHeight", ctypes.c_long),
+                    ("biPlanes", ctypes.c_uint16), ("biBitCount", ctypes.c_uint16), ("biCompression", ctypes.c_uint32),
+                    ("biSizeImage", ctypes.c_uint32), ("biXPelsPerMeter", ctypes.c_long),
+                    ("biYPelsPerMeter", ctypes.c_long), ("biClrUsed", ctypes.c_uint32), ("biClrImportant", ctypes.c_uint32)]
+
+    shell32, gdi32, ole32 = ctypes.windll.shell32, ctypes.windll.gdi32, ctypes.windll.ole32
+    ole32.CoInitialize(None)  # поток картинок Qt — свой; второй вызов в том же потоке безвреден
+    iid = GUID(0xBCC18B79, 0xBA16, 0x442F, (ctypes.c_ubyte * 8)(0x80, 0xC4, 0x8A, 0x59, 0xC3, 0x0C, 0x46, 0x3B))
+    item = ctypes.c_void_p()
+    if shell32.SHCreateItemFromParsingName(ctypes.c_wchar_p(target), None, ctypes.byref(iid), ctypes.byref(item)):
+        return None
+    vtbl = ctypes.cast(item, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+    release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])
+    get_image = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, SIZE, ctypes.c_int,
+                                   ctypes.POINTER(wintypes.HBITMAP))(vtbl[3])
+    hbmp = wintypes.HBITMAP()
+    try:
+        if get_image(item, SIZE(n, n), 0x1 | 0x4, ctypes.byref(hbmp)) or not hbmp:  # BIGGERSIZEOK | ICONONLY
+            return None
+    finally:
+        release(item)
+    try:
+        bm = (ctypes.c_long * 2)()  # BITMAP: bmType, bmWidth, bmHeight… — нужны только размеры
+        raw = (ctypes.c_byte * 32)()
+        gdi32.GetObjectW(hbmp, ctypes.sizeof(raw), raw)
+        ctypes.memmove(bm, ctypes.addressof(raw) + 4, 8)
+        w, h = bm[0], bm[1]
+        hdr = BITMAPINFOHEADER(biSize=ctypes.sizeof(BITMAPINFOHEADER), biWidth=w, biHeight=-h,  # минус — сверху вниз
+                               biPlanes=1, biBitCount=32)
+        buf = ctypes.create_string_buffer(w * h * 4)
+        dc = ctypes.windll.user32.GetDC(None)
+        ok = gdi32.GetDIBits(dc, hbmp, 0, h, buf, ctypes.byref(hdr), 0)
+        ctypes.windll.user32.ReleaseDC(None, dc)
+        if not ok:
+            return None
+        # Проводник отдаёт BGRA с уже умноженной прозрачностью — это и есть ARGB32_Premultiplied на x86.
+        return QImage(buf.raw, w, h, w * 4, QImage.Format_ARGB32_Premultiplied).copy()
+    finally:
+        gdi32.DeleteObject(hbmp)
 
 
 # Кнопки островка зовут линуксовые программы (xdg-open, wl-copy, nmcli…). На Windows их нет, и
@@ -609,7 +725,8 @@ def main() -> int:
     if sys.platform == "win32":
         # На Windows нет unix-сокета: демон слушает TCP на 127.0.0.1 (docs/WINDOWS.md).
         os.environ.setdefault("JUSTDAY_SOCKET", "tcp:47615")
-        os.environ.setdefault("JUSTDAY_ISLAND_ONLY", "1")  # без дока и лотка: их на Windows включают сами
+        # Лотка на Windows нет: значки чужих программ у часов Windows не отдаёт никому, кроме своей панели.
+        os.environ.setdefault("JUSTDAY_NO_TRAY", "1")
         if getattr(sys, "frozen", False) and not os.environ.get("JUSTDAY_SHOT"):
             _wake_jarvis()
             # Конфига ещё нет — это первый щелчок по ярлыку: маскот выходит сразу, не дожидаясь демона.

@@ -1200,12 +1200,12 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         spawn(self._sessions_loop())
         spawn(self._telegram_loop())
         spawn(self._cpu_loop())
+        spawn(self._watch_windows())  # док и «вернуть окно»: на Windows — опрос user32
         if linux:
             spawn(self._clip_watch())
             spawn(self._file_index_loop())
             if shutil.which("dbus-monitor"):
                 spawn(self._watch_notifications())
-            spawn(self._watch_windows())
             spawn(self._watch_layout())
             spawn(self._watch_brightness())
         # Каталог дока уходит по живому сокету. Перезапускать ради него оболочку не надо.

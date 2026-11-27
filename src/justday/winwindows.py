@@ -8,6 +8,8 @@ Powershell не берём: каждый его запуск из отсоеди
 import ctypes
 from ctypes import wintypes
 
+from .desktop import win_icon
+
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 dwmapi = ctypes.windll.dwmapi
@@ -32,6 +34,7 @@ kernel32.OpenProcess.restype = wintypes.HANDLE
 
 
 def _exe(pid: int) -> str:
+    """Полный путь к exe процесса: имя для сопоставления, путь — для значка в доке."""
     h = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION: хватает и для чужих
     if not h:
         return ""
@@ -40,7 +43,7 @@ def _exe(pid: int) -> str:
         size = wintypes.DWORD(len(buf))
         if not kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
             return ""
-        return buf.value.rsplit("\\", 1)[-1].removesuffix(".exe").removesuffix(".EXE")
+        return buf.value
     finally:
         kernel32.CloseHandle(h)
 
@@ -74,7 +77,9 @@ def _info(hwnd, active) -> dict:
     full = not minimized and (r.left, r.top, r.right, r.bottom) == (m.left, m.top, m.right, m.bottom)
     # ponytail: программы из Store все называются ApplicationFrameHost; настоящее имя — через
     # дочернее окно CoreWindow, если «закрой калькулятор» понадобится.
-    return {"id": str(int(hwnd)), "app": _exe(pid.value), "title": title.value, "pid": pid.value,
+    exe = _exe(pid.value)
+    return {"id": str(int(hwnd)), "app": exe.rsplit("\\", 1)[-1].removesuffix(".exe").removesuffix(".EXE"),
+            "icon": win_icon(exe), "title": title.value, "pid": pid.value,
             "active": int(hwnd) == int(active or 0), "minimized": minimized, "full": full,
             "x": r.left, "y": r.top, "w": r.right - r.left, "h": r.bottom - r.top}
 

@@ -1740,6 +1740,12 @@ Item {
                 }
                 Row { title: JD.tr("Прятать, пока не нужен"); subtitle: JD.tr("Уезжает за край и возвращается, когда подвести курсор"); Toggle { checked: win.get("dock.autohide") === true; onToggled: v => win.set("dock.autohide", v) } }
                 Row {
+                    visible: Qt.platform.os === "windows"
+                    title: JD.tr("Спрятать панель задач Windows")
+                    subtitle: JD.tr("Вместо неё — док. Значки у часов Windows тогда не видны; выключите — и панель вернётся")
+                    Toggle { checked: win.get("dock.hide_taskbar") === true; onToggled: v => win.set("dock.hide_taskbar", v) }
+                }
+                Row {
                     title: JD.tr("Отнимать место у окон")
                     subtitle: JD.tr("Магнит exclusive zone: развёрнутые окна останавливаются над доком. Выкл. — окна могут наезжать на полосу, док сам прячется и зовётся с края")
                     Toggle { checked: win.get("dock.reserve") === true; onToggled: v => win.set("dock.reserve", v) }

@@ -711,6 +711,9 @@ Singleton {
     property bool autostartOn: false
     property var freeResult: ({})
     readonly property bool islandOnly: Quickshell.env("JUSTDAY_ISLAND_ONLY") === "1"
+    // Панель задач Windows прячется только вместе с доком: без него не осталось бы ни одной полосы.
+    readonly property bool hideTaskbar: Qt.platform.os === "windows" && dockOn && dockCfg.hide_taskbar === true
+    onHideTaskbarChanged: Quickshell.taskbar(hideTaskbar)
     // Первое впечатление — один островок: док и лоток на чистой системе выглядели мусором (19 нояб.).
     // Пока идёт знакомство, их не видно; в нём есть шаг «Посмотреть / Включить» (welcomeDock/Tray — показ).
     property bool welcomeDock: false
@@ -720,7 +723,7 @@ Singleton {
     // Кнопка в доке должна делать ровно то, что кнопка: показывать спрятанное и прятать показанное.
     property int trayPeek: 0
     function trayToggle() { trayPeek = trayOn ? -1 : 1 }
-    readonly property bool trayOn: !islandOnly && (welcomeTray || trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false && !mustOnboard))
+    readonly property bool trayOn: !islandOnly && Quickshell.env("JUSTDAY_NO_TRAY") !== "1" && (welcomeTray || trayPeek === 1 || (trayPeek !== -1 && trayCfg.enabled !== false && !mustOnboard))
     // Выкл. — лоток не занимает край рабочего стола. Значки сети, Bluetooth и языка остаются на полосе.
     readonly property bool trayDesktop: trayCfg.on_desktop !== false
     property bool netOn: false

@@ -20,7 +20,7 @@ Quickshell работает только на Linux (Wayland) и, возможн
 | `Quickshell.Services.Pipewire` | 12 | громкость, микшер, уровни | Демон через `pycaw` (WASAPI), островок получает числа по сокету |
 | `Quickshell.Io` | 10 | `Socket`, `FileView`, `Process` | `QtNetwork` (`QTcpSocket`/`QLocalSocket`) или мост из Python |
 | `Quickshell.Widgets` | 8 | `ClippingRectangle`, `IconImage` | `Rectangle` + `layer.effect` / `OpacityMask`, обычный `Image` |
-| `Quickshell.Services.SystemTray` | 6 | значки лотка | Не нужно: трея на Windows нет |
+| `Quickshell.Services.SystemTray` | 6 | значки лотка | Пустая заглушка: чужие значки у часов Windows не отдаёт |
 | `Quickshell.Services.Mpris` | 2 | что играет, кнопки плеера | Демон через SMTC (`winrt` `GlobalSystemMediaTransportControlsSessionManager`) |
 | `Quickshell.Services.Notifications` | 2 | свои уведомления | Не нужно на первом шаге: у Windows свои |
 | `QtMultimedia`, `Qt.labs.folderlistmodel` | — | звук, списки файлов | Есть в Qt под Windows как есть |
@@ -114,6 +114,8 @@ Quickshell работает только на Linux (Wayland) и, возможн
 | Spotlight | Alt+Space через KDE | Alt+Space через RegisterHotKey |
 | Филин | /dev/input, loginctl | хуки клавиатуры и мыши, LockWorkStation |
 | «Открой …» | .desktop | меню «Пуск» (Get-StartApps) |
+| Док | окна из KWin, значки темы | окна из user32 (раз в 0,5 с), значки Проводника; можно спрятать панель задач (обратимо) |
+| Лоток | значки фоновых программ | нет: Windows отдаёт их только своей панели задач |
 | Громкость, плеер | wpctl, playerctl | pycaw, мультимедийные клавиши (`winaudio.py`) |
 
 Ключи вставляются в первом знакомстве островка, там же ссылки, где их взять. Речь распознаётся

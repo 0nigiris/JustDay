@@ -12,6 +12,7 @@ import subprocess
 import time
 
 from . import (
+    config,
     desktop,
     notifications,
 )
@@ -103,6 +104,9 @@ class WatchersMixin:
         случается десятки раз.
         """
         loop = asyncio.get_running_loop()
+        if config.WINDOWS:
+            await self._watch_windows_win(loop)
+            return
         if desktop.backend() != "kwin":
             return
         self._layout = await loop.run_in_executor(None, desktop.layout_now)
@@ -243,6 +247,22 @@ class WatchersMixin:
                 return
             # KWin перезапустили — скрипт ушёл вместе с ним; следующий круг поселит его заново.
             await asyncio.sleep(5)
+
+    async def _watch_windows_win(self, loop) -> None:
+        """Windows: событий о чужих окнах без хука в каждом процессе нет, поэтому — опрос. EnumWindows
+        стоит единицы миллисекунд; в док уходит только изменившийся список.
+        ponytail: опрос раз в 0,5 с; если мало — SetWinEventHook (EVENT_OBJECT_SHOW/DESTROY/FOREGROUND)."""
+        from . import winwindows
+
+        while True:
+            try:
+                got = await loop.run_in_executor(None, winwindows.windows)
+            except OSError:
+                got = self._windows
+            if got != self._windows:
+                self._windows_pending = got
+                self._publish_windows_now()
+            await asyncio.sleep(0.5)
 
     def _emit_notification(self, raw: str) -> None:
         if "member=Notify" not in raw or not self.cfg["island"].get("show_notifications", True):

@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ["JUSTDAY_ISLAND_ONLY"] = "1"
+os.environ["JUSTDAY_ISLAND_ONLY"] = os.environ.get("ONLY", "1")
 QMLDIR = tempfile.mkdtemp()
 for d in Path("/usr/lib64/qt6/qml").iterdir():
     if d.name != "Quickshell":
@@ -44,13 +44,16 @@ def step(i=0):
         os._exit(0)  # обычный выход Qt здесь иногда падает, и KDE показывает окно отчёта
     name, expr = shots[i]
     e = QQmlExpression(QQmlEngine.contextForObject(root), root, expr)
-    e.evaluate()
+    got = e.evaluate()
+    if name.startswith("?"):  # «?имя=выражение» — не снимок, а значение: посмотреть, что знает островок
+        print(name, got, file=sys.stderr)
     if e.hasError():  # молча пустой снимок — хуже ошибки: не видно, что выражение не выполнилось
         print(name, e.error().toString(), file=sys.stderr)
 
     def grab():
-        win = max((w for w in app.topLevelWindows() if w.isVisible()), key=lambda w: w.width() * w.height())
-        win.grabWindow().save(f"{OUT}/{name}.png")
+        wins = sorted((w for w in app.topLevelWindows() if w.isVisible()), key=lambda w: -w.width() * w.height())
+        for k, win in enumerate(wins):  # док и лоток — свои окна; главный снимок — самое большое
+            win.grabWindow().save(f"{OUT}/{name}.png" if k == 0 else f"{OUT}/{name}-{k}.png")
         step(i + 1)
 
     QTimer.singleShot(2500, grab)
