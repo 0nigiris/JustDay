@@ -2070,6 +2070,7 @@ Item {
                     }
                 }
                 Row {
+                    visible: JD.notifPlace !== "island"
                     title: JD.tr("Монитор уведомлений")
                     subtitle: JD.tr("Как в Telegram: на каком экране появляется всплывашка. «Второй» — не основной (слева сверху)")
                     Choice {
@@ -2082,11 +2083,11 @@ Item {
                     }
                 }
                 Row {
-                    title: JD.tr("Угол уведомлений")
-                    subtitle: JD.tr("Край и угол экрана, как у Telegram Desktop")
+                    title: JD.tr("Где показывать уведомления")
+                    subtitle: JD.tr("На месте островка — на пару секунд вместо него. Или в углу экрана, как у Telegram Desktop")
                     Choice {
                         key: "island.notification_position"
-                        options: [{ value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
+                        options: [{ value: "island", label: JD.tr("На месте островка") }, { value: "top-left", label: JD.tr("Сверху слева") }, { value: "top-center", label: JD.tr("Сверху по центру") },
                                  { value: "top-right", label: JD.tr("Сверху справа") }, { value: "bottom-left", label: JD.tr("Снизу слева") },
                                  { value: "bottom-center", label: JD.tr("Снизу по центру") }, { value: "bottom-right", label: JD.tr("Снизу справа") }]
                     }

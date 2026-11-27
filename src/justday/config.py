@@ -564,7 +564,9 @@ DEFAULTS: dict = {
         # position: top-left | top-center | top-right | bottom-left | bottom-center | bottom-right
         # (empty position = follow island.position)
         "notification_screen": "secondary",
-        "notification_position": "top-right",
+        # "island" — на месте самого островка, на пару секунд. На Windows так по умолчанию: угла
+        # экрана, как у Telegram, там нет, а островок есть всегда.
+        "notification_position": "island" if WINDOWS else "top-right",
         # Transient system HUD (volume / layout / brightness) — Noctalia-style OSD.
         # Separate from Telegram-style app toasts (notification_*). Empty position = near island.
         "show_osd": True,

@@ -1532,8 +1532,8 @@ Singleton {
         if (video && !videoMini) return "video"
         if (dstate === "listening") return answerOpen ? "answer" : "listening"
         if (playerOpen && musicOn) return "player"
-        // notifications render on notifWin (corner toast); keep the island free
-        // if (notification) return "notification"
+        // Уведомление — в углу (NotifToastWindow) или, если так выбрано, на месте самого островка.
+        if (notification && notifPlace === "island") return "notification"
         if (flashText) return "flash"
         if (answerOpen) return "answer"
         if (dstate === "transcribing") return "transcribing"
@@ -2109,7 +2109,8 @@ Singleton {
             }
         }
     }
-    Timer { id: notifTimer; interval: 6000; onTriggered: if (jd.islandHovered || jd.notifHovered || jd.notifExpanded) restart(); else jd.notification = null }
+    // На месте островка — пару секунд: дольше он закрывал бы музыку и время, которые там живут.
+    Timer { id: notifTimer; interval: jd.notifPlace === "island" ? 3500 : 6000; onTriggered: if (jd.islandHovered || jd.notifHovered || jd.notifExpanded) restart(); else jd.notification = null }
     Timer {
         id: answerTimer
         // without a voice the text is all there is: give time to read it

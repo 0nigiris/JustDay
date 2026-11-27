@@ -601,8 +601,6 @@
   "Второй монитор": "Secondary monitor",
   "Основной монитор": "Primary monitor",
   "Там же, где остров": "Same as the island",
-  "Угол уведомлений": "Notification corner",
-  "Край и угол экрана, как у Telegram Desktop": "Screen edge and corner, like Telegram Desktop",
   "Всплывашки JustDay — на выбранном мониторе и углу. Установщик и `justday popups island` выключают всплывашки Plasma через «Не беспокоить» (история в трее сохраняется). В меню острова (клик по нему) также есть плеер — он появляется, когда что-то играет.": "JustDay toasts appear on the chosen monitor and corner. The installer and `justday popups island` silence Plasma popups via Do Not Disturb (tray history remains). The island menu (click the island) also has a player — it appears when something is playing.",
   "Системный OSD": "System OSD",
   "Громкость, раскладка и яркость — отдельная всплывашка, не путать с уведомлениями приложений": "Volume, keyboard layout and brightness — a separate HUD, not app toasts",
@@ -1189,5 +1187,8 @@
   "не скачалось — нажмите, чтобы повторить": "download failed — tap to retry",
   "Филин": "Filin",
   "Не спит: первое касание запрёт экран и снимет лицо. Голосом: «я дома»": "Awake: the first touch locks the screen and photographs the face. Say “I'm home” to stop",
-  "Уходите, оставив экран включённым? Первое касание через 15 с запрёт экран и снимет лицо. Голосом: «посторожи»": "Leaving the screen on? From 15 s on, the first touch locks the screen and photographs the face. Say “keep watch”"
+  "Уходите, оставив экран включённым? Первое касание через 15 с запрёт экран и снимет лицо. Голосом: «посторожи»": "Leaving the screen on? From 15 s on, the first touch locks the screen and photographs the face. Say “keep watch”",
+  "Где показывать уведомления": "Where notifications appear",
+  "На месте островка — на пару секунд вместо него. Или в углу экрана, как у Telegram Desktop": "In place of the island for a couple of seconds, or in a screen corner like Telegram Desktop",
+  "На месте островка": "In place of the island"
 }

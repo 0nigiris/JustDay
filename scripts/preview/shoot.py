@@ -43,7 +43,10 @@ def step(i=0):
     if i == len(shots):
         os._exit(0)  # обычный выход Qt здесь иногда падает, и KDE показывает окно отчёта
     name, expr = shots[i]
-    QQmlExpression(QQmlEngine.contextForObject(root), root, expr).evaluate()
+    e = QQmlExpression(QQmlEngine.contextForObject(root), root, expr)
+    e.evaluate()
+    if e.hasError():  # молча пустой снимок — хуже ошибки: не видно, что выражение не выполнилось
+        print(name, e.error().toString(), file=sys.stderr)
 
     def grab():
         win = max((w for w in app.topLevelWindows() if w.isVisible()), key=lambda w: w.width() * w.height())

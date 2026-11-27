@@ -9,7 +9,7 @@ import Quickshell.Wayland
 // top-right. The island mode "notification" is suppressed while this window shows the toast.
 PanelWindow {
     id: notifWin
-    property bool show: !!JD.notification && JD.island.show_notifications !== false
+    property bool show: !!JD.notification && JD.island.show_notifications !== false && nplace !== "island"
     visible: show
     screen: JD.resolveNotifScreen()
     readonly property string nplace: JD.notifPlace
