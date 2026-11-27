@@ -125,6 +125,9 @@ def run() -> int:
             pct = 100.0
         if 50 <= pct <= 250 and pct != 100 and "QT_SCALE_FACTOR" not in os.environ:
             os.environ["QT_SCALE_FACTOR"] = f"{pct / 100:.2f}"
+        # Знакомство не ждёт демона: островок начнёт его сам, как только нарисуется (JD.startWelcome).
+        if (config.load()["user"] or {}).get("onboarded", True) is False:
+            os.environ["JUSTDAY_FIRST_RUN"] = "1"
         os.execvp(exe, [exe, "-p", str(ISLAND_DIR)])
     from . import panel
     return panel.main()

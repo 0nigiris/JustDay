@@ -87,3 +87,26 @@ def test_a_pinned_island_without_quickshell_still_shows_something(monkeypatch):
     monkeypatch.setattr(face.config, "load", lambda: {"ui": {"face": "island"}})
     what, why = face.pick()
     assert what == "panel" and "Quickshell" in why
+
+
+def test_fresh_install_does_not_wait_for_the_daemon_to_greet(monkeypatch):
+    """После установки маскот ждал, пока поднимется демон и пришлёт настройки: секунды пустого экрана.
+    Запускатель сам говорит островку, что это первый запуск."""
+    import pytest
+
+    monkeypatch.setenv("JUSTDAY_FIRST_RUN", "")  # чтобы monkeypatch вернул окружение как было
+    monkeypatch.delenv("JUSTDAY_FIRST_RUN")
+    monkeypatch.setattr(face, "pick", lambda: ("island", "тест"))
+    monkeypatch.setattr(face, "quickshell", lambda: "qs")
+    monkeypatch.setattr(face.config, "load", lambda: {"island": {}, "user": {"onboarded": False}})
+
+    class Exec(Exception):
+        pass
+
+    def fake_exec(*a):
+        raise Exec
+
+    monkeypatch.setattr(face.os, "execvp", fake_exec)
+    with pytest.raises(Exec):
+        face.run()
+    assert face.os.environ.get("JUSTDAY_FIRST_RUN") == "1"

@@ -603,6 +603,10 @@ def main() -> int:
         os.environ.setdefault("JUSTDAY_ISLAND_ONLY", "1")  # без дока и лотка: их на Windows включают сами
         if getattr(sys, "frozen", False) and not os.environ.get("JUSTDAY_SHOT"):
             _wake_jarvis()
+            # Конфига ещё нет — это первый щелчок по ярлыку: маскот выходит сразу, не дожидаясь демона.
+            appdata = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
+            if not (appdata / "JustDay" / "config.toml").exists():
+                os.environ.setdefault("JUSTDAY_FIRST_RUN", "1")
     app = QGuiApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     _register_qml()

@@ -988,7 +988,18 @@ Singleton {
             }
         } catch (e) {}
     }
-    Component.onCompleted: seedDockFromDisk()
+    Component.onCompleted: {
+        seedDockFromDisk()
+        // Первый запуск запускатель видит сам (face.py, host.py): маскот выходит сразу, а не после того,
+        // как демон поднимется и пришлёт настройки. На Windows холодный пуск демона из exe — секунды
+        // пустого экрана после щелчка по ярлыку (27 нояб.: «островок как можно быстрее»).
+        if (Quickshell.env("JUSTDAY_FIRST_RUN") === "1") Qt.callLater(startWelcome)
+    }
+    function startWelcome() {
+        if (welcomeShown) return
+        welcomeShown = true
+        if (animOn) introOn = true; else Qt.callLater(() => openTools("welcome"))
+    }
     // Открытые окна. Спрашивать вейланд бесполезно: KWin не отдаёт список окон обычным клиентам —
     // ни wlr-foreign-toplevel, ни org_kde_plasma_window_management в реестре нет. Список приходит от
     // демона, которому о нём рассказывает скрипт, живущий внутри самого KWin.
@@ -1794,7 +1805,7 @@ Singleton {
             settings = m.settings
             // Свежая установка: знакомство открывается само, один раз за запуск острова.
             // Свежая установка: сначала маскот (intro в shell.qml), он сам откроет знакомство.
-            if (settings.onboarded === false && !welcomeShown) { welcomeShown = true; if (animOn) introOn = true; else Qt.callLater(() => openTools("welcome")) }
+            if (settings.onboarded === false) startWelcome()
         }
         if (m.history !== undefined) history = m.history
         if (m.free !== undefined) freeProviders = m.free
