@@ -439,6 +439,9 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
     sp = sub.add_parser("guard", help="предупреждение перед выключением компьютера: status | on | off")
     sp.add_argument("action", nargs="?", choices=["status", "on", "off"], default="status")
+    sp = sub.add_parser("filin", help="Филин: первое касание без вас — фото с вебкамеры и замок экрана: status | on | off")
+    sp.add_argument("action", nargs="?", choices=["status", "on", "off"], default="status")
+    sp.add_argument("--delay", type=float, default=15, help="секунд, чтобы успеть отойти")
     sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
     sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
@@ -1091,6 +1094,10 @@ def main(argv: list[str] | None = None) -> None:
         from . import manage
 
         _print(manage.guard(a.action))
+    elif a.cmd == "filin":
+        from . import filin
+
+        _print(filin.control(a.action, a.delay))
     elif a.cmd == "session":
         from . import session
 

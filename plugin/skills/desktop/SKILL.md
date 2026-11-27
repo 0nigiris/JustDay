@@ -43,5 +43,6 @@ The kwin server is already connected to the live desktop (no `session_connect`; 
 - Volume: `wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+` / `5%-` / `wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle`; read: `wpctl get-volume @DEFAULT_AUDIO_SINK@`.
 - Media: `playerctl play-pause|next|previous|status|metadata`.
 - Lock screen: `loginctl lock-session`. Sleep/shutdown/reboot need explicit user request (`systemctl suspend|poweroff|reboot`).
+- "I'm leaving, keep watch" / «посторожи»: `justday filin on` (Filin: from 15 s on, the first physical touch locks the screen and photographs the face; photos go to Telegram). «Я дома»: `justday filin off`. Prefer this to locking right away: a locked screen takes your screenshots away.
 - KWin / Plasma D-Bus: `qdbus-qt6 org.kde.KWin /KWin` (e.g. `org.kde.KWin.showDesktop`), `qdbus-qt6 org.kde.plasmashell /PlasmaShell`.
 - Settings changes via `kwriteconfig6 --notify` are allowed for harmless UI prefs; say what you changed.

@@ -18,6 +18,7 @@ dependencies = [
     "pycaw>=20240316; sys_platform == 'win32'",  # громкость на Windows (winaudio.py)
     "keyring>=25; sys_platform == 'win32'",      # ключи в «Диспетчере учётных данных» Windows
     "sounddevice>=0.5; sys_platform == 'win32'", # микрофон на Windows (audio.Microphone)
+    "filin; sys_platform == 'linux'",            # Филин: замок и фото по первому касанию (justday/filin.py)
 ]
 
 # Необязательное. Речь и голос — это гигабайты, и они нужны не всем: без микрофона
@@ -49,6 +50,7 @@ exclude-dependencies = ["tflite-runtime"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
+filin = { git = "https://github.com/0nigiris/Filin" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

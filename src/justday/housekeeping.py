@@ -11,6 +11,7 @@ from . import (
     calendar_lane,
     desktop,
     events,
+    filin,
     guardian,
     island,
     memory,
@@ -73,6 +74,13 @@ class HousekeepingMixin:
                         await guardian.tick(self._windows or [], self._nudge, self.cfg)
                     except Exception as e:
                         log.info("присмотр: %s", type(e).__name__)
+                    # Филин сработал, пока его не было: фото ушли в Telegram, но за компьютером он
+                    # узнавал об этом, только открыв папку. Сказать сразу, как вернётся к экрану.
+                    try:
+                        for line in filin.news():
+                            self.notify("Филин: " + line.split("  ", 1)[-1], "camera-photo", urgent=True)
+                    except OSError as e:
+                        log.info("филин: %s", e)
                 isl = self.cfg["island"]
                 if isl["show_weather"] and isl["city"] and (time.monotonic() - last_weather > 900 or self._weather_city != isl["city"]):
                     last_weather, self._weather_city = time.monotonic(), isl["city"]

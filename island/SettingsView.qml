@@ -1132,6 +1132,17 @@ Item {
                     }
                 }
                 Row {
+                    visible: !!(win.d.filin && win.d.filin.available)
+                    title: JD.tr("Филин")
+                    subtitle: win.d.filin && win.d.filin.on
+                        ? JD.tr("Не спит: первое касание запрёт экран и снимет лицо. Голосом: «я дома»")
+                        : JD.tr("Уходите, оставив экран включённым? Первое касание через 15 с запрёт экран и снимет лицо. Голосом: «посторожи»")
+                    Toggle {
+                        checked: win.d.filin && win.d.filin.on === true
+                        onToggled: v => win.run(["filin", v ? "on" : "off"], () => win.reload())
+                    }
+                }
+                Row {
                     title: JD.tr("Молчать во время игры")
                     subtitle: JD.tr("Пока запущена игра, ответы приходят текстом: видеокарта достаётся игре")
                     Toggle {

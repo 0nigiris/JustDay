@@ -801,7 +801,7 @@ def overview() -> dict:
             "local_models": local_models(), "mail_password": bool(providers.secret_get("mail")),
             "calendar": len(__import__("justday.calendar_lane", fromlist=["urls"]).urls()),
             "memory": memory_files(), "autostart": autostart(), "services": services(), "about": about(),
-            "guard": guard()}
+            "guard": guard(), "filin": __import__("justday.filin", fromlist=["control"]).control()}
 
 
 GUARD_UNIT = "justday-guard.service"

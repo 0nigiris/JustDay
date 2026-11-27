@@ -1186,5 +1186,8 @@
   "Голос и речь готовы": "Voice and speech are ready",
   "установлено": "installed",
   "качается в фоне · нажмите, чтобы остановить": "downloading in the background · tap to stop",
-  "не скачалось — нажмите, чтобы повторить": "download failed — tap to retry"
+  "не скачалось — нажмите, чтобы повторить": "download failed — tap to retry",
+  "Филин": "Filin",
+  "Не спит: первое касание запрёт экран и снимет лицо. Голосом: «я дома»": "Awake: the first touch locks the screen and photographs the face. Say “I'm home” to stop",
+  "Уходите, оставив экран включённым? Первое касание через 15 с запрёт экран и снимет лицо. Голосом: «посторожи»": "Leaving the screen on? From 15 s on, the first touch locks the screen and photographs the face. Say “keep watch”"
 }
