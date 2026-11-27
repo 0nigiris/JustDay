@@ -20,6 +20,15 @@ def test_free_model_answers_and_remembers(monkeypatch):
     assert any(m["content"] == "сделай громче" for m in seen[1])
 
 
+def test_free_model_can_close_and_search(monkeypatch):
+    """«Закрой браузер» и «какая погода» у друга без Claude получали только слова: действий таких не было."""
+    monkeypatch.setattr(freellm, "ready", lambda: [{"id": "groq"}])
+    monkeypatch.setattr(desktop, "list_apps", lambda: [])
+    for action in ("close", "search"):
+        monkeypatch.setattr(freellm, "chat", lambda m, a=action, **_: f'{{"action": "{a}", "query": "x"}}')
+        assert offline.decide("…")["action"] == action
+
+
 def test_free_model_silent_falls_back(monkeypatch):
     """Все бесплатные молчат (лимит, сеть) — не падать, а уйти к местной модели и регуляркам."""
     def dead(*a, **k):

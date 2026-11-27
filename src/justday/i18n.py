@@ -92,7 +92,7 @@ EN = {
     "играет {what}": "playing {what}", "музыка продолжается": "music resumed", "музыка выключена": "music stopped",
     "Нечего вернуть": "Nothing to bring back",
     "сначала": "from the start", "перемотал": "skipped to the spot", "видео закрыто": "video closed",
-    "Не нашёл «{q}»": "Couldn't find “{q}”", "Не получилось включить: {e}": "Couldn't play it: {e}",
+    "Не нашёл «{q}»": "Couldn't find “{q}”", "Не вижу открытого «{q}»": "I don't see “{q}” open", "ищу «{q}»": "searching for “{q}”", "Не получилось включить: {e}": "Couldn't play it: {e}",
     "Ищу видео: {q}": "Looking for a video: {q}", "Где включить видео?": "Where should the video play?",
     "В острове": "In the island", "прямо здесь, поверх окон": "right here, above the windows",
     "В окне": "In a window", "отдельный плеер, есть весь экран": "a separate player, can go fullscreen",

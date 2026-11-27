@@ -938,6 +938,16 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             step = {"+": "10%+", "-": "10%-"}.get(query) or f"{max(0, min(100, int(query or 50)))}%"
             await loop.run_in_executor(None, fastpath._run, "wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", step)
             said = t("готово")
+        elif action == "close":
+            # Бесплатная модель без инструментов: «закрой браузер» раньше получал только слова в ответ.
+            shut = await loop.run_in_executor(None, desktop.windows, "close_app", query)
+            said = t("закрыл {what}", what=query) if shut else t("Не вижу открытого «{q}»", q=query)
+        elif action == "search":
+            import webbrowser
+            from urllib.parse import quote_plus
+
+            webbrowser.open("https://duckduckgo.com/?q=" + quote_plus(query))
+            said = got["answer"] or t("ищу «{q}»", q=query)
         else:
             said = got["answer"] or t("Облако сейчас недоступно.")
         if not got.get("cloud") and time.monotonic() - self._offline_note > 600:  # say it once, not before every sentence

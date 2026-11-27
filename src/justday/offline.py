@@ -38,8 +38,10 @@ CLOUD = """%(character)s
 Ты — голосовой ассистент на компьютере человека (%(os)s). Отвечаешь вслух: коротко, живо, без
 разметки, без списков, одно-три предложения, если не просят подробно. Обращение: «%(address)s».
 Кроме разговора умеешь: app — открыть программу (query = её название), music — включить скачанную
-музыку (query = песня или пусто), volume — громкость (query = число 0-100 или "+"/"-").
-Отвечай ТОЛЬКО JSON: {"action": "app|music|volume|answer", "query": "...", "answer": "что сказать вслух"}.
+музыку (query = песня или пусто), volume — громкость (query = число 0-100 или "+"/"-"),
+close — закрыть программу (query = её название), search — найти в интернете (query = что искать;
+так же, если просят свежее: погоду, новости, курс).
+Отвечай ТОЛЬКО JSON: {"action": "app|music|volume|close|search|answer", "query": "...", "answer": "что сказать вслух"}.
 Установленные программы: %(apps)s"""
 
 # Последние реплики разговора с бесплатной моделью: без них «а теперь погромче» и «а он кто?» не
@@ -77,7 +79,7 @@ def decide(text: str) -> dict:
     got = _cloud(text, apps)
     if got is not None:
         action = str(got.get("action", "answer")).strip().lower()
-        return {"action": action if action in ("app", "music", "volume") else "answer",
+        return {"action": action if action in ("app", "music", "volume", "close", "search") else "answer",
                 "query": str(got.get("query", "")).strip(), "answer": str(got.get("answer", "")).strip(), "cloud": True}
     try:
         raw = localllm.chat(PROMPT % {"apps": apps}, text, json_mode=True, max_tokens=200, timeout=60)
