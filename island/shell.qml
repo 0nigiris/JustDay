@@ -732,8 +732,9 @@ ShellRoot {
                     parent: JD.islandStyle === "bar" ? dropCard : stage
                     // На низком экране или при масштабе 125% 640 не влезает: карточка не выше экрана.
                     // 27 нояб.: на экране 1024×768 (так на машине сборки Windows) 940 точек — это вся
-                    // ширина, и карточка закрывала стол целиком. Не шире двух третей экрана.
-                    implicitWidth: Math.min(940, Math.round(JD.screenWidth * 0.66))
+                    // ширина, и карточка закрывала стол целиком. Не шире двух третей экрана, но и не уже 720:
+                    // слева колонка разделов 240, и правой части меньше 480 уже не хватает на строки.
+                    implicitWidth: Math.min(940, Math.max(720, Math.round(JD.screenWidth * 0.66)), JD.screenWidth - 16)
                     implicitHeight: Math.min(640, JD.screenHeight - 2 * (JD.topMargin + 20))
                     Loader {
                         anchors.fill: parent

@@ -632,7 +632,9 @@ def _shoot(app, eng, path: str) -> None:
     from PySide6.QtQml import QQmlEngine, QQmlExpression
 
     r = eng.rootObjects()[0]
-    QTimer.singleShot(1500, lambda: QQmlExpression(QQmlEngine.contextForObject(r), r, "JD.expanded = true").evaluate())
+    # JUSTDAY_SHOT_DO — что открыть перед снимком (выражение QML): так снимаются и настройки, и знакомство.
+    what = os.environ.get("JUSTDAY_SHOT_DO", "JD.expanded = true")
+    QTimer.singleShot(1500, lambda: QQmlExpression(QQmlEngine.contextForObject(r), r, what).evaluate())
 
     def grab():
         wins = [w for w in app.topLevelWindows() if w.isVisible() and hasattr(w, "grabWindow")]
