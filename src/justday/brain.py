@@ -36,6 +36,15 @@ from . import chats, config, dispatch, events, kde, providers
 from . import persona as persona_mod
 from .i18n import t
 
+# Персона написана для KDE: на Windows мозг тянулся бы к wpctl, qdbus и kwin, которых там нет.
+WINDOWS_NOTE = """
+
+## Windows
+Это Windows, не Linux: wpctl, playerctl, qdbus, kwin, systemctl и notify-send здесь нет. Окна,
+громкость, программы, поиск, уведомления — через `justday …` (это JustDay.exe, команды те же);
+остальное — PowerShell. Окна: `justday windows list|focus|minimize|close ЗАПРОС`.
+"""
+
 log = logging.getLogger("justday.brain")
 
 # Два разных места, их нельзя путать. BRAIN_DIR — данные человека: рабочая папка мозга, его профиль
@@ -200,9 +209,13 @@ class Brain:
             persona_file = BRAIN_PKG_DIR / "PERSONA.md"
         persona = persona_file.read_text(encoding="utf-8")
         names = [u["assistant_name"], *u.get("assistant_aliases", [])]
-        plasma, kind = kde.session()
-        persona = (persona.replace("(KDE Plasma 6, Wayland)", f"(KDE Plasma {plasma}, {'X11' if kind == 'x11' else 'Wayland'})")
-                   .replace("`kwin_wayland`", f"`kwin_{kind}`"))
+        if config.WINDOWS:
+            persona = persona.replace("Linux-компьютере (KDE Plasma 6, Wayland)", "компьютере с Windows").replace(
+                "Linux computer (KDE Plasma 6, Wayland)", "Windows computer") + WINDOWS_NOTE
+        else:
+            plasma, kind = kde.session()
+            persona = (persona.replace("(KDE Plasma 6, Wayland)", f"(KDE Plasma {plasma}, {'X11' if kind == 'x11' else 'Wayland'})")
+                       .replace("`kwin_wayland`", f"`kwin_{kind}`"))
         persona = persona.replace("{character}", persona_mod.character(self.cfg))  # it has placeholders of its own
         # Что из его умений включено — знает конфиг, а не текст характера. Иначе он обещает
         # то, чего у человека нет, и не знает про то, что у него есть.
@@ -229,7 +242,8 @@ class Brain:
             # хука на каждую команду (Р-20). Свои правила мозга — в brain/settings.json, плагин — ниже.
             setting_sources=["project", "local"],
             settings=str(BRAIN_PKG_DIR / "settings.json"),
-            plugins=[{"type": "local", "path": str(config.REPO_DIR / "plugin")}],
+            # Навыки плагина — про KDE и KWin; в JustDay.exe его нет, и путь в никуда ронял запуск мозга.
+            plugins=[{"type": "local", "path": str(p)} for p in [config.REPO_DIR / "plugin"] if p.is_dir()],
             add_dirs=[str(Path.home())],
             # kwin screenshot: full-resolution multi-monitor PNG (slow; `look` instead);
             # kwin launch_app: never reaps its children (zombies confuse "is it running?" checks; `justday apps launch`)

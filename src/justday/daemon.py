@@ -112,6 +112,24 @@ def sd_notify(state: str) -> None:
         pass
 
 
+def _justday_on_path() -> None:
+    """В JustDay.exe нет команды `justday`, а персона и навыки зовут именно её: мозг (Claude Code
+    в Git Bash) и сцены получали «command not found». Две прокладки — для cmd/PowerShell и для bash.
+
+    Путь к exe — через переменную, а не в тексте: cmd читает .cmd в кодировке OEM, и кириллица в
+    имени папки пользователя превращалась бы в мусор."""
+    import sys
+
+    if not getattr(sys, "frozen", False):
+        return  # поставлен через pip: justday уже лежит в Scripts
+    d = config.STATE_DIR / "bin"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "justday.cmd").write_text('@"%JUSTDAY_EXE%" %*\r\n', encoding="ascii")
+    (d / "justday").write_text('#!/bin/sh\nexec "$JUSTDAY_EXE" "$@"\n', encoding="ascii")
+    os.environ["JUSTDAY_EXE"] = sys.executable
+    os.environ["PATH"] = f"{d}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
 class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, HousekeepingMixin, BackgroundMixin, LadderMixin, AskMixin, WatchersMixin, MusicMixin, VideoMixin, ReminderMixin):
     def __init__(self) -> None:
         self.cfg = config.load()
@@ -1135,6 +1153,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
         self._loop = loop
         events.subscribe(self._on_event)
         if config.WINDOWS:
+            _justday_on_path()
             server = await self._serve_tcp()
         else:
             if config.SOCKET_PATH.exists():

@@ -90,6 +90,14 @@ jobs:
           grep -qi notepad apps.txt
           ./dist/JustDay/JustDay.exe
           test -s spotlight.png
+      - name: Команда justday — для мозга и сцен
+        # Персона и навыки зовут `justday …`; в exe её нет, демон кладёт прокладки в state\bin.
+        shell: bash
+        run: |
+          export JUSTDAY_EXE="$(cygpath -w "$PWD/dist/JustDay/JustDay.exe")"
+          bin="$(cygpath -u "$LOCALAPPDATA")/JustDay/state/bin"
+          "$bin/justday" status | grep -q '"ok": true'
+          cmd //c "$(cygpath -w "$bin/justday.cmd")" status | grep -q '"ok": true'
       - name: Слух — своя речь внутри exe
         # Имя и «Hey Jarvis» слушаются только своей речью: облаку не отдаём всё, что звучит в комнате.
         # Если сборка потеряла Whisper, Джарвис тихо вернулся бы к кнопке и к ключу Groq.
