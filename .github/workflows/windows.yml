@@ -123,6 +123,7 @@ jobs:
         shell: bash
         env:
           QT_QPA_PLATFORM: offscreen
+          PYTHONIOENCODING: utf-8
         run: |
           python - <<'PY'
           import ctypes, sys
