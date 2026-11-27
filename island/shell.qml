@@ -462,7 +462,7 @@ ShellRoot {
         }
 
         // Маскот при первом запуске: см. MascotIntro.qml.
-        MascotIntro { z: 2 }
+        MascotIntro { id: mascotIntro; z: 2 }
 
         // ───────────── the island ─────────────
         Rectangle {
@@ -480,11 +480,11 @@ ShellRoot {
             readonly property bool barHang: JD.islandStyle === "bar" && (mode === "settings" || mode === "expanded" || mode === "tools")
             readonly property bool menuBar: JD.islandStyle === "bar" && (mode === "peek" || mode === "hidden")
             readonly property bool barDock: menuBar || barHang
-            // Пока маскот падает, капсула ждёт под ним невидимой, размером с шарик (MascotIntro.size):
-            // из него и вырастет знакомство, без стыка.
+            // Пока маскот падает и здоровается, капсула ждёт под ним невидимой, того же размера
+            // (шарик, потом пилюля «Привет!»): из него и вырастет знакомство, без стыка.
             readonly property bool introBall: JD.introOn && mode !== "tools" && JD.islandStyle === "island"
             width: barDock ? Math.max(1, parent.width - win.barBleed * 2)
-                 : introBall ? 44
+                 : introBall ? mascotIntro.width
                  : mode === "hidden" ? 0
                  : Math.max(120, content.implicitWidth)
             height: introBall ? 44

@@ -1180,5 +1180,11 @@
   "у нижнего края": "at the bottom edge",
   "Никогда не включать": "Never play",
   "Слова через запятую: трек с ними в названии пропускается, например lofi": "Comma-separated words: a track with one in its title is skipped, e.g. lofi",
-  "это в списке «никогда не включать»": "that is on the never-play list"
+  "это в списке «никогда не включать»": "that is on the never-play list",
+  "Привет!": "Hi!",
+  "Голос и речь качаются в фоне": "Voice and speech are downloading",
+  "Голос и речь готовы": "Voice and speech are ready",
+  "установлено": "installed",
+  "качается в фоне · нажмите, чтобы остановить": "downloading in the background · tap to stop",
+  "не скачалось — нажмите, чтобы повторить": "download failed — tap to retry"
 }

@@ -138,3 +138,10 @@ def parts_in_background(names: list[str]) -> dict:
                            "--description=JustDay: доставка частей", "bash", "-c", script],
                           capture_output=True, text=True, timeout=15)
     return {"ok": done.returncode == 0, "error": done.stderr.strip()[:200]}
+
+
+def parts_stop() -> dict:
+    """Остановить докачку частей. Знакомство начинает её само, не спросив (27 нояб.: «чтобы не ждать»),
+    поэтому человеку нужен способ отказаться — гигабайт на мобильном интернете не всем по карману."""
+    done = _systemctl("stop", "justday-parts.service")
+    return {"ok": done.returncode == 0, "error": done.stderr.strip()[:200]}

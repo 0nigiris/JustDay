@@ -1097,13 +1097,20 @@ class CommandsMixin:
                 return
 
     async def _cmd_parts_install(self, req: dict, writer: asyncio.StreamWriter) -> dict:
-        """Этап 2 установки из острова: доставить выбранные части в фоне. Качает гигабайты: решает человек."""
+        """Этап 2 установки из острова: доставить части в фоне. Качает гигабайты: решает человек, а не ИИ —
+        знакомство начинает сама, остановить можно там же (parts_stop)."""
         from . import modules
 
         if self._peer_is_ai(writer):
             return {"ok": False, "error": "ставит человек: кнопкой"}
         names = [str(n) for n in (req.get("names") or [])]
         return await asyncio.get_running_loop().run_in_executor(None, modules.parts_in_background, names)
+
+    async def _cmd_parts_stop(self, req: dict, writer: asyncio.StreamWriter) -> dict:
+        """Остановить докачку частей, начатую знакомством."""
+        from . import modules
+
+        return await asyncio.get_running_loop().run_in_executor(None, modules.parts_stop)
 
     async def _cmd_terminal_run(self, req: dict, writer: asyncio.StreamWriter) -> dict:
         """Показать одно из заранее известных действий в окне терминала (обновление, журнал, голос)."""

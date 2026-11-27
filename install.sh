@@ -539,45 +539,12 @@ fi
 
 # ───────────── uv, Claude Code, kwin-mcp ─────────────
 export PATH="$HOME/.local/bin:$PATH"
-get_claude() {
-  if command -v claude >/dev/null; then
-    note "$(claude --version 2>/dev/null | awk '{print $1}')"
-  else
-    curl -fsSL https://claude.ai/install.sh | bash
-    note "$(t 'установлен' 'installed')"
-  fi
-}
-step "Claude Code" get_claude
 
 get_uv() {
   if command -v uv >/dev/null; then note "$(t 'уже есть' 'already here')"
   else curl -LsSf https://astral.sh/uv/install.sh | sh; note "$(t 'установлен' 'installed')"; fi
 }
 step "uv" get_uv
-
-# Без прав администратора кое-что ставится и в домашнюю папку — музыка не должна пропадать
-# только потому, что на этом компьютере нет пароля.
-if ((${#MISSING[@]})) && [[ " ${MISSING[*]} " == *" yt-dlp "* ]] && ! command -v yt-dlp >/dev/null; then
-  user_tools() { uv tool install yt-dlp; note "yt-dlp"; }
-  step "$(t 'Музыка и видео' 'Music and video')" user_tools
-  MISSING=("${MISSING[@]/yt-dlp/}")
-fi
-
-if [[ $DESKTOP_CONTROL == 1 ]]; then
-  get_kwin_mcp() {
-    # pinned: plugin/bin/kwin_live.py extends this server's internals (engine, AT-SPI helper)
-    local rev="${KWIN_MCP_REV:-7cef7afc402d3c5892f39825290bbbe1851ae1d0}"
-    if uv tool install --python 3.12 --reinstall "git+https://github.com/VibeProgramm/kwin-mcp@$rev"; then
-      note "kwin-mcp"
-    else
-      note "$(t 'не поставилось' 'not installed')"
-      warn "$(t 'Без него ассистент не сможет нажимать кнопки в окнах. Подробности в журнале.' 'Without it the assistant cannot press buttons in windows. See the log.')"
-    fi
-  }
-  step "$(t 'Управление рабочим столом' 'Desktop control')" get_kwin_mcp
-else
-  row '•' "$C" "$(t 'Управление рабочим столом' 'Desktop control')" "$(t 'пропущено: нужен KWin 6 на Wayland' 'skipped: needs KWin 6 on Wayland')"
-fi
 
 # ───────────── python env and models ─────────────
 # Самый долгий шаг во всей установке, и раньше он выглядел как зависший спиннер: рядом с ним
@@ -748,6 +715,44 @@ services() {
   fi
 }
 step "$(t 'Службы' 'Services')" services
+
+# Claude Code, yt-dlp и kwin-mcp — после служб (27 нояб.): островку для первого показа они не нужны, а
+# качаются они минуты. Раньше они стояли до окружения Python, и человек всё это время смотрел в
+# терминал; теперь островок со знакомством уже на экране, пока они докачиваются.
+get_claude() {
+  if command -v claude >/dev/null; then
+    note "$(claude --version 2>/dev/null | awk '{print $1}')"
+  else
+    curl -fsSL https://claude.ai/install.sh | bash
+    note "$(t 'установлен' 'installed')"
+  fi
+}
+step "Claude Code" get_claude
+
+# Без прав администратора кое-что ставится и в домашнюю папку — музыка не должна пропадать
+# только потому, что на этом компьютере нет пароля.
+if ((${#MISSING[@]})) && [[ " ${MISSING[*]} " == *" yt-dlp "* ]] && ! command -v yt-dlp >/dev/null; then
+  user_tools() { uv tool install yt-dlp; note "yt-dlp"; }
+  step "$(t 'Музыка и видео' 'Music and video')" user_tools
+  MISSING=("${MISSING[@]/yt-dlp/}")
+fi
+
+if [[ $DESKTOP_CONTROL == 1 ]]; then
+  get_kwin_mcp() {
+    # pinned: plugin/bin/kwin_live.py extends this server's internals (engine, AT-SPI helper)
+    local rev="${KWIN_MCP_REV:-7cef7afc402d3c5892f39825290bbbe1851ae1d0}"
+    if uv tool install --python 3.12 --reinstall "git+https://github.com/VibeProgramm/kwin-mcp@$rev"; then
+      note "kwin-mcp"
+    else
+      note "$(t 'не поставилось' 'not installed')"
+      warn "$(t 'Без него ассистент не сможет нажимать кнопки в окнах. Подробности в журнале.' 'Without it the assistant cannot press buttons in windows. See the log.')"
+    fi
+  }
+  step "$(t 'Управление рабочим столом' 'Desktop control')" get_kwin_mcp
+else
+  row '•' "$C" "$(t 'Управление рабочим столом' 'Desktop control')" "$(t 'пропущено: нужен KWin 6 на Wayland' 'skipped: needs KWin 6 on Wayland')"
+fi
+
 
 # Видео, открытое из файлового менеджера, шло в системный проигрыватель (Showtime, VLC), а «включи»
 # голосом — в наш плеер на острове; он видел два разных плеера и считал наш хуже работающим (п.7b

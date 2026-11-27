@@ -2,6 +2,7 @@
 // модель и место острова человек выбирает здесь, глазами. Показывается один раз (user.onboarded).
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell.Io
 
 Item {
@@ -27,16 +28,57 @@ Item {
     Component.onCompleted: if (win) { JD.send({ cmd: "free_key" }); JD.send({ cmd: "autostart" }) }
     property string saving: ""
     // Linux: установщик ставит минимум без вопросов, речь и голос докачиваются отсюда в фоне (19 нояб.).
+    // 27 нояб.: раньше докачка ждала кнопки на последнем шаге, и человек, нажавший «Дальше» четыре
+    // раза, оставался без голоса. Теперь она начинается сразу, как открылось знакомство: вопросы
+    // идут, пока качается; что качается — видно в углу карточки, остановить можно на последнем шаге.
     property var missingParts: []
     property bool partsStarted: false
+    property bool partsDone: false
+    property bool partsFailed: false
+    property bool partsChecked: false
     Process {
+        id: partsList
         running: !wl.win
         command: ["justday", "parts", "json"]
         stdout: StdioCollector {
             onStreamFinished: {
-                try { wl.missingParts = JSON.parse(text).filter(p => !p.have && ["speech", "voice"].includes(p.name)) } catch (e) {}
+                let miss = []
+                try { miss = JSON.parse(text).filter(p => !p.have && ["speech", "voice"].includes(p.name)) } catch (e) { return }
+                if (wl.partsStarted) {
+                    // Повторная проверка после докачки: всё ли встало.
+                    wl.partsDone = miss.length === 0
+                    wl.partsFailed = miss.length > 0
+                    wl.partsStarted = false
+                    return
+                }
+                wl.missingParts = miss
+                if (!wl.partsChecked && miss.length) wl.startParts()
+                wl.partsChecked = true
             }
         }
+    }
+    function startParts() {
+        partsStarted = true
+        partsFailed = false
+        JD.installParts(missingParts.map(p => p.name))
+    }
+    function stopParts() {
+        JD.send({ cmd: "parts_stop" })
+        partsStarted = false
+    }
+    // Служба докачки закончилась — пересмотреть, что теперь есть.
+    Process {
+        id: partsUnit
+        command: ["systemctl", "--user", "is-active", "justday-parts.service"]
+        stdout: StdioCollector {
+            onStreamFinished: if (wl.partsStarted && !["active", "activating"].includes(text.trim())) partsList.running = true
+        }
+    }
+    Timer {
+        running: wl.partsStarted
+        interval: 4000
+        repeat: true
+        onTriggered: partsUnit.running = true
     }
     Connections {
         target: JD
@@ -176,6 +218,42 @@ Item {
             onAccepted: wl.next()
             // На каждую букву глаза чуть кивают: видно, что его слушают.
             onTextChanged: if (activeFocus) JD.facePing("nod")
+        }
+    }
+
+    // Что качается в фоне — тихо в углу, вровень с глазами маскота. Вопросы от этого не ждут.
+    Row {
+        id: partsChip
+        z: 2
+        anchors { right: parent.right; rightMargin: 10; top: parent.top; topMargin: 8 }
+        spacing: 7
+        readonly property bool shown: wl.partsStarted || wl.partsDone
+        opacity: shown ? 1 : 0
+        visible: opacity > 0.01
+        Behavior on opacity { enabled: JD.animOn; NumberAnimation { duration: JD.durSlow; easing.type: Easing.OutCubic } }
+        // Готово — подержать галочку и убрать, чтобы угол не висел навсегда.
+        Timer { running: wl.partsDone; interval: 4000; onTriggered: wl.partsDone = false }
+        Item {
+            width: 14; height: 14
+            anchors.verticalCenter: parent.verticalCenter
+            Rectangle { anchors.fill: parent; radius: 7; color: "transparent"; border.width: 2; border.color: JD.fill2; visible: !wl.partsDone }
+            Shape {
+                id: spin
+                anchors.fill: parent
+                visible: !wl.partsDone
+                preferredRendererType: Shape.CurveRenderer
+                ShapePath {
+                    strokeColor: JD.accentBlue; strokeWidth: 2; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    PathAngleArc { centerX: 7; centerY: 7; radiusX: 6; radiusY: 6; startAngle: 0; sweepAngle: 100 }
+                }
+                RotationAnimation on rotation { running: spin.visible && partsChip.visible && JD.animOn; from: 0; to: 360; duration: 1100; loops: Animation.Infinite }
+            }
+            Icon { anchors.centerIn: parent; visible: wl.partsDone; name: "check"; implicitSize: 14; tint: JD.accentBlue }
+        }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: wl.partsDone ? JD.tr("Голос и речь готовы") : JD.tr("Голос и речь качаются в фоне")
+            font.family: JD.fontFamily; font.pixelSize: 12; color: JD.text2
         }
     }
 
@@ -340,10 +418,12 @@ Item {
                            onPicked: JD.send({ cmd: "autostart", state: JD.autostartOn ? "off" : "on" }) }
                     Card { visible: !wl.win && wl.missingParts.length > 0; width: parent.width
                            title: JD.tr("Голос и распознавание речи")
-                           hint: wl.partsStarted ? JD.tr("качается в фоне, по готовности придёт уведомление")
-                                                 : JD.tr("скачать в фоне") + " · " + wl.missingParts.map(p => p.size).join(" + ")
-                           on: wl.partsStarted
-                           onPicked: if (!wl.partsStarted) { wl.partsStarted = true; JD.installParts(wl.missingParts.map(p => p.name)) } }
+                           hint: wl.partsDone ? JD.tr("установлено")
+                               : wl.partsStarted ? JD.tr("качается в фоне · нажмите, чтобы остановить")
+                               : wl.partsFailed ? JD.tr("не скачалось — нажмите, чтобы повторить")
+                               : JD.tr("скачать в фоне") + " · " + wl.missingParts.map(p => p.size).join(" + ")
+                           on: wl.partsStarted || wl.partsDone
+                           onPicked: if (wl.partsStarted) wl.stopParts(); else if (!wl.partsDone) wl.startParts() }
                 }
             }
         }
