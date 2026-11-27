@@ -60,6 +60,10 @@ Filename: "{app}\JustDay.exe"; Flags: nowait skipifsilent
 [UninstallRun]
 ; Демон живёт в фоне без окна: не остановив его, удаление оставило бы занятые файлы.
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM JustDay.exe"; Flags: runhidden; RunOnceId: "StopJustDay"
+; Потом вернуть панель задач: taskkill /F не даёт островку сделать это самому, а живой
+; островок спрятал бы её снова за 2 с, и без этой строки
+; человек оставался бы без панели задач и без дока.
+Filename: "{app}\JustDay.exe"; Parameters: "taskbar-show"; Flags: runhidden waituntilterminated; RunOnceId: "TaskbarBack"
 ; Автозапуск включается из островка (manage._autostart_windows) — убираем его вместе с программой.
 Filename: "{sys}\reg.exe"; Parameters: "delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v JustDay /f"; Flags: runhidden; RunOnceId: "DropAutostart"
 

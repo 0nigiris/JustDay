@@ -531,47 +531,23 @@ def _register_qml() -> None:
     t("Quickshell.Services.Notifications", "NotificationServer")
 
 
-_TASKBAR = {"hidden": False, "was": None, "timer": None}
+_TASKBAR = {"hidden": False, "timer": None}
 
 
 def _taskbar(hide: bool) -> None:
-    """Прячем обратимо: автоскрытие (рабочая область становится весь экран, окна разворачиваются до
-    низа) плюс само окно панели. Ничего не пишем в реестр: вернуть — то же действие наоборот, а
-    перезапуск Проводника и так возвращает панель. Прежнее автоскрытие человека запоминаем и
-    восстанавливаем, а не включаем «как нам кажется»."""
+    """Панель задач Windows: прячет и возвращает justday.winwindows.taskbar, здесь — только присмотр."""
     if sys.platform != "win32" or hide == _TASKBAR["hidden"]:
         return
-    import ctypes
-    from ctypes import wintypes
+    from justday import winwindows
 
-    class APPBARDATA(ctypes.Structure):
-        _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uCallbackMessage", wintypes.UINT),
-                    ("uEdge", wintypes.UINT), ("rc", wintypes.RECT), ("lParam", wintypes.LPARAM)]
-
-    user32, shell32 = ctypes.windll.user32, ctypes.windll.shell32
-    shell32.SHAppBarMessage.restype = ctypes.c_size_t
-    abd = APPBARDATA(cbSize=ctypes.sizeof(APPBARDATA))
-    if hide and _TASKBAR["was"] is None:
-        _TASKBAR["was"] = int(shell32.SHAppBarMessage(4, ctypes.byref(abd)))  # ABM_GETSTATE
-    abd.lParam = 1 if hide else (_TASKBAR["was"] or 0)  # ABS_AUTOHIDE
-    shell32.SHAppBarMessage(10, ctypes.byref(abd))  # ABM_SETSTATE
+    winwindows.taskbar(hide)
     _TASKBAR["hidden"] = hide
-
-    def apply():
-        for cls in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd"):  # главная и панели на других мониторах
-            h = user32.FindWindowW(cls, None)
-            while h:
-                if bool(user32.IsWindowVisible(h)) == _TASKBAR["hidden"]:
-                    user32.ShowWindow(h, 0 if _TASKBAR["hidden"] else 5)  # SW_HIDE / SW_SHOW
-                h = user32.FindWindowExW(None, h, cls, None)
-
-    apply()
     if _TASKBAR["timer"] is None:
         # Проводник перезапустился или клавиша Win вытащила панель — прячем снова. Раз в 2 с хватает:
         # панель, мелькнувшая на миг, не беда, а опрос чаще — работа впустую.
         t = _TASKBAR["timer"] = QTimer()
         t.setInterval(2000)
-        t.timeout.connect(lambda: _TASKBAR["hidden"] and apply())
+        t.timeout.connect(lambda: _TASKBAR["hidden"] and winwindows.taskbar_windows(True))
         t.start()
         # JustDay закрыли — панель возвращается: без него у человека не осталось бы ни дока, ни панели.
         QGuiApplication.instance().aboutToQuit.connect(lambda: _taskbar(False))
@@ -747,6 +723,12 @@ def main() -> int:
         os.environ.setdefault("JUSTDAY_SOCKET", "tcp:47615")
         # Лотка на Windows нет: значки чужих программ у часов Windows не отдаёт никому, кроме своей панели.
         os.environ.setdefault("JUSTDAY_NO_TRAY", "1")
+        try:  # прошлый раз упали, не вернув панель задач; нужна она снова — островок спрячет её сам
+            from justday import winwindows
+
+            winwindows.taskbar(False)
+        except Exception:
+            pass
         if getattr(sys, "frozen", False) and not os.environ.get("JUSTDAY_SHOT"):
             _wake_jarvis()
             # Конфига ещё нет — это первый щелчок по ярлыку: маскот выходит сразу, не дожидаясь демона.

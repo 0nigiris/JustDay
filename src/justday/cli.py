@@ -447,6 +447,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("filin", help="Филин: первое касание без вас — фото с вебкамеры и замок экрана: status | on | off | run")
     sp.add_argument("action", nargs="?", choices=["status", "on", "off", "run"], default="status")
     sp.add_argument("--delay", type=float, default=15, help="секунд, чтобы успеть отойти")
+    sub.add_parser("taskbar-show", help="Windows: вернуть панель задач, если её спрятал JustDay (зовёт удаление)")
     sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
     sp.add_argument("--keep", action="append", default=[], help="an application to leave open (may repeat)")
@@ -1109,6 +1110,11 @@ def main(argv: list[str] | None = None) -> None:
         from . import filin
 
         _print(filin.control(a.action, a.delay))
+    elif a.cmd == "taskbar-show":
+        if config.WINDOWS:
+            from . import winwindows
+
+            winwindows.taskbar(False)
     elif a.cmd == "session":
         from . import session
 

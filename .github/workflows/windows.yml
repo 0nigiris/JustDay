@@ -145,6 +145,13 @@ jobs:
               assert not u.IsWindowVisible(h), "панель задач не спряталась"
               host._taskbar(False)
               assert u.IsWindowVisible(h), "панель задач не вернулась"
+              # Островок упал, не вернув панель: её должна вернуть команда, которую зовёт удаление.
+              from justday import winwindows
+              import subprocess
+              winwindows.taskbar(True)
+              assert not u.IsWindowVisible(h)
+              subprocess.run(["dist/JustDay/JustDay.exe", "taskbar-show"], check=True, timeout=60)
+              assert u.IsWindowVisible(h), "taskbar-show не вернул панель задач"
           PY
       - name: Установщик
         # Другу нужна установка, а не папка: ярлык в «Пуске», удаление из «Параметров», автозапуск по желанию.

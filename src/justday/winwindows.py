@@ -8,11 +8,13 @@ Powershell не берём: каждый его запуск из отсоеди
 import ctypes
 from ctypes import wintypes
 
+from . import config
 from .desktop import win_icon
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 dwmapi = ctypes.windll.dwmapi
+shell32 = ctypes.windll.shell32
 
 WM_CLOSE = 0x0010
 SW_MINIMIZE, SW_RESTORE = 6, 9
@@ -126,3 +128,45 @@ def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
         if action in ("focus", "wake"):
             break
     return out
+
+
+class _APPBARDATA(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uCallbackMessage", wintypes.UINT),
+                ("uEdge", wintypes.UINT), ("rc", wintypes.RECT), ("lParam", wintypes.LPARAM)]
+
+
+def _taskbar_was():
+    return config.STATE_DIR / "taskbar-was"
+
+
+def taskbar(hide: bool) -> None:
+    """Спрятать или вернуть панель задач. Обратимо: автоскрытие плюс само окно панели, реестр не трогаем.
+
+    Прежнее автоскрытие человека лежит в файле, а не в памяти: островок, упавший или снятый
+    `taskkill /F` при удалении, иначе оставлял человека без панели задач насовсем. Пока файл есть,
+    панель спрятана нами, и следующий запуск или удаление (`justday taskbar show`) её вернёт."""
+    shell32.SHAppBarMessage.restype = ctypes.c_size_t
+    abd = _APPBARDATA(cbSize=ctypes.sizeof(_APPBARDATA))
+    mark = _taskbar_was()
+    if hide:
+        if not mark.exists():
+            mark.parent.mkdir(parents=True, exist_ok=True)
+            mark.write_text(str(int(shell32.SHAppBarMessage(4, ctypes.byref(abd)))))  # ABM_GETSTATE
+        abd.lParam = 1  # ABS_AUTOHIDE
+    else:
+        if not mark.exists():
+            return  # не мы прятали — не нам и возвращать
+        abd.lParam = int(mark.read_text() or 0)
+    shell32.SHAppBarMessage(10, ctypes.byref(abd))  # ABM_SETSTATE
+    taskbar_windows(hide)
+    if not hide:
+        mark.unlink(missing_ok=True)
+
+
+def taskbar_windows(hide: bool) -> None:
+    for cls in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd"):  # главная и панели на других мониторах
+        h = user32.FindWindowW(cls, None)
+        while h:
+            if bool(user32.IsWindowVisible(h)) == hide:
+                user32.ShowWindow(h, 0 if hide else 5)  # SW_HIDE / SW_SHOW
+            h = user32.FindWindowExW(None, h, cls, None)
