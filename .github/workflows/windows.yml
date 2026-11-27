@@ -107,6 +107,11 @@ jobs:
           $done = $p.HasExited
           Watch 30000  # холодный пуск exe: демон, островок, шарик и знакомство
           Shot after-setup-shot.png
+          # Кнопки островка зовут те же команды, а они — powershell, reg, where: каждая могла бы мигнуть
+          # своим окном уже после знакомства, когда человек жмёт кнопки.
+          $exe = "$env:LOCALAPPDATA\Programs\JustDay\JustDay.exe"
+          foreach ($c in 'status', 'doctor', 'apps', 'windows', 'version') { Start-Process $exe $c -WindowStyle Hidden }
+          Watch 20000
           taskkill /F /IM JustDay.exe 2>$null
           # Установка, которая ждёт щелчка, у друга выглядела бы зависшей.
           if (-not $done) { $p.Kill(); Write-Error "установщик не закончил за 2 минуты: ждёт щелчка?"; exit 1 }
