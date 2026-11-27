@@ -439,8 +439,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--full", action="store_true", help="keep full resolution (small text)")
     sp = sub.add_parser("guard", help="предупреждение перед выключением компьютера: status | on | off")
     sp.add_argument("action", nargs="?", choices=["status", "on", "off"], default="status")
-    sp = sub.add_parser("filin", help="Филин: первое касание без вас — фото с вебкамеры и замок экрана: status | on | off")
-    sp.add_argument("action", nargs="?", choices=["status", "on", "off"], default="status")
+    sp = sub.add_parser("filin", help="Филин: первое касание без вас — фото с вебкамеры и замок экрана: status | on | off | run")
+    sp.add_argument("action", nargs="?", choices=["status", "on", "off", "run"], default="status")
     sp.add_argument("--delay", type=float, default=15, help="секунд, чтобы успеть отойти")
     sp = sub.add_parser("session", help="the open applications: save | close [--keep NAME] | restore | list")
     sp.add_argument("action", choices=["save", "close", "restore", "list"])
@@ -1095,6 +1095,12 @@ def main(argv: list[str] | None = None) -> None:
 
         _print(manage.guard(a.action))
     elif a.cmd == "filin":
+        if a.action == "run":  # сам сторож, на переднем плане: так его запускает filin.control на Windows
+            import filin as owl
+
+            sys.argv = ["filin", "--delay", str(a.delay)]
+            owl.main()
+            return
         from . import filin
 
         _print(filin.control(a.action, a.delay))

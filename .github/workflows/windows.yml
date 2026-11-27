@@ -89,6 +89,18 @@ jobs:
           grep -qi notepad apps.txt
           ./dist/JustDay/JustDay.exe
           test -s spotlight.png
+      - name: Филин — встаёт на стражу и снимается
+        # Срабатывание здесь не проверить: нажатия робота помечены injected, и Филин их нарочно
+        # пропускает. Проверяется то, что ломается тихо: процесс поднялся, хуки встали, «off» его снял.
+        shell: pwsh
+        run: |
+          $exe = "./dist/JustDay/JustDay.exe"
+          $on = & $exe filin on | ConvertFrom-Json; $on
+          if (-not $on.available) { throw "Филина нет в сборке" }
+          Start-Sleep 5
+          if (-not (& $exe filin status | ConvertFrom-Json).on) { throw "Филин упал сразу после запуска" }
+          & $exe filin off | Out-Null; Start-Sleep 2
+          if ((& $exe filin status | ConvertFrom-Json).on) { throw "Филин не снялся" }
       - name: Установщик
         # Другу нужна установка, а не папка: ярлык в «Пуске», удаление из «Параметров», автозапуск по желанию.
         shell: bash

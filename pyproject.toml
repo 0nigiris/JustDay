@@ -18,7 +18,7 @@ dependencies = [
     "pycaw>=20240316; sys_platform == 'win32'",  # громкость на Windows (winaudio.py)
     "keyring>=25; sys_platform == 'win32'",      # ключи в «Диспетчере учётных данных» Windows
     "sounddevice>=0.5; sys_platform == 'win32'", # микрофон на Windows (audio.Microphone)
-    "filin; sys_platform == 'linux'",            # Филин: замок и фото по первому касанию (justday/filin.py)
+    "filin @ git+https://github.com/0nigiris/Filin",  # Филин: замок и фото по первому касанию (justday/filin.py)
 ]
 
 # Необязательное. Речь и голос — это гигабайты, и они нужны не всем: без микрофона
@@ -50,7 +50,6 @@ exclude-dependencies = ["tflite-runtime"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
-filin = { git = "https://github.com/0nigiris/Filin" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -66,6 +65,11 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
 ]
+
+# Филин берётся прямо с GitHub: `pip install .` в сборке Windows не читает tool.uv.sources и
+# без адреса в самой зависимости взял бы чужой пакет с тем же именем с PyPI.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/justday"]

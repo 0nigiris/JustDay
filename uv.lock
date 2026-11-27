@@ -457,7 +457,7 @@ wheels = [
 [[package]]
 name = "filin"
 version = "0.1.0"
-source = { git = "https://github.com/0nigiris/Filin#c1f44bb6076c3e521942428c981a9d3a50010fc8" }
+source = { git = "https://github.com/0nigiris/Filin#0e6836ed928535ab80d345e4e91b7fed8000e9f3" }
 
 [[package]]
 name = "flatbuffers"
@@ -718,7 +718,7 @@ version = "0.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
-    { name = "filin", marker = "sys_platform == 'linux'" },
+    { name = "filin" },
     { name = "icalendar" },
     { name = "keyring", marker = "sys_platform == 'win32'" },
     { name = "numpy" },
@@ -756,7 +756,7 @@ dev = [
 requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.2.150" },
     { name = "faster-whisper", marker = "extra == 'speech'", specifier = ">=1.2.1" },
-    { name = "filin", marker = "sys_platform == 'linux'", git = "https://github.com/0nigiris/Filin" },
+    { name = "filin", git = "https://github.com/0nigiris/Filin" },
     { name = "icalendar", specifier = ">=6" },
     { name = "keyring", marker = "sys_platform == 'win32'", specifier = ">=25" },
     { name = "numpy", specifier = ">=2.0" },
