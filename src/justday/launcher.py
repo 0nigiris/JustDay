@@ -16,10 +16,9 @@ from __future__ import annotations
 import ast
 import json
 import operator
-import subprocess
 import time
 
-from . import config, desktop, filesearch, media
+from . import config, desktop, filesearch, glyphs, media
 
 RECENT_FILE = config.STATE_DIR / "launcher-recent.json"
 FAV_FILE = config.STATE_DIR / "launcher-favourites.json"
@@ -245,7 +244,7 @@ def run(kind: str, ident: str, files: list[str] | None = None) -> dict:
             desktop.windows("focus", ident)
             return {"ok": True, "kind": kind, "id": ident}
         if kind == "calc":
-            subprocess.run(["wl-copy", ident], check=True, timeout=5)
+            glyphs.to_clipboard(ident)
             return {"ok": True, "kind": kind, "id": ident}
         if kind == "file":
             got = filesearch.open_path(ident)

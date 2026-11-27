@@ -259,6 +259,8 @@ def launch_app_id(desktop_id: str, files: list[str] | None = None) -> None:
     подставляет файлы туда, куда программа просила (%f, %U), вместо того чтобы угадывать за неё.
     """
     if WINDOWS:  # AppID из Get-StartApps: так открываются и ярлыки, и программы из Store
+        # Поиск приписывает «.desktop» к любому имени (launcher.run): с ним explorer не находил ничего.
+        desktop_id = desktop_id.removesuffix(".desktop")
         subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{desktop_id}", *[str(f) for f in (files or [])]])
         return
     name = _gtk_name(desktop_id)

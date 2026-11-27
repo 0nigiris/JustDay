@@ -75,6 +75,20 @@ jobs:
           if ((& $exe windows list notepad | ConvertFrom-Json)[0].minimized -ne $false) { throw "не развернулся" }
           & $exe windows close notepad | Out-Null; Start-Sleep 2
           if (Get-Process notepad -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0) { throw "не закрылся" }
+      - name: Spotlight — находит программу и показывает её
+        # Alt+Space на Windows ловит host.py (RegisterHotKey); здесь проверяется то, что за ней:
+        # поиск по меню «Пуск» через демона и как карточка поиска выглядит на 1024×768.
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+          JUSTDAY_SHOT: ${{ github.workspace }}\spotlight.png
+          JUSTDAY_SHOT_DO: 'JD.openSearch(); JD.menuQuery = "note"; JD.searchMenu()'
+        run: |
+          ./dist/JustDay/JustDay.exe apps list notepad | tee apps.txt
+          grep -qi notepad apps.txt
+          ./dist/JustDay/JustDay.exe
+          test -s spotlight.png
       - name: Установщик
         # Другу нужна установка, а не папка: ярлык в «Пуске», удаление из «Параметров», автозапуск по желанию.
         shell: bash
@@ -167,5 +181,6 @@ jobs:
           name: shot
           path: |
             shot.png
+            spotlight.png
             setup-shot.png
             after-setup-shot.png

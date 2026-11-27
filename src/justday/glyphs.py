@@ -171,6 +171,8 @@ def to_clipboard(text: str) -> bool:
     """Положить в буфер обмена. Wayland — wl-copy, X11 — xclip."""
     from . import face
 
+    if os.name == "nt":  # clip.exe есть на любой Windows; без BOM он читал бы кириллицу как кракозябры
+        return subprocess.run(["clip"], input=("\ufeff" + text).encode("utf-16-le"), timeout=5).returncode == 0
     cmd = (["wl-copy", "--"] if face.session() == "wayland" and shutil.which("wl-copy")
            else ["xclip", "-selection", "clipboard"] if shutil.which("xclip") else [])
     if not cmd:

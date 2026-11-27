@@ -107,7 +107,7 @@ def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
         if action in ("active", "close_active") and not w["active"]:
             continue
         hay = (w["app"] if action == "close_app" else f"{w['app']} {w['title']}").lower()
-        if q and q not in hay:
+        if q and q not in hay and q != w["id"]:  # поиск переходит к окну по его номеру (launcher.run)
             continue
         if action == "wake" and not w["minimized"]:
             continue

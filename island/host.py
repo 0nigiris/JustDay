@@ -443,7 +443,16 @@ class LayerAttached(QObject):
 
     layer = _attached_prop("layer", int)
     namespace = _attached_prop("namespace", str)
-    keyboardFocus = _attached_prop("keyboardFocus", int)
+
+    def _set_focus(self, v):
+        self._v["keyboardFocus"] = v
+        self.changed.emit()
+        # На Wayland клавиатуру отдаёт слой сам. На Windows окно-«инструмент» её не получает, пока по
+        # нему не щёлкнут: поиск по Alt+Space открывался, а набранные буквы уходили в прежнее окно.
+        if v and hasattr(self.parent(), "requestActivate"):
+            self.parent().requestActivate()
+
+    keyboardFocus = Property(int, lambda self: self._v["keyboardFocus"], _set_focus, notify=_changed)
     blurRegion = _attached_prop("blurRegion", QObject)
 
 
@@ -619,7 +628,49 @@ def main() -> int:
         return 1
     if shot := os.environ.get("JUSTDAY_SHOT"):
         _shoot(app, eng, shot)
+    elif sys.platform == "win32":
+        _win_hotkeys(eng)
     return app.exec()
+
+
+# Глобальные клавиши Windows: то, что на Linux держит KWin (manage.HOTKEYS). Выражение QML — как у
+# тех же клавиш на Linux: Alt+Space — `justday tools apps`, Win+J — `justday toggle`.
+WIN_HOTKEYS = {
+    (0x1, 0x20): "JD.toggleSearch()",          # Alt+Space
+    (0x8, 0x4A): 'JD.send({ cmd: "toggle" })',  # Win+J
+}
+
+
+class _Hotkeys(QObject):
+    pressed = Signal(str)
+
+
+def _win_hotkeys(eng) -> None:
+    """Слушать клавиши в своём потоке: RegisterHotKey шлёт WM_HOTKEY в очередь того потока, что его
+    зарегистрировал, а очередь главного потока принадлежит Qt."""
+    import ctypes
+    import threading
+    from ctypes import wintypes
+
+    from PySide6.QtQml import QQmlEngine, QQmlExpression
+
+    r = eng.rootObjects()[0]
+    hk = _Hotkeys()
+    hk.pressed.connect(lambda expr: QQmlExpression(QQmlEngine.contextForObject(r), r, expr).evaluate())
+    eng._hotkeys = hk  # иначе сборщик мусора унесёт объект вместе с подпиской
+
+    def loop():
+        user32 = ctypes.windll.user32
+        exprs = list(WIN_HOTKEYS.values())
+        for i, (mods, vk) in enumerate(WIN_HOTKEYS):
+            if not user32.RegisterHotKey(None, i + 1, mods | 0x4000, vk):  # 0x4000: без автоповтора
+                print(f"клавиша {exprs[i][:30]}… занята другой программой", file=sys.stderr)
+        msg = wintypes.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            if msg.message == 0x0312 and 0 < msg.wParam <= len(exprs):  # WM_HOTKEY
+                hk.pressed.emit(exprs[msg.wParam - 1])
+
+    threading.Thread(target=loop, daemon=True, name="hotkeys").start()
 
 
 def _shoot(app, eng, path: str) -> None:
