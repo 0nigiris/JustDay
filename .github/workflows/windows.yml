@@ -68,27 +68,49 @@ jobs:
           ver=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q "-DAppVersion=$ver" installer/justday.iss
           ls -la dist/*.exe
-      - name: Установка глазами — капсула вместо мастера
+      - name: Установка глазами — капсула вместо мастера, ни одного окна консоли
         # Обычный запуск, как у друга: снимок экрана через несколько секунд должен показать чёрную
-        # капсулу сверху, а не серое окно «Далее → Далее».
+        # капсулу сверху, а не серое окно «Далее → Далее». Всё время установки и холодного пуска
+        # раз в четверть секунды смотрим, не появилось ли окно консоли: демон в exe отсоединён, и
+        # каждый его powershell/ffmpeg без CREATE_NO_WINDOW открывал своё (27 нояб.). Мелькнувшее
+        # окно живёт доли секунды, поэтому опрос, а не один снимок.
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist\JustDay-Setup-*.exe | Select-Object -First 1
-          $p = Start-Process $setup.FullName -PassThru
-          Start-Sleep -Seconds 4
+          # Окно агента GitHub с логами лежало поверх стола на каждом снимке — свернуть всё заранее.
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep -Seconds 1
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("$PWD\setup-shot.png")
-          $done = $p.WaitForExit(120000)
-          Start-Sleep -Seconds 30  # холодный пуск exe: демон, островок, шарик и знакомство
-          $bmp2 = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp2).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp2.Save("$PWD\after-setup-shot.png")
+          function Shot($name) {
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$PWD\$name")
+          }
+          $console = 'conhost','OpenConsole','WindowsTerminal','cmd','powershell','pwsh','python','ffmpeg','where','reg','schtasks'
+          $before = @(Get-Process | Where-Object MainWindowHandle -ne 0 | ForEach-Object Id)
+          $seen = @{}
+          function Watch($ms) {
+            $until = (Get-Date).AddMilliseconds($ms)
+            while ((Get-Date) -lt $until) {
+              Get-Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.MainWindowHandle -ne 0 -and $before -notcontains $_.Id -and $console -contains $_.ProcessName
+              } | ForEach-Object { $seen["$($_.ProcessName) #$($_.Id) «$($_.MainWindowTitle)»"] = 1 }
+              Start-Sleep -Milliseconds 250
+            }
+          }
+          $setup = Get-ChildItem dist\JustDay-Setup-*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -PassThru
+          Watch 4000
+          Shot setup-shot.png
+          $t = 0
+          while (-not $p.HasExited -and $t -lt 120) { Watch 1000; $t++ }
+          $done = $p.HasExited
+          Watch 30000  # холодный пуск exe: демон, островок, шарик и знакомство
+          Shot after-setup-shot.png
           taskkill /F /IM JustDay.exe 2>$null
           # Установка, которая ждёт щелчка, у друга выглядела бы зависшей.
           if (-not $done) { $p.Kill(); Write-Error "установщик не закончил за 2 минуты: ждёт щелчка?"; exit 1 }
+          if ($seen.Count) { Write-Error ("выскочили окна консоли: " + ($seen.Keys -join '; ')); exit 1 }
           exit 0
       - name: Установка, запуск и удаление
         # Проверяем то, что получит друг: тихая установка, Джарвис из установленной папки отвечает,
