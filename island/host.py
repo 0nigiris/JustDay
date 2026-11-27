@@ -31,10 +31,30 @@ if getattr(sys, "frozen", False) and len(sys.argv) > 1 and not sys.argv[1].start
 
                 if ctypes.windll.kernel32.AttachConsole(-1):  # запущен из cmd/PowerShell
                     setattr(sys, _name, open("CONOUT$", "w", encoding="utf-8", errors="replace"))  # noqa: SIM115
+    for _s in (sys.stdout, sys.stderr):  # консоль Windows в cp1252 падала на «✘» и «✔» проверок
+        if _s is not None and hasattr(_s, "reconfigure"):
+            _s.reconfigure(encoding="utf-8", errors="replace")
     from justday.cli import main as _cli
 
-    _cli(sys.argv[1:])
-    sys.exit(0)
+    try:
+        _cli(sys.argv[1:])
+        _code = 0
+    except SystemExit as _e:
+        _code = _e.code if isinstance(_e.code, int) else (0 if _e.code is None else 1)
+    except BaseException:
+        import traceback
+
+        traceback.print_exc()
+        _code = 1
+    # os._exit, а не sys.exit: после ошибки потоки Whisper и COM держали процесс живым, и
+    # `JustDay.exe test stt` висел шесть часов вместо того, чтобы сказать «не вышло».
+    import logging
+
+    logging.shutdown()
+    for _s in (sys.stdout, sys.stderr):
+        if _s is not None:
+            _s.flush()
+    os._exit(_code)
 
 from PySide6.QtCore import Property, QFileSystemWatcher, QObject, QProcess, QProcessEnvironment, QRect, QSaveFile, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QImage, QPixmap, QRegion

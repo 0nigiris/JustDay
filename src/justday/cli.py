@@ -115,6 +115,11 @@ def t_stt():
     tts = TTS({**cfg["tts"], "engine": "silero"} if cfg["tts"]["engine"] == "none" else cfg["tts"])
     phrase = "Джарвис, открой браузер и найди видео про раст."
     pcm = tts.synth(normalize(phrase))
+    if config.WINDOWS and len(pcm) < tts.rate // 2:
+        # Русского голоса в Windows нет (робот сборки, английская Windows): проверяем уши английской
+        # фразой. Иначе тишина на входе выглядела бы как поломка слуха.
+        tts = TTS({**tts.cfg, "lang": "en"})
+        pcm = tts.synth("Jarvis, open the browser and find a video about rust.")
     pcm16k = pcm[:: max(1, tts.rate // 16000)].astype(np.int16)  # 48k → 16k decimation is fine for a smoke test
     text = STT(cfg["stt"]).transcribe(pcm16k)
     if not text:
