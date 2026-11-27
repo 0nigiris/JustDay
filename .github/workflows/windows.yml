@@ -60,6 +60,21 @@ jobs:
           for i in $(seq 30); do sleep 2; ./dist/JustDay/JustDay.exe status > status.txt 2>&1 && break; done
           cat status.txt; tail -30 daemon.log
           grep -q '"ok": true' status.txt
+      - name: Окна — видит, сворачивает, выводит вперёд и закрывает
+        # «Сверни браузер», «закрой дискорд», док и сцены на Windows идут через winwindows.py (user32).
+        # Блокнот есть на любой Windows: если его окна не видно в списке, не работает ничего из этого.
+        shell: pwsh
+        run: |
+          $exe = "./dist/JustDay/JustDay.exe"
+          Start-Process notepad; Start-Sleep 3
+          $l = & $exe windows list | Out-String; $l
+          if ($l -notmatch '"app": "[Nn]otepad"') { throw "окна Блокнота нет в списке" }
+          & $exe windows minimize notepad | Out-Null; Start-Sleep 1
+          if ((& $exe windows list notepad | ConvertFrom-Json)[0].minimized -ne $true) { throw "не свернулся" }
+          & $exe windows focus notepad | Out-Null; Start-Sleep 1
+          if ((& $exe windows list notepad | ConvertFrom-Json)[0].minimized -ne $false) { throw "не развернулся" }
+          & $exe windows close notepad | Out-Null; Start-Sleep 2
+          if (Get-Process notepad -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0) { throw "не закрылся" }
       - name: Установщик
         # Другу нужна установка, а не папка: ярлык в «Пуске», удаление из «Параметров», автозапуск по желанию.
         shell: bash

@@ -726,6 +726,10 @@ def windows(action: str = "list", query: str = "", wid: str = "") -> list[dict]:
     import tempfile
     import uuid
 
+    if WINDOWS:
+        from . import winwindows
+
+        return winwindows.windows(action, query, wid)
     if backend() != "kwin":
         return _x11_windows(action, query) if backend() == "x11" else []
 

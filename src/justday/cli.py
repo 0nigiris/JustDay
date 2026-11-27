@@ -424,7 +424,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("games", help="list/launch installed games (Steam, Heroic)")
     sp.add_argument("action", choices=["list", "launch"])
     sp.add_argument("query", nargs="*")
-    sp = sub.add_parser("windows", help="list/focus/close/minimize windows (KWin)")
+    sp = sub.add_parser("windows", help="list/focus/close/minimize windows (KWin, на Windows — user32)")
     sp.add_argument("action", choices=["list", "focus", "close", "close-active", "minimize", "wake"])
     sp.add_argument("query", nargs="*")
     sp = sub.add_parser("click", help="щёлкнуть в точке экрана (X11: xdotool; на Wayland щелчки идут через kwin-mcp)")
