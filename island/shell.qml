@@ -730,8 +730,10 @@ ShellRoot {
                            ? (dropCard.want === "settings" || dropCard.held === "settings")
                            : (island.mode === "settings" || dropCard.held === "settings")
                     parent: JD.islandStyle === "bar" ? dropCard : stage
-                    implicitWidth: 940
                     // На низком экране или при масштабе 125% 640 не влезает: карточка не выше экрана.
+                    // 27 нояб.: на экране 1024×768 (так на машине сборки Windows) 940 точек — это вся
+                    // ширина, и карточка закрывала стол целиком. Не шире двух третей экрана.
+                    implicitWidth: Math.min(940, Math.round(JD.screenWidth * 0.66))
                     implicitHeight: Math.min(640, JD.screenHeight - 2 * (JD.topMargin + 20))
                     Loader {
                         anchors.fill: parent
@@ -747,8 +749,9 @@ ShellRoot {
                            ? (dropCard.want === "tools" || dropCard.held === "tools")
                            : island.mode === "tools"
                     parent: JD.islandStyle === "bar" ? dropCard : stage
-                    implicitWidth: 860
-                    implicitHeight: 560
+                    // Знакомство живёт здесь же и на маленьком экране не должно занимать его целиком.
+                    implicitWidth: Math.min(860, Math.round(JD.screenWidth * 0.66))
+                    implicitHeight: Math.min(560, Math.round(JD.screenHeight * 0.72))
                     Loader {
                         anchors.fill: parent
                         active: toolsHolder.shown || toolsHolder.opacity > 0.01
