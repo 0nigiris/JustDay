@@ -89,6 +89,12 @@ class MusicMixin:
         if not req:
             return False
         kind, query = req
+        if kind in ("music", "video", "video_random") and not media.can_play():
+            await asyncio.to_thread(media.open_in_browser, query)
+            events.emit("fast", text=text, desc=t("открыл «{q}» на ютубе", q=query))
+            self.brain.note(f"[Уже выполнено мгновенно, без тебя: «{text}» → открыто на YouTube в браузере. Не повторяй.]")
+            await self.earcon("done")
+            return True
 
         async def go():
             if kind == "music" and not media.is_url(query):

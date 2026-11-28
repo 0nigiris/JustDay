@@ -51,3 +51,19 @@ def test_микшер_подписывал_песню_из_youtube_хвосто�
     load = next(c for c in sent if c[0] == "loadfile")
     name = "Кто-то — Привет, мир"
     assert load[-1] == f"force-media-title=%{len(name.encode())}%{name}"
+
+
+def test_play_song_without_own_player_opens_youtube(monkeypatch):
+    """На Windows «включи песню X» молчал (28 нояб.): mpv и yt-dlp там нет, а других путей не было."""
+    import webbrowser
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+
+    class Page:
+        def read(self):
+            return b'..."videoId":"7wtfhZwyrcc"...'
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout: Page())
+    assert media.open_in_browser("imagine dragons believer") == "https://www.youtube.com/watch?v=7wtfhZwyrcc"
+    assert opened == ["https://www.youtube.com/watch?v=7wtfhZwyrcc"]

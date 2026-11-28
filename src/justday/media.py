@@ -334,6 +334,33 @@ def search(query: str, n: int = 8) -> list[dict]:
     return []
 
 
+def can_play() -> bool:
+    """Свой плеер возможен: есть mpv и yt-dlp. В сборке Windows их нет — там музыка открывается в браузере."""
+    return bool(shutil.which("mpv") and shutil.which("yt-dlp"))
+
+
+def open_in_browser(query: str) -> str:
+    """«Включи песню X» без своего плеера (Windows, 28 нояб.): первое видео YouTube — в браузере.
+
+    Без нейросети и без yt-dlp: id берём прямо из страницы поиска. Не нашли или нет сети — открываем
+    саму страницу поиска, человек выберет сам. Возвращает открытую ссылку."""
+    import urllib.parse
+    import urllib.request
+    import webbrowser
+
+    url = query if is_url(query) else "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query)
+    if not is_url(query):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "ru,en"})
+            page = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", "replace")
+            if m := re.search(r'"videoId":"([\w-]{11})"', page):
+                url = f"https://www.youtube.com/watch?v={m.group(1)}"
+        except OSError as e:
+            log.info("поиск YouTube: %s", type(e).__name__)
+    webbrowser.open(url)
+    return url
+
+
 def info(url: str) -> dict:
     r = _ytdlp("-J", "--no-playlist", "--skip-download", url, timeout=40)
     if r.returncode:
