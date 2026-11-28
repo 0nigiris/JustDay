@@ -242,10 +242,18 @@ class Process(QObject):
         return self._p is not None
 
     def _set_running(self, on: bool) -> None:
+        # Запуск — на следующем витке цикла, а не сразу. `running: true` в QML присваивается раньше, чем
+        # `command` из createObject(…, {command}), и процесс стартовал с пустой командой: окно настроек
+        # на Windows вечно писало «settings-data: не отвечает». Quickshell тоже ждёт конца создания.
+        self._want = on
         if on and self._p is None:
-            self._start()
+            QTimer.singleShot(0, self._start_wanted)
         elif not on and self._p is not None:
             self._p.kill()
+
+    def _start_wanted(self) -> None:
+        if self._want and self._p is None:
+            self._start()
 
     running = Property(bool, _is_running, _set_running, notify=runningChanged)
 
@@ -271,6 +279,11 @@ class Process(QObject):
     def _start(self) -> None:
         if not self._cmd or not _which(self._cmd[0]):
             # Команды из Linux (nmcli, pactl…) на Windows нет: тихо «завершилась с ошибкой».
+            # Потоки тоже закрываем: кто ждёт и выход, и конец вывода, иначе ждал бы вечно.
+            for s in (self._out, self._err):
+                if s is not None:
+                    s.reset()
+                    s.finish()
             self.exited.emit(127, 0)
             return
         p = QProcess(self)
@@ -286,7 +299,9 @@ class Process(QObject):
                 s.reset()
         p.readyReadStandardOutput.connect(lambda: self._out and self._out.feed(bytes(p.readAllStandardOutput()).decode(errors="replace")))
         p.readyReadStandardError.connect(lambda: self._err and self._err.feed(bytes(p.readAllStandardError()).decode(errors="replace")))
-        p.finished.connect(self._done)
+        # Лямбда, а не self._done: у объекта, созданного из QML через createObject, PySide молча терял
+        # подключение к методу — процесс кончался, а onExited не приходил, и настройки «не отвечали».
+        p.finished.connect(lambda code, status: self._done(code, status))
         self._p = p
         p.start(_which(self._cmd[0]), self._cmd[1:])
         self.runningChanged.emit()

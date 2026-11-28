@@ -134,7 +134,9 @@ def eleven_voices() -> dict:
 def voices() -> dict:
     """Neural voices are read from disk (the service may be busy speaking); status comes from systemd."""
     installed = (config.DATA_DIR / "voice" / ".venv" / "bin" / "python").exists()
-    state = subprocess.run(["systemctl", "--user", "is-active", "justday-voice.service"], capture_output=True, text=True).stdout.strip()
+    # На Windows systemctl нет: FileNotFoundError ронял settings-data, и окно настроек не открывалось.
+    state = "" if config.WINDOWS else subprocess.run(["systemctl", "--user", "is-active", "justday-voice.service"],
+                                                     capture_output=True, text=True).stdout.strip()
     items = []
     for root, builtin in ((config.REPO_DIR / "voice" / "voices", True), (config.DATA_DIR / "voices", False)):
         for d in sorted(root.iterdir()) if root.is_dir() else []:
@@ -813,6 +815,8 @@ def guard(action: str = "status") -> dict:
     Служба ничего не рисует сама: она берёт у logind блокирующую задержку, и окно выхода
     KDE показывает её причину вместе с кнопкой «всё равно выключить». Поэтому включение —
     это ровно enable/disable пользовательской службы."""
+    if config.WINDOWS:  # logind и systemd там нет; без этой строки падало всё окно настроек
+        return {"on": False, "unit": GUARD_UNIT, "state": "unsupported"}
     unit_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd/user"
     if action in ("on", "off"):
         if action == "on":
