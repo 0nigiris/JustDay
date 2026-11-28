@@ -1192,5 +1192,9 @@
   "Уходите, оставив экран включённым? Первое касание через 15 с запрёт экран и снимет лицо. Голосом: «посторожи»": "Leaving the screen on? From 15 s on, the first touch locks the screen and photographs the face. Say “keep watch”",
   "Где показывать уведомления": "Where notifications appear",
   "На месте островка — на пару секунд вместо него. Или в углу экрана, как у Telegram Desktop": "In place of the island for a couple of seconds, or in a screen corner like Telegram Desktop",
-  "На месте островка": "In place of the island"
+  "На месте островка": "In place of the island",
+  "Студия на видеокарте": "Studio on the graphics card",
+  "поставится после голоса, в фоне": "installs after the voice, in the background",
+  "картинки, увеличение, видео · ~25 ГБ · можно потом из настроек": "images, upscaling, video · ~25 GB · or later from settings",
+  "если без вас тронут компьютер — фото с вебкамеры и замок экрана": "if someone touches the computer while you're away: webcam photo and screen lock"
 }

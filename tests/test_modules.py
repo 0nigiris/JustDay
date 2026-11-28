@@ -27,3 +27,17 @@ def test_unknown_part_is_refused_before_systemd(monkeypatch):
     monkeypatch.setattr(modules.subprocess, "run", lambda *a, **k: ran.append(a))
     got = modules.parts_in_background(["speech; rm -rf ~"])
     assert not got["ok"] and not ran
+
+
+def test_studio_waits_for_voice_instead_of_vanishing(monkeypatch):
+    """Студию выбирали в знакомстве, пока качался голос, — ответ «уже идёт», и студия не ставилась (28 нояб.)."""
+    import subprocess
+    import types
+
+    monkeypatch.setattr(modules.shutil, "which", lambda n: "/bin/" + n)
+    monkeypatch.setattr(modules, "_systemctl", lambda _c, u: types.SimpleNamespace(
+        stdout="active" if u == "justday-parts.service" else "inactive"))
+    ran = []
+    monkeypatch.setattr(modules.subprocess, "run", lambda a, **k: ran.append(a) or subprocess.CompletedProcess(a, 0, "", ""))
+    assert modules.parts_in_background(["studio"])["ok"]
+    assert "--unit=justday-parts-next" in ran[0] and "is-active justday-parts" in ran[0][-1]

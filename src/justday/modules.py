@@ -128,13 +128,18 @@ def parts_in_background(names: list[str]) -> dict:
         return {"ok": False, "error": f"неизвестные части: {', '.join(bad) or 'не названы'}"}
     if not cli or not shutil.which("systemd-run"):
         return {"ok": False, "error": "нет justday или systemd-run"}
+    # Голос знакомство качает само, а студию человек выбирает позже, пока тот ещё идёт: раньше второй
+    # запрос отвечал «уже идёт» и студия молча не ставилась. Теперь она ждёт своей очереди.
+    unit, wait = "justday-parts", ""
     if _systemctl("is-active", "justday-parts.service").stdout.strip() == "active":
-        return {"ok": True, "already": True}
-    log = config.STATE_DIR / "parts.log"
+        unit, wait = "justday-parts-next", "while systemctl --user -q is-active justday-parts; do sleep 10; done; "
+        if _systemctl("is-active", f"{unit}.service").stdout.strip() == "active":
+            return {"ok": True, "already": True}
+    log = config.STATE_DIR / ("parts.log" if not wait else "parts-next.log")
     notify = ("notify-send -a JustDay JustDay "
               f"\"$( [ $rc = 0 ] && echo 'Части установлены' || echo \"Часть не поставилась: {_why(log)}\" )\"")
-    script = f'{cli} parts add {" ".join(names)} >"{log}" 2>&1; rc=$?; {notify}'
-    done = subprocess.run(["systemd-run", "--user", "--collect", "--unit=justday-parts",
+    script = f'{wait}{cli} parts add {" ".join(names)} >"{log}" 2>&1; rc=$?; {notify}'
+    done = subprocess.run(["systemd-run", "--user", "--collect", f"--unit={unit}",
                            "--description=JustDay: доставка частей", "bash", "-c", script],
                           capture_output=True, text=True, timeout=15)
     return {"ok": done.returncode == 0, "error": done.stderr.strip()[:200]}

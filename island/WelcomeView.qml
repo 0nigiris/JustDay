@@ -34,6 +34,10 @@ Item {
     property var missingParts: []
     property bool partsStarted: false
     property bool partsDone: false
+    // Студия и Филин — выбор в самом знакомстве (28 нояб.: «спросить про студию и доп. функции,
+    // подключить сторожа»): раньше о них узнавали, только найдя в настройках.
+    property bool studioAsked: false
+    property bool filinOn: false
     property bool partsFailed: false
     property bool partsChecked: false
     Process {
@@ -426,6 +430,17 @@ Item {
                                : JD.tr("скачать в фоне") + " · " + wl.missingParts.map(p => p.size).join(" + ")
                            on: wl.partsStarted || wl.partsDone
                            onPicked: if (wl.partsStarted) wl.stopParts(); else if (!wl.partsDone) wl.startParts() }
+                    Card { visible: !wl.win; width: parent.width
+                           title: JD.tr("Студия на видеокарте")
+                           hint: wl.studioAsked ? JD.tr("поставится после голоса, в фоне")
+                                                : JD.tr("картинки, увеличение, видео · ~25 ГБ · можно потом из настроек")
+                           on: wl.studioAsked
+                           onPicked: if (!wl.studioAsked) { wl.studioAsked = true; JD.installParts(["studio"]) } }
+                    Card { width: parent.width
+                           title: JD.tr("Филин")
+                           hint: JD.tr("если без вас тронут компьютер — фото с вебкамеры и замок экрана")
+                           on: wl.filinOn
+                           onPicked: { wl.filinOn = !wl.filinOn; JD.run(["filin", wl.filinOn ? "on" : "off"]) } }
                 }
             }
         }
