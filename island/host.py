@@ -137,6 +137,29 @@ class Quickshell(QObject):
         if cmd and _which(cmd[0]):
             QProcess.startDetached(_which(cmd[0]), cmd[1:])
 
+    @Slot(result="QVariantList")
+    def systemVolume(self) -> list:
+        """[громкость 0..1, заглушено] динамиков Windows; [] — узнать нельзя (не Windows, нет pycaw)."""
+        try:
+            from justday import winaudio
+
+            ep = winaudio._endpoint()
+            return [float(ep.GetMasterVolumeLevelScalar()), bool(ep.GetMute())]
+        except Exception:
+            return []
+
+    @Slot(float, bool)
+    def setSystemVolume(self, level: float, muted: bool) -> None:
+        # Ползунок «Система» в меню двигал заглушку Pipewire.qml, и звук на Windows не менялся (28 нояб.).
+        try:
+            from justday import winaudio
+
+            ep = winaudio._endpoint()
+            ep.SetMasterVolumeLevelScalar(max(0.0, min(1.0, level)), None)
+            ep.SetMute(int(muted), None)
+        except Exception:
+            pass
+
     @Slot(bool)
     def taskbar(self, hide: bool) -> None:
         """Панель задач Windows: спрятать вместо неё док или вернуть как было (настройка dock.hide_taskbar)."""
