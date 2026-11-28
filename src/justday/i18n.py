@@ -94,6 +94,8 @@ EN = {
     "сначала": "from the start", "перемотал": "skipped to the spot", "видео закрыто": "video closed",
     "Не нашёл «{q}»": "Couldn't find “{q}”", "Не вижу открытого «{q}»": "I don't see “{q}” open", "ищу «{q}»": "searching for “{q}”", "Не получилось включить: {e}": "Couldn't play it: {e}",
     "открыл «{q}» на ютубе": "opened “{q}” on YouTube",
+    "Братан, мозга у меня нет: ни одна нейросеть не подключена. Подключи бесплатную в настройках, это минута. А пока могу открыть программу, включить песню или поменять громкость.":
+        "Buddy, I have no brain: no AI is connected. Connect a free one in Settings, it takes a minute. Meanwhile I can open an app, play a song or change the volume.",
     "Ищу видео: {q}": "Looking for a video: {q}", "Где включить видео?": "Where should the video play?",
     "В острове": "In the island", "прямо здесь, поверх окон": "right here, above the windows",
     "В окне": "In a window", "отдельный плеер, есть весь экран": "a separate player, can go fullscreen",

@@ -98,12 +98,23 @@ PLAY = re.compile(r"\b(музык|музон|музл|музычк|песн|пе
 
 
 def _guess(text: str) -> dict:
-    """No model at all: the two requests worth catching by hand."""
+    """No model at all: the two requests worth catching by hand.
+
+    `nobrain` — ни одной нейросети не подключено. Тогда так и говорим (28 нояб.): раньше без мозга
+    звучало «облако не отвечает, работаю сам», и казалось, что он думает, а он не думал вовсе."""
+    from . import freellm
+
+    nobrain = not freellm.ready()
     if PLAY.search(text):
-        return {"action": "music", "query": "", "answer": ""}
+        return {"action": "music", "query": "", "answer": "", "nobrain": nobrain}
     m = OPEN.search(text)
     if m:
-        return {"action": "app", "query": m.group("q").strip(" .,!?"), "answer": ""}
+        return {"action": "app", "query": m.group("q").strip(" .,!?"), "answer": "", "nobrain": nobrain}
+    if nobrain:
+        return {"action": "answer", "query": "", "nobrain": True,
+                "answer": t("Братан, мозга у меня нет: ни одна нейросеть не подключена. "
+                            "Подключи бесплатную в настройках, это минута. А пока могу открыть программу, "
+                            "включить песню или поменять громкость.")}
     return {"action": "answer", "query": "",
             "answer": t("Облако сейчас недоступно. Могу включить музыку из скачанного, открыть программу или "
                         "поменять громкость.")}

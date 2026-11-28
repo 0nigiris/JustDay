@@ -950,7 +950,7 @@ class Daemon(CommandsMixin, RemoteMixin, HearingMixin, SpeechMixin, Housekeeping
             said = got["answer"] or t("ищу «{q}»", q=query)
         else:
             said = got["answer"] or t("Облако сейчас недоступно.")
-        if not got.get("cloud") and time.monotonic() - self._offline_note > 600:  # say it once, not before every sentence
+        if not got.get("cloud") and not got.get("nobrain") and time.monotonic() - self._offline_note > 600:  # say it once, not before every sentence
             self._offline_note = time.monotonic()
             said = t("Облако не отвечает, работаю сам. ") + said
         events.emit("offline", text=text, action=action, said=said[:300])
