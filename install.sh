@@ -715,6 +715,9 @@ services() {
   fi
 }
 step "$(t 'Службы' 'Services')" services
+# step гоняет шаг в подпроцессе, и ISLAND_WELCOME=1 из services сюда не доходил: «дальше — в островке»
+# не печаталось ни разу. Спрашиваем ту же face.pick ещё раз уже здесь.
+[[ "$("$APP_DIR/.venv/bin/python" -c 'from justday import face; print(face.pick()[0])' 2>/dev/null)" == island ]] && ISLAND_WELCOME=1
 
 # Claude Code, yt-dlp и kwin-mcp — после служб (27 нояб.): островку для первого показа они не нужны, а
 # качаются они минуты. Раньше они стояли до окружения Python, и человек всё это время смотрел в
@@ -727,13 +730,24 @@ get_claude() {
     note "$(t 'установлен' 'installed')"
   fi
 }
-step "Claude Code" get_claude
+# Первая установка с островком: что ему для показа не нужно, качается уже без терминала (29 нояб.:
+# «терминал ставит самое необходимое, островок появился — пишет, что можно закрывать, а остальное
+# островок докачает в фоне»). Отдельная служба systemd переживает закрытое окно терминала.
+LATER=()
+later() {   # later 'заголовок' 'команда' — в фон, если можно; иначе 1 и шаг идёт как раньше
+  [[ "${ISLAND_WELCOME:-0}" == 1 && "$FIRST_RUN" == 1 ]] && command -v systemd-run >/dev/null || return 1
+  LATER+=("$2")
+  row '•' "$C" "$1" "$(t 'докачается в фоне' 'downloads in the background')"
+}
+later "Claude Code" 'command -v claude >/dev/null || curl -fsSL https://claude.ai/install.sh | bash' \
+  || step "Claude Code" get_claude
 
 # Без прав администратора кое-что ставится и в домашнюю папку — музыка не должна пропадать
 # только потому, что на этом компьютере нет пароля.
 if ((${#MISSING[@]})) && [[ " ${MISSING[*]} " == *" yt-dlp "* ]] && ! command -v yt-dlp >/dev/null; then
   user_tools() { uv tool install yt-dlp; note "yt-dlp"; }
-  step "$(t 'Музыка и видео' 'Music and video')" user_tools
+  later "$(t 'Музыка и видео' 'Music and video')" 'uv tool install yt-dlp' \
+    || step "$(t 'Музыка и видео' 'Music and video')" user_tools
   MISSING=("${MISSING[@]/yt-dlp/}")
 fi
 
@@ -748,7 +762,9 @@ if [[ $DESKTOP_CONTROL == 1 ]]; then
       warn "$(t 'Без него ассистент не сможет нажимать кнопки в окнах. Подробности в журнале.' 'Without it the assistant cannot press buttons in windows. See the log.')"
     fi
   }
-  step "$(t 'Управление рабочим столом' 'Desktop control')" get_kwin_mcp
+  later "$(t 'Управление рабочим столом' 'Desktop control')" \
+    "uv tool install --python 3.12 --reinstall git+https://github.com/VibeProgramm/kwin-mcp@${KWIN_MCP_REV:-7cef7afc402d3c5892f39825290bbbe1851ae1d0}" \
+    || step "$(t 'Управление рабочим столом' 'Desktop control')" get_kwin_mcp
 else
   row '•' "$C" "$(t 'Управление рабочим столом' 'Desktop control')" "$(t 'пропущено: нужен KWin 6 на Wayland' 'skipped: needs KWin 6 on Wayland')"
 fi
@@ -949,11 +965,20 @@ check_services() {
 check_services
 
 # ───────────── done ─────────────
+if ((${#LATER[@]})); then
+  cmds=$(printf '%s; ' "${LATER[@]}")
+  systemd-run --user --collect --quiet --unit="justday-finish-$$" --setenv=PATH="$PATH" \
+    -p StandardOutput="append:$LOG" -p StandardError="append:$LOG" bash -c "$cmds" \
+    || warn "$(t 'Фоновая докачка не запустилась — повторите установку' 'Background download did not start — run the installer again')"
+fi
 kread=$(command -v kreadconfig6 || command -v kreadconfig5 || echo true)
 talk=$("$kread" --file kglobalshortcutsrc --group services --group net.local.justday.desktop --key _launch 2>/dev/null | cut -d, -f1 | cut -f1 || true)
 talk=${talk:-$HOTKEY}
 plate "$(t 'Готово' 'Done') · $(clock $((SECONDS - STARTED)))" "$chosen · $(mib "$APP_DIR/.venv")"
-if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true'; then
+if ((${#LATER[@]})); then
+  printf '  %s%s%s\n  %s\n\n' "$B" "$(t 'Установка завершена. Этот терминал можно закрыть.' 'Setup is done. You can close this terminal.')" "$N" \
+    "$(t 'Остальное островок докачает сверху сам; войти в Claude — там же: Настройки → Модель.' 'The island downloads the rest by itself; sign in to Claude there too: Settings → Model.')"
+elif ! claude auth status 2>/dev/null | grep -q '"loggedIn": true'; then
   printf '  %s%s%s\n  %s\n\n' "$B" "$(t 'Остался один шаг: войдите в Claude.' 'One step left: sign in to Claude.')" "$N" \
     "$(t 'Наберите' 'Type') ${B}claude${N} $(t 'и в нём' 'and in it') ${B}/login${N}."
 fi
