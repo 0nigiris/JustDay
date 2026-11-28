@@ -285,7 +285,9 @@ Item {
                     Text { text: JD.tr("Чем он будет думать"); font.family: JD.fontFamily; font.pixelSize: 26; font.weight: Font.DemiBold; color: JD.text1 }
                     Text { width: parent.width; wrapMode: Text.Wrap; text: wl.win ? JD.tr("Возьмите хотя бы один бесплатный ключ: вход аккаунтом, минута времени. Два — надёжнее: если один упрётся в лимит, ответит другой.") : JD.tr("Бесплатное работает сразу. Claude нужен вход по подписке."); font.family: JD.fontFamily; font.pixelSize: 14; color: JD.text2 }
                     Repeater {
-                        model: wl.win ? JD.freeProviders : []
+                        // На Linux карточка OpenRouter была, а ключ к ней вписать было негде: выбор молча
+                        // оставлял ассистента без мозга. Ключ ложится туда же, откуда его читает мозг.
+                        model: JD.freeProviders.filter(p => wl.win || p.id === wl.provider)
                         Rectangle {
                             id: fp
                             required property var modelData
@@ -331,7 +333,7 @@ Item {
                     }
                     Text {
                         width: parent.width; wrapMode: Text.Wrap; font.family: JD.fontFamily; font.pixelSize: 12
-                        visible: wl.win && JD.freeResult.error !== undefined && JD.freeResult.error !== ""
+                        visible: JD.freeResult.error !== undefined && JD.freeResult.error !== ""
                         color: "#ff6b6b"
                         text: JD.tr("Ключ сохранён, но модель не ответила: ") + (JD.freeResult.error || "")
                     }

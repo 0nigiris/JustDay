@@ -1811,6 +1811,10 @@ Singleton {
             // Свежая установка: знакомство открывается само, один раз за запуск острова.
             // Свежая установка: сначала маскот (intro в shell.qml), он сам откроет знакомство.
             if (settings.onboarded === false) startWelcome()
+            // Карточки бесплатных ключей (Gemini, Groq, OpenRouter) просили один раз при создании окна — до
+            // того, как поднялся демон, — и в знакомстве на Windows их не было вовсе (28 нояб.). Настройки
+            // пришли — демон точно на связи: тут и спрашиваем, пока список пуст.
+            if (!freeProviders.length) send({ cmd: "free_key" })
         }
         if (m.history !== undefined) history = m.history
         if (m.free !== undefined) freeProviders = m.free
