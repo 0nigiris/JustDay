@@ -718,7 +718,9 @@ Singleton {
     // Пока идёт знакомство, их не видно; в нём есть шаг «Посмотреть / Включить» (welcomeDock/Tray — показ).
     property bool welcomeDock: false
     property bool welcomeTray: false
-    readonly property bool dockOn: !islandOnly && (welcomeDock || (dockCfg.enabled !== false && !mustOnboard))
+    // На Windows дока нет (28 нояб.): без переноса значков со старой панели и удобного закрепления он только
+    // мешал. Панель задач Windows остаётся как есть; вернём, когда док станет по-настоящему удобным.
+    readonly property bool dockOn: !islandOnly && Qt.platform.os !== "windows" && (welcomeDock || (dockCfg.enabled !== false && !mustOnboard))
     // Полоса лотка: 0 — как в настройках, 1 — показана кнопкой, −1 — спрятана кнопкой.
     // Кнопка в доке должна делать ровно то, что кнопка: показывать спрятанное и прятать показанное.
     property int trayPeek: 0

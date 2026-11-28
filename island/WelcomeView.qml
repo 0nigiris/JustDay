@@ -9,8 +9,8 @@ Item {
     id: wl
     property int step: 0
     readonly property int last: 4
-    // Шаг «Док и лоток» (3): по умолчанию — нет. На Windows — только док: лотка там нет (JD.trayOn).
-    readonly property bool canDock: !JD.islandOnly
+    // Шаг «Док и лоток» (3): по умолчанию — нет. На Windows шага нет: ни дока, ни лотка там нет (JD.dockOn, JD.trayOn).
+    readonly property bool canDock: !JD.islandOnly && Qt.platform.os !== "windows"
     property bool wantDock: false
     property bool wantTray: false
     property string provider: JD.settings.provider || "claude"
