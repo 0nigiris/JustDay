@@ -192,7 +192,7 @@ jobs:
               Start-Sleep -Milliseconds 250
             }
           }
-          $setup = Get-ChildItem dist\JustDay-Setup-*.exe | Select-Object -First 1
+          $setup = Get-ChildItem dist\JustDaySetup.exe | Select-Object -First 1
           $p = Start-Process $setup.FullName -PassThru
           Watch 4000
           Shot setup-shot.png
@@ -218,7 +218,7 @@ jobs:
         run: |
           taskkill //F //IM JustDay.exe || true  # демон из прошлого шага держит порт: отвечал бы он, а не установленный
           sleep 2
-          ./dist/JustDay-Setup-*.exe //VERYSILENT //SUPPRESSMSGBOXES //NORESTART
+          ./dist/JustDaySetup.exe //VERYSILENT //SUPPRESSMSGBOXES //NORESTART
           app="$LOCALAPPDATA/Programs/JustDay"
           test -f "$app/JustDay.exe"
           ls "$APPDATA/Microsoft/Windows/Start Menu/Programs/JustDay"
@@ -235,7 +235,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: JustDay-Setup
-          path: dist/JustDay-Setup-*.exe
+          path: dist/JustDaySetup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: JustDay-windows
